@@ -80,15 +80,18 @@ export default function Workout() {
 
   const handleLog = (setIndex: number, reps: number) => {
     const s = allSets[setIndex]
-    logSet({
+    const setData = {
       sessionId: activeSession!.id!,
       type: s.type,
       setNumber: s.setNumber,
       weight: s.weight,
       reps,
       isAmrap: (s as MainSet).isAmrap ?? false,
-    })
+    }
+    // Update UI immediately, then persist to DB and store the assigned id
+    logSet(setData)
     advanceSet()
+    db.sets.add(setData).then(dbId => editSet(setIndex, { id: dbId }))
 
     const isAmrap = (s as MainSet).isAmrap
     if (isAmrap) {
@@ -102,15 +105,14 @@ export default function Workout() {
 
   const handleEdit = (setIndex: number, reps: number) => {
     editSet(setIndex, { reps })
+    const dbId = loggedSets[setIndex]?.id
+    if (dbId) db.sets.update(dbId, { reps })
   }
 
   const handleComplete = async () => {
     if (!activeSession?.id) return
     await db.sessions.update(activeSession.id, { status: 'completed', notes })
-    for (const s of loggedSets) {
-      const { id: _id, ...setData } = s
-      await db.sets.add({ ...setData, sessionId: activeSession.id })
-    }
+    // Sets were already written to DB as they were logged
     for (const acc of activeAccessories) {
       for (const s of acc.loggedSets) {
         if (s.setNumber != null) {
@@ -159,8 +161,8 @@ export default function Workout() {
 
   return (
     <div className="p-4 font-mono pb-32">
-      <div className="text-zinc-500 uppercase text-xs tracking-widest mb-4">
-        --- {liftName} . WEEK {activeSession.week} ----------------------------
+      <div className={`uppercase text-xs tracking-widest mb-4 ${activeSession.week === 4 ? 'text-blue-400' : 'text-zinc-500'}`}>
+        --- {liftName} . WEEK {activeSession.week}{activeSession.week === 4 ? ' . DELOAD' : ''} ----------------------------
       </div>
 
       <div className="mb-4">

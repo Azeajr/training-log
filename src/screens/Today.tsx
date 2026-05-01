@@ -16,6 +16,7 @@ interface WeekStatus {
 export default function Today() {
   const navigate = useNavigate()
   const startSession = useWorkoutStore(s => s.startSession)
+  const clearSession = useWorkoutStore(s => s.clearSession)
   const activeSession = useWorkoutStore(s => s.activeSession)
 
   const [loading, setLoading] = useState(true)
@@ -26,6 +27,7 @@ export default function Today() {
   const [currentCycleId, setCurrentCycleId] = useState<number>(1)
   const [tm, setTm] = useState(0)
   const [liftType, setLiftType] = useState<'upper' | 'lower'>('upper')
+  const [showAbandonConfirm, setShowAbandonConfirm] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -73,7 +75,7 @@ export default function Today() {
     if (lift) setLiftType(lift.liftType)
   }
 
-  const handleStart = async () => {
+  const launchSession = async () => {
     if (!selectedLiftId) return
     const existing = await db.sessions
       .where('cycleId').equals(currentCycleId)
@@ -98,12 +100,30 @@ export default function Today() {
     navigate('/workout')
   }
 
+  const handleStart = () => {
+    if (!selectedLiftId) return
+    // Active session for a different lift — ask before abandoning
+    if (activeSession && activeSession.liftId !== selectedLiftId) {
+      setShowAbandonConfirm(true)
+      return
+    }
+    // Same lift or no active session
+    launchSession()
+  }
+
+  const handleAbandonAndStart = () => {
+    clearSession()
+    setShowAbandonConfirm(false)
+    launchSession()
+  }
+
   if (loading) return null
 
   const selectedLift = lifts.find(l => l.id === selectedLiftId)
   const main = selectedLift ? calcMainSets(tm, currentWeek) : []
   const fsl = selectedLift ? calcFslSets(tm) : []
   const warmup = selectedLift ? calcWarmup(tm, main[0]?.weight ?? tm, liftType) : []
+  const activeLiftName = lifts.find(l => l.id === activeSession?.liftId)?.name ?? ''
 
   const statusLabel = (ws: WeekStatus) => {
     if (ws.liftId === selectedLiftId) return '->'
@@ -122,8 +142,9 @@ export default function Today() {
           &#9654; SESSION IN PROGRESS — RESUME
         </Link>
       )}
-      <div className="text-zinc-500 uppercase text-xs tracking-widest mb-4">
-        --- WEEK {currentWeek} ----------------------------------------
+
+      <div className={`uppercase text-xs tracking-widest mb-4 ${currentWeek === 4 ? 'text-blue-400' : 'text-zinc-500'}`}>
+        --- WEEK {currentWeek}{currentWeek === 4 ? ' . DELOAD' : ''} ----------------------------------------
       </div>
 
       <div className="flex gap-2 mb-6 flex-wrap">
@@ -159,6 +180,33 @@ export default function Today() {
             START WORKOUT
           </button>
         </>
+      )}
+
+      {showAbandonConfirm && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-zinc-900 border border-zinc-700 p-6 font-mono max-w-sm w-full">
+            <div className="text-zinc-100 uppercase tracking-widest text-sm mb-2">
+              ABANDON SESSION?
+            </div>
+            <div className="text-zinc-500 text-xs mb-6">
+              Your {activeLiftName} session is unfinished. Starting a new lift will discard it.
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleAbandonAndStart}
+                className="flex-1 border border-red-400 text-red-400 py-2 text-xs tracking-widest font-mono"
+              >
+                ABANDON
+              </button>
+              <button
+                onClick={() => setShowAbandonConfirm(false)}
+                className="flex-1 border border-zinc-700 text-zinc-500 py-2 text-xs tracking-widest font-mono"
+              >
+                CANCEL
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
