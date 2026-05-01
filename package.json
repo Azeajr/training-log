@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "debug:browser": "node scripts/debug-browser.js",
+    "debug:browser:nowipe": "node scripts/debug-browser.js --no-wipe"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",
