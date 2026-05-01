@@ -25,7 +25,7 @@ export default function History() {
   useEffect(() => { load() }, [mode, selectedLiftId])
 
   const load = async () => {
-    const allLifts = await db.lifts.orderBy('order').toArray()
+    const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
     if (!selectedLiftId && allLifts.length > 0) setSelectedLiftId(allLifts[0].id!)
 

@@ -12,7 +12,7 @@ export async function getNextSession(database: TrainingDB = db): Promise<{
       startDate: new Date(),
       endDate: null,
     })
-    const lifts = await database.lifts.orderBy('order').toArray()
+    const lifts = (await database.lifts.toArray()).sort((a, b) => a.order - b.order)
     return { liftId: lifts[0].id!, week: 1, cycleId }
   }
 
@@ -33,7 +33,7 @@ export async function getNextSession(database: TrainingDB = db): Promise<{
     })
     await applyTmProgression(database)
     await applyAccessoryTmProgression(database, cycle.id)
-    const lifts = await database.lifts.orderBy('order').toArray()
+    const lifts = (await database.lifts.toArray()).sort((a, b) => a.order - b.order)
     return { liftId: lifts[0].id!, week: 1, cycleId: newCycleId }
   }
 
@@ -46,7 +46,7 @@ export async function getNextSession(database: TrainingDB = db): Promise<{
     .filter(s => s.week === currentWeek && s.status !== 'pending')
     .map(s => s.liftId)
 
-  const lifts = await database.lifts.orderBy('order').toArray()
+  const lifts = (await database.lifts.toArray()).sort((a, b) => a.order - b.order)
   const nextLift = lifts.find(l => !completedLiftIds.includes(l.id!))
 
   return {

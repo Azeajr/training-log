@@ -31,7 +31,7 @@ export default function Today() {
   const load = async () => {
     setLoading(true)
     const next = await getNextSession()
-    const allLifts = await db.lifts.orderBy('order').toArray()
+    const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
     setCurrentWeek(next.week)
     setCurrentCycleId(next.cycleId)

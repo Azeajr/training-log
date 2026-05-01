@@ -18,7 +18,7 @@ export default function Settings() {
   useEffect(() => { load() }, [])
 
   const load = async () => {
-    const allLifts = await db.lifts.orderBy('order').toArray()
+    const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
     const tmMap: Record<number, number> = {}
     for (const l of allLifts) {
