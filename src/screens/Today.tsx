@@ -102,12 +102,16 @@ export default function Today() {
 
   const handleStart = () => {
     if (!selectedLiftId) return
-    // Active session for a different lift — ask before abandoning
-    if (activeSession && activeSession.liftId !== selectedLiftId) {
+    // Same lift already in progress — resume without touching store state
+    if (activeSession && activeSession.liftId === selectedLiftId) {
+      navigate('/workout')
+      return
+    }
+    // Different lift in progress — ask before abandoning
+    if (activeSession) {
       setShowAbandonConfirm(true)
       return
     }
-    // Same lift or no active session
     launchSession()
   }
 

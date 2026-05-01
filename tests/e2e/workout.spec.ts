@@ -172,4 +172,21 @@ test.describe('resume banner and abandon dialog', () => {
     // Original session still active
     await expect(page.locator('text=SESSION IN PROGRESS')).toBeVisible()
   })
+
+  test('START WORKOUT for the same lift resumes without wiping logged sets', async ({ page }) => {
+    await startWorkout(page)
+    await logSet(page, 8)
+    await page.click('button:has-text("SKIP REST")')
+
+    // Navigate to Today and tap START WORKOUT for the same lift (OHP)
+    await page.goto('/today')
+    await page.waitForTimeout(800)
+    await page.click('button:has-text("START WORKOUT")')
+    await page.waitForTimeout(800)
+
+    // Should be back on the workout screen with the logged set still there
+    await expect(page.locator('text=COMPLETE SESSION')).toBeVisible()
+    await expect(page.locator('text=x 8')).toBeVisible()
+    await expect(page.locator('text=done')).toBeVisible()
+  })
 })
