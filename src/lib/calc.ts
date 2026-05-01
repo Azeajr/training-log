@@ -1,0 +1,152 @@
+export const MAIN_PERCENTAGES = {
+  1: [0.65, 0.75, 0.85],
+  2: [0.70, 0.80, 0.90],
+  3: [0.75, 0.85, 0.95],
+  4: [0.40, 0.50, 0.60],
+} as const
+
+export const MAIN_REPS = {
+  1: [5, 5, 5],
+  2: [3, 3, 3],
+  3: [5, 3, 1],
+  4: [5, 5, 5],
+} as const
+
+export const FSL_PERCENTAGE = 0.65
+export const FSL_SETS = 5
+export const FSL_REPS = 10
+
+export const ACCESSORY_PERCENTAGE = 0.75
+export const ACCESSORY_SETS = 5
+export const ACCESSORY_REPS = 10
+
+export const roundToNearest5 = (weight: number): number =>
+  Math.round(weight / 5) * 5
+
+export interface MainSet {
+  setNumber: number
+  weight: number
+  reps: number
+  isAmrap: boolean
+  type: 'main'
+}
+
+export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4): MainSet[] => {
+  const percentages = MAIN_PERCENTAGES[week]
+  const reps = MAIN_REPS[week]
+  return percentages.map((pct, i) => ({
+    setNumber: i + 1,
+    weight: roundToNearest5(tm * pct),
+    reps: reps[i],
+    isAmrap: week !== 4 && i === 2,
+    type: 'main',
+  }))
+}
+
+export interface FslSet {
+  setNumber: number
+  weight: number
+  reps: number
+  type: 'fsl'
+}
+
+export const calcFslSets = (tm: number): FslSet[] => {
+  const weight = roundToNearest5(tm * FSL_PERCENTAGE)
+  return Array.from({ length: FSL_SETS }, (_, i) => ({
+    setNumber: i + 1,
+    weight,
+    reps: FSL_REPS,
+    type: 'fsl',
+  }))
+}
+
+export interface AccessorySetCalc {
+  setNumber: number
+  weight: number
+  reps: number
+}
+
+export const calcAccessorySets = (accessoryTm: number): AccessorySetCalc[] => {
+  const weight = roundToNearest5(accessoryTm * ACCESSORY_PERCENTAGE)
+  return Array.from({ length: ACCESSORY_SETS }, (_, i) => ({
+    setNumber: i + 1,
+    weight,
+    reps: ACCESSORY_REPS,
+  }))
+}
+
+export interface WarmupSet {
+  setNumber: number
+  weight: number
+  reps: number
+  type: 'warmup'
+}
+
+export const calcWarmup = (
+  tm: number,
+  workingWeight: number,
+  liftType: 'upper' | 'lower'
+): WarmupSet[] => {
+  const barWeight = 45
+  const base = liftType === 'lower' ? 135 : 95
+  const increment = Math.round((tm * 0.1) / 5) * 5
+
+  const sets: WarmupSet[] = [
+    { setNumber: 1, weight: barWeight, reps: 10, type: 'warmup' }
+  ]
+
+  if (base >= workingWeight) return sets
+
+  let current = base
+  let setNumber = 2
+
+  while (current + increment < workingWeight) {
+    sets.push({ setNumber, weight: current, reps: 5, type: 'warmup' })
+    current += increment
+    setNumber++
+  }
+
+  sets.push({ setNumber, weight: current, reps: 3, type: 'warmup' })
+
+  return sets
+}
+
+export const estimated1RM = (weight: number, reps: number): number =>
+  weight * (1 + reps / 30)
+
+export const targetReps = (prev1RM: number, todayWeight: number): number =>
+  Math.ceil((prev1RM / todayWeight - 1) * 30)
+
+export interface AmrapTarget {
+  label: string
+  reps: number
+  est1RM: number
+}
+
+export const calcAmrapTargets = (
+  prevSets: Array<{ weight: number; reps: number; label: string }>,
+  todayAmrapWeight: number
+): AmrapTarget[] =>
+  prevSets.map(({ weight, reps, label }) => {
+    const est = estimated1RM(weight, reps)
+    return {
+      label,
+      reps: targetReps(est, todayAmrapWeight),
+      est1RM: Math.round(est * 100) / 100,
+    }
+  })
+
+export const canAdvanceWeek = (completedOrSkipped: number): boolean =>
+  completedOrSkipped >= 4
+
+export const toSeconds = (mm: number, ss: number): number => mm * 60 + ss
+
+export const fromSeconds = (total: number): { mm: number; ss: number } => ({
+  mm: Math.floor(total / 60),
+  ss: total % 60,
+})
+
+export const formatDuration = (seconds: number): string => {
+  const { mm, ss } = fromSeconds(seconds)
+  return `${mm}:${ss.toString().padStart(2, '0')}`
+}
