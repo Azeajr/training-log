@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { seedDatabase } from './db/seed'
 import { db } from './db/db'
 import { useSettingsStore } from './store/settingsStore'
+import { useWorkoutStore } from './store/workoutStore'
 import BottomNav from './components/BottomNav'
 import Setup from './screens/Setup'
 import Today from './screens/Today'
@@ -12,6 +13,7 @@ import Settings from './screens/Settings'
 
 export default function App() {
   const loadSettings = useSettingsStore((s) => s.load)
+  const activeSession = useWorkoutStore((s) => s.activeSession)
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function App() {
       <div className="bg-zinc-950 min-h-screen font-mono text-zinc-100 flex flex-col">
         <main className="flex-1 overflow-y-auto pb-16">
           <Routes>
-            <Route path="/" element={<Navigate to="/today" replace />} />
+            <Route path="/" element={<Navigate to={activeSession ? '/workout' : '/today'} replace />} />
             <Route path="/today" element={<Today />} />
             <Route path="/workout" element={<Workout />} />
             <Route path="/history" element={<History />} />

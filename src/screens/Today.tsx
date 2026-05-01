@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { db } from '../db/db'
 import type { Lift, Session } from '../db/db'
 import { useWorkoutStore } from '../store/workoutStore'
@@ -16,6 +16,7 @@ interface WeekStatus {
 export default function Today() {
   const navigate = useNavigate()
   const startSession = useWorkoutStore(s => s.startSession)
+  const activeSession = useWorkoutStore(s => s.activeSession)
 
   const [loading, setLoading] = useState(true)
   const [lifts, setLifts] = useState<Lift[]>([])
@@ -113,6 +114,14 @@ export default function Today() {
 
   return (
     <div className="p-4 font-mono">
+      {activeSession && (
+        <Link
+          to="/workout"
+          className="block border border-amber-400 text-amber-400 px-4 py-2 text-xs tracking-widest uppercase mb-4"
+        >
+          &#9654; SESSION IN PROGRESS — RESUME
+        </Link>
+      )}
       <div className="text-zinc-500 uppercase text-xs tracking-widest mb-4">
         --- WEEK {currentWeek} ----------------------------------------
       </div>

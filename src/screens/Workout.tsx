@@ -24,11 +24,13 @@ export default function Workout() {
     loggedSets,
     currentSetIndex,
     activeAccessories,
+    notes,
     logSet,
     editSet,
     advanceSet,
     startRest,
     clearSession,
+    setNotes,
   } = useWorkoutStore()
   useSettingsStore()
 
@@ -37,7 +39,6 @@ export default function Workout() {
   const [amrapTargets, setAmrapTargets] = useState<AmrapTarget[]>([])
   const [showPicker, setShowPicker] = useState(false)
   const [exercises, setExercises] = useState<Exercise[]>([])
-  const [notes, setNotes] = useState('')
   const [skipConfirm, setSkipConfirm] = useState(false)
 
   useEffect(() => {

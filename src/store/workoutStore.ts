@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { Session, Set, AccessorySet } from '../db/db'
 
 interface LoggedSet extends Set {
@@ -21,6 +22,7 @@ interface WorkoutState {
   restStartedAt: number | null
   lastAmrapFailed: boolean
   activeAccessories: ActiveAccessory[]
+  notes: string
 
   startSession: (session: Session) => void
   logSet: (set: LoggedSet) => void
@@ -32,78 +34,89 @@ interface WorkoutState {
   logAccessorySet: (exerciseId: number, set: Partial<AccessorySet>) => void
   completeSession: () => void
   clearSession: () => void
+  setNotes: (notes: string) => void
 }
 
-export const useWorkoutStore = create<WorkoutState>((set) => ({
-  activeSession: null,
-  loggedSets: [],
-  currentSetIndex: 0,
-  isResting: false,
-  restStartedAt: null,
-  lastAmrapFailed: false,
-  activeAccessories: [],
+export const useWorkoutStore = create<WorkoutState>()(
+  persist(
+    (set) => ({
+      activeSession: null,
+      loggedSets: [],
+      currentSetIndex: 0,
+      isResting: false,
+      restStartedAt: null,
+      lastAmrapFailed: false,
+      activeAccessories: [],
+      notes: '',
 
-  startSession: (session) => set({
-    activeSession: session,
-    loggedSets: [],
-    currentSetIndex: 0,
-    isResting: false,
-    restStartedAt: null,
-    lastAmrapFailed: false,
-    activeAccessories: [],
-  }),
+      startSession: (session) => set({
+        activeSession: session,
+        loggedSets: [],
+        currentSetIndex: 0,
+        isResting: false,
+        restStartedAt: null,
+        lastAmrapFailed: false,
+        activeAccessories: [],
+        notes: '',
+      }),
 
-  logSet: (newSet) => set((state) => ({
-    loggedSets: [...state.loggedSets, newSet],
-  })),
+      logSet: (newSet) => set((state) => ({
+        loggedSets: [...state.loggedSets, newSet],
+      })),
 
-  editSet: (index, updates) => set((state) => ({
-    loggedSets: state.loggedSets.map((s, i) =>
-      i === index ? { ...s, ...updates } : s
-    ),
-  })),
+      editSet: (index, updates) => set((state) => ({
+        loggedSets: state.loggedSets.map((s, i) =>
+          i === index ? { ...s, ...updates } : s
+        ),
+      })),
 
-  advanceSet: () => set((state) => ({
-    currentSetIndex: state.currentSetIndex + 1,
-  })),
+      advanceSet: () => set((state) => ({
+        currentSetIndex: state.currentSetIndex + 1,
+      })),
 
-  startRest: (failed = false) => set({
-    isResting: true,
-    restStartedAt: Date.now(),
-    lastAmrapFailed: failed,
-  }),
+      startRest: (failed = false) => set({
+        isResting: true,
+        restStartedAt: Date.now(),
+        lastAmrapFailed: failed,
+      }),
 
-  stopRest: () => set({
-    isResting: false,
-    restStartedAt: null,
-    lastAmrapFailed: false,
-  }),
+      stopRest: () => set({
+        isResting: false,
+        restStartedAt: null,
+        lastAmrapFailed: false,
+      }),
 
-  addAccessory: (accessory) => set((state) => ({
-    activeAccessories: [...state.activeAccessories, accessory],
-  })),
+      addAccessory: (accessory) => set((state) => ({
+        activeAccessories: [...state.activeAccessories, accessory],
+      })),
 
-  logAccessorySet: (exerciseId, newSet) => set((state) => ({
-    activeAccessories: state.activeAccessories.map((a) =>
-      a.exerciseId === exerciseId
-        ? { ...a, loggedSets: [...a.loggedSets, newSet] }
-        : a
-    ),
-  })),
+      logAccessorySet: (exerciseId, newSet) => set((state) => ({
+        activeAccessories: state.activeAccessories.map((a) =>
+          a.exerciseId === exerciseId
+            ? { ...a, loggedSets: [...a.loggedSets, newSet] }
+            : a
+        ),
+      })),
 
-  completeSession: () => set((state) => ({
-    activeSession: state.activeSession
-      ? { ...state.activeSession, status: 'completed' }
-      : null,
-  })),
+      completeSession: () => set((state) => ({
+        activeSession: state.activeSession
+          ? { ...state.activeSession, status: 'completed' }
+          : null,
+      })),
 
-  clearSession: () => set({
-    activeSession: null,
-    loggedSets: [],
-    currentSetIndex: 0,
-    isResting: false,
-    restStartedAt: null,
-    lastAmrapFailed: false,
-    activeAccessories: [],
-  }),
-}))
+      clearSession: () => set({
+        activeSession: null,
+        loggedSets: [],
+        currentSetIndex: 0,
+        isResting: false,
+        restStartedAt: null,
+        lastAmrapFailed: false,
+        activeAccessories: [],
+        notes: '',
+      }),
+
+      setNotes: (notes) => set({ notes }),
+    }),
+    { name: 'workout-store' }
+  )
+)
