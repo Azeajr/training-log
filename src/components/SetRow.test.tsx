@@ -46,13 +46,13 @@ describe('SetRow — active', () => {
     expect(onLog).toHaveBeenCalledWith(9)
   })
 
-  it('does not call onLog if reps field is empty', async () => {
+  it('logs the default reps when LOG is clicked with empty input', async () => {
     const onLog = vi.fn()
     render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={onLog} onEdit={vi.fn()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'LOG' }))
 
-    expect(onLog).not.toHaveBeenCalled()
+    expect(onLog).toHaveBeenCalledWith(BASE_SET.reps)
   })
 
   it('shows AMRAP badge when isAmrap is true', () => {

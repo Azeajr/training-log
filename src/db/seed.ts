@@ -28,7 +28,13 @@ const EXERCISES = [
   { name: 'Plank',                        type: 'timed'    as const },
 ]
 
-export async function seedDatabase() {
+let _seed: Promise<void> | null = null
+export function seedDatabase(): Promise<void> {
+  if (!_seed) _seed = _seedDatabase()
+  return _seed
+}
+
+async function _seedDatabase() {
   // Seed lifts if missing
   const liftCount = await db.lifts.count()
   if (liftCount === 0) {

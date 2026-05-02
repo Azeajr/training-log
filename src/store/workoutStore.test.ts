@@ -29,7 +29,7 @@ function resetStore() {
     currentSetIndex: 0,
     isResting: false,
     restStartedAt: null,
-    lastAmrapFailed: false,
+    restType: 'normal',
     activeAccessories: [],
     notes: '',
   })
@@ -40,10 +40,9 @@ describe('workoutStore', () => {
 
   describe('startSession', () => {
     it('sets activeSession and resets all other state', () => {
-      // Put some state in first
       useWorkoutStore.getState().logSet(MOCK_SET)
       useWorkoutStore.getState().advanceSet()
-      useWorkoutStore.getState().startRest()
+      useWorkoutStore.getState().startRest('normal')
 
       useWorkoutStore.getState().startSession(MOCK_SESSION)
       const s = useWorkoutStore.getState()
@@ -88,31 +87,36 @@ describe('workoutStore', () => {
   })
 
   describe('rest timer', () => {
-    it('startRest sets isResting and records timestamp', () => {
+    it('startRest sets isResting, records timestamp, and stores restType', () => {
       const before = Date.now()
-      useWorkoutStore.getState().startRest()
+      useWorkoutStore.getState().startRest('normal')
       const after = Date.now()
 
       const s = useWorkoutStore.getState()
       expect(s.isResting).toBe(true)
       expect(s.restStartedAt).toBeGreaterThanOrEqual(before)
       expect(s.restStartedAt).toBeLessThanOrEqual(after)
-      expect(s.lastAmrapFailed).toBe(false)
+      expect(s.restType).toBe('normal')
     })
 
-    it('startRest(true) marks failed AMRAP', () => {
-      useWorkoutStore.getState().startRest(true)
-      expect(useWorkoutStore.getState().lastAmrapFailed).toBe(true)
+    it('startRest stores transition type', () => {
+      useWorkoutStore.getState().startRest('transition')
+      expect(useWorkoutStore.getState().restType).toBe('transition')
+    })
+
+    it('startRest stores fail type', () => {
+      useWorkoutStore.getState().startRest('fail')
+      expect(useWorkoutStore.getState().restType).toBe('fail')
     })
 
     it('stopRest clears timer state', () => {
-      useWorkoutStore.getState().startRest()
+      useWorkoutStore.getState().startRest('fail')
       useWorkoutStore.getState().stopRest()
 
       const s = useWorkoutStore.getState()
       expect(s.isResting).toBe(false)
       expect(s.restStartedAt).toBeNull()
-      expect(s.lastAmrapFailed).toBe(false)
+      expect(s.restType).toBe('normal')
     })
   })
 
@@ -128,7 +132,7 @@ describe('workoutStore', () => {
       useWorkoutStore.getState().startSession(MOCK_SESSION)
       useWorkoutStore.getState().logSet(MOCK_SET)
       useWorkoutStore.getState().advanceSet()
-      useWorkoutStore.getState().startRest()
+      useWorkoutStore.getState().startRest('fail')
       useWorkoutStore.getState().setNotes('some notes')
 
       useWorkoutStore.getState().clearSession()

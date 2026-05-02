@@ -102,12 +102,10 @@ export default function Today() {
 
   const handleStart = () => {
     if (!selectedLiftId) return
-    // Same lift already in progress — resume without touching store state
     if (activeSession && activeSession.liftId === selectedLiftId) {
       navigate('/workout')
       return
     }
-    // Different lift in progress — ask before abandoning
     if (activeSession) {
       setShowAbandonConfirm(true)
       return
@@ -137,54 +135,62 @@ export default function Today() {
   }
 
   return (
-    <div className="p-4 font-mono">
+    <div className="p-4 md:p-8 font-mono max-w-5xl mx-auto">
       {activeSession && (
         <Link
           to="/workout"
-          className="block border border-amber-400 text-amber-400 px-4 py-2 text-xs tracking-widest uppercase mb-4"
+          className="block border border-amber-400 text-amber-400 px-4 py-3 text-xs tracking-widest uppercase mb-6"
         >
           &#9654; SESSION IN PROGRESS — RESUME
         </Link>
       )}
 
-      <div className={`uppercase text-xs tracking-widest mb-4 ${currentWeek === 4 ? 'text-blue-400' : 'text-zinc-500'}`}>
-        --- WEEK {currentWeek}{currentWeek === 4 ? ' . DELOAD' : ''} ----------------------------------------
-      </div>
-
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {weekStatuses.map(ws => (
-          <button
-            key={ws.liftId}
-            onClick={() => handleSelectLift(ws.liftId)}
-            className={`border px-3 py-1 text-xs tracking-widest ${
-              ws.liftId === selectedLiftId
-                ? 'border-amber-400 text-amber-400'
-                : ws.status === 'completed'
-                ? 'border-green-400 text-green-400'
-                : ws.status === 'skipped'
-                ? 'border-red-400 text-red-400'
-                : 'border-zinc-700 text-zinc-500 hover:border-zinc-100 hover:text-zinc-100'
-            }`}
-          >
-            {ws.name} {statusLabel(ws)}
-          </button>
-        ))}
-      </div>
-
-      {selectedLift && (
-        <>
-          <div className="text-zinc-500 uppercase text-xs tracking-widest mb-4">
-            --- {selectedLift.name} . TODAY ---------------------------------
+      <div className="md:grid md:grid-cols-2 md:gap-12 md:items-start">
+        {/* Left: week header + lift picker */}
+        <div>
+          <div className={`uppercase text-xs tracking-widest mb-4 ${currentWeek === 4 ? 'text-blue-400' : 'text-zinc-500'}`}>
+            --- WEEK {currentWeek}{currentWeek === 4 ? ' . DELOAD' : ''} ----------------------------------------
           </div>
-          <SessionPreview warmup={warmup} main={main} fsl={fsl} />
-          <button
-            onClick={handleStart}
-            className="mt-8 border border-green-400 text-green-400 px-6 py-2 font-mono w-full tracking-widest"
-          >
-            START WORKOUT
-          </button>
-        </>
-      )}
+
+          <div className="flex gap-2 mb-6 flex-wrap">
+            {weekStatuses.map(ws => (
+              <button
+                key={ws.liftId}
+                onClick={() => handleSelectLift(ws.liftId)}
+                className={`border px-3 py-2 text-xs tracking-widest ${
+                  ws.liftId === selectedLiftId
+                    ? 'border-amber-400 text-amber-400'
+                    : ws.status === 'completed'
+                    ? 'border-green-400 text-green-400'
+                    : ws.status === 'skipped'
+                    ? 'border-red-400 text-red-400'
+                    : 'border-zinc-700 text-zinc-500 hover:border-zinc-100 hover:text-zinc-100'
+                }`}
+              >
+                {ws.name} {statusLabel(ws)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: session preview + start */}
+        <div>
+          {selectedLift && (
+            <>
+              <div className="text-zinc-500 uppercase text-xs tracking-widest mb-4">
+                --- {selectedLift.name} . TODAY ---------------------------------
+              </div>
+              <SessionPreview warmup={warmup} main={main} fsl={fsl} />
+              <button
+                onClick={handleStart}
+                className="mt-6 border border-green-400 text-green-400 px-6 py-4 font-mono w-full tracking-widest text-sm"
+              >
+                START WORKOUT
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       {showAbandonConfirm && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
@@ -198,13 +204,13 @@ export default function Today() {
             <div className="flex gap-3">
               <button
                 onClick={handleAbandonAndStart}
-                className="flex-1 border border-red-400 text-red-400 py-2 text-xs tracking-widest font-mono"
+                className="flex-1 border border-red-400 text-red-400 py-3 text-xs tracking-widest font-mono"
               >
                 ABANDON
               </button>
               <button
                 onClick={() => setShowAbandonConfirm(false)}
-                className="flex-1 border border-zinc-700 text-zinc-500 py-2 text-xs tracking-widest font-mono"
+                className="flex-1 border border-zinc-700 text-zinc-500 py-3 text-xs tracking-widest font-mono"
               >
                 CANCEL
               </button>

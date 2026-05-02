@@ -17,7 +17,7 @@ interface Props {
 }
 
 export default function AccessoryLog({ accessory, exercise }: Props) {
-  const { logAccessorySet } = useWorkoutStore()
+  const { logAccessorySet, startRest } = useWorkoutStore()
   const [reps, setReps] = useState('')
   const [duration, setDuration] = useState<number | null>(null)
   const [distance, setDistance] = useState('')
@@ -34,6 +34,8 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
       distance: type === 'distance' ? (parseFloat(distance) || null) : null,
     }
     logAccessorySet(accessory.exerciseId, set)
+    // last set of this exercise → transition to next; otherwise same exercise → normal
+    startRest(nextSet >= 5 ? 'transition' : 'normal')
     setReps('')
     setDuration(null)
     setDistance('')

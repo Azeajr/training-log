@@ -24,6 +24,9 @@
     "tailwindcss": "^4.2.4",
     "zustand": "^5.0.12"
   },
+  "overrides": {
+    "serialize-javascript": ">=7.0.5"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@testing-library/dom": "^10.4.1",

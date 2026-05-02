@@ -3,14 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
 import type { Lift, Exercise } from '../db/db'
 import { useWorkoutStore } from '../store/workoutStore'
-import { useSettingsStore } from '../store/settingsStore'
 import {
   calcMainSets,
   calcFslSets,
   calcWarmup,
   calcAmrapTargets,
+  targetReps,
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet } from '../lib/calc'
+import type { RestType } from '../store/workoutStore'
 import { getAmrapTargets } from '../lib/session'
 import SetRow from '../components/SetRow'
 import AccessoryPicker from '../components/AccessoryPicker'
@@ -32,8 +33,6 @@ export default function Workout() {
     clearSession,
     setNotes,
   } = useWorkoutStore()
-  useSettingsStore()
-
   const [lift, setLift] = useState<Lift | null>(null)
   const [allSets, setAllSets] = useState<(WarmupSet | MainSet | FslSet)[]>([])
   const [amrapTargets, setAmrapTargets] = useState<AmrapTarget[]>([])
@@ -63,14 +62,24 @@ export default function Workout() {
     setAllSets([...warmup, ...main, ...fsl])
 
     if (activeSession.week !== 4) {
-      const prevSets = await getAmrapTargets(
-        activeSession.liftId,
-        activeSession.week,
-        activeSession.cycleId
-      )
       const amrapSet = main.find(s => s.isAmrap)
-      if (amrapSet && prevSets.length > 0) {
-        setAmrapTargets(calcAmrapTargets(prevSets, amrapSet.weight))
+      if (amrapSet) {
+        const prevSets = await getAmrapTargets(
+          activeSession.liftId,
+          activeSession.week,
+          activeSession.cycleId
+        )
+        if (prevSets.length > 0) {
+          setAmrapTargets(calcAmrapTargets(prevSets, amrapSet.weight))
+        } else {
+          // No history — derive goal from TM (TM ≈ 90% of true 1RM)
+          const est1RM = tmWeight / 0.9
+          setAmrapTargets([{
+            label: 'goal',
+            reps: targetReps(est1RM, amrapSet.weight),
+            est1RM: Math.round(est1RM),
+          }])
+        }
       }
     }
 
@@ -88,19 +97,20 @@ export default function Workout() {
       reps,
       isAmrap: (s as MainSet).isAmrap ?? false,
     }
-    // Update UI immediately, then persist to DB and store the assigned id
     logSet(setData)
     advanceSet()
     db.sets.add(setData).then(dbId => editSet(setIndex, { id: dbId }))
 
-    const isAmrap = (s as MainSet).isAmrap
-    if (isAmrap) {
-      const highestTarget = amrapTargets.length > 0 ? Math.max(...amrapTargets.map(t => t.reps)) : 0
-      const failed = highestTarget > 0 && reps < highestTarget
-      startRest(failed)
+    const nextS = allSets[setIndex + 1]
+    let restType: RestType
+    if (reps < s.reps) {
+      restType = 'fail'
+    } else if (!nextS || nextS.type !== s.type) {
+      restType = 'transition'
     } else {
-      startRest(false)
+      restType = 'normal'
     }
+    startRest(restType)
   }
 
   const handleEdit = (setIndex: number, reps: number) => {
@@ -112,7 +122,6 @@ export default function Workout() {
   const handleComplete = async () => {
     if (!activeSession?.id) return
     await db.sessions.update(activeSession.id, { status: 'completed', notes })
-    // Sets were already written to DB as they were logged
     for (const acc of activeAccessories) {
       for (const s of acc.loggedSets) {
         if (s.setNumber != null) {
@@ -141,12 +150,11 @@ export default function Workout() {
     navigate('/today')
   }
 
-  // Week advancement is handled by getNextSession on next load
   const checkWeekAdvancement = async () => {}
 
   if (!activeSession) {
     return (
-      <div className="p-4 font-mono text-zinc-500">
+      <div className="p-6 font-mono text-zinc-500">
         No active session. Go to <span className="text-green-400">TODAY</span> to start one.
       </div>
     )
@@ -160,128 +168,138 @@ export default function Workout() {
   const mainCount = mainSets.length
 
   return (
-    <div className="p-4 font-mono pb-32">
-      <div className={`uppercase text-xs tracking-widest mb-4 ${activeSession.week === 4 ? 'text-blue-400' : 'text-zinc-500'}`}>
+    <div className="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
+      <div className={`uppercase text-xs tracking-widest mb-6 ${activeSession.week === 4 ? 'text-blue-400' : 'text-zinc-500'}`}>
         --- {liftName} . WEEK {activeSession.week}{activeSession.week === 4 ? ' . DELOAD' : ''} ----------------------------
       </div>
 
-      <div className="mb-4">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-1">WARM UP</div>
-        {warmupSets.map((s, i) => (
-          <SetRow
-            key={i}
-            set={{ ...s, isAmrap: false }}
-            isActive={currentSetIndex === i}
-            isCompleted={i < currentSetIndex}
-            loggedReps={loggedSets[i]?.reps}
-            onLog={(reps) => handleLog(i, reps)}
-            onEdit={(reps) => handleEdit(i, reps)}
-          />
-        ))}
-      </div>
+      {/* Sets: single column on mobile, two-column on desktop */}
+      <div className="md:grid md:grid-cols-[2fr_3fr] md:gap-10 md:items-start">
 
-      <div className="mb-4">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-1">MAIN</div>
-        {mainSets.map((s, i) => {
-          const globalIdx = warmupCount + i
-          return (
-            <SetRow
-              key={i}
-              set={s}
-              isActive={currentSetIndex === globalIdx}
-              isCompleted={globalIdx < currentSetIndex}
-              loggedReps={loggedSets[globalIdx]?.reps}
-              amrapTargets={s.isAmrap ? amrapTargets : undefined}
-              onLog={(reps) => handleLog(globalIdx, reps)}
-              onEdit={(reps) => handleEdit(globalIdx, reps)}
-            />
-          )
-        })}
-      </div>
-
-      <div className="mb-6">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-1">FSL  5 x 10</div>
-        {fslSets.map((s, i) => {
-          const globalIdx = warmupCount + mainCount + i
-          return (
-            <SetRow
-              key={i}
-              set={{ ...s, isAmrap: false }}
-              isActive={currentSetIndex === globalIdx}
-              isCompleted={globalIdx < currentSetIndex}
-              loggedReps={loggedSets[globalIdx]?.reps}
-              onLog={(reps) => handleLog(globalIdx, reps)}
-              onEdit={(reps) => handleEdit(globalIdx, reps)}
-            />
-          )
-        })}
-      </div>
-
-      {activeAccessories.length > 0 && (
-        <div className="mb-4">
-          <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
-            --- ACCESSORIES ----------------------------------
+        {/* Left column on desktop (secondary sets) / top on mobile */}
+        <div>
+          <div className="mb-6">
+            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">WARM UP</div>
+            {warmupSets.map((s, i) => (
+              <SetRow
+                key={i}
+                set={{ ...s, isAmrap: false }}
+                isActive={currentSetIndex === i}
+                isCompleted={i < currentSetIndex}
+                loggedReps={loggedSets[i]?.reps}
+                onLog={(reps) => handleLog(i, reps)}
+                onEdit={(reps) => handleEdit(i, reps)}
+              />
+            ))}
           </div>
-          {activeAccessories.map(acc => (
-            <AccessoryLog
-              key={acc.exerciseId}
-              accessory={acc}
-              exercise={exercises.find(e => e.id === acc.exerciseId)}
-            />
-          ))}
+
+          <div className="mb-6 md:mb-0">
+            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">FSL  5 x 10</div>
+            {fslSets.map((s, i) => {
+              const globalIdx = warmupCount + mainCount + i
+              return (
+                <SetRow
+                  key={i}
+                  set={{ ...s, isAmrap: false }}
+                  isActive={currentSetIndex === globalIdx}
+                  isCompleted={globalIdx < currentSetIndex}
+                  loggedReps={loggedSets[globalIdx]?.reps}
+                  onLog={(reps) => handleLog(globalIdx, reps)}
+                  onEdit={(reps) => handleEdit(globalIdx, reps)}
+                />
+              )
+            })}
+          </div>
         </div>
-      )}
 
-      <button
-        onClick={() => setShowPicker(true)}
-        className="w-full border border-zinc-700 py-2 text-zinc-500 text-xs tracking-widest hover:border-green-400 hover:text-green-400 mb-6"
-      >
-        + SELECT ASSISTANCE EXERCISE
-      </button>
+        {/* Right column on desktop (main work + accessories + actions) */}
+        <div>
+          <div className="mb-6">
+            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">MAIN</div>
+            {mainSets.map((s, i) => {
+              const globalIdx = warmupCount + i
+              return (
+                <SetRow
+                  key={i}
+                  set={s}
+                  isActive={currentSetIndex === globalIdx}
+                  isCompleted={globalIdx < currentSetIndex}
+                  loggedReps={loggedSets[globalIdx]?.reps}
+                  amrapTargets={s.isAmrap ? amrapTargets : undefined}
+                  onLog={(reps) => handleLog(globalIdx, reps)}
+                  onEdit={(reps) => handleEdit(globalIdx, reps)}
+                />
+              )
+            })}
+          </div>
 
-      <div className="mb-4">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-1">
-          --- NOTES ----------------------------------------
-        </div>
-        <textarea
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          className="w-full bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-3 py-2 text-sm focus:outline-none focus:border-green-400 resize-none"
-          rows={3}
-          placeholder="Session notes..."
-        />
-      </div>
+          {activeAccessories.length > 0 && (
+            <div className="mb-4">
+              <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
+                --- ACCESSORIES ----------------------------------
+              </div>
+              {activeAccessories.map(acc => (
+                <AccessoryLog
+                  key={acc.exerciseId}
+                  accessory={acc}
+                  exercise={exercises.find(e => e.id === acc.exerciseId)}
+                />
+              ))}
+            </div>
+          )}
 
-      <div className="flex gap-3">
-        <button
-          onClick={handleComplete}
-          className="flex-1 border border-green-400 text-green-400 py-2 font-mono text-sm tracking-widest"
-        >
-          COMPLETE SESSION
-        </button>
-        {!skipConfirm ? (
           <button
-            onClick={() => setSkipConfirm(true)}
-            className="border border-red-400 text-red-400 px-4 py-2 font-mono text-sm"
+            onClick={() => setShowPicker(true)}
+            className="w-full border border-zinc-700 py-3 text-zinc-500 text-xs tracking-widest hover:border-green-400 hover:text-green-400 mb-6"
           >
-            SKIP LIFT
+            + SELECT ASSISTANCE EXERCISE
           </button>
-        ) : (
-          <div className="flex gap-2">
-            <button
-              onClick={handleSkip}
-              className="border border-red-400 text-red-400 px-3 py-2 font-mono text-xs"
-            >
-              CONFIRM SKIP
-            </button>
-            <button
-              onClick={() => setSkipConfirm(false)}
-              className="border border-zinc-700 text-zinc-500 px-3 py-2 font-mono text-xs"
-            >
-              CANCEL
-            </button>
+
+          <div className="mb-6">
+            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
+              --- NOTES ----------------------------------------
+            </div>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-3 py-3 text-sm focus:outline-none focus:border-green-400 resize-none"
+              rows={3}
+              placeholder="Session notes..."
+            />
           </div>
-        )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleComplete}
+              className="flex-1 border border-green-400 text-green-400 py-4 font-mono text-sm tracking-widest"
+            >
+              COMPLETE SESSION
+            </button>
+            {!skipConfirm ? (
+              <button
+                onClick={() => setSkipConfirm(true)}
+                className="border border-red-400 text-red-400 px-5 py-4 font-mono text-sm"
+              >
+                SKIP LIFT
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSkip}
+                  className="border border-red-400 text-red-400 px-3 py-4 font-mono text-xs tracking-widest"
+                >
+                  CONFIRM SKIP
+                </button>
+                <button
+                  onClick={() => setSkipConfirm(false)}
+                  className="border border-zinc-700 text-zinc-500 px-3 py-4 font-mono text-xs"
+                >
+                  CANCEL
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {showPicker && lift && (

@@ -118,7 +118,7 @@ test.describe('rest timer persistence across refresh', () => {
     expect(restStartedAfter).toBe(restStartedAt)
 
     // Timer display should show at least 2 seconds
-    const timerText = await page.locator('text=/REST\\s+\\d+:\\d+/').first().textContent()
+    const timerText = await page.locator('.text-amber-400.text-4xl').first().textContent()
     const [, mm, ss] = (timerText ?? '').match(/(\d+):(\d+)/) ?? []
     const elapsed = parseInt(mm ?? '0') * 60 + parseInt(ss ?? '0')
     expect(elapsed).toBeGreaterThanOrEqual(2)
@@ -188,5 +188,102 @@ test.describe('resume banner and abandon dialog', () => {
     await expect(page.locator('text=COMPLETE SESSION')).toBeVisible()
     await expect(page.locator('text=x 8')).toBeVisible()
     await expect(page.locator('text=done')).toBeVisible()
+  })
+})
+
+// Helper: advance through warmup + 2 main sets to reach the AMRAP set
+// With TM=100 / OHP week 1: warmup = 1 set (45lb bar), main = 65lb, 75lb, then AMRAP at 85lb
+async function advanceToAmrap(page: Parameters<typeof logSet>[0]) {
+  await logSet(page, 10) // warmup
+  await page.click('button:has-text("SKIP REST")')
+  await logSet(page, 5)  // main set 1
+  await page.click('button:has-text("SKIP REST")')
+  await logSet(page, 5)  // main set 2
+  await page.click('button:has-text("SKIP REST")')
+  // currentSetIndex is now on the AMRAP set
+}
+
+test.describe('rest timer thresholds and AMRAP fail detection', () => {
+  const getRestState = (page: Parameters<typeof logSet>[0]) =>
+    page.evaluate(() => {
+      const stored = localStorage.getItem('workout-store')
+      return stored ? JSON.parse(stored).state as { isResting: boolean; restType: string } : null
+    })
+
+  test('warmup→main transition sets restType to transition', async ({ page }) => {
+    await startWorkout(page)
+    await logSet(page, 10) // warmup set; next set is main → transition
+
+    const state = await getRestState(page)
+    expect(state?.isResting).toBe(true)
+    expect(state?.restType).toBe('transition')
+  })
+
+  test('main→main set sets restType to normal', async ({ page }) => {
+    await startWorkout(page)
+    await logSet(page, 10)                            // warmup → skip
+    await page.click('button:has-text("SKIP REST")')
+    await logSet(page, 5)                             // main set 1 → main set 2 = normal
+
+    const state = await getRestState(page)
+    expect(state?.restType).toBe('normal')
+  })
+
+  test('AMRAP at or above program minimum sets restType to transition (to FSL)', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 6) // 6 >= 5 minimum; next set is FSL → transition
+
+    const state = await getRestState(page)
+    expect(state?.restType).toBe('transition')
+  })
+
+  test('AMRAP below program minimum sets restType to fail', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 3) // 3 < 5 (week 1 minimum)
+
+    const state = await getRestState(page)
+    expect(state?.restType).toBe('fail')
+  })
+
+  test('"TIME FOR YOUR NEXT SET" appears after 60s on exercise transition', async ({ page }) => {
+    await page.clock.install()
+    await startWorkout(page)
+    await logSet(page, 10) // warmup→main = transition
+
+    await page.clock.fastForward(60_000)
+    await expect(page.locator('text=TIME FOR YOUR NEXT SET')).toBeVisible()
+  })
+
+  test('"TIME FOR YOUR NEXT SET" appears after 90s on same-exercise set', async ({ page }) => {
+    await page.clock.install()
+    await startWorkout(page)
+    await logSet(page, 10)                           // warmup (transition, 60s)
+    await page.click('button:has-text("SKIP REST")')
+    await logSet(page, 5)                            // main set 1 → main set 2 = normal (90s)
+
+    await page.clock.fastForward(90_000)
+    await expect(page.locator('text=TIME FOR YOUR NEXT SET')).toBeVisible()
+  })
+
+  test('"TIME FOR YOUR NEXT SET" appears after 180s on failed AMRAP', async ({ page }) => {
+    await page.clock.install()
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 3) // fail
+
+    await page.clock.fastForward(180_000)
+    await expect(page.locator('text=TIME FOR YOUR NEXT SET')).toBeVisible()
+  })
+
+  test('"REST UP — SET FAILED" appears after 300s on failed AMRAP', async ({ page }) => {
+    await page.clock.install()
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 3) // below week 1 minimum of 5
+
+    await page.clock.fastForward(300_000)
+    await expect(page.locator('text=REST UP — SET FAILED')).toBeVisible()
   })
 })

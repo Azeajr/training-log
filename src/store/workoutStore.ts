@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Session, Set, AccessorySet } from '../db/db'
 
+export type RestType = 'normal' | 'transition' | 'fail'
+
 interface LoggedSet extends Set {
   id?: number
 }
@@ -20,7 +22,7 @@ interface WorkoutState {
   currentSetIndex: number
   isResting: boolean
   restStartedAt: number | null
-  lastAmrapFailed: boolean
+  restType: RestType
   activeAccessories: ActiveAccessory[]
   notes: string
 
@@ -28,7 +30,7 @@ interface WorkoutState {
   logSet: (set: LoggedSet) => void
   editSet: (index: number, updates: Partial<LoggedSet>) => void
   advanceSet: () => void
-  startRest: (failed?: boolean) => void
+  startRest: (type: RestType) => void
   stopRest: () => void
   addAccessory: (accessory: ActiveAccessory) => void
   logAccessorySet: (exerciseId: number, set: Partial<AccessorySet>) => void
@@ -45,7 +47,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       currentSetIndex: 0,
       isResting: false,
       restStartedAt: null,
-      lastAmrapFailed: false,
+      restType: 'normal' as RestType,
       activeAccessories: [],
       notes: '',
 
@@ -55,7 +57,7 @@ export const useWorkoutStore = create<WorkoutState>()(
         currentSetIndex: 0,
         isResting: false,
         restStartedAt: null,
-        lastAmrapFailed: false,
+        restType: 'normal',
         activeAccessories: [],
         notes: '',
       }),
@@ -74,16 +76,16 @@ export const useWorkoutStore = create<WorkoutState>()(
         currentSetIndex: state.currentSetIndex + 1,
       })),
 
-      startRest: (failed = false) => set({
+      startRest: (type) => set({
         isResting: true,
         restStartedAt: Date.now(),
-        lastAmrapFailed: failed,
+        restType: type,
       }),
 
       stopRest: () => set({
         isResting: false,
         restStartedAt: null,
-        lastAmrapFailed: false,
+        restType: 'normal',
       }),
 
       addAccessory: (accessory) => set((state) => ({
@@ -110,7 +112,7 @@ export const useWorkoutStore = create<WorkoutState>()(
         currentSetIndex: 0,
         isResting: false,
         restStartedAt: null,
-        lastAmrapFailed: false,
+        restType: 'normal',
         activeAccessories: [],
         notes: '',
       }),
