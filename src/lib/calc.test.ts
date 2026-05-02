@@ -13,6 +13,8 @@ import {
   formatDuration,
   canAdvanceWeek,
   calcPlatesPerSide,
+  calcNextJokerWeight,
+  calcJokerSet,
 } from './calc'
 import { DEFAULT_PLATES } from '../store/settingsStore'
 
@@ -134,6 +136,28 @@ describe('formatDuration', () => {
 describe('canAdvanceWeek', () => {
   it('true at 4', () => expect(canAdvanceWeek(4)).toBe(true))
   it('false at 3', () => expect(canAdvanceWeek(3)).toBe(false))
+})
+
+describe('calcNextJokerWeight', () => {
+  it('adds ~5% and rounds to nearest 5', () => {
+    expect(calcNextJokerWeight(170)).toBe(180)  // 170 * 1.05 = 178.5 → 180
+  })
+  it('170lb top set chains correctly', () => {
+    const j1 = calcNextJokerWeight(170)         // 180
+    const j2 = calcNextJokerWeight(j1)          // 180 * 1.05 = 189 → 190
+    expect(j1).toBe(180)
+    expect(j2).toBe(190)
+  })
+})
+
+describe('calcJokerSet', () => {
+  it('produces a correctly shaped JokerSet', () => {
+    const s = calcJokerSet(170, 1, 5)
+    expect(s).toEqual({ type: 'joker', setNumber: 1, weight: 180, reps: 5, isAmrap: false })
+  })
+  it('setNumber is preserved', () => {
+    expect(calcJokerSet(170, 3, 3).setNumber).toBe(3)
+  })
 })
 
 describe('calcPlatesPerSide', () => {

@@ -8,9 +8,11 @@ import {
   calcFslSets,
   calcWarmup,
   calcAmrapTargets,
+  calcJokerSet,
+  calcNextJokerWeight,
   targetReps,
 } from '../lib/calc'
-import type { AmrapTarget, MainSet, FslSet, WarmupSet } from '../lib/calc'
+import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
 import type { RestType } from '../store/workoutStore'
 import { getAmrapTargets, advanceCycleIfComplete } from '../lib/session'
 import SetRow from '../components/SetRow'
@@ -35,7 +37,8 @@ export default function Workout() {
     setNotes,
   } = useWorkoutStore()
   const [lift, setLift] = useState<Lift | null>(null)
-  const [allSets, setAllSets] = useState<(WarmupSet | MainSet | FslSet)[]>([])
+  const [allSets, setAllSets] = useState<(WarmupSet | MainSet | FslSet | JokerSet)[]>([])
+  const [jokerSets, setJokerSets] = useState<JokerSet[]>([])
   const [amrapTargets, setAmrapTargets] = useState<AmrapTarget[]>([])
   const [showPicker, setShowPicker] = useState(false)
   const [exercises, setExercises] = useState<Exercise[]>([])
@@ -62,7 +65,11 @@ export default function Workout() {
     const main = calcMainSets(tmWeight, activeSession.week)
     const fsl = calcFslSets(tmWeight)
     const warmup = calcWarmup(tmWeight, main[0].weight, l.liftType)
-    setAllSets([...warmup, ...main, ...fsl])
+    const restoredJokers: JokerSet[] = loggedSets
+      .filter(s => s.type === 'joker')
+      .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
+    setJokerSets(restoredJokers)
+    setAllSets([...warmup, ...main, ...restoredJokers, ...fsl])
 
     if (activeSession.week !== 4) {
       const amrapSet = main.find(s => s.isAmrap)
@@ -120,6 +127,21 @@ export default function Workout() {
     editSet(setIndex, { reps, weight })
     const dbId = loggedSets[setIndex]?.id
     if (dbId) db.sets.update(dbId, { reps, weight })
+  }
+
+  const handleAddJoker = () => {
+    const amrapSet = allSets.find(s => s.type === 'main' && (s as MainSet).isAmrap) as MainSet | undefined
+    const lastWeight = jokerSets.length > 0 ? jokerSets[jokerSets.length - 1].weight : (amrapSet?.weight ?? 0)
+    const jokerReps = ({ 1: 5, 2: 3, 3: 1 } as Record<number, number>)[activeSession!.week] ?? 5
+    const newJoker = calcJokerSet(lastWeight, jokerSets.length + 1, jokerReps)
+    const updatedJokers = [...jokerSets, newJoker]
+    setJokerSets(updatedJokers)
+    setAllSets(prev => {
+      const w = prev.filter(s => s.type === 'warmup') as WarmupSet[]
+      const m = prev.filter(s => s.type === 'main') as MainSet[]
+      const f = prev.filter(s => s.type === 'fsl') as FslSet[]
+      return [...w, ...m, ...updatedJokers, ...f]
+    })
   }
 
   const handleComplete = async () => {
@@ -188,9 +210,25 @@ export default function Workout() {
   const liftName = lift?.name ?? '...'
   const warmupSets = allSets.filter(s => s.type === 'warmup') as WarmupSet[]
   const mainSets = allSets.filter(s => s.type === 'main') as MainSet[]
+  const jokerSetsRendered = allSets.filter(s => s.type === 'joker') as JokerSet[]
   const fslSets = allSets.filter(s => s.type === 'fsl') as FslSet[]
   const warmupCount = warmupSets.length
   const mainCount = mainSets.length
+  const jokerCount = jokerSetsRendered.length
+
+  const amrapIdx = warmupCount + mainCount - 1
+  const amrapLogged = loggedSets[amrapIdx]
+  const weekMinReps = ({ 1: 5, 2: 3, 3: 1 } as Record<number, number>)[activeSession?.week ?? 4] ?? 1
+  const lastJokerLogged = jokerCount === 0 || loggedSets[warmupCount + mainCount + jokerCount - 1] != null
+  const showJokerButton =
+    activeSession?.week !== 4 &&
+    amrapLogged != null &&
+    amrapLogged.reps >= weekMinReps &&
+    lastJokerLogged
+
+  const amrapSet = mainSets.find(s => s.isAmrap)
+  const lastJokerWeight = jokerCount > 0 ? jokerSetsRendered[jokerCount - 1].weight : (amrapSet?.weight ?? 0)
+  const nextJokerWeight = calcNextJokerWeight(lastJokerWeight)
 
   return (
     <div className="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
@@ -223,7 +261,7 @@ export default function Workout() {
           <div className="mb-6 md:mb-0">
             <div className="text-muted uppercase text-xs tracking-widest mb-2">FSL  5 x 10</div>
             {fslSets.map((s, i) => {
-              const globalIdx = warmupCount + mainCount + i
+              const globalIdx = warmupCount + mainCount + jokerCount + i
               return (
                 <SetRow
                   key={i}
@@ -261,6 +299,36 @@ export default function Workout() {
               )
             })}
           </div>
+
+          {jokerSetsRendered.length > 0 && (
+            <div className="mb-6">
+              <div className="text-muted uppercase text-xs tracking-widest mb-2">JOKER SETS</div>
+              {jokerSetsRendered.map((s, i) => {
+                const globalIdx = warmupCount + mainCount + i
+                return (
+                  <SetRow
+                    key={i}
+                    set={s}
+                    isActive={currentSetIndex === globalIdx}
+                    isCompleted={globalIdx < currentSetIndex}
+                    loggedReps={loggedSets[globalIdx]?.reps}
+                    loggedWeight={loggedSets[globalIdx]?.weight}
+                    onLog={(reps, weight) => handleLog(globalIdx, reps, weight)}
+                    onEdit={(reps, weight) => handleEdit(globalIdx, reps, weight)}
+                  />
+                )
+              })}
+            </div>
+          )}
+
+          {showJokerButton && (
+            <button
+              onClick={handleAddJoker}
+              className="w-full border border-warn text-warn py-3 font-mono text-xs tracking-widest hover:bg-warn/10 mb-6"
+            >
+              + JOKER SET  {nextJokerWeight}lb
+            </button>
+          )}
 
           {activeAccessories.length > 0 && (
             <div className="mb-4">

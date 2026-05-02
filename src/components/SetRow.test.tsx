@@ -23,6 +23,11 @@ describe('SetRow — pending (not active, not completed)', () => {
     expect(screen.getByText('170lb')).toBeInTheDocument()
     expect(screen.queryByRole('button')).toBeNull()
   })
+
+  it('shows JOKER badge on pending joker set', () => {
+    render(<SetRow set={{ ...BASE_SET, type: 'joker' as const }} isActive={false} isCompleted={false} onLog={vi.fn()} onEdit={vi.fn()} />)
+    expect(screen.getByText('JOKER')).toBeInTheDocument()
+  })
 })
 
 describe('SetRow — active', () => {
@@ -84,6 +89,11 @@ describe('SetRow — active', () => {
   it('shows AMRAP badge when isAmrap is true', () => {
     render(<SetRow set={{ ...BASE_SET, isAmrap: true }} isActive={true} isCompleted={false} onLog={vi.fn()} onEdit={vi.fn()} />)
     expect(screen.getByText('AMRAP')).toBeInTheDocument()
+  })
+
+  it('shows JOKER badge when type is joker', () => {
+    render(<SetRow set={{ ...BASE_SET, type: 'joker' as const }} isActive={true} isCompleted={false} onLog={vi.fn()} onEdit={vi.fn()} />)
+    expect(screen.getByText('JOKER')).toBeInTheDocument()
   })
 })
 

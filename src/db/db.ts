@@ -36,7 +36,7 @@ export interface Session {
 export interface Set {
   id?: number
   sessionId: number
-  type: 'warmup' | 'main' | 'fsl'
+  type: 'warmup' | 'main' | 'fsl' | 'joker'
   setNumber: number
   weight: number
   reps: number

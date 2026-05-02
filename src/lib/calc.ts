@@ -45,6 +45,27 @@ export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4): MainSet[] => {
   }))
 }
 
+export interface JokerSet {
+  type: 'joker'
+  setNumber: number
+  weight: number
+  reps: number
+  isAmrap: false
+}
+
+export const JOKER_INCREMENT = 0.05
+
+export const calcNextJokerWeight = (prevWeight: number): number =>
+  roundToNearest5(prevWeight * (1 + JOKER_INCREMENT))
+
+export const calcJokerSet = (prevWeight: number, setNumber: number, reps: number): JokerSet => ({
+  type: 'joker',
+  setNumber,
+  weight: calcNextJokerWeight(prevWeight),
+  reps,
+  isAmrap: false,
+})
+
 export interface FslSet {
   setNumber: number
   weight: number

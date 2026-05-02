@@ -72,6 +72,7 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
           </span>
           <span className="text-xl text-text">x {set.reps}{isAmrap ? '+' : ''}</span>
           {isAmrap && <span className="text-warn text-xs tracking-widest">AMRAP</span>}
+          {set.type === 'joker' && <span className="text-warn text-xs tracking-widest">JOKER</span>}
         </div>
         <PlateDisplay weight={weight} />
         {isAmrap && amrapTargets && amrapTargets.length > 0 && (
@@ -94,11 +95,14 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
     )
   }
 
+  const isJoker = set.type === 'joker'
+
   return (
     <div className="flex items-center gap-3 py-2.5 pl-3 text-sm text-muted border-l-4 border-transparent">
       <span className="w-16 text-right font-mono">{set.weight}lb</span>
       <span>x {set.reps}{isAmrap ? '+' : ''}</span>
       {isAmrap && <span className="text-xs text-faint tracking-widest">AMRAP</span>}
+      {isJoker && <span className="text-xs text-faint tracking-widest">JOKER</span>}
     </div>
   )
 }
