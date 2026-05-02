@@ -26,8 +26,8 @@ export function useSwipeNav() {
     const current = TABS.findIndex(t => location.pathname.startsWith(t))
     if (current === -1) return
 
-    if (dx < 0 && current < TABS.length - 1) navigate(TABS[current + 1])
-    else if (dx > 0 && current > 0) navigate(TABS[current - 1])
+    const next = (current + (dx < 0 ? 1 : -1) + TABS.length) % TABS.length
+    navigate(TABS[next])
   }
 
   return { onTouchStart, onTouchEnd }
