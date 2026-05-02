@@ -3,6 +3,7 @@ import { db } from '../db/db'
 import type { Exercise, LiftAccessory } from '../db/db'
 import { useWorkoutStore } from '../store/workoutStore'
 import { roundToNearest5 } from '../lib/calc'
+import Rule from './Rule'
 
 interface Props {
   liftId: number
@@ -89,9 +90,7 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
   if (settingTm) {
     return (
       <div className="fixed inset-0 bg-zinc-950 z-50 p-4">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-4">
-          --- SET TRAINING MAX -----------------------------
-        </div>
+        <Rule label="SET TRAINING MAX" className="text-zinc-500 mb-4" />
         <div className="text-zinc-100 mb-6 uppercase tracking-widest">{settingTm.name}</div>
         <div className="space-y-4">
           <div className="flex items-center gap-4">
@@ -139,9 +138,7 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
   return (
     <div className="fixed inset-0 bg-zinc-950 z-50 p-4 overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest">
-          --- SELECT ASSISTANCE EXERCISE ---------------
-        </div>
+        <Rule label="SELECT ASSISTANCE EXERCISE" className="text-zinc-500" />
         <button onClick={onClose} className="text-zinc-500 hover:text-zinc-100 font-mono">✕</button>
       </div>
       <div className="space-y-1">

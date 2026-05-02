@@ -3,6 +3,7 @@ import { db } from '../db/db'
 import type { Lift, Exercise } from '../db/db'
 import { useSettingsStore } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../lib/exportImport'
+import Rule from '../components/Rule'
 
 export default function Settings() {
   const { restTimer1, restTimer2, restTimerFail, update } = useSettingsStore()
@@ -95,9 +96,7 @@ export default function Settings() {
 
       {/* Training Maxes */}
       <div className="mb-6">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
-          --- TRAINING MAXES --------------------------------
-        </div>
+        <Rule label="TRAINING MAXES" className="text-zinc-500 mb-2" />
         {lifts.map(l => (
           <div key={l.id} className="flex items-center gap-3 py-1 border-b border-zinc-800">
             <span className="text-zinc-500 w-20 uppercase tracking-widest text-xs">{l.name}</span>
@@ -131,9 +130,7 @@ export default function Settings() {
 
       {/* Rest Timers */}
       <div className="mb-6">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
-          --- REST TIMERS -----------------------------------
-        </div>
+        <Rule label="REST TIMERS" className="text-zinc-500 mb-2" />
         {(
           [
             { label: 'First', field: 'restTimer1' as const, value: restTimer1 },
@@ -152,9 +149,7 @@ export default function Settings() {
 
       {/* Exercises */}
       <div className="mb-6">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
-          --- EXERCISES -------------------------------------
-        </div>
+        <Rule label="EXERCISES" className="text-zinc-500 mb-2" />
         {exercises.map(ex => (
           <div key={ex.id} className="flex items-center justify-between py-1 border-b border-zinc-800">
             <span className="text-zinc-100">{ex.name}</span>
@@ -204,9 +199,7 @@ export default function Settings() {
 
       {/* Data */}
       <div>
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-3">
-          --- DATA ------------------------------------------
-        </div>
+        <Rule label="DATA" className="text-zinc-500 mb-3" />
         <div className="flex flex-wrap gap-3 mb-4">
           <button
             onClick={exportJson}

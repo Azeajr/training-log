@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
 import type { Exercise, LiftAccessory } from '../db/db'
 import DurationInput from '../components/DurationInput'
+import Rule from '../components/Rule'
 
 interface EditSet {
   id: number
@@ -296,9 +297,7 @@ export default function HistoryEdit() {
       })}
 
       <div className="mb-6">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
-          --- ACCESSORIES ----------------------------------
-        </div>
+        <Rule label="ACCESSORIES" className="text-zinc-500 mb-2" />
         {editAccessories.map((acc, ai) => (
           <div key={ai} className="border border-zinc-700 p-3 mb-3">
             <div className="flex items-center justify-between mb-2">
@@ -387,9 +386,7 @@ export default function HistoryEdit() {
       {showPicker !== null && (
         <div className="fixed inset-0 bg-zinc-950 z-50 p-4 overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
-            <div className="text-zinc-500 uppercase text-xs tracking-widest">
-              --- SELECT EXERCISE --------------------------
-            </div>
+            <Rule label="SELECT EXERCISE" className="text-zinc-500" />
             <button onClick={() => setShowPicker(null)} className="text-zinc-500 hover:text-zinc-100 font-mono">✕</button>
           </div>
           <div className="space-y-1">

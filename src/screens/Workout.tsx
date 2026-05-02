@@ -17,6 +17,7 @@ import SetRow from '../components/SetRow'
 import AccessoryPicker from '../components/AccessoryPicker'
 import AccessoryLog from '../components/AccessoryLog'
 import RestTimer from '../components/RestTimer'
+import Rule from '../components/Rule'
 
 export default function Workout() {
   const navigate = useNavigate()
@@ -178,9 +179,10 @@ export default function Workout() {
 
   return (
     <div className="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
-      <div className={`uppercase text-xs tracking-widest mb-6 ${activeSession.week === 4 ? 'text-blue-400' : 'text-zinc-500'}`}>
-        --- {liftName} . WEEK {activeSession.week}{activeSession.week === 4 ? ' . DELOAD' : ''} ----------------------------
-      </div>
+      <Rule
+        label={`${liftName} . WEEK ${activeSession.week}${activeSession.week === 4 ? ' . DELOAD' : ''}`}
+        className={`mb-6 ${activeSession.week === 4 ? 'text-blue-400' : 'text-zinc-500'}`}
+      />
 
       {/* Sets: single column on mobile, two-column on desktop */}
       <div className="md:grid md:grid-cols-[2fr_3fr] md:gap-10 md:items-start">
@@ -244,9 +246,7 @@ export default function Workout() {
 
           {activeAccessories.length > 0 && (
             <div className="mb-4">
-              <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
-                --- ACCESSORIES ----------------------------------
-              </div>
+              <Rule label="ACCESSORIES" className="text-zinc-500 mb-2" />
               {activeAccessories.map(acc => (
                 <AccessoryLog
                   key={acc.exerciseId}
@@ -265,9 +265,7 @@ export default function Workout() {
           </button>
 
           <div className="mb-6">
-            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
-              --- NOTES ----------------------------------------
-            </div>
+            <Rule label="NOTES" className="text-zinc-500 mb-2" />
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}

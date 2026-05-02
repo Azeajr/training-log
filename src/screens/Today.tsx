@@ -6,6 +6,7 @@ import { useWorkoutStore } from '../store/workoutStore'
 import { calcMainSets, calcFslSets, calcWarmup } from '../lib/calc'
 import { getNextSession } from '../lib/session'
 import SessionPreview from '../components/SessionPreview'
+import Rule from '../components/Rule'
 
 interface WeekStatus {
   liftId: number
@@ -148,9 +149,10 @@ export default function Today() {
       <div className="md:grid md:grid-cols-2 md:gap-12 md:items-start">
         {/* Left: week header + lift picker */}
         <div>
-          <div className={`uppercase text-xs tracking-widest mb-4 ${currentWeek === 4 ? 'text-blue-400' : 'text-zinc-500'}`}>
-            --- WEEK {currentWeek}{currentWeek === 4 ? ' . DELOAD' : ''} ----------------------------------------
-          </div>
+          <Rule
+            label={`WEEK ${currentWeek}${currentWeek === 4 ? ' . DELOAD' : ''}`}
+            className={`mb-4 ${currentWeek === 4 ? 'text-blue-400' : 'text-zinc-500'}`}
+          />
 
           <div className="flex gap-2 mb-6 flex-wrap">
             {weekStatuses.map(ws => (
@@ -177,9 +179,7 @@ export default function Today() {
         <div>
           {selectedLift && (
             <>
-              <div className="text-zinc-500 uppercase text-xs tracking-widest mb-4">
-                --- {selectedLift.name} . TODAY ---------------------------------
-              </div>
+              <Rule label={`${selectedLift.name} . TODAY`} className="text-zinc-500 mb-4" />
               <SessionPreview warmup={warmup} main={main} fsl={fsl} />
               <button
                 onClick={handleStart}

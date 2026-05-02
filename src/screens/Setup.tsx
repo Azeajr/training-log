@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { db } from '../db/db'
+import Rule from '../components/Rule'
 
 interface Props {
   onComplete: () => void
@@ -35,9 +36,7 @@ export default function Setup({ onComplete }: Props) {
   if (step === 1) {
     return (
       <div className="p-4 max-w-sm mx-auto pt-12">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-6">
-          --- SETUP . STEP 1/2 ---------------------
-        </div>
+        <Rule label="SETUP . STEP 1/2" className="text-zinc-500 mb-6" />
         <div className="text-zinc-100 mb-6">Enter your training maxes (lbs):</div>
         <div className="space-y-4">
           {LIFTS.map(lift => (
@@ -68,9 +67,7 @@ export default function Setup({ onComplete }: Props) {
 
   return (
     <div className="p-4 max-w-sm mx-auto pt-12">
-      <div className="text-zinc-500 uppercase text-xs tracking-widest mb-6">
-        --- SETUP . STEP 2/2 ---------------------
-      </div>
+      <Rule label="SETUP . STEP 2/2" className="text-zinc-500 mb-6" />
       <div className="text-zinc-100 mb-4">Confirm training maxes:</div>
       <div className="border border-zinc-700 p-4 space-y-2 mb-8">
         {LIFTS.map(lift => (
