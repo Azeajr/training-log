@@ -19,6 +19,7 @@ interface Props {
 export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedWeight, amrapTargets, onLog, onEdit }: Props) {
   const [reps, setReps] = useState(set.reps)
   const [weight, setWeight] = useState(set.weight)
+  const [weightEditing, setWeightEditing] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editReps, setEditReps] = useState(loggedReps ?? set.reps)
   const [editWeight, setEditWeight] = useState(loggedWeight ?? set.weight)
@@ -67,9 +68,12 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
     return (
       <div ref={rowRef} className="border-l-4 border-accent pl-3 py-3 mb-1">
         <div className="flex items-baseline gap-3">
-          <span className="text-2xl font-mono text-text">
-            {weight}<span className="text-base text-muted ml-1">lb</span>
-          </span>
+          <button
+            onClick={() => setWeightEditing(w => !w)}
+            className={`text-2xl font-mono border-b-2 ${weightEditing ? 'text-accent border-accent' : 'text-text border-muted border-dashed'}`}
+          >
+            {weight}<span className="text-base ml-1">lb</span>
+          </button>
           <span className="text-xl text-text">x {set.reps}{isAmrap ? '+' : ''}</span>
           {isAmrap && <span className="text-warn text-xs tracking-widest">AMRAP</span>}
           {set.type === 'joker' && <span className="text-warn text-xs tracking-widest">JOKER</span>}
@@ -79,13 +83,18 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
           <AmrapTargets targets={amrapTargets} />
         )}
         <div className="mt-3 flex flex-col gap-2">
+          {weightEditing && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-faint uppercase tracking-widest w-8">wt</span>
+              <Stepper value={weight} onChange={setWeight} step={2.5} min={0} />
+            </div>
+          )}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-faint uppercase tracking-widest w-8">wt</span>
-            <Stepper value={weight} onChange={setWeight} step={2.5} min={0} />
+            <span className="text-xs text-faint uppercase tracking-widest w-8">reps</span>
+            <Stepper value={reps} onChange={setReps} step={1} min={0} />
           </div>
-          <Stepper value={reps} onChange={setReps} step={1} min={0} />
           <button
-            onClick={() => { onLog(reps, weight); setReps(set.reps) }}
+            onClick={() => { onLog(reps, weight); setReps(set.reps); setWeightEditing(false) }}
             className="w-full border border-accent text-accent py-4 font-mono text-base tracking-widest"
           >
             LOG

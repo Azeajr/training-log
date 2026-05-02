@@ -12,10 +12,18 @@ const BASE_SET = {
   isAmrap: false,
 }
 
-// Active set has two Steppers (weight, reps); helpers index them left-to-right.
+// Active set: weight display is a toggle button ("170lb"), reps stepper is always visible.
+// Weight stepper only appears after tapping the weight display.
+const weightDisplayBtn = () => screen.getByRole('button', { name: /^170lb$/ })
+const repsValueBtn = () => screen.getByRole('button', { name: String(BASE_SET.reps) })
+
+// Call after opening weight editing (two "−" / "+" sets present):
 const wtPlus  = () => screen.getAllByRole('button', { name: '+' })[0]
 const wtMinus = () => screen.getAllByRole('button', { name: '−' })[0]
-const repsPlus  = () => screen.getAllByRole('button', { name: '+' })[1]
+
+// Reps stepper: only "+" / "−" present by default (index 0 before weight editing, index 1 after).
+const repsPlus  = (weightOpen = false) => screen.getAllByRole('button', { name: '+' })[weightOpen ? 1 : 0]
+const repsMinus = (weightOpen = false) => screen.getAllByRole('button', { name: '−' })[weightOpen ? 1 : 0]
 
 describe('SetRow — pending (not active, not completed)', () => {
   it('renders weight and reps dimmed, no interactive controls', () => {
@@ -31,11 +39,27 @@ describe('SetRow — pending (not active, not completed)', () => {
 })
 
 describe('SetRow — active', () => {
-  it('renders weight and reps Steppers and a LOG button', () => {
+  it('shows weight display button, reps stepper, and LOG — no weight stepper by default', () => {
     render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={vi.fn()} onEdit={vi.fn()} />)
-    expect(screen.getByRole('button', { name: String(BASE_SET.weight) })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: String(BASE_SET.reps) })).toBeInTheDocument()
+    expect(weightDisplayBtn()).toBeInTheDocument()
+    expect(repsValueBtn()).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'LOG' })).toBeInTheDocument()
+    // weight stepper value button ("170" without "lb") must NOT be present
+    expect(screen.queryByRole('button', { name: '170' })).toBeNull()
+  })
+
+  it('tapping weight display reveals the weight stepper', async () => {
+    render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={vi.fn()} onEdit={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: '170' })).toBeNull()
+    await userEvent.click(weightDisplayBtn())
+    expect(screen.getByRole('button', { name: '170' })).toBeInTheDocument()
+  })
+
+  it('tapping weight display again hides the weight stepper', async () => {
+    render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={vi.fn()} onEdit={vi.fn()} />)
+    await userEvent.click(weightDisplayBtn())
+    await userEvent.click(weightDisplayBtn())
+    expect(screen.queryByRole('button', { name: '170' })).toBeNull()
   })
 
   it('logs the planned reps and weight when LOG is clicked without adjustment', async () => {
@@ -53,9 +77,10 @@ describe('SetRow — active', () => {
     expect(onLog).toHaveBeenCalledWith(BASE_SET.reps + 1, BASE_SET.weight)
   })
 
-  it('logs adjusted weight (reps unchanged) after pressing weight +', async () => {
+  it('logs adjusted weight after pressing weight + (requires opening weight edit first)', async () => {
     const onLog = vi.fn()
     render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={onLog} onEdit={vi.fn()} />)
+    await userEvent.click(weightDisplayBtn())
     await userEvent.click(wtPlus())
     await userEvent.click(screen.getByRole('button', { name: 'LOG' }))
     expect(onLog).toHaveBeenCalledWith(BASE_SET.reps, BASE_SET.weight + 2.5)
@@ -64,26 +89,47 @@ describe('SetRow — active', () => {
   it('logs adjusted weight after pressing weight −', async () => {
     const onLog = vi.fn()
     render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={onLog} onEdit={vi.fn()} />)
+    await userEvent.click(weightDisplayBtn())
     await userEvent.click(wtMinus())
     await userEvent.click(screen.getByRole('button', { name: 'LOG' }))
     expect(onLog).toHaveBeenCalledWith(BASE_SET.reps, BASE_SET.weight - 2.5)
   })
 
-  it('weight display updates immediately when weight is adjusted', async () => {
+  it('large weight display updates immediately when weight Stepper is adjusted', async () => {
     render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={vi.fn()} onEdit={vi.fn()} />)
+    await userEvent.click(weightDisplayBtn())
     await userEvent.click(wtPlus())
-    expect(screen.getByRole('button', { name: '172.5' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^172\.5lb$/ })).toBeInTheDocument()
+  })
+
+  it('LOG resets weight stepper to hidden', async () => {
+    const onLog = vi.fn()
+    render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={onLog} onEdit={vi.fn()} />)
+    await userEvent.click(weightDisplayBtn())
+    expect(screen.getByRole('button', { name: '170' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    expect(screen.queryByRole('button', { name: '170' })).toBeNull()
   })
 
   it('logs a custom reps value typed via keyboard fallback', async () => {
     const onLog = vi.fn()
     render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={onLog} onEdit={vi.fn()} />)
-    await userEvent.click(screen.getByRole('button', { name: String(BASE_SET.reps) }))
+    await userEvent.click(repsValueBtn())
     const input = screen.getByRole('spinbutton')
     await userEvent.clear(input)
     await userEvent.type(input, '12{Enter}')
     await userEvent.click(screen.getByRole('button', { name: 'LOG' }))
     expect(onLog).toHaveBeenCalledWith(12, BASE_SET.weight)
+  })
+
+  it('can adjust both weight and reps independently before logging', async () => {
+    const onLog = vi.fn()
+    render(<SetRow set={BASE_SET} isActive={true} isCompleted={false} onLog={onLog} onEdit={vi.fn()} />)
+    await userEvent.click(weightDisplayBtn())
+    await userEvent.click(wtPlus())             // weight: 172.5
+    await userEvent.click(repsPlus(true))       // reps: 6  (weight open → index 1)
+    await userEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    expect(onLog).toHaveBeenCalledWith(BASE_SET.reps + 1, BASE_SET.weight + 2.5)
   })
 
   it('shows AMRAP badge when isAmrap is true', () => {

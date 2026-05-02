@@ -12,7 +12,10 @@ EXIT WITHOUT SAVING button on the Workout screen abandons the current attempt, d
 Given a target weight, show which plates to load on each side of the bar. Shown inline on the active set during a workout.
 
 ### Per-Set Weight Adjustment
-Tap the weight stepper on any active or completed set during a workout to adjust the actual weight lifted. Stored on the set record; TM is unchanged. Completed sets can be re-edited inline.
+Weight on the active set defaults to the programmed value. Tap the weight display to reveal the stepper (signalled by a dashed underline; accent colour when open). Stored on the set record; TM is unchanged. Completed sets can be re-edited inline.
+
+### Component-Level Workout Tests
+RTL integration tests (`src/screens/Workout.test.tsx`) cover the joker-button flow — successful AMRAP, failed AMRAP, week 2/3 minimums, pending-joker suppression — without requiring a browser. Removes reliance on Playwright as the sole regression gate for core workout logic.
 
 ### Joker Sets
 After logging the AMRAP top set with reps ≥ the week's minimum (≥5/≥3/≥1), a "+ JOKER SET Xlb" button appears. Each joker is +5% over the previous weight rounded to nearest 5lb at the same rep scheme. Button reappears after each successful joker. Disabled on deload week. Joker sets survive reload.
