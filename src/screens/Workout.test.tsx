@@ -17,24 +17,13 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Workout from './Workout'
 import { useWorkoutStore } from '../store/workoutStore'
-import { calcMainSets, calcWarmup, calcFslSets } from '../lib/calc'
+import { calcMainSets, calcWarmup } from '../lib/calc'
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
 
 const TM = 95   // same TM as e2e setup wizard
 const LIFT_ID = 1
 const CYCLE_ID = 1
-
-const mockLift = {
-  id: LIFT_ID,
-  name: 'OHP' as const,
-  order: 1,
-  progressionIncrement: 5,
-  baseWeight: 45,
-  liftType: 'upper' as const,
-}
-
-const mockTm = { id: 1, liftId: LIFT_ID, weight: TM, setAt: new Date() }
 
 vi.mock('../db/db', () => ({
   db: {
@@ -110,7 +99,6 @@ function renderWorkout() {
 // Compute the expected layout for TM=95, week=1, upper body
 const mainSets = calcMainSets(TM, 1)
 const warmupSets = calcWarmup(TM, mainSets[0].weight, 'upper')
-const fslSets = calcFslSets(TM)
 const WARMUP_COUNT = warmupSets.length   // 1 for TM=95
 const MAIN_COUNT = mainSets.length       // 3
 

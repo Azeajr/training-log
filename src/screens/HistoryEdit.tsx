@@ -8,7 +8,7 @@ import Stepper from '../components/Stepper'
 
 interface EditSet {
   id: number
-  type: 'warmup' | 'main' | 'fsl'
+  type: 'warmup' | 'main' | 'fsl' | 'joker'
   setNumber: number
   weight: number
   reps: number
@@ -68,7 +68,7 @@ export default function HistoryEdit() {
     setNotes(session.notes ?? '')
 
     const dbSets = await db.sets.where('sessionId').equals(sid).toArray()
-    const typeOrder = { warmup: 0, main: 1, fsl: 2 }
+    const typeOrder = { warmup: 0, main: 1, fsl: 2, joker: 3 }
     dbSets.sort((a, b) => {
       const td = typeOrder[a.type] - typeOrder[b.type]
       return td !== 0 ? td : a.setNumber - b.setNumber

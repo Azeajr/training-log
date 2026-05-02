@@ -22,8 +22,7 @@ const wtPlus  = () => screen.getAllByRole('button', { name: '+' })[0]
 const wtMinus = () => screen.getAllByRole('button', { name: '−' })[0]
 
 // Reps stepper: only "+" / "−" present by default (index 0 before weight editing, index 1 after).
-const repsPlus  = (weightOpen = false) => screen.getAllByRole('button', { name: '+' })[weightOpen ? 1 : 0]
-const repsMinus = (weightOpen = false) => screen.getAllByRole('button', { name: '−' })[weightOpen ? 1 : 0]
+const repsPlus = (weightOpen = false) => screen.getAllByRole('button', { name: '+' })[weightOpen ? 1 : 0]
 
 describe('SetRow — pending (not active, not completed)', () => {
   it('renders weight and reps dimmed, no interactive controls', () => {
