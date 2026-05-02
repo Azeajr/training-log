@@ -140,7 +140,7 @@ export default function Today() {
       {activeSession && (
         <Link
           to="/workout"
-          className="block border border-amber-400 text-amber-400 px-4 py-3 text-xs tracking-widest uppercase mb-6"
+          className="block border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-6"
         >
           &#9654; SESSION IN PROGRESS — RESUME
         </Link>
@@ -151,7 +151,7 @@ export default function Today() {
         <div>
           <Rule
             label={`WEEK ${currentWeek}${currentWeek === 4 ? ' . DELOAD' : ''}`}
-            className={`mb-4 ${currentWeek === 4 ? 'text-blue-400' : 'text-zinc-500'}`}
+            className={`mb-4 ${currentWeek === 4 ? 'text-blue-400' : 'text-muted'}`}
           />
 
           <div className="flex gap-2 mb-6 flex-wrap">
@@ -161,12 +161,12 @@ export default function Today() {
                 onClick={() => handleSelectLift(ws.liftId)}
                 className={`border px-3 py-2 text-xs tracking-widest ${
                   ws.liftId === selectedLiftId
-                    ? 'border-amber-400 text-amber-400'
+                    ? 'border-warn text-warn'
                     : ws.status === 'completed'
-                    ? 'border-green-400 text-green-400'
+                    ? 'border-accent text-accent'
                     : ws.status === 'skipped'
-                    ? 'border-red-400 text-red-400'
-                    : 'border-zinc-700 text-zinc-500 hover:border-zinc-100 hover:text-zinc-100'
+                    ? 'border-danger text-danger'
+                    : 'border-border text-muted hover:border-text hover:text-text'
                 }`}
               >
                 {ws.name} {statusLabel(ws)}
@@ -179,11 +179,11 @@ export default function Today() {
         <div>
           {selectedLift && (
             <>
-              <Rule label={`${selectedLift.name} . TODAY`} className="text-zinc-500 mb-4" />
+              <Rule label={`${selectedLift.name} . TODAY`} className="text-muted mb-4" />
               <SessionPreview warmup={warmup} main={main} fsl={fsl} />
               <button
                 onClick={handleStart}
-                className="mt-6 border border-green-400 text-green-400 px-6 py-4 font-mono w-full tracking-widest text-sm"
+                className="mt-6 border border-accent text-accent px-6 py-4 font-mono w-full tracking-widest text-sm"
               >
                 START WORKOUT
               </button>
@@ -194,23 +194,23 @@ export default function Today() {
 
       {showAbandonConfirm && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-          <div className="bg-zinc-900 border border-zinc-700 p-6 font-mono max-w-sm w-full">
-            <div className="text-zinc-100 uppercase tracking-widest text-sm mb-2">
+          <div className="bg-surface border border-border p-6 font-mono max-w-sm w-full">
+            <div className="text-text uppercase tracking-widest text-sm mb-2">
               ABANDON SESSION?
             </div>
-            <div className="text-zinc-500 text-xs mb-6">
+            <div className="text-muted text-xs mb-6">
               Your {activeLiftName} session is unfinished. Starting a new lift will discard it.
             </div>
             <div className="flex gap-3">
               <button
                 onClick={handleAbandonAndStart}
-                className="flex-1 border border-red-400 text-red-400 py-3 text-xs tracking-widest font-mono"
+                className="flex-1 border border-danger text-danger py-3 text-xs tracking-widest font-mono"
               >
                 ABANDON
               </button>
               <button
                 onClick={() => setShowAbandonConfirm(false)}
-                className="flex-1 border border-zinc-700 text-zinc-500 py-3 text-xs tracking-widest font-mono"
+                className="flex-1 border border-border text-muted py-3 text-xs tracking-widest font-mono"
               >
                 CANCEL
               </button>

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { db } from '../db/db'
 import type { Lift, Exercise } from '../db/db'
-import { useSettingsStore } from '../store/settingsStore'
+import { useSettingsStore, THEMES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../lib/exportImport'
 import Rule from '../components/Rule'
 
 export default function Settings() {
-  const { restTimer1, restTimer2, restTimerFail, update } = useSettingsStore()
+  const { restTimer1, restTimer2, restTimerFail, theme, update } = useSettingsStore()
   const [lifts, setLifts] = useState<Lift[]>([])
   const [tms, setTms] = useState<Record<number, number>>({})
   const [editingTm, setEditingTm] = useState<number | null>(null)
@@ -96,29 +96,29 @@ export default function Settings() {
 
       {/* Training Maxes */}
       <div className="mb-6">
-        <Rule label="TRAINING MAXES" className="text-zinc-500 mb-2" />
+        <Rule label="TRAINING MAXES" className="text-muted mb-2" />
         {lifts.map(l => (
-          <div key={l.id} className="flex items-center gap-3 py-1 border-b border-zinc-800">
-            <span className="text-zinc-500 w-20 uppercase tracking-widest text-xs">{l.name}</span>
+          <div key={l.id} className="flex items-center gap-3 py-1 border-b border-border-dim">
+            <span className="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
             {editingTm === l.id ? (
               <>
                 <input
                   type="number"
                   value={tmInput}
                   onChange={e => setTmInput(e.target.value)}
-                  className="bg-zinc-900 border border-zinc-700 text-zinc-100 px-2 py-0.5 w-20 focus:outline-none focus:border-green-400"
+                  className="bg-surface border border-border text-text px-2 py-0.5 w-20 focus:outline-none focus:border-accent"
                   autoFocus
                 />
-                <span className="text-zinc-500">lb</span>
-                <button onClick={() => handleSaveTm(l.id!)} className="text-green-400 text-xs">SAVE</button>
-                <button onClick={() => setEditingTm(null)} className="text-zinc-500 text-xs">cancel</button>
+                <span className="text-muted">lb</span>
+                <button onClick={() => handleSaveTm(l.id!)} className="text-accent text-xs">SAVE</button>
+                <button onClick={() => setEditingTm(null)} className="text-muted text-xs">cancel</button>
               </>
             ) : (
               <>
-                <span className="text-zinc-100">{tms[l.id!] ?? '—'} lb</span>
+                <span className="text-text">{tms[l.id!] ?? '—'} lb</span>
                 <button
                   onClick={() => { setEditingTm(l.id!); setTmInput(String(tms[l.id!] ?? '')) }}
-                  className="text-zinc-500 text-xs hover:text-green-400"
+                  className="text-muted text-xs hover:text-accent"
                 >
                   edit
                 </button>
@@ -130,7 +130,7 @@ export default function Settings() {
 
       {/* Rest Timers */}
       <div className="mb-6">
-        <Rule label="REST TIMERS" className="text-zinc-500 mb-2" />
+        <Rule label="REST TIMERS" className="text-muted mb-2" />
         {(
           [
             { label: 'First', field: 'restTimer1' as const, value: restTimer1 },
@@ -138,30 +138,61 @@ export default function Settings() {
             { label: 'Failed', field: 'restTimerFail' as const, value: restTimerFail },
           ]
         ).map(({ label, field, value }) => (
-          <div key={field} className="flex items-center gap-3 py-1 border-b border-zinc-800">
-            <span className="text-zinc-500 w-16 text-xs uppercase tracking-widest">{label}</span>
-            <button onClick={() => timerStep(field, -30)} className="border border-zinc-700 px-2 py-0.5 text-zinc-500 hover:text-zinc-100">-</button>
-            <span className="text-zinc-100 w-12 text-center">{fmtTimer(value)}</span>
-            <button onClick={() => timerStep(field, 30)} className="border border-zinc-700 px-2 py-0.5 text-zinc-500 hover:text-zinc-100">+</button>
+          <div key={field} className="flex items-center gap-3 py-1 border-b border-border-dim">
+            <span className="text-muted w-16 text-xs uppercase tracking-widest">{label}</span>
+            <button onClick={() => timerStep(field, -30)} className="border border-border px-2 py-0.5 text-muted hover:text-text">-</button>
+            <span className="text-text w-12 text-center">{fmtTimer(value)}</span>
+            <button onClick={() => timerStep(field, 30)} className="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
           </div>
         ))}
       </div>
 
+      {/* Theme */}
+      <div className="mb-6">
+        <Rule label="THEME" className="text-muted mb-3" />
+        <div className="flex gap-4">
+          {(Object.entries(THEMES) as [string, typeof THEMES[keyof typeof THEMES]][]).map(([key, t]) => (
+            <button
+              key={key}
+              onClick={() => update({ theme: key })}
+              className="flex flex-col items-center gap-1.5"
+            >
+              <div
+                className="w-14 h-10 p-1 rounded-sm border-2 flex flex-col gap-1 transition-all"
+                style={{
+                  backgroundColor: t.vars['--color-bg'],
+                  borderColor: theme === key ? t.vars['--color-accent'] : 'transparent',
+                }}
+              >
+                <div className="flex-1 rounded-sm" style={{ backgroundColor: t.vars['--color-surface'] }} />
+                <div className="h-1 w-1/2 rounded-full" style={{ backgroundColor: t.vars['--color-accent'] }} />
+              </div>
+              <span
+                className="text-xs uppercase tracking-widest"
+                style={{ color: theme === key ? 'var(--color-accent)' : 'var(--color-muted)' }}
+              >
+                {t.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Exercises */}
       <div className="mb-6">
-        <Rule label="EXERCISES" className="text-zinc-500 mb-2" />
+        <Rule label="EXERCISES" className="text-muted mb-2" />
         {exercises.map(ex => (
-          <div key={ex.id} className="flex items-center justify-between py-1 border-b border-zinc-800">
-            <span className="text-zinc-100">{ex.name}</span>
+          <div key={ex.id} className="flex items-center justify-between py-1 border-b border-border-dim">
+            <span className="text-text">{ex.name}</span>
             <div className="flex items-center gap-2">
-              <span className="text-zinc-600 text-xs border border-zinc-800 px-1">{ex.type}</span>
+              <span className="text-muted text-xs border border-border-dim px-1">{ex.type}</span>
               {deleteConfirm === ex.id ? (
                 <>
-                  <button onClick={() => handleDeleteExercise(ex.id!)} className="text-red-400 text-xs">DELETE</button>
-                  <button onClick={() => setDeleteConfirm(null)} className="text-zinc-500 text-xs">cancel</button>
+                  <button onClick={() => handleDeleteExercise(ex.id!)} className="text-danger text-xs">DELETE</button>
+                  <button onClick={() => setDeleteConfirm(null)} className="text-muted text-xs">cancel</button>
                 </>
               ) : (
-                <button onClick={() => setDeleteConfirm(ex.id!)} className="text-zinc-700 text-xs hover:text-red-400">✕</button>
+                <button onClick={() => setDeleteConfirm(ex.id!)} className="text-faint text-xs hover:text-danger">✕</button>
               )}
             </div>
           </div>
@@ -173,24 +204,24 @@ export default function Settings() {
               value={newExName}
               onChange={e => setNewExName(e.target.value)}
               placeholder="Exercise name"
-              className="bg-zinc-900 border border-zinc-700 text-zinc-100 px-2 py-1 flex-1 focus:outline-none focus:border-green-400"
+              className="bg-surface border border-border text-text px-2 py-1 flex-1 focus:outline-none focus:border-accent"
             />
             <select
               value={newExType}
               onChange={e => setNewExType(e.target.value as any)}
-              className="bg-zinc-900 border border-zinc-700 text-zinc-100 px-2 py-1 focus:outline-none"
+              className="bg-surface border border-border text-text px-2 py-1 focus:outline-none"
             >
               <option value="reps">reps</option>
               <option value="timed">timed</option>
               <option value="distance">distance</option>
             </select>
-            <button onClick={handleAddExercise} className="border border-green-400 text-green-400 px-2 py-1 text-xs">ADD</button>
-            <button onClick={() => setShowAddEx(false)} className="text-zinc-500 text-xs">cancel</button>
+            <button onClick={handleAddExercise} className="border border-accent text-accent px-2 py-1 text-xs">ADD</button>
+            <button onClick={() => setShowAddEx(false)} className="text-muted text-xs">cancel</button>
           </div>
         ) : (
           <button
             onClick={() => setShowAddEx(true)}
-            className="mt-2 border border-zinc-700 text-zinc-500 px-3 py-1 text-xs hover:border-green-400 hover:text-green-400"
+            className="mt-2 border border-border text-muted px-3 py-1 text-xs hover:border-accent hover:text-accent"
           >
             + ADD EXERCISE
           </button>
@@ -199,23 +230,23 @@ export default function Settings() {
 
       {/* Data */}
       <div>
-        <Rule label="DATA" className="text-zinc-500 mb-3" />
+        <Rule label="DATA" className="text-muted mb-3" />
         <div className="flex flex-wrap gap-3 mb-4">
           <button
             onClick={exportJson}
-            className="border border-zinc-700 px-4 py-2 text-zinc-500 text-xs uppercase tracking-widest hover:border-green-400 hover:text-green-400"
+            className="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent"
           >
             EXPORT JSON
           </button>
           <button
             onClick={exportCsv}
-            className="border border-zinc-700 px-4 py-2 text-zinc-500 text-xs uppercase tracking-widest hover:border-green-400 hover:text-green-400"
+            className="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent"
           >
             EXPORT CSV
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="border border-zinc-700 px-4 py-2 text-zinc-500 text-xs uppercase tracking-widest hover:border-amber-400 hover:text-amber-400"
+            className="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
           >
             IMPORT JSON
           </button>
@@ -229,26 +260,26 @@ export default function Settings() {
         </div>
 
         {importConfirm && (
-          <div className="border border-amber-400 p-4 mb-4">
-            <div className="text-amber-400 text-xs uppercase tracking-widest mb-2">
+          <div className="border border-warn p-4 mb-4">
+            <div className="text-warn text-xs uppercase tracking-widest mb-2">
               OVERWRITE ALL DATA?
             </div>
-            <div className="text-zinc-400 text-xs mb-3">
-              This will replace all training history with the contents of <span className="text-zinc-100">{pendingFile?.name}</span>. This cannot be undone.
+            <div className="text-text-dim text-xs mb-3">
+              This will replace all training history with the contents of <span className="text-text">{pendingFile?.name}</span>. This cannot be undone.
             </div>
             {importError && (
-              <div className="text-red-400 text-xs mb-3">{importError}</div>
+              <div className="text-danger text-xs mb-3">{importError}</div>
             )}
             <div className="flex gap-3">
               <button
                 onClick={handleImportConfirmed}
-                className="border border-amber-400 text-amber-400 px-4 py-2 text-xs uppercase tracking-widest hover:bg-amber-400 hover:text-zinc-900"
+                className="border border-warn text-warn px-4 py-2 text-xs uppercase tracking-widest hover:bg-warn hover:text-zinc-900"
               >
                 CONFIRM IMPORT
               </button>
               <button
                 onClick={() => { setImportConfirm(false); setPendingFile(null); setImportError(null) }}
-                className="text-zinc-500 text-xs hover:text-zinc-100"
+                className="text-muted text-xs hover:text-text"
               >
                 cancel
               </button>
@@ -256,7 +287,7 @@ export default function Settings() {
           </div>
         )}
 
-        <div className="text-zinc-700 text-xs leading-relaxed">
+        <div className="text-faint text-xs leading-relaxed">
           JSON backup restores all history. CSV exports completed sessions for spreadsheets.
         </div>
       </div>

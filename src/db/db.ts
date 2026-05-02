@@ -80,6 +80,7 @@ export interface Settings {
   restTimer1: number
   restTimer2: number
   restTimerFail: number
+  theme?: string
 }
 
 export class TrainingDB extends Dexie {

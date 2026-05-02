@@ -239,7 +239,7 @@ export default function HistoryEdit() {
     }
   }
 
-  if (!sessionInfo) return <div className="p-6 font-mono text-zinc-500">Loading...</div>
+  if (!sessionInfo) return <div className="p-6 font-mono text-muted">Loading...</div>
 
   const setsByType = (type: 'warmup' | 'main' | 'fsl') =>
     editSets.map((s, i) => ({ s, i })).filter(({ s }) => s.type === type)
@@ -249,18 +249,18 @@ export default function HistoryEdit() {
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={() => navigate('/history')}
-          className="text-zinc-500 hover:text-zinc-100 text-xs tracking-widest"
+          className="text-muted hover:text-text text-xs tracking-widest"
         >
           ← BACK
         </button>
-        <div className="text-zinc-500 text-xs tracking-widest uppercase">
+        <div className="text-muted text-xs tracking-widest uppercase">
           {sessionInfo.liftName} W{sessionInfo.week}
-          <span className="text-zinc-600 ml-2">{sessionInfo.date}</span>
+          <span className="text-muted ml-2">{sessionInfo.date}</span>
         </div>
         <button
           onClick={handleSave}
           disabled={isSaving}
-          className="border border-green-400 text-green-400 px-4 py-1 text-xs font-mono tracking-widest hover:bg-green-400 hover:text-zinc-950 disabled:opacity-50"
+          className="border border-accent text-accent px-4 py-1 text-xs font-mono tracking-widest hover:bg-accent hover:text-on-accent disabled:opacity-50"
         >
           {isSaving ? 'SAVING...' : 'SAVE'}
         </button>
@@ -271,7 +271,7 @@ export default function HistoryEdit() {
         if (!rows.length) return null
         return (
           <div key={type} className="mb-6">
-            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
+            <div className="text-muted uppercase text-xs tracking-widest mb-2">
               {type === 'fsl' ? 'FSL' : type}
             </div>
             {rows.map(({ s, i }) => (
@@ -280,16 +280,16 @@ export default function HistoryEdit() {
                   type="number"
                   value={s.weight}
                   onChange={e => updateSet(i, 'weight', e.target.value)}
-                  className="bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-2 py-1.5 w-20 text-center focus:outline-none focus:border-green-400 text-sm"
+                  className="bg-surface border border-border text-text font-mono px-2 py-1.5 w-20 text-center focus:outline-none focus:border-accent text-sm"
                 />
-                <span className="text-zinc-500 text-xs">lb ×</span>
+                <span className="text-muted text-xs">lb ×</span>
                 <input
                   type="number"
                   value={s.reps}
                   onChange={e => updateSet(i, 'reps', e.target.value)}
-                  className="bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-2 py-1.5 w-16 text-center focus:outline-none focus:border-green-400 text-sm"
+                  className="bg-surface border border-border text-text font-mono px-2 py-1.5 w-16 text-center focus:outline-none focus:border-accent text-sm"
                 />
-                {s.isAmrap && <span className="text-amber-400 text-xs tracking-widest">AMRAP</span>}
+                {s.isAmrap && <span className="text-warn text-xs tracking-widest">AMRAP</span>}
               </div>
             ))}
           </div>
@@ -297,42 +297,42 @@ export default function HistoryEdit() {
       })}
 
       <div className="mb-6">
-        <Rule label="ACCESSORIES" className="text-zinc-500 mb-2" />
+        <Rule label="ACCESSORIES" className="text-muted mb-2" />
         {editAccessories.map((acc, ai) => (
-          <div key={ai} className="border border-zinc-700 p-3 mb-3">
+          <div key={ai} className="border border-border p-3 mb-3">
             <div className="flex items-center justify-between mb-2">
               <button
                 onClick={() => setShowPicker(ai)}
-                className="text-zinc-100 text-sm uppercase tracking-widest hover:text-green-400"
+                className="text-text text-sm uppercase tracking-widest hover:text-accent"
               >
                 {acc.exerciseName}
-                <span className="text-zinc-600 text-xs ml-2 normal-case tracking-normal">tap to swap</span>
+                <span className="text-muted text-xs ml-2 normal-case tracking-normal">tap to swap</span>
               </button>
               <button
                 onClick={() => deleteAccessory(ai)}
-                className="text-zinc-600 hover:text-red-400 text-xs font-mono px-1"
+                className="text-muted hover:text-danger text-xs font-mono px-1"
               >
                 ✕
               </button>
             </div>
             {acc.sets.map((s, si) => (
               <div key={si} className="flex items-center gap-2 py-1 pl-2">
-                <span className="text-zinc-600 text-xs w-10">Set {s.setNumber}</span>
+                <span className="text-muted text-xs w-10">Set {s.setNumber}</span>
                 {acc.exerciseType === 'reps' && (
                   <>
                     <input
                       type="number"
                       value={s.weight ?? ''}
                       onChange={e => updateAccSet(ai, si, 'weight', parseFloat(e.target.value) || null)}
-                      className="bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-2 py-1 w-20 text-center focus:outline-none focus:border-green-400 text-xs"
+                      className="bg-surface border border-border text-text font-mono px-2 py-1 w-20 text-center focus:outline-none focus:border-accent text-xs"
                       placeholder="wt"
                     />
-                    <span className="text-zinc-500 text-xs">lb ×</span>
+                    <span className="text-muted text-xs">lb ×</span>
                     <input
                       type="number"
                       value={s.reps ?? ''}
                       onChange={e => updateAccSet(ai, si, 'reps', parseInt(e.target.value) || null)}
-                      className="bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-2 py-1 w-14 text-center focus:outline-none focus:border-green-400 text-xs"
+                      className="bg-surface border border-border text-text font-mono px-2 py-1 w-14 text-center focus:outline-none focus:border-accent text-xs"
                       placeholder="reps"
                     />
                   </>
@@ -348,7 +348,7 @@ export default function HistoryEdit() {
                     type="number"
                     value={s.distance ?? ''}
                     onChange={e => updateAccSet(ai, si, 'distance', parseFloat(e.target.value) || null)}
-                    className="bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-2 py-1 w-24 text-center focus:outline-none focus:border-green-400 text-xs"
+                    className="bg-surface border border-border text-text font-mono px-2 py-1 w-24 text-center focus:outline-none focus:border-accent text-xs"
                     placeholder="ft"
                   />
                 )}
@@ -358,18 +358,18 @@ export default function HistoryEdit() {
         ))}
         <button
           onClick={() => setShowPicker(-1)}
-          className="w-full border border-zinc-700 py-2 text-zinc-500 text-xs tracking-widest hover:border-green-400 hover:text-green-400"
+          className="w-full border border-border py-2 text-muted text-xs tracking-widest hover:border-accent hover:text-accent"
         >
           + ADD ACCESSORY
         </button>
       </div>
 
       <div className="mb-6">
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">NOTES</div>
+        <div className="text-muted uppercase text-xs tracking-widest mb-2">NOTES</div>
         <textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          className="w-full bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-3 py-3 text-sm focus:outline-none focus:border-green-400 resize-none"
+          className="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
           rows={3}
           placeholder="Session notes..."
         />
@@ -378,16 +378,16 @@ export default function HistoryEdit() {
       <button
         onClick={handleSave}
         disabled={isSaving}
-        className="w-full border border-green-400 text-green-400 py-4 font-mono text-sm tracking-widest hover:bg-green-400 hover:text-zinc-950 disabled:opacity-50"
+        className="w-full border border-accent text-accent py-4 font-mono text-sm tracking-widest hover:bg-accent hover:text-on-accent disabled:opacity-50"
       >
         {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
       </button>
 
       {showPicker !== null && (
-        <div className="fixed inset-0 bg-zinc-950 z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
-            <Rule label="SELECT EXERCISE" className="text-zinc-500" />
-            <button onClick={() => setShowPicker(null)} className="text-zinc-500 hover:text-zinc-100 font-mono">✕</button>
+            <Rule label="SELECT EXERCISE" className="text-muted" />
+            <button onClick={() => setShowPicker(null)} className="text-muted hover:text-text font-mono">✕</button>
           </div>
           <div className="space-y-1">
             {liftExercises.map(({ exercise }) => {
@@ -400,12 +400,12 @@ export default function HistoryEdit() {
                   disabled={alreadyAdded}
                   className={`w-full text-left px-3 py-2 border font-mono text-sm flex justify-between ${
                     alreadyAdded
-                      ? 'border-zinc-800 text-zinc-600'
-                      : 'border-zinc-700 text-zinc-100 hover:border-green-400 hover:text-green-400'
+                      ? 'border-border-dim text-muted'
+                      : 'border-border text-text hover:border-accent hover:text-accent'
                   }`}
                 >
                   <span>{exercise.name}{alreadyAdded ? ' ✓' : ''}</span>
-                  <span className="text-zinc-500 text-xs uppercase">{exercise.type}</span>
+                  <span className="text-muted text-xs uppercase">{exercise.type}</span>
                 </button>
               )
             })}

@@ -84,13 +84,13 @@ export default function History() {
 
   return (
     <div className="p-4 font-mono">
-      <div className="flex gap-0 mb-4 border border-zinc-700">
+      <div className="flex gap-0 mb-4 border border-border">
         {(['lift', 'date'] as ViewMode[]).map(m => (
           <button
             key={m}
             onClick={() => setMode(m)}
             className={`flex-1 py-2 text-xs uppercase tracking-widest ${
-              mode === m ? 'bg-zinc-800 text-green-400' : 'text-zinc-500 hover:text-zinc-100'
+              mode === m ? 'bg-surface-high text-accent' : 'text-muted hover:text-text'
             }`}
           >
             By {m}
@@ -107,8 +107,8 @@ export default function History() {
                 onClick={() => setSelectedLiftId(l.id!)}
                 className={`flex-1 border py-1 text-xs uppercase tracking-widest ${
                   selectedLiftId === l.id
-                    ? 'border-green-400 text-green-400'
-                    : 'border-zinc-700 text-zinc-500'
+                    ? 'border-accent text-accent'
+                    : 'border-border text-muted'
                 }`}
               >
                 {l.name}
@@ -145,22 +145,22 @@ export default function History() {
             <div key={sid}>
               <button
                 onClick={() => handleExpand(sid)}
-                className="w-full text-left border border-zinc-700 px-3 py-2 text-sm flex justify-between hover:border-zinc-500"
+                className="w-full text-left border border-border px-3 py-2 text-sm flex justify-between hover:border-muted"
               >
-                <span className="text-zinc-500">{dateStr}</span>
-                <span className="text-zinc-100">{row.liftName} W{row.session.week}</span>
-                <span className="text-zinc-500">
+                <span className="text-muted">{dateStr}</span>
+                <span className="text-text">{row.liftName} W{row.session.week}</span>
+                <span className="text-muted">
                   {row.amrapWeight && row.amrapReps
                     ? `${row.amrapWeight}×${row.amrapReps} ~ ${e1rm}lb`
                     : ''}
                 </span>
               </button>
               {expanded === sid && detail && (
-                <div className="border border-t-0 border-zinc-700 px-3 py-2 text-xs text-zinc-400 space-y-1">
+                <div className="border border-t-0 border-border px-3 py-2 text-xs text-text-dim space-y-1">
                   <div className="flex justify-end mb-1">
                     <button
                       onClick={() => navigate(`/history/${sid}/edit`)}
-                      className="text-xs text-zinc-500 hover:text-green-400 font-mono tracking-widest"
+                      className="text-xs text-muted hover:text-accent font-mono tracking-widest"
                     >
                       EDIT →
                     </button>
@@ -170,11 +170,11 @@ export default function History() {
                     if (!typeSets.length) return null
                     return (
                       <div key={type}>
-                        <div className="text-zinc-500 uppercase tracking-widest mb-0.5">{type}</div>
+                        <div className="text-muted uppercase tracking-widest mb-0.5">{type}</div>
                         {typeSets.map((s: any, i: number) => (
                           <div key={i} className="pl-2">
                             {s.weight}lb x {s.reps}
-                            {s.isAmrap && e1rm && <span className="text-zinc-500 ml-2">est. 1RM: {e1rm}lb</span>}
+                            {s.isAmrap && e1rm && <span className="text-muted ml-2">est. 1RM: {e1rm}lb</span>}
                           </div>
                         ))}
                       </div>
@@ -182,8 +182,8 @@ export default function History() {
                   })}
                   {detail.notes && (
                     <div>
-                      <div className="text-zinc-500 uppercase tracking-widest mb-0.5">NOTES</div>
-                      <div className="pl-2 text-zinc-400">{detail.notes}</div>
+                      <div className="text-muted uppercase tracking-widest mb-0.5">NOTES</div>
+                      <div className="pl-2 text-text-dim">{detail.notes}</div>
                     </div>
                   )}
                 </div>
@@ -192,7 +192,7 @@ export default function History() {
           )
         })}
         {sessions.length === 0 && (
-          <div className="text-zinc-600 text-sm">No completed sessions yet.</div>
+          <div className="text-muted text-sm">No completed sessions yet.</div>
         )}
       </div>
     </div>

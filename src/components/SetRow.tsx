@@ -37,43 +37,43 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, amrapTa
   if (isCompleted && !editing) {
     return (
       <div
-        className="flex items-center gap-3 py-3 pl-3 text-sm text-zinc-500 cursor-pointer hover:text-zinc-300 active:text-zinc-100 border-l-4 border-transparent"
+        className="flex items-center gap-3 py-3 pl-3 text-sm text-muted cursor-pointer hover:text-text-dim active:text-text border-l-4 border-transparent"
         onClick={() => { setEditing(true); setEditReps(String(loggedReps ?? set.reps)) }}
       >
         <span className="w-16 text-right font-mono">{set.weight}lb</span>
         <span>x {loggedReps}</span>
         {isAmrap && <span className="text-xs tracking-widest">AMRAP</span>}
-        <span className="text-green-400 text-xs tracking-widest">done</span>
+        <span className="text-accent text-xs tracking-widest">done</span>
       </div>
     )
   }
 
   if (isCompleted && editing) {
     return (
-      <div className="flex items-center gap-3 py-3 pl-3 text-sm border-l-4 border-green-400">
-        <span className="w-16 text-right text-zinc-400 font-mono">{set.weight}lb</span>
+      <div className="flex items-center gap-3 py-3 pl-3 text-sm border-l-4 border-accent">
+        <span className="w-16 text-right text-text-dim font-mono">{set.weight}lb</span>
         <input
           type="number"
           value={editReps}
           onChange={e => setEditReps(e.target.value)}
-          className="bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-2 py-2 w-16 text-center focus:outline-none focus:border-green-400"
+          className="bg-surface border border-border text-text font-mono px-2 py-2 w-16 text-center focus:outline-none focus:border-accent"
           autoFocus
         />
-        <button onClick={handleEdit} className="border border-green-400 text-green-400 px-3 py-2 text-xs font-mono tracking-widest">SAVE</button>
-        <button onClick={() => setEditing(false)} className="text-zinc-500 text-xs font-mono">cancel</button>
+        <button onClick={handleEdit} className="border border-accent text-accent px-3 py-2 text-xs font-mono tracking-widest">SAVE</button>
+        <button onClick={() => setEditing(false)} className="text-muted text-xs font-mono">cancel</button>
       </div>
     )
   }
 
   if (isActive) {
     return (
-      <div className="border-l-4 border-green-400 pl-3 py-3 mb-1">
+      <div className="border-l-4 border-accent pl-3 py-3 mb-1">
         <div className="flex items-baseline gap-3">
-          <span className="text-2xl font-mono text-zinc-100">
-            {set.weight}<span className="text-base text-zinc-500 ml-1">lb</span>
+          <span className="text-2xl font-mono text-text">
+            {set.weight}<span className="text-base text-muted ml-1">lb</span>
           </span>
-          <span className="text-xl text-zinc-100">x {set.reps}{isAmrap ? '+' : ''}</span>
-          {isAmrap && <span className="text-amber-400 text-xs tracking-widest">AMRAP</span>}
+          <span className="text-xl text-text">x {set.reps}{isAmrap ? '+' : ''}</span>
+          {isAmrap && <span className="text-warn text-xs tracking-widest">AMRAP</span>}
         </div>
         {isAmrap && amrapTargets && amrapTargets.length > 0 && (
           <AmrapTargets targets={amrapTargets} />
@@ -85,13 +85,13 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, amrapTa
             value={reps}
             onChange={e => setReps(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleLog()}
-            className="w-full md:w-20 bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-3 py-4 md:py-2 text-center text-2xl md:text-base focus:outline-none focus:border-green-400"
+            className="w-full md:w-20 bg-surface border border-border text-text font-mono px-3 py-4 md:py-2 text-center text-2xl md:text-base focus:outline-none focus:border-accent"
             placeholder={String(set.reps)}
             autoFocus
           />
           <button
             onClick={handleLog}
-            className="w-full md:flex-1 border border-green-400 text-green-400 py-4 md:py-2 font-mono text-base md:text-sm tracking-widest"
+            className="w-full md:flex-1 border border-accent text-accent py-4 md:py-2 font-mono text-base md:text-sm tracking-widest"
           >
             LOG
           </button>
@@ -101,10 +101,10 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, amrapTa
   }
 
   return (
-    <div className="flex items-center gap-3 py-2.5 pl-3 text-sm text-zinc-600 border-l-4 border-transparent">
+    <div className="flex items-center gap-3 py-2.5 pl-3 text-sm text-muted border-l-4 border-transparent">
       <span className="w-16 text-right font-mono">{set.weight}lb</span>
       <span>x {set.reps}{isAmrap ? '+' : ''}</span>
-      {isAmrap && <span className="text-xs text-zinc-700 tracking-widest">AMRAP</span>}
+      {isAmrap && <span className="text-xs text-faint tracking-widest">AMRAP</span>}
     </div>
   )
 }

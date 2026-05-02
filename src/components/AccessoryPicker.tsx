@@ -89,44 +89,44 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
 
   if (settingTm) {
     return (
-      <div className="fixed inset-0 bg-zinc-950 z-50 p-4">
-        <Rule label="SET TRAINING MAX" className="text-zinc-500 mb-4" />
-        <div className="text-zinc-100 mb-6 uppercase tracking-widest">{settingTm.name}</div>
+      <div className="fixed inset-0 bg-bg z-50 p-4">
+        <Rule label="SET TRAINING MAX" className="text-muted mb-4" />
+        <div className="text-text mb-6 uppercase tracking-widest">{settingTm.name}</div>
         <div className="space-y-4">
           <div className="flex items-center gap-4">
-            <label className="text-zinc-500 text-sm uppercase tracking-widest w-32">Weight</label>
+            <label className="text-muted text-sm uppercase tracking-widest w-32">Weight</label>
             <input
               type="number"
               min={1}
               value={tmWeight}
               onChange={e => setTmWeight(e.target.value)}
-              className="bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-3 py-2 w-28 focus:outline-none focus:border-green-400"
+              className="bg-surface border border-border text-text font-mono px-3 py-2 w-28 focus:outline-none focus:border-accent"
               placeholder="0"
             />
-            <span className="text-zinc-500">lb</span>
+            <span className="text-muted">lb</span>
           </div>
           <div className="flex items-center gap-4">
-            <label className="text-zinc-500 text-sm uppercase tracking-widest w-32">Increment</label>
+            <label className="text-muted text-sm uppercase tracking-widest w-32">Increment</label>
             <input
               type="number"
               min={1}
               value={tmIncrement}
               onChange={e => setTmIncrement(e.target.value)}
-              className="bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-3 py-2 w-28 focus:outline-none focus:border-green-400"
+              className="bg-surface border border-border text-text font-mono px-3 py-2 w-28 focus:outline-none focus:border-accent"
             />
-            <span className="text-zinc-500">lb</span>
+            <span className="text-muted">lb</span>
           </div>
         </div>
         <div className="flex gap-4 mt-8">
           <button
             onClick={() => setSettingTm(null)}
-            className="border border-zinc-700 px-4 py-2 font-mono text-zinc-100"
+            className="border border-border px-4 py-2 font-mono text-text"
           >
             BACK
           </button>
           <button
             onClick={handleSaveTm}
-            className="border border-green-400 text-green-400 px-6 py-2 font-mono"
+            className="border border-accent text-accent px-6 py-2 font-mono"
           >
             SAVE
           </button>
@@ -136,10 +136,10 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-zinc-950 z-50 p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
-        <Rule label="SELECT ASSISTANCE EXERCISE" className="text-zinc-500" />
-        <button onClick={onClose} className="text-zinc-500 hover:text-zinc-100 font-mono">✕</button>
+        <Rule label="SELECT ASSISTANCE EXERCISE" className="text-muted" />
+        <button onClick={onClose} className="text-muted hover:text-text font-mono">✕</button>
       </div>
       <div className="space-y-1">
         {rows.map(row => (
@@ -149,12 +149,12 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
             disabled={row.alreadyAdded}
             className={`w-full text-left px-3 py-2 border font-mono text-sm flex justify-between ${
               row.alreadyAdded
-                ? 'border-zinc-800 text-zinc-600'
-                : 'border-zinc-700 text-zinc-100 hover:border-green-400 hover:text-green-400'
+                ? 'border-border-dim text-muted'
+                : 'border-border text-text hover:border-accent hover:text-accent'
             }`}
           >
             <span>{row.exercise.name}{row.alreadyAdded ? ' ✓' : ''}</span>
-            <span className="text-zinc-500">
+            <span className="text-muted">
               {row.calculatedWeight != null
                 ? `5x10 @ ${row.calculatedWeight}lb`
                 : 'NOT SET'}

@@ -103,18 +103,18 @@ export default function RestTimer() {
   }
 
   return (
-    <div className="fixed bottom-16 left-0 right-0 bg-zinc-950 border-t-2 border-zinc-700 px-4 py-4">
+    <div className="fixed bottom-16 left-0 right-0 bg-bg border-t-2 border-border px-4 py-4">
       <div className="max-w-3xl mx-auto flex items-center justify-between gap-6">
         <div>
-          <div className="text-zinc-500 text-xs uppercase tracking-widest mb-1">REST</div>
-          <div className="text-amber-400 font-mono text-4xl leading-none">{formatDuration(elapsed)}</div>
+          <div className="text-muted text-xs uppercase tracking-widest mb-1">REST</div>
+          <div className="text-warn font-mono text-4xl leading-none">{formatDuration(elapsed)}</div>
           {message && (
-            <div className="text-amber-400 text-xs uppercase tracking-widest mt-2">{message}</div>
+            <div className="text-warn text-xs uppercase tracking-widest mt-2">{message}</div>
           )}
         </div>
         <button
           onClick={stopRest}
-          className="border border-zinc-600 px-6 py-4 font-mono text-zinc-400 text-xs tracking-widest hover:border-green-400 hover:text-green-400 shrink-0"
+          className="border border-border px-6 py-4 font-mono text-text-dim text-xs tracking-widest hover:border-accent hover:text-accent shrink-0"
         >
           SKIP REST
         </button>

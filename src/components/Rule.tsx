@@ -5,7 +5,7 @@ interface Props {
   className?: string
 }
 
-export default function Rule({ label, className = 'text-zinc-500' }: Props) {
+export default function Rule({ label, className = 'text-muted' }: Props) {
   return (
     <div className={`overflow-hidden whitespace-nowrap text-xs tracking-widest uppercase ${className}`}>
       {label ? `--- ${label} ${FILL}` : FILL}

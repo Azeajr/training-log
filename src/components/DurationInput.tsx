@@ -25,10 +25,10 @@ export default function DurationInput({ value, onChange }: Props) {
         value={mm}
         onChange={e => setMm(e.target.value)}
         onBlur={commit}
-        className="bg-zinc-900 border border-zinc-700 text-zinc-100 px-2 py-1 w-14 text-center focus:outline-none focus:border-green-400"
+        className="bg-surface border border-border text-text px-2 py-1 w-14 text-center focus:outline-none focus:border-accent"
         placeholder="0"
       />
-      <span className="text-zinc-500">:</span>
+      <span className="text-muted">:</span>
       <input
         type="number"
         min={0}
@@ -36,7 +36,7 @@ export default function DurationInput({ value, onChange }: Props) {
         value={ss}
         onChange={e => setSs(e.target.value)}
         onBlur={commit}
-        className="bg-zinc-900 border border-zinc-700 text-zinc-100 px-2 py-1 w-14 text-center focus:outline-none focus:border-green-400"
+        className="bg-surface border border-border text-text px-2 py-1 w-14 text-center focus:outline-none focus:border-accent"
         placeholder="00"
       />
     </div>

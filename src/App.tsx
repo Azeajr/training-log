@@ -18,7 +18,7 @@ function AppShell() {
   const { onTouchStart, onTouchEnd } = useSwipeNav()
 
   return (
-    <div className="bg-zinc-950 min-h-screen font-mono text-zinc-100 flex flex-col">
+    <div className="bg-bg min-h-screen font-mono text-text flex flex-col">
       <main
         className="flex-1 overflow-y-auto pb-20"
         onTouchStart={onTouchStart}
@@ -56,7 +56,7 @@ export default function App() {
 
   if (!setupComplete) {
     return (
-      <div className="bg-zinc-950 min-h-screen font-mono text-zinc-100">
+      <div className="bg-bg min-h-screen font-mono text-text">
         <Setup onComplete={() => setSetupComplete(true)} />
       </div>
     )

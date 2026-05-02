@@ -9,9 +9,9 @@ export default function AmrapTargets({ targets }: Props) {
   return (
     <div className="mt-1 space-y-0.5">
       {targets.map(t => (
-        <div key={t.label} className="text-xs text-amber-400 font-mono">
+        <div key={t.label} className="text-xs text-warn font-mono">
           -&gt; {t.label.toUpperCase().padEnd(14)} {t.reps} reps{' '}
-          <span className="text-zinc-500">({t.est1RM}lb est. 1RM)</span>
+          <span className="text-muted">({t.est1RM}lb est. 1RM)</span>
         </div>
       ))}
     </div>

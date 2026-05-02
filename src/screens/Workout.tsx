@@ -164,8 +164,8 @@ export default function Workout() {
 
   if (!activeSession) {
     return (
-      <div className="p-6 font-mono text-zinc-500">
-        No active session. Go to <span className="text-green-400">TODAY</span> to start one.
+      <div className="p-6 font-mono text-muted">
+        No active session. Go to <span className="text-accent">TODAY</span> to start one.
       </div>
     )
   }
@@ -181,7 +181,7 @@ export default function Workout() {
     <div className="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
       <Rule
         label={`${liftName} . WEEK ${activeSession.week}${activeSession.week === 4 ? ' . DELOAD' : ''}`}
-        className={`mb-6 ${activeSession.week === 4 ? 'text-blue-400' : 'text-zinc-500'}`}
+        className={`mb-6 ${activeSession.week === 4 ? 'text-blue-400' : 'text-muted'}`}
       />
 
       {/* Sets: single column on mobile, two-column on desktop */}
@@ -190,7 +190,7 @@ export default function Workout() {
         {/* Left column on desktop (secondary sets) / top on mobile */}
         <div>
           <div className="mb-6">
-            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">WARM UP</div>
+            <div className="text-muted uppercase text-xs tracking-widest mb-2">WARM UP</div>
             {warmupSets.map((s, i) => (
               <SetRow
                 key={i}
@@ -205,7 +205,7 @@ export default function Workout() {
           </div>
 
           <div className="mb-6 md:mb-0">
-            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">FSL  5 x 10</div>
+            <div className="text-muted uppercase text-xs tracking-widest mb-2">FSL  5 x 10</div>
             {fslSets.map((s, i) => {
               const globalIdx = warmupCount + mainCount + i
               return (
@@ -226,7 +226,7 @@ export default function Workout() {
         {/* Right column on desktop (main work + accessories + actions) */}
         <div>
           <div className="mb-6">
-            <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">MAIN</div>
+            <div className="text-muted uppercase text-xs tracking-widest mb-2">MAIN</div>
             {mainSets.map((s, i) => {
               const globalIdx = warmupCount + i
               return (
@@ -246,7 +246,7 @@ export default function Workout() {
 
           {activeAccessories.length > 0 && (
             <div className="mb-4">
-              <Rule label="ACCESSORIES" className="text-zinc-500 mb-2" />
+              <Rule label="ACCESSORIES" className="text-muted mb-2" />
               {activeAccessories.map(acc => (
                 <AccessoryLog
                   key={acc.exerciseId}
@@ -259,17 +259,17 @@ export default function Workout() {
 
           <button
             onClick={() => setShowPicker(true)}
-            className="w-full border border-zinc-700 py-3 text-zinc-500 text-xs tracking-widest hover:border-green-400 hover:text-green-400 mb-6"
+            className="w-full border border-border py-3 text-muted text-xs tracking-widest hover:border-accent hover:text-accent mb-6"
           >
             + SELECT ASSISTANCE EXERCISE
           </button>
 
           <div className="mb-6">
-            <Rule label="NOTES" className="text-zinc-500 mb-2" />
+            <Rule label="NOTES" className="text-muted mb-2" />
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-700 text-zinc-100 font-mono px-3 py-3 text-sm focus:outline-none focus:border-green-400 resize-none"
+              className="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
               rows={3}
               placeholder="Session notes..."
             />
@@ -278,14 +278,14 @@ export default function Workout() {
           <div className="flex gap-3">
             <button
               onClick={handleComplete}
-              className="flex-1 border border-green-400 text-green-400 py-4 font-mono text-sm tracking-widest"
+              className="flex-1 border border-accent text-accent py-4 font-mono text-sm tracking-widest"
             >
               COMPLETE SESSION
             </button>
             {!skipConfirm ? (
               <button
                 onClick={() => setSkipConfirm(true)}
-                className="border border-red-400 text-red-400 px-5 py-4 font-mono text-sm"
+                className="border border-danger text-danger px-5 py-4 font-mono text-sm"
               >
                 SKIP LIFT
               </button>
@@ -293,13 +293,13 @@ export default function Workout() {
               <div className="flex gap-2">
                 <button
                   onClick={handleSkip}
-                  className="border border-red-400 text-red-400 px-3 py-4 font-mono text-xs tracking-widest"
+                  className="border border-danger text-danger px-3 py-4 font-mono text-xs tracking-widest"
                 >
                   CONFIRM SKIP
                 </button>
                 <button
                   onClick={() => setSkipConfirm(false)}
-                  className="border border-zinc-700 text-zinc-500 px-3 py-4 font-mono text-xs"
+                  className="border border-border text-muted px-3 py-4 font-mono text-xs"
                 >
                   CANCEL
                 </button>
@@ -310,22 +310,22 @@ export default function Workout() {
             {!exitConfirm ? (
               <button
                 onClick={() => setExitConfirm(true)}
-                className="text-zinc-600 hover:text-zinc-400 font-mono text-xs tracking-widest"
+                className="text-muted hover:text-text-dim font-mono text-xs tracking-widest"
               >
                 EXIT WITHOUT SAVING
               </button>
             ) : (
               <div className="flex gap-3 items-center">
-                <span className="text-zinc-500 text-xs">discard this attempt?</span>
+                <span className="text-muted text-xs">discard this attempt?</span>
                 <button
                   onClick={handleExit}
-                  className="border border-zinc-500 text-zinc-300 px-3 py-1 font-mono text-xs tracking-widest"
+                  className="border border-muted text-text-dim px-3 py-1 font-mono text-xs tracking-widest"
                 >
                   CONFIRM EXIT
                 </button>
                 <button
                   onClick={() => setExitConfirm(false)}
-                  className="text-zinc-600 font-mono text-xs"
+                  className="text-muted font-mono text-xs"
                 >
                   cancel
                 </button>
