@@ -39,6 +39,7 @@ export default function Workout() {
   const [showPicker, setShowPicker] = useState(false)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [skipConfirm, setSkipConfirm] = useState(false)
+  const [exitConfirm, setExitConfirm] = useState(false)
 
   useEffect(() => {
     if (!activeSession) return
@@ -138,6 +139,14 @@ export default function Workout() {
       }
     }
     await checkWeekAdvancement()
+    clearSession()
+    navigate('/today')
+  }
+
+  const handleExit = async () => {
+    if (!activeSession?.id) return
+    await db.sets.where('sessionId').equals(activeSession.id).delete()
+    await db.accessorySets.where('sessionId').equals(activeSession.id).delete()
     clearSession()
     navigate('/today')
   }
@@ -295,6 +304,32 @@ export default function Workout() {
                   className="border border-zinc-700 text-zinc-500 px-3 py-4 font-mono text-xs"
                 >
                   CANCEL
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end mt-3">
+            {!exitConfirm ? (
+              <button
+                onClick={() => setExitConfirm(true)}
+                className="text-zinc-600 hover:text-zinc-400 font-mono text-xs tracking-widest"
+              >
+                EXIT WITHOUT SAVING
+              </button>
+            ) : (
+              <div className="flex gap-3 items-center">
+                <span className="text-zinc-500 text-xs">discard this attempt?</span>
+                <button
+                  onClick={handleExit}
+                  className="border border-zinc-500 text-zinc-300 px-3 py-1 font-mono text-xs tracking-widest"
+                >
+                  CONFIRM EXIT
+                </button>
+                <button
+                  onClick={() => setExitConfirm(false)}
+                  className="text-zinc-600 font-mono text-xs"
+                >
+                  cancel
                 </button>
               </div>
             )}
