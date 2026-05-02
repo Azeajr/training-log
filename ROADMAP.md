@@ -8,6 +8,12 @@ Route `/history/:sessionId/edit` — edit weight, reps, notes, and accessory exe
 ### Exit Session Without Saving
 EXIT WITHOUT SAVING button on the Workout screen abandons the current attempt, deletes any sets already written to the DB, and leaves the session as `pending` so it can be restarted.
 
+### Plate Calculator
+Given a target weight, show which plates to load on each side of the bar. Shown inline on the active set during a workout.
+
+### Per-Set Weight Adjustment
+Tap the weight stepper on any active or completed set during a workout to adjust the actual weight lifted. Stored on the set record; TM is unchanged. Completed sets can be re-edited inline.
+
 ---
 
 ## Planned
@@ -47,16 +53,6 @@ Permission request — `Notification.requestPermission()` triggered by a deliber
 
 ---
 
-### Plate Calculator
-
-Given a target weight, show which plates to load on each side of the bar. Useful at the gym when you don't want to do the math mid-set.
-
-- Standard bar = 45 lb, configurable
-- Available plate denominations configurable in Settings
-- Show as a simple list: "2 × 45, 1 × 25, 1 × 10"
-
----
-
 ### Estimated 1RM History Chart
 
 The History screen already shows TM over time. An estimated 1RM chart from AMRAP performance would be more meaningful — it reflects actual strength rather than programmed TM.
@@ -73,6 +69,16 @@ After completing a cycle, recommend whether to increase, hold, or reduce the TM 
 - If AMRAP reps are well above target (e.g. 10+ on week 3), suggest a larger jump
 - If AMRAP reps are at or below minimum (e.g. ≤ 1 on week 3), suggest holding or reducing
 - Surface as a prompt when deload week is completed
+
+---
+
+### Post-Session TM Prompt (from weight adjustments)
+
+If the user bumped up the weight on the top set (AMRAP set) relative to the planned weight, surface a prompt at session completion: "You lifted Xlb on your top set — want to update your training max?" Opt-in only; TM does not change unless confirmed.
+
+- Compare logged weight vs planned weight on the AMRAP set
+- Only trigger if logged weight > planned (voluntary bump up, not a bail)
+- Skip if cycle is on deload week (no AMRAP)
 
 ---
 

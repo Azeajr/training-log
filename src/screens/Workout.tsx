@@ -90,13 +90,13 @@ export default function Workout() {
     setExercises(allExercises)
   }
 
-  const handleLog = (setIndex: number, reps: number) => {
+  const handleLog = (setIndex: number, reps: number, weight: number) => {
     const s = allSets[setIndex]
     const setData = {
       sessionId: activeSession!.id!,
       type: s.type,
       setNumber: s.setNumber,
-      weight: s.weight,
+      weight,
       reps,
       isAmrap: (s as MainSet).isAmrap ?? false,
     }
@@ -116,10 +116,10 @@ export default function Workout() {
     startRest(restType)
   }
 
-  const handleEdit = (setIndex: number, reps: number) => {
-    editSet(setIndex, { reps })
+  const handleEdit = (setIndex: number, reps: number, weight: number) => {
+    editSet(setIndex, { reps, weight })
     const dbId = loggedSets[setIndex]?.id
-    if (dbId) db.sets.update(dbId, { reps })
+    if (dbId) db.sets.update(dbId, { reps, weight })
   }
 
   const handleComplete = async () => {
@@ -213,8 +213,9 @@ export default function Workout() {
                 isActive={currentSetIndex === i}
                 isCompleted={i < currentSetIndex}
                 loggedReps={loggedSets[i]?.reps}
-                onLog={(reps) => handleLog(i, reps)}
-                onEdit={(reps) => handleEdit(i, reps)}
+                loggedWeight={loggedSets[i]?.weight}
+                onLog={(reps, weight) => handleLog(i, reps, weight)}
+                onEdit={(reps, weight) => handleEdit(i, reps, weight)}
               />
             ))}
           </div>
@@ -230,8 +231,9 @@ export default function Workout() {
                   isActive={currentSetIndex === globalIdx}
                   isCompleted={globalIdx < currentSetIndex}
                   loggedReps={loggedSets[globalIdx]?.reps}
-                  onLog={(reps) => handleLog(globalIdx, reps)}
-                  onEdit={(reps) => handleEdit(globalIdx, reps)}
+                  loggedWeight={loggedSets[globalIdx]?.weight}
+                  onLog={(reps, weight) => handleLog(globalIdx, reps, weight)}
+                  onEdit={(reps, weight) => handleEdit(globalIdx, reps, weight)}
                 />
               )
             })}
@@ -251,9 +253,10 @@ export default function Workout() {
                   isActive={currentSetIndex === globalIdx}
                   isCompleted={globalIdx < currentSetIndex}
                   loggedReps={loggedSets[globalIdx]?.reps}
+                  loggedWeight={loggedSets[globalIdx]?.weight}
                   amrapTargets={s.isAmrap ? amrapTargets : undefined}
-                  onLog={(reps) => handleLog(globalIdx, reps)}
-                  onEdit={(reps) => handleEdit(globalIdx, reps)}
+                  onLog={(reps, weight) => handleLog(globalIdx, reps, weight)}
+                  onEdit={(reps, weight) => handleEdit(globalIdx, reps, weight)}
                 />
               )
             })}
