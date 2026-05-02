@@ -15,6 +15,7 @@ import {
   calcPlatesPerSide,
   calcNextJokerWeight,
   calcJokerSet,
+  shouldShowJokerButton,
 } from './calc'
 import { DEFAULT_PLATES } from '../store/settingsStore'
 
@@ -157,6 +158,75 @@ describe('calcJokerSet', () => {
   })
   it('setNumber is preserved', () => {
     expect(calcJokerSet(170, 3, 3).setNumber).toBe(3)
+  })
+})
+
+describe('shouldShowJokerButton', () => {
+  // layout: 1 warmup, 3 main sets (last is AMRAP), 0+ jokers
+  const base = { warmupCount: 1, mainCount: 3 }
+
+  const logged = (reps: number, type = 'main') => ({ reps, type })
+
+  it('false when AMRAP not yet logged', () => {
+    expect(shouldShowJokerButton({ week: 1, loggedSets: [], jokerCount: 0, ...base })).toBe(false)
+  })
+
+  it('false on deload week (week 4) regardless of reps', () => {
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(5)]
+    expect(shouldShowJokerButton({ week: 4, loggedSets: sets, jokerCount: 0, ...base })).toBe(false)
+  })
+
+  it('true when AMRAP logged at minimum reps — week 1 (≥5)', () => {
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(5)]
+    expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 0, ...base })).toBe(true)
+  })
+
+  it('true when AMRAP logged above minimum — week 1', () => {
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(8)]
+    expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 0, ...base })).toBe(true)
+  })
+
+  it('false when AMRAP logged below minimum — week 1 (4 < 5)', () => {
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(4)]
+    expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 0, ...base })).toBe(false)
+  })
+
+  it('true when AMRAP logged at minimum — week 2 (≥3)', () => {
+    const sets = [logged(10, 'warmup'), logged(3), logged(3), logged(3)]
+    expect(shouldShowJokerButton({ week: 2, loggedSets: sets, jokerCount: 0, ...base })).toBe(true)
+  })
+
+  it('false when AMRAP below minimum — week 2 (2 < 3)', () => {
+    const sets = [logged(10, 'warmup'), logged(3), logged(3), logged(2)]
+    expect(shouldShowJokerButton({ week: 2, loggedSets: sets, jokerCount: 0, ...base })).toBe(false)
+  })
+
+  it('true when AMRAP logged at minimum — week 3 (≥1)', () => {
+    const sets = [logged(10, 'warmup'), logged(5), logged(3), logged(1)]
+    expect(shouldShowJokerButton({ week: 3, loggedSets: sets, jokerCount: 0, ...base })).toBe(true)
+  })
+
+  it('false while joker set is pending (added but not logged)', () => {
+    // jokerCount=1 means a joker was added; loggedSets has only warmup+main
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(5)]
+    expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 1, ...base })).toBe(false)
+  })
+
+  it('true after joker logged with sufficient reps', () => {
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(5), logged(5, 'joker')]
+    expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 1, ...base })).toBe(true)
+  })
+
+  it('false after joker logged below minimum — bug fix: checks joker reps not AMRAP reps', () => {
+    // AMRAP had 8 reps (well above min), but joker had 4 reps (below week 1 min of 5)
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(8), logged(4, 'joker')]
+    expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 1, ...base })).toBe(false)
+  })
+
+  it('cascades correctly: second joker pending hides button', () => {
+    // two jokers added, only first logged
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(5), logged(5, 'joker')]
+    expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 2, ...base })).toBe(false)
   })
 })
 

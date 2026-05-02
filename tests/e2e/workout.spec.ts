@@ -14,10 +14,10 @@ test.describe('workout flow', () => {
     await expect(page.locator('text=MAIN')).toBeVisible()
   })
 
-  test('active set shows reps input and LOG button', async ({ page }) => {
+  test('active set shows weight and reps steppers and a LOG button', async ({ page }) => {
     await startWorkout(page)
-    await expect(page.locator('input[type=number]').first()).toBeVisible()
-    await expect(page.locator('button:has-text("LOG")')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'LOG' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '+' }).first()).toBeVisible()
   })
 
   test('logging a set starts the rest timer', async ({ page }) => {
@@ -118,7 +118,7 @@ test.describe('rest timer persistence across refresh', () => {
     expect(restStartedAfter).toBe(restStartedAt)
 
     // Timer display should show at least 2 seconds
-    const timerText = await page.locator('.text-amber-400.text-4xl').first().textContent()
+    const timerText = await page.locator('.text-warn.text-4xl').first().textContent()
     const [, mm, ss] = (timerText ?? '').match(/(\d+):(\d+)/) ?? []
     const elapsed = parseInt(mm ?? '0') * 60 + parseInt(ss ?? '0')
     expect(elapsed).toBeGreaterThanOrEqual(2)
@@ -191,8 +191,8 @@ test.describe('resume banner and abandon dialog', () => {
   })
 })
 
-// Helper: advance through warmup + 2 main sets to reach the AMRAP set
-// With TM=100 / OHP week 1: warmup = 1 set (45lb bar), main = 65lb, 75lb, then AMRAP at 85lb
+// Helper: advance through warmup + 2 main sets to reach the AMRAP set.
+// With TM=95 / OHP week 1: 1 warmup (45lb bar), main = 60lb, 70lb, then AMRAP at 80lb.
 async function advanceToAmrap(page: Parameters<typeof logSet>[0]) {
   await logSet(page, 10) // warmup
   await page.click('button:has-text("SKIP REST")')
@@ -202,6 +202,79 @@ async function advanceToAmrap(page: Parameters<typeof logSet>[0]) {
   await page.click('button:has-text("SKIP REST")')
   // currentSetIndex is now on the AMRAP set
 }
+
+test.describe('joker sets', () => {
+  test('joker button absent before AMRAP is logged', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await expect(page.locator('button:has-text("+ JOKER SET")')).not.toBeVisible()
+  })
+
+  test('joker button appears after AMRAP logged at minimum reps (week 1 = 5)', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 5)
+    await expect(page.locator('button:has-text("+ JOKER SET")')).toBeVisible()
+  })
+
+  test('joker button absent when AMRAP logged below minimum (4 < 5)', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 4)
+    await expect(page.locator('button:has-text("+ JOKER SET")')).not.toBeVisible()
+  })
+
+  test('joker button shows next weight — 80lb AMRAP → 85lb joker', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 5)
+    await expect(page.locator('button:has-text("85lb")')).toBeVisible()
+  })
+
+  test('clicking joker button adds a JOKER SETS section with LOG button', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 5)
+    await page.click('button:has-text("+ JOKER SET")')
+    await expect(page.locator('text=JOKER SETS')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'LOG' })).toBeVisible()
+  })
+
+  test('joker button hidden while joker set is pending (not yet logged)', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 5)
+    await page.click('button:has-text("+ JOKER SET")')
+    await expect(page.locator('button:has-text("+ JOKER SET")')).not.toBeVisible()
+  })
+
+  test('joker button reappears after joker logged at minimum reps', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 5)                           // AMRAP
+    await page.click('button:has-text("+ JOKER SET")')
+    await logSet(page, 5)                           // joker 1
+    await expect(page.locator('button:has-text("+ JOKER SET")')).toBeVisible()
+  })
+
+  test('second joker button shows escalated weight — 85lb joker → 90lb next', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 5)
+    await page.click('button:has-text("+ JOKER SET")')
+    await logSet(page, 5)
+    await expect(page.locator('button:has-text("90lb")')).toBeVisible()
+  })
+
+  test('joker button does not reappear after joker logged below minimum', async ({ page }) => {
+    await startWorkout(page)
+    await advanceToAmrap(page)
+    await logSet(page, 5)                           // AMRAP — good
+    await page.click('button:has-text("+ JOKER SET")')
+    await logSet(page, 4)                           // joker — below week 1 min of 5
+    await expect(page.locator('button:has-text("+ JOKER SET")')).not.toBeVisible()
+  })
+})
 
 test.describe('rest timer thresholds and AMRAP fail detection', () => {
   const getRestState = (page: Parameters<typeof logSet>[0]) =>

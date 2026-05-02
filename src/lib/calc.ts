@@ -55,6 +55,8 @@ export interface JokerSet {
 
 export const JOKER_INCREMENT = 0.05
 
+export const JOKER_MIN_REPS: Record<number, number> = { 1: 5, 2: 3, 3: 1 }
+
 export const calcNextJokerWeight = (prevWeight: number): number =>
   roundToNearest5(prevWeight * (1 + JOKER_INCREMENT))
 
@@ -65,6 +67,22 @@ export const calcJokerSet = (prevWeight: number, setNumber: number, reps: number
   reps,
   isAmrap: false,
 })
+
+export const shouldShowJokerButton = (params: {
+  week: 1 | 2 | 3 | 4
+  loggedSets: ReadonlyArray<{ reps: number; type: string }>
+  warmupCount: number
+  mainCount: number
+  jokerCount: number
+}): boolean => {
+  const { week, loggedSets, warmupCount, mainCount, jokerCount } = params
+  if (week === 4) return false
+  // Check the last relevant set: AMRAP when no jokers, last joker otherwise.
+  // If that set hasn't been logged yet (joker is pending), hide the button.
+  const lastRelevantIdx = warmupCount + mainCount + jokerCount - 1
+  const lastRelevantSet = loggedSets[lastRelevantIdx]
+  return lastRelevantSet != null && lastRelevantSet.reps >= (JOKER_MIN_REPS[week] ?? 1)
+}
 
 export interface FslSet {
   setNumber: number

@@ -10,6 +10,7 @@ import {
   calcAmrapTargets,
   calcJokerSet,
   calcNextJokerWeight,
+  shouldShowJokerButton,
   targetReps,
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
@@ -216,15 +217,13 @@ export default function Workout() {
   const mainCount = mainSets.length
   const jokerCount = jokerSetsRendered.length
 
-  const amrapIdx = warmupCount + mainCount - 1
-  const amrapLogged = loggedSets[amrapIdx]
-  const weekMinReps = ({ 1: 5, 2: 3, 3: 1 } as Record<number, number>)[activeSession?.week ?? 4] ?? 1
-  const lastJokerLogged = jokerCount === 0 || loggedSets[warmupCount + mainCount + jokerCount - 1] != null
-  const showJokerButton =
-    activeSession?.week !== 4 &&
-    amrapLogged != null &&
-    amrapLogged.reps >= weekMinReps &&
-    lastJokerLogged
+  const showJokerButton = shouldShowJokerButton({
+    week: activeSession.week,
+    loggedSets,
+    warmupCount,
+    mainCount,
+    jokerCount,
+  })
 
   const amrapSet = mainSets.find(s => s.isAmrap)
   const lastJokerWeight = jokerCount > 0 ? jokerSetsRendered[jokerCount - 1].weight : (amrapSet?.weight ?? 0)
