@@ -18,3 +18,6 @@ Object.defineProperty(globalThis, 'localStorage', {
   value: makeLocalStorage(),
   writable: true,
 })
+
+// jsdom doesn't implement scrollIntoView
+window.HTMLElement.prototype.scrollIntoView = () => {}

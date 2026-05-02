@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Set } from '../db/db'
 import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../lib/calc'
@@ -18,8 +18,15 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, amrapTa
   const [reps, setReps] = useState(set.reps)
   const [editing, setEditing] = useState(false)
   const [editReps, setEditReps] = useState(loggedReps ?? set.reps)
+  const rowRef = useRef<HTMLDivElement>(null)
 
   const isAmrap = set.isAmrap ?? false
+
+  useEffect(() => {
+    if (isActive) {
+      rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [isActive])
 
   if (isCompleted && !editing) {
     return (
@@ -53,7 +60,7 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, amrapTa
 
   if (isActive) {
     return (
-      <div className="border-l-4 border-accent pl-3 py-3 mb-1">
+      <div ref={rowRef} className="border-l-4 border-accent pl-3 py-3 mb-1">
         <div className="flex items-baseline gap-3">
           <span className="text-2xl font-mono text-text">
             {set.weight}<span className="text-base text-muted ml-1">lb</span>
