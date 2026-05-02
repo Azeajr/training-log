@@ -9,13 +9,16 @@ const tabs = [
 
 export default function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-zinc-700 flex">
+    <nav
+      className="fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-zinc-700 flex"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
       {tabs.map(({ to, label }) => (
         <NavLink
           key={to}
           to={to}
           className={({ isActive }) =>
-            `flex-1 py-3 text-center text-xs tracking-widest transition-colors ${
+            `flex-1 py-4 text-center text-xs tracking-widest transition-colors ${
               isActive
                 ? 'text-green-400 border-t border-green-400 -mt-px'
                 : 'text-zinc-500 hover:text-zinc-100'
