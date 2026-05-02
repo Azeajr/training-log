@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { db } from '../db/db'
 import type { Lift, Exercise } from '../db/db'
-import { useSettingsStore, THEMES } from '../store/settingsStore'
+import { useSettingsStore, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../lib/exportImport'
 import Rule from '../components/Rule'
+import Stepper from '../components/Stepper'
 
 export default function Settings() {
-  const { restTimer1, restTimer2, restTimerFail, theme, update } = useSettingsStore()
+  const { restTimer1, restTimer2, restTimerFail, theme, barWeight, plates, update } = useSettingsStore()
   const [lifts, setLifts] = useState<Lift[]>([])
   const [tms, setTms] = useState<Record<number, number>>({})
   const [editingTm, setEditingTm] = useState<number | null>(null)
@@ -226,6 +227,35 @@ export default function Settings() {
             + ADD EXERCISE
           </button>
         )}
+      </div>
+
+      {/* Plates */}
+      <div className="mb-6">
+        <Rule label="PLATES" className="text-muted mb-2" />
+        <div className="flex items-center gap-3 py-1 border-b border-border-dim">
+          <span className="text-muted w-20 uppercase tracking-widest text-xs">Bar</span>
+          <Stepper value={barWeight} onChange={v => update({ barWeight: v })} step={2.5} min={10} max={100} />
+          <span className="text-muted text-xs">lb</span>
+        </div>
+        {DEFAULT_PLATES.map(({ weight }) => {
+          const plate = plates.find(p => p.weight === weight) ?? { weight, count: 0 }
+          return (
+            <div key={weight} className="flex items-center gap-3 py-1 border-b border-border-dim">
+              <span className="text-muted w-20 text-right font-mono text-xs">{weight} lb</span>
+              <Stepper
+                value={plate.count}
+                onChange={v => {
+                  const next = plates.some(p => p.weight === weight)
+                    ? plates.map(p => p.weight === weight ? { ...p, count: v } : p)
+                    : [...plates, { weight, count: v }]
+                  update({ plates: next })
+                }}
+                step={1}
+                min={0}
+              />
+            </div>
+          )
+        })}
       </div>
 
       {/* Data */}

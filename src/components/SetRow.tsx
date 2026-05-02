@@ -3,6 +3,7 @@ import type { Set } from '../db/db'
 import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../lib/calc'
 import Stepper from './Stepper'
+import PlateDisplay from './PlateDisplay'
 
 interface Props {
   set: Omit<Set, 'id' | 'sessionId'> & { isAmrap?: boolean }
@@ -68,6 +69,7 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, amrapTa
           <span className="text-xl text-text">x {set.reps}{isAmrap ? '+' : ''}</span>
           {isAmrap && <span className="text-warn text-xs tracking-widest">AMRAP</span>}
         </div>
+        <PlateDisplay weight={set.weight} />
         {isAmrap && amrapTargets && amrapTargets.length > 0 && (
           <AmrapTargets targets={amrapTargets} />
         )}

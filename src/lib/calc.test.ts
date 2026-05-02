@@ -12,7 +12,9 @@ import {
   fromSeconds,
   formatDuration,
   canAdvanceWeek,
+  calcPlatesPerSide,
 } from './calc'
+import { DEFAULT_PLATES } from '../store/settingsStore'
 
 describe('roundToNearest5', () => {
   it('rounds down at 162', () => expect(roundToNearest5(162)).toBe(160))
@@ -132,4 +134,71 @@ describe('formatDuration', () => {
 describe('canAdvanceWeek', () => {
   it('true at 4', () => expect(canAdvanceWeek(4)).toBe(true))
   it('false at 3', () => expect(canAdvanceWeek(3)).toBe(false))
+})
+
+describe('calcPlatesPerSide', () => {
+  const BAR = 45
+
+  it('returns [] when target equals bar weight', () => {
+    expect(calcPlatesPerSide(45, BAR, DEFAULT_PLATES)).toEqual([])
+  })
+
+  it('returns null when target is below bar weight', () => {
+    expect(calcPlatesPerSide(35, BAR, DEFAULT_PLATES)).toBeNull()
+  })
+
+  it('185lb → 1×45 + 1×25 per side (70 per side)', () => {
+    expect(calcPlatesPerSide(185, BAR, DEFAULT_PLATES)).toEqual([
+      { weight: 45, count: 1 },
+      { weight: 25, count: 1 },
+    ])
+  })
+
+  it('275lb → 2×45 + 1×25 per side (115 per side)', () => {
+    expect(calcPlatesPerSide(275, BAR, DEFAULT_PLATES)).toEqual([
+      { weight: 45, count: 2 },
+      { weight: 25, count: 1 },
+    ])
+  })
+
+  it('135lb → 1×45 per side', () => {
+    expect(calcPlatesPerSide(135, BAR, DEFAULT_PLATES)).toEqual([
+      { weight: 45, count: 1 },
+    ])
+  })
+
+  it('handles fractional plates — 190lb → 45 + 25 + 2.5 per side (72.5 per side)', () => {
+    expect(calcPlatesPerSide(190, BAR, DEFAULT_PLATES)).toEqual([
+      { weight: 45, count: 1 },
+      { weight: 25, count: 1 },
+      { weight: 2.5, count: 1 },
+    ])
+  })
+
+  it('returns null when weight cannot be made with available plates', () => {
+    const limitedPlates = [{ weight: 45, count: 4 }]
+    expect(calcPlatesPerSide(160, BAR, limitedPlates)).toBeNull()
+  })
+
+  it('respects count limit — falls through to smaller plates', () => {
+    // only 1 pair of 45s available; 235lb needs 95/side = 45+25+25
+    const plates = [
+      { weight: 45, count: 2 },
+      { weight: 25, count: 4 },
+    ]
+    expect(calcPlatesPerSide(235, BAR, plates)).toEqual([
+      { weight: 45, count: 1 },
+      { weight: 25, count: 2 },
+    ])
+  })
+
+  it('ignores plates with count < 2', () => {
+    const plates = [
+      { weight: 45, count: 1 },
+      { weight: 25, count: 4 },
+    ]
+    expect(calcPlatesPerSide(95, BAR, plates)).toEqual([
+      { weight: 25, count: 1 },
+    ])
+  })
 })

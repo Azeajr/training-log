@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { db } from '../db/db'
+import type { PlateConfig } from '../db/db'
 
 export const THEMES = {
   dark: {
@@ -64,6 +65,16 @@ export const THEMES = {
 export type ThemeKey = keyof typeof THEMES
 
 const DEFAULT_THEME: ThemeKey = 'dark'
+export const DEFAULT_BAR_WEIGHT = 45
+export const DEFAULT_PLATES: PlateConfig[] = [
+  { weight: 45, count: 4 },
+  { weight: 35, count: 2 },
+  { weight: 25, count: 4 },
+  { weight: 15, count: 2 },
+  { weight: 10, count: 4 },
+  { weight: 5,  count: 4 },
+  { weight: 2.5, count: 4 },
+]
 
 const applyTheme = (key: string) => {
   const theme = THEMES[key as ThemeKey] ?? THEMES[DEFAULT_THEME]
@@ -78,6 +89,8 @@ interface SettingsState {
   restTimer2: number
   restTimerFail: number
   theme: string
+  barWeight: number
+  plates: PlateConfig[]
   loaded: boolean
   load: () => Promise<void>
   update: (updates: Partial<Omit<SettingsState, 'loaded' | 'load' | 'update'>>) => Promise<void>
@@ -88,6 +101,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   restTimer2: 180,
   restTimerFail: 300,
   theme: DEFAULT_THEME,
+  barWeight: DEFAULT_BAR_WEIGHT,
+  plates: DEFAULT_PLATES,
   loaded: false,
 
   load: async () => {
@@ -100,6 +115,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         restTimer2: settings.restTimer2,
         restTimerFail: settings.restTimerFail,
         theme,
+        barWeight: settings.barWeight ?? DEFAULT_BAR_WEIGHT,
+        plates: settings.plates ?? DEFAULT_PLATES,
         loaded: true,
       })
     }

@@ -1,3 +1,5 @@
+import type { PlateConfig } from '../db/db'
+
 export const MAIN_PERCENTAGES = {
   1: [0.65, 0.75, 0.85],
   2: [0.70, 0.80, 0.90],
@@ -149,4 +151,32 @@ export const fromSeconds = (total: number): { mm: number; ss: number } => ({
 export const formatDuration = (seconds: number): string => {
   const { mm, ss } = fromSeconds(seconds)
   return `${mm}:${ss.toString().padStart(2, '0')}`
+}
+
+export const calcPlatesPerSide = (
+  targetWeight: number,
+  barWeight: number,
+  plates: PlateConfig[]
+): PlateConfig[] | null => {
+  const perSide = Math.round(((targetWeight - barWeight) / 2) * 100) / 100
+  if (perSide < 0) return null
+  if (perSide === 0) return []
+
+  const sorted = [...plates]
+    .filter(p => p.count >= 2)
+    .sort((a, b) => b.weight - a.weight)
+
+  const result: PlateConfig[] = []
+  let remaining = perSide
+  for (const plate of sorted) {
+    if (remaining <= 0) break
+    const maxPairs = Math.floor(plate.count / 2)
+    const pairsNeeded = Math.floor(remaining / plate.weight)
+    const pairsToUse = Math.min(maxPairs, pairsNeeded)
+    if (pairsToUse > 0) {
+      result.push({ weight: plate.weight, count: pairsToUse })
+      remaining = Math.round((remaining - pairsToUse * plate.weight) * 100) / 100
+    }
+  }
+  return Math.abs(remaining) < 0.01 ? result : null
 }

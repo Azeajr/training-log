@@ -75,12 +75,19 @@ export interface AccessorySet {
   distance: number | null
 }
 
+export interface PlateConfig {
+  weight: number
+  count: number
+}
+
 export interface Settings {
   id?: number
   restTimer1: number
   restTimer2: number
   restTimerFail: number
   theme?: string
+  barWeight?: number
+  plates?: PlateConfig[]
 }
 
 export class TrainingDB extends Dexie {
