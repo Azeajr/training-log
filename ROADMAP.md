@@ -14,6 +14,9 @@ Given a target weight, show which plates to load on each side of the bar. Shown 
 ### Per-Set Weight Adjustment
 Tap the weight stepper on any active or completed set during a workout to adjust the actual weight lifted. Stored on the set record; TM is unchanged. Completed sets can be re-edited inline.
 
+### Joker Sets
+After logging the AMRAP top set with reps ≥ the week's minimum (≥5/≥3/≥1), a "+ JOKER SET Xlb" button appears. Each joker is +5% over the previous weight rounded to nearest 5lb at the same rep scheme. Button reappears after each successful joker. Disabled on deload week. Joker sets survive reload.
+
 ---
 
 ## Planned
@@ -96,3 +99,44 @@ Per-session and per-week totals:
 - Weekly frequency — how many days trained
 
 Surface in History or a dedicated Stats tab.
+
+---
+
+### 5's PRO
+
+Alternative main set style: always 5 reps across all three working sets regardless of week (no AMRAP). Reduces fatigue during high-volume supplemental phases like BBB. Settable per lift as a toggle alongside the current default.
+
+---
+
+### Supplemental Template Selection
+
+Let the user choose a supplemental template per lift instead of FSL being fixed:
+- **FSL** — 5×10 at the first working set weight (current default)
+- **SSL** — 5×5 at the second working set weight; higher intensity
+- **BBB** — 5×10 at 40–60% of TM; classic hypertrophy volume
+- **BBS** — 10×5 at a moderate percentage; high rep count at better bar speed
+
+---
+
+### Leader / Anchor Cycle Structure
+
+Formalize the two-phase programming block from *5/3/1 Forever*:
+- **Leader** (typically 2 cycles): high supplemental volume (BBB/BBS), 5's PRO on main sets, no Jokers
+- **Anchor** (typically 1 cycle): lower supplemental volume (FSL), AMRAP top sets, Jokers allowed
+
+The app would track which phase the user is in and surface the appropriate options automatically.
+
+---
+
+### 7th Week Protocol
+
+A structured week inserted between Leader and Anchor cycles (or every 2–3 cycles). Three variants:
+- **Deload** — standard easy week to shed fatigue
+- **PR Test** — attempt a new rep PR at the top set weight
+- **TM Test** — perform 3–5 reps at 100% TM; if the user can't hit it cleanly, the app suggests reducing the TM before the next block
+
+---
+
+### Assistance Category Tracking
+
+Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Track rep totals per category per session and show progress toward the Wendler target of 25–100 reps from each bucket every workout.
