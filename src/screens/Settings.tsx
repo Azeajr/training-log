@@ -3,6 +3,7 @@ import { db } from '../db/db'
 import type { Lift, Exercise } from '../db/db'
 import { useSettingsStore, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../lib/exportImport'
+import { calcMainSets } from '../lib/calc'
 import Rule from '../components/Rule'
 import Stepper from '../components/Stepper'
 
@@ -11,7 +12,7 @@ export default function Settings() {
   const [lifts, setLifts] = useState<Lift[]>([])
   const [tms, setTms] = useState<Record<number, number>>({})
   const [editingTm, setEditingTm] = useState<number | null>(null)
-  const [tmInput, setTmInput] = useState('')
+  const [tmInput, setTmInput] = useState(0)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [newExName, setNewExName] = useState('')
   const [newExType, setNewExType] = useState<'reps' | 'timed' | 'distance'>('reps')
@@ -39,11 +40,10 @@ export default function Settings() {
   }
 
   const handleSaveTm = async (liftId: number) => {
-    const w = parseFloat(tmInput)
-    if (!w || w <= 0) return
-    await db.trainingMaxes.add({ liftId, weight: w, setAt: new Date() })
+    if (tmInput <= 0) return
+    await db.trainingMaxes.add({ liftId, weight: tmInput, setAt: new Date() })
     setEditingTm(null)
-    setTmInput('')
+    setTmInput(0)
     load()
   }
 
@@ -99,31 +99,32 @@ export default function Settings() {
       <div className="mb-6">
         <Rule label="TRAINING MAXES" className="text-muted mb-2" />
         {lifts.map(l => (
-          <div key={l.id} className="flex items-center gap-3 py-1 border-b border-border-dim">
-            <span className="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
-            {editingTm === l.id ? (
-              <>
-                <input
-                  type="number"
-                  value={tmInput}
-                  onChange={e => setTmInput(e.target.value)}
-                  className="bg-surface border border-border text-text px-2 py-0.5 w-20 focus:outline-none focus:border-accent"
-                  autoFocus
-                />
-                <span className="text-muted">lb</span>
-                <button onClick={() => handleSaveTm(l.id!)} className="text-accent text-xs">SAVE</button>
-                <button onClick={() => setEditingTm(null)} className="text-muted text-xs">cancel</button>
-              </>
-            ) : (
-              <>
-                <span className="text-text">{tms[l.id!] ?? '—'} lb</span>
-                <button
-                  onClick={() => { setEditingTm(l.id!); setTmInput(String(tms[l.id!] ?? '')) }}
-                  className="text-muted text-xs hover:text-accent"
-                >
-                  edit
-                </button>
-              </>
+          <div key={l.id} className="py-1 border-b border-border-dim">
+            <div className="flex items-center gap-3">
+              <span className="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
+              {editingTm === l.id ? (
+                <>
+                  <Stepper value={tmInput} onChange={setTmInput} step={5} min={0} />
+                  <span className="text-muted text-xs">lb</span>
+                  <button onClick={() => handleSaveTm(l.id!)} className="text-accent text-xs">SAVE</button>
+                  <button onClick={() => setEditingTm(null)} className="text-muted text-xs">cancel</button>
+                </>
+              ) : (
+                <>
+                  <span className="text-text">{tms[l.id!] ?? '—'} lb</span>
+                  <button
+                    onClick={() => { setEditingTm(l.id!); setTmInput(tms[l.id!] ?? 0) }}
+                    className="text-muted text-xs hover:text-accent"
+                  >
+                    edit
+                  </button>
+                </>
+              )}
+            </div>
+            {editingTm === l.id && tmInput > 0 && (
+              <div className="text-faint text-xs font-mono mt-1 ml-24">
+                {'W1: ' + calcMainSets(tmInput, 1).map(s => s.weight).join(' · ') + ' lb'}
+              </div>
             )}
           </div>
         ))}

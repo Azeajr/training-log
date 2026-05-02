@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { db } from '../db/db'
+import { calcMainSets } from '../lib/calc'
 import Rule from '../components/Rule'
+import Stepper from '../components/Stepper'
 
 interface Props {
   onComplete: () => void
@@ -10,14 +12,11 @@ const LIFTS = ['OHP', 'Bench', 'Squat', 'Deadlift'] as const
 
 export default function Setup({ onComplete }: Props) {
   const [step, setStep] = useState<1 | 2>(1)
-  const [tms, setTms] = useState<Record<string, string>>({
-    OHP: '', Bench: '', Squat: '', Deadlift: '',
+  const [tms, setTms] = useState<Record<string, number>>({
+    OHP: 0, Bench: 0, Squat: 0, Deadlift: 0,
   })
 
-  const allValid = LIFTS.every(l => {
-    const v = Number(tms[l])
-    return Number.isFinite(v) && v > 0
-  })
+  const allValid = LIFTS.every(l => tms[l] > 0)
 
   const handleComplete = async () => {
     const now = new Date()
@@ -25,7 +24,7 @@ export default function Setup({ onComplete }: Props) {
     for (const lift of lifts) {
       await db.trainingMaxes.add({
         liftId: lift.id!,
-        weight: Number(tms[lift.name]),
+        weight: tms[lift.name],
         setAt: now,
       })
     }
@@ -37,20 +36,25 @@ export default function Setup({ onComplete }: Props) {
     return (
       <div className="p-4 max-w-sm mx-auto pt-12">
         <Rule label="SETUP . STEP 1/2" className="text-muted mb-6" />
-        <div className="text-text mb-6">Enter your training maxes (lbs):</div>
+        <div className="text-text mb-6">Enter your training maxes:</div>
         <div className="space-y-4">
           {LIFTS.map(lift => (
-            <div key={lift} className="flex items-center gap-4">
-              <label className="text-muted w-20 text-sm uppercase tracking-widest">{lift}</label>
-              <input
-                type="number"
-                min={1}
-                value={tms[lift]}
-                onChange={e => setTms(prev => ({ ...prev, [lift]: e.target.value }))}
-                className="bg-surface border border-border text-text font-mono px-3 py-2 w-32 focus:outline-none focus:border-accent"
-                placeholder="0"
-              />
-              <span className="text-muted text-sm">lb</span>
+            <div key={lift}>
+              <div className="flex items-center gap-4">
+                <label className="text-muted w-20 text-sm uppercase tracking-widest">{lift}</label>
+                <Stepper
+                  value={tms[lift]}
+                  onChange={v => setTms(prev => ({ ...prev, [lift]: v }))}
+                  step={5}
+                  min={0}
+                />
+                <span className="text-muted text-sm">lb</span>
+              </div>
+              {tms[lift] > 0 && (
+                <div className="text-faint text-xs font-mono mt-1 ml-24">
+                  {'W1: ' + calcMainSets(tms[lift], 1).map(s => s.weight).join(' · ') + ' lb'}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -69,11 +73,16 @@ export default function Setup({ onComplete }: Props) {
     <div className="p-4 max-w-sm mx-auto pt-12">
       <Rule label="SETUP . STEP 2/2" className="text-muted mb-6" />
       <div className="text-text mb-4">Confirm training maxes:</div>
-      <div className="border border-border p-4 space-y-2 mb-8">
+      <div className="border border-border p-4 space-y-3 mb-8">
         {LIFTS.map(lift => (
-          <div key={lift} className="flex justify-between">
-            <span className="text-muted uppercase text-sm tracking-widest">{lift}</span>
-            <span className="text-text">{tms[lift]} lb</span>
+          <div key={lift}>
+            <div className="flex justify-between">
+              <span className="text-muted uppercase text-sm tracking-widest">{lift}</span>
+              <span className="text-text font-mono">{tms[lift]} lb</span>
+            </div>
+            <div className="text-faint text-xs font-mono mt-0.5">
+              {'W1: ' + calcMainSets(tms[lift], 1).map(s => s.weight).join(' · ') + ' lb'}
+            </div>
           </div>
         ))}
       </div>
