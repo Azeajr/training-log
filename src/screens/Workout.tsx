@@ -12,7 +12,7 @@ import {
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet } from '../lib/calc'
 import type { RestType } from '../store/workoutStore'
-import { getAmrapTargets } from '../lib/session'
+import { getAmrapTargets, advanceCycleIfComplete } from '../lib/session'
 import SetRow from '../components/SetRow'
 import AccessoryPicker from '../components/AccessoryPicker'
 import AccessoryLog from '../components/AccessoryLog'
@@ -41,6 +41,7 @@ export default function Workout() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [skipConfirm, setSkipConfirm] = useState(false)
   const [exitConfirm, setExitConfirm] = useState(false)
+  const [cycleCompleteData, setCycleCompleteData] = useState<Array<{ liftName: string; weight: number }> | null>(null)
 
   useEffect(() => {
     if (!activeSession) return
@@ -139,9 +140,11 @@ export default function Workout() {
         }
       }
     }
-    await checkWeekAdvancement()
-    clearSession()
-    navigate('/today')
+    const advanced = await checkWeekAdvancement()
+    if (!advanced) {
+      clearSession()
+      navigate('/today')
+    }
   }
 
   const handleExit = async () => {
@@ -155,12 +158,24 @@ export default function Workout() {
   const handleSkip = async () => {
     if (!activeSession?.id) return
     await db.sessions.update(activeSession.id, { status: 'skipped' })
-    await checkWeekAdvancement()
+    const advanced = await checkWeekAdvancement()
+    if (!advanced) {
+      clearSession()
+      navigate('/today')
+    }
+  }
+
+  const checkWeekAdvancement = async (): Promise<boolean> => {
+    const { advanced, newTms } = await advanceCycleIfComplete()
+    if (advanced) setCycleCompleteData(newTms)
+    return advanced
+  }
+
+  const handleCycleCompleteDismiss = () => {
+    setCycleCompleteData(null)
     clearSession()
     navigate('/today')
   }
-
-  const checkWeekAdvancement = async () => {}
 
   if (!activeSession) {
     return (
@@ -337,6 +352,29 @@ export default function Workout() {
 
       {showPicker && lift && (
         <AccessoryPicker liftId={lift.id!} onClose={() => { setShowPicker(false); loadData() }} />
+      )}
+
+      {cycleCompleteData && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-surface border border-accent p-6 font-mono max-w-sm w-full">
+            <div className="text-accent uppercase tracking-widest text-sm mb-1">CYCLE COMPLETE</div>
+            <div className="text-muted text-xs mb-4">New training maxes:</div>
+            <div className="mb-6 space-y-2">
+              {cycleCompleteData.map(({ liftName, weight }) => (
+                <div key={liftName} className="flex justify-between text-sm">
+                  <span className="text-text uppercase tracking-widest">{liftName}</span>
+                  <span className="text-accent">{weight} lbs</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={handleCycleCompleteDismiss}
+              className="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono"
+            >
+              CONTINUE
+            </button>
+          </div>
+        </div>
       )}
 
       <RestTimer />

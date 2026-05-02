@@ -25,18 +25,6 @@ export async function getNextSession(database: TrainingDB = db): Promise<{
     if (s.status !== 'pending') weekCounts[s.week]++
   })
 
-  if (weekCounts[4] >= 4) {
-    const newCycleId = await database.cycles.add({
-      number: cycle.number + 1,
-      startDate: new Date(),
-      endDate: null,
-    })
-    await applyTmProgression(database)
-    await applyAccessoryTmProgression(database, cycle.id)
-    const lifts = (await database.lifts.toArray()).sort((a, b) => a.order - b.order)
-    return { liftId: lifts[0].id!, week: 1, cycleId: newCycleId }
-  }
-
   let currentWeek: 1 | 2 | 3 | 4 = 1
   for (const w of [1, 2, 3, 4] as const) {
     if (weekCounts[w] < 4) { currentWeek = w; break }
@@ -54,6 +42,40 @@ export async function getNextSession(database: TrainingDB = db): Promise<{
     week: currentWeek,
     cycleId: cycle.id,
   }
+}
+
+export async function advanceCycleIfComplete(database: TrainingDB = db): Promise<{
+  advanced: boolean
+  newTms: Array<{ liftName: string; weight: number }>
+}> {
+  const cycle = await database.cycles.orderBy('number').last()
+  if (!cycle?.id) return { advanced: false, newTms: [] }
+
+  const sessions = await database.sessions.where('cycleId').equals(cycle.id).toArray()
+  const weekCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
+  sessions.forEach(s => {
+    if (s.status !== 'pending') weekCounts[s.week]++
+  })
+
+  if (weekCounts[4] < 4) return { advanced: false, newTms: [] }
+
+  await database.cycles.add({
+    number: cycle.number + 1,
+    startDate: new Date(),
+    endDate: null,
+  })
+  await applyTmProgression(database)
+  await applyAccessoryTmProgression(database, cycle.id)
+
+  const lifts = (await database.lifts.toArray()).sort((a, b) => a.order - b.order)
+  const newTms: Array<{ liftName: string; weight: number }> = []
+  for (const lift of lifts) {
+    const tms = await database.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
+    const latest = tms[tms.length - 1]
+    if (latest) newTms.push({ liftName: lift.name, weight: latest.weight })
+  }
+
+  return { advanced: true, newTms }
 }
 
 export async function applyTmProgression(database: TrainingDB = db) {
