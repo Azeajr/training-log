@@ -42,3 +42,29 @@ Currently the rest timer fires audio + vibration cues in-app. When the screen lo
 
 - No new npm packages needed for SW scheduling
 - Web Push path: `web-push` npm package on a Cloudflare Worker, VAPID key pair stored in env
+
+---
+
+## Editable History
+
+Completed sessions are currently read-only once the Workout screen is left.
+
+### What's needed
+
+**History screen** — list of completed sessions grouped by date or cycle, accessible from BottomNav. Each row shows lift name, week, date, and a summary (e.g. AMRAP reps).
+
+**Session detail view** — tapping a session opens a read/edit view showing all logged sets (warmup, main, FSL). Each set row should allow inline rep editing, the same edit-mode flow already used in the active Workout screen (`SetRow` → edit mode → SAVE).
+
+**Persistence** — edits write through to `db.sets` via `db.sets.update(id, { reps })`, same as the live `handleEdit` path in Workout.tsx.
+
+### Scope
+
+- Edit reps only (weight is fixed by the program at log time)
+- No adding or deleting sets from history
+- No editing session date, week, or lift
+
+### Implementation order
+
+1. History screen: list sessions, route `/history/:sessionId` for detail
+2. SessionDetail component: reuse `SetRow` in completed+editable mode
+3. Wire `onEdit` to `db.sets.update` for historical sessions

@@ -105,7 +105,7 @@ export async function getAmrapTargets(
 ): Promise<Array<{ weight: number; reps: number; label: string }>> {
   const allSessions = await db.sessions
     .where('liftId').equals(liftId)
-    .filter(s => s.status === 'completed')
+    .filter(s => s.status === 'completed' && s.week !== 4)
     .toArray()
 
   allSessions.sort((a, b) =>
