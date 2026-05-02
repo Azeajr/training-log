@@ -9,6 +9,7 @@ import Setup from './screens/Setup'
 import Today from './screens/Today'
 import Workout from './screens/Workout'
 import History from './screens/History'
+import HistoryEdit from './screens/HistoryEdit'
 import Settings from './screens/Settings'
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/today" element={<Today />} />
             <Route path="/workout" element={<Workout />} />
             <Route path="/history" element={<History />} />
+            <Route path="/history/:sessionId/edit" element={<HistoryEdit />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

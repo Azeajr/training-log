@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
 import type { Session, Lift } from '../db/db'
 import { estimated1RM } from '../lib/calc'
@@ -14,6 +15,7 @@ interface SessionRow {
 }
 
 export default function History() {
+  const navigate = useNavigate()
   const [mode, setMode] = useState<ViewMode>('lift')
   const [lifts, setLifts] = useState<Lift[]>([])
   const [selectedLiftId, setSelectedLiftId] = useState<number | null>(null)
@@ -155,6 +157,14 @@ export default function History() {
               </button>
               {expanded === sid && detail && (
                 <div className="border border-t-0 border-zinc-700 px-3 py-2 text-xs text-zinc-400 space-y-1">
+                  <div className="flex justify-end mb-1">
+                    <button
+                      onClick={() => navigate(`/history/${sid}/edit`)}
+                      className="text-xs text-zinc-500 hover:text-green-400 font-mono tracking-widest"
+                    >
+                      EDIT →
+                    </button>
+                  </div>
                   {['warmup', 'main', 'fsl'].map(type => {
                     const typeSets = detail.sets.filter(s => s.type === type)
                     if (!typeSets.length) return null
