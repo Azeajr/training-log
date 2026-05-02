@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { db } from '../db/db'
 import type { Lift, Exercise } from '../db/db'
 import { useSettingsStore } from '../store/settingsStore'
+import { exportJson, importJson, exportCsv } from '../lib/exportImport'
 
 export default function Settings() {
   const { restTimer1, restTimer2, restTimerFail, update } = useSettingsStore()
@@ -14,6 +15,10 @@ export default function Settings() {
   const [newExType, setNewExType] = useState<'reps' | 'timed' | 'distance'>('reps')
   const [showAddEx, setShowAddEx] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [importConfirm, setImportConfirm] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { load() }, [])
 
@@ -56,26 +61,25 @@ export default function Settings() {
     load()
   }
 
-  const handleExportJson = async () => {
-    const data = {
-      lifts: await db.lifts.toArray(),
-      trainingMaxes: await db.trainingMaxes.toArray(),
-      accessoryTrainingMaxes: await db.accessoryTrainingMaxes.toArray(),
-      cycles: await db.cycles.toArray(),
-      sessions: await db.sessions.toArray(),
-      sets: await db.sets.toArray(),
-      exercises: await db.exercises.toArray(),
-      liftAccessories: await db.liftAccessories.toArray(),
-      accessorySets: await db.accessorySets.toArray(),
-      settings: await db.settings.toArray(),
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPendingFile(file)
+    setImportConfirm(true)
+    setImportError(null)
+    e.target.value = ''
+  }
+
+  const handleImportConfirmed = async () => {
+    if (!pendingFile) return
+    try {
+      await importJson(pendingFile)
+      setImportConfirm(false)
+      setPendingFile(null)
+      load()
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed')
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `training-log-${new Date().toISOString().split('T')[0]}.json`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   const timerStep = (field: 'restTimer1' | 'restTimer2' | 'restTimerFail', delta: number) => {
@@ -198,17 +202,70 @@ export default function Settings() {
         )}
       </div>
 
-      {/* Data Export */}
+      {/* Data */}
       <div>
-        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-2">
+        <div className="text-zinc-500 uppercase text-xs tracking-widest mb-3">
           --- DATA ------------------------------------------
         </div>
-        <button
-          onClick={handleExportJson}
-          className="border border-zinc-700 px-4 py-2 text-zinc-500 text-xs uppercase tracking-widest hover:border-green-400 hover:text-green-400"
-        >
-          EXPORT JSON
-        </button>
+        <div className="flex flex-wrap gap-3 mb-4">
+          <button
+            onClick={exportJson}
+            className="border border-zinc-700 px-4 py-2 text-zinc-500 text-xs uppercase tracking-widest hover:border-green-400 hover:text-green-400"
+          >
+            EXPORT JSON
+          </button>
+          <button
+            onClick={exportCsv}
+            className="border border-zinc-700 px-4 py-2 text-zinc-500 text-xs uppercase tracking-widest hover:border-green-400 hover:text-green-400"
+          >
+            EXPORT CSV
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="border border-zinc-700 px-4 py-2 text-zinc-500 text-xs uppercase tracking-widest hover:border-amber-400 hover:text-amber-400"
+          >
+            IMPORT JSON
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleFileSelected}
+          />
+        </div>
+
+        {importConfirm && (
+          <div className="border border-amber-400 p-4 mb-4">
+            <div className="text-amber-400 text-xs uppercase tracking-widest mb-2">
+              OVERWRITE ALL DATA?
+            </div>
+            <div className="text-zinc-400 text-xs mb-3">
+              This will replace all training history with the contents of <span className="text-zinc-100">{pendingFile?.name}</span>. This cannot be undone.
+            </div>
+            {importError && (
+              <div className="text-red-400 text-xs mb-3">{importError}</div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleImportConfirmed}
+                className="border border-amber-400 text-amber-400 px-4 py-2 text-xs uppercase tracking-widest hover:bg-amber-400 hover:text-zinc-900"
+              >
+                CONFIRM IMPORT
+              </button>
+              <button
+                onClick={() => { setImportConfirm(false); setPendingFile(null); setImportError(null) }}
+                className="text-zinc-500 text-xs hover:text-zinc-100"
+              >
+                cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="text-zinc-700 text-xs leading-relaxed">
+          JSON backup restores all history. CSV exports completed sessions for spreadsheets.
+        </div>
       </div>
     </div>
   )
