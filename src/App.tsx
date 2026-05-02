@@ -18,9 +18,13 @@ function AppShell() {
   const { onTouchStart, onTouchEnd } = useSwipeNav()
 
   return (
-    <div className="bg-bg min-h-screen font-mono text-text flex flex-col">
+    <div
+      className="bg-bg min-h-screen font-mono text-text flex flex-col"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
       <main
-        className="flex-1 overflow-y-auto pb-20"
+        className="flex-1 overflow-y-auto"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 3.5rem)' }}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >

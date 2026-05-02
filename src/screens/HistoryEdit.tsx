@@ -4,6 +4,7 @@ import { db } from '../db/db'
 import type { Exercise, LiftAccessory } from '../db/db'
 import DurationInput from '../components/DurationInput'
 import Rule from '../components/Rule'
+import Stepper from '../components/Stepper'
 
 interface EditSet {
   id: number
@@ -124,10 +125,8 @@ export default function HistoryEdit() {
     )
   }
 
-  const updateSet = (idx: number, field: 'weight' | 'reps', raw: string) => {
-    const num = parseFloat(raw)
-    if (isNaN(num)) return
-    setEditSets(prev => prev.map((s, i) => i === idx ? { ...s, [field]: num } : s))
+  const updateSet = (idx: number, field: 'weight' | 'reps', value: number) => {
+    setEditSets(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s))
   }
 
   const updateAccSet = (accIdx: number, setIdx: number, field: keyof EditAccSet, value: number | null) => {
@@ -275,20 +274,10 @@ export default function HistoryEdit() {
               {type === 'fsl' ? 'FSL' : type}
             </div>
             {rows.map(({ s, i }) => (
-              <div key={i} className="flex items-center gap-2 py-1.5">
-                <input
-                  type="number"
-                  value={s.weight}
-                  onChange={e => updateSet(i, 'weight', e.target.value)}
-                  className="bg-surface border border-border text-text font-mono px-2 py-1.5 w-20 text-center focus:outline-none focus:border-accent text-sm"
-                />
+              <div key={i} className="flex items-center gap-2 py-1.5 flex-wrap">
+                <Stepper value={s.weight} onChange={v => updateSet(i, 'weight', v)} step={2.5} min={0} />
                 <span className="text-muted text-xs">lb ×</span>
-                <input
-                  type="number"
-                  value={s.reps}
-                  onChange={e => updateSet(i, 'reps', e.target.value)}
-                  className="bg-surface border border-border text-text font-mono px-2 py-1.5 w-16 text-center focus:outline-none focus:border-accent text-sm"
-                />
+                <Stepper value={s.reps} onChange={v => updateSet(i, 'reps', v)} step={1} min={0} />
                 {s.isAmrap && <span className="text-warn text-xs tracking-widest">AMRAP</span>}
               </div>
             ))}
@@ -316,25 +305,13 @@ export default function HistoryEdit() {
               </button>
             </div>
             {acc.sets.map((s, si) => (
-              <div key={si} className="flex items-center gap-2 py-1 pl-2">
+              <div key={si} className="flex items-center flex-wrap gap-2 py-1 pl-2">
                 <span className="text-muted text-xs w-10">Set {s.setNumber}</span>
                 {acc.exerciseType === 'reps' && (
                   <>
-                    <input
-                      type="number"
-                      value={s.weight ?? ''}
-                      onChange={e => updateAccSet(ai, si, 'weight', parseFloat(e.target.value) || null)}
-                      className="bg-surface border border-border text-text font-mono px-2 py-1 w-20 text-center focus:outline-none focus:border-accent text-xs"
-                      placeholder="wt"
-                    />
+                    <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} />
                     <span className="text-muted text-xs">lb ×</span>
-                    <input
-                      type="number"
-                      value={s.reps ?? ''}
-                      onChange={e => updateAccSet(ai, si, 'reps', parseInt(e.target.value) || null)}
-                      className="bg-surface border border-border text-text font-mono px-2 py-1 w-14 text-center focus:outline-none focus:border-accent text-xs"
-                      placeholder="reps"
-                    />
+                    <Stepper value={s.reps ?? 0} onChange={v => updateAccSet(ai, si, 'reps', v)} step={1} min={0} />
                   </>
                 )}
                 {acc.exerciseType === 'timed' && (
@@ -344,13 +321,7 @@ export default function HistoryEdit() {
                   />
                 )}
                 {acc.exerciseType === 'distance' && (
-                  <input
-                    type="number"
-                    value={s.distance ?? ''}
-                    onChange={e => updateAccSet(ai, si, 'distance', parseFloat(e.target.value) || null)}
-                    className="bg-surface border border-border text-text font-mono px-2 py-1 w-24 text-center focus:outline-none focus:border-accent text-xs"
-                    placeholder="ft"
-                  />
+                  <Stepper value={s.distance ?? 0} onChange={v => updateAccSet(ai, si, 'distance', v)} step={1} min={0} />
                 )}
               </div>
             ))}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useWorkoutStore } from '../store/workoutStore'
 import type { AccessorySet, Exercise } from '../db/db'
 import DurationInput from './DurationInput'
+import Stepper from './Stepper'
 
 interface ActiveAccessory {
   exerciseId: number
@@ -18,9 +19,9 @@ interface Props {
 
 export default function AccessoryLog({ accessory, exercise }: Props) {
   const { logAccessorySet, startRest } = useWorkoutStore()
-  const [reps, setReps] = useState('')
+  const [reps, setReps] = useState(10)
   const [duration, setDuration] = useState<number | null>(null)
-  const [distance, setDistance] = useState('')
+  const [distance, setDistance] = useState(0)
   const type = exercise?.type ?? 'reps'
   const nextSet = accessory.loggedSets.length + 1
 
@@ -29,16 +30,16 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
       exerciseId: accessory.exerciseId,
       setNumber: nextSet,
       weight: accessory.calculatedWeight,
-      reps: type === 'reps' ? (parseInt(reps) || 0) : null,
+      reps: type === 'reps' ? reps : null,
       duration: type === 'timed' ? duration : null,
-      distance: type === 'distance' ? (parseFloat(distance) || null) : null,
+      distance: type === 'distance' ? distance : null,
     }
     logAccessorySet(accessory.exerciseId, set)
     // last set of this exercise → transition to next; otherwise same exercise → normal
     startRest(nextSet >= 5 ? 'transition' : 'normal')
-    setReps('')
+    setReps(10)
     setDuration(null)
-    setDistance('')
+    setDistance(0)
   }
 
   const done = accessory.loggedSets.length >= 5
@@ -62,27 +63,13 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
         <div className="flex items-center gap-2 mt-2 pl-2">
           <span className="text-warn text-xs">Set {nextSet}:</span>
           {type === 'reps' && (
-            <input
-              type="number"
-              min={0}
-              value={reps}
-              onChange={e => setReps(e.target.value)}
-              className="bg-surface border border-border text-text font-mono px-2 py-1 w-16 text-center focus:outline-none focus:border-accent"
-              placeholder="10"
-            />
+            <Stepper value={reps} onChange={setReps} step={1} min={0} />
           )}
           {type === 'timed' && (
             <DurationInput value={duration} onChange={setDuration} />
           )}
           {type === 'distance' && (
-            <input
-              type="number"
-              min={0}
-              value={distance}
-              onChange={e => setDistance(e.target.value)}
-              className="bg-surface border border-border text-text font-mono px-2 py-1 w-20 text-center focus:outline-none focus:border-accent"
-              placeholder="0"
-            />
+            <Stepper value={distance} onChange={setDistance} step={1} min={0} />
           )}
           <button
             onClick={handleLog}
