@@ -1,73 +1,56 @@
-# React + TypeScript + Vite
+# Training Log
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A progressive strength training tracker built for the **5/3/1 program**. Designed as a mobile-first PWA for use at the gym.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **5/3/1 program logic** — calculates warmup, main, and FSL sets from your training max each week
+- **AMRAP tracking** — logs rep PRs on the third main set and shows targets based on prior performance
+- **Accessory work** — select assistance exercises per lift, log reps/weight/duration/distance
+- **Rest timer** — in-session countdown with audio and vibration cues; different durations for normal, transition, and failed sets
+- **4-week cycles** — auto-advances week and applies TM progression after each deload
+- **History** — view completed sessions by lift or date, TM progression chart, editable after the fact
+- **Export / Import** — full JSON or CSV backup and restore
+- **PWA** — installable, works offline
 
-## React Compiler
+## Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Layer | Library |
+|---|---|
+| UI | React 19, TypeScript, Tailwind CSS 4 |
+| Routing | React Router v7 |
+| State | Zustand 5 |
+| Database | Dexie (IndexedDB) 4 |
+| Charts | Recharts 3 |
+| Build | Vite + vite-plugin-pwa |
+| Tests | Vitest |
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open `http://localhost:5173` and enter your training maxes to begin.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Running Tests
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm test
 ```
+
+## Program Structure
+
+Each cycle is 4 weeks across 4 lifts (OHP, Deadlift, Bench, Squat):
+
+| Week | Set 1 | Set 2 | Set 3 (AMRAP) |
+|---|---|---|---|
+| 1 | 65% × 5 | 75% × 5 | 85% × 5+ |
+| 2 | 70% × 3 | 80% × 3 | 90% × 3+ |
+| 3 | 75% × 5 | 85% × 3 | 95% × 1+ |
+| 4 (deload) | 40% × 5 | 50% × 5 | 60% × 5 |
+
+FSL (First Set Last) is 5 × 10 @ 65% of TM after every non-deload session.
+
+TM progression after each deload: +5 lb upper body, +10 lb lower body.
