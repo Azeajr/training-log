@@ -4,6 +4,7 @@ import type { Exercise, LiftAccessory } from '../db/db'
 import { useWorkoutStore } from '../store/workoutStore'
 import { roundToNearest5 } from '../lib/calc'
 import Rule from './Rule'
+import Stepper from './Stepper'
 
 interface Props {
   liftId: number
@@ -22,8 +23,8 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
   const { activeAccessories, addAccessory } = useWorkoutStore()
   const [rows, setRows] = useState<PickerRow[]>([])
   const [settingTm, setSettingTm] = useState<Exercise | null>(null)
-  const [tmWeight, setTmWeight] = useState('')
-  const [tmIncrement, setTmIncrement] = useState('5')
+  const [tmWeight, setTmWeight] = useState(0)
+  const [tmIncrement, setTmIncrement] = useState(5)
 
   useEffect(() => { load() }, [])
 
@@ -66,55 +67,45 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
   }
 
   const handleSaveTm = async () => {
-    if (!settingTm) return
-    const weight = parseFloat(tmWeight)
-    const increment = parseFloat(tmIncrement)
-    if (!weight || weight <= 0) return
+    if (!settingTm || tmWeight <= 0) return
     await db.accessoryTrainingMaxes.add({
       exerciseId: settingTm.id!,
-      weight,
-      incrementLb: increment || 5,
+      weight: tmWeight,
+      incrementLb: tmIncrement,
       setAt: new Date(),
     })
-    const calcW = roundToNearest5(weight * 0.75)
     addAccessory({
       exerciseId: settingTm.id!,
       exerciseName: settingTm.name,
-      tm: weight,
-      calculatedWeight: calcW,
+      tm: tmWeight,
+      calculatedWeight: roundToNearest5(tmWeight * 0.75),
       loggedSets: [],
     })
     onClose()
   }
 
   if (settingTm) {
+    const workingWeight = tmWeight > 0 ? roundToNearest5(tmWeight * 0.75) : null
     return (
       <div className="fixed inset-0 bg-bg z-50 p-4">
         <Rule label="SET TRAINING MAX" className="text-muted mb-4" />
         <div className="text-text mb-6 uppercase tracking-widest">{settingTm.name}</div>
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div className="flex items-center gap-4">
-            <label className="text-muted text-sm uppercase tracking-widest w-32">Weight</label>
-            <input
-              type="number"
-              min={1}
-              value={tmWeight}
-              onChange={e => setTmWeight(e.target.value)}
-              className="bg-surface border border-border text-text font-mono px-3 py-2 w-28 focus:outline-none focus:border-accent"
-              placeholder="0"
-            />
-            <span className="text-muted">lb</span>
+            <label className="text-muted text-sm uppercase tracking-widest w-32">TM</label>
+            <Stepper value={tmWeight} onChange={setTmWeight} step={5} min={0} />
+            <span className="text-muted text-sm">lb</span>
           </div>
+          {workingWeight != null && (
+            <div className="flex items-center gap-4">
+              <span className="text-muted text-sm uppercase tracking-widest w-32">5×10 weight</span>
+              <span className="text-accent font-mono text-lg">{workingWeight} lb</span>
+            </div>
+          )}
           <div className="flex items-center gap-4">
             <label className="text-muted text-sm uppercase tracking-widest w-32">Increment</label>
-            <input
-              type="number"
-              min={1}
-              value={tmIncrement}
-              onChange={e => setTmIncrement(e.target.value)}
-              className="bg-surface border border-border text-text font-mono px-3 py-2 w-28 focus:outline-none focus:border-accent"
-            />
-            <span className="text-muted">lb</span>
+            <Stepper value={tmIncrement} onChange={setTmIncrement} step={2.5} min={0} />
+            <span className="text-muted text-sm">lb</span>
           </div>
         </div>
         <div className="flex gap-4 mt-8">
@@ -126,7 +117,8 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
           </button>
           <button
             onClick={handleSaveTm}
-            className="border border-accent text-accent px-6 py-2 font-mono"
+            disabled={tmWeight <= 0}
+            className="border border-accent text-accent px-6 py-2 font-mono disabled:opacity-40"
           >
             SAVE
           </button>
