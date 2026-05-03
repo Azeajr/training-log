@@ -15,6 +15,7 @@ import {
   calcPlatesPerSide,
   calcNextJokerWeight,
   calcJokerSet,
+  calcJokerIncrement,
   shouldShowJokerButton,
 } from './calc'
 import { DEFAULT_PLATES } from '../store/settingsStore'
@@ -139,25 +140,48 @@ describe('canAdvanceWeek', () => {
   it('false at 3', () => expect(canAdvanceWeek(3)).toBe(false))
 })
 
-describe('calcNextJokerWeight', () => {
-  it('adds ~5% and rounds to nearest 5', () => {
-    expect(calcNextJokerWeight(170)).toBe(180)  // 170 * 1.05 = 178.5 → 180
+describe('calcJokerIncrement', () => {
+  it('returns 5% when amrap reps equal double the goal', () => {
+    expect(calcJokerIncrement(10, 5)).toBe(0.05)  // 10 === 2*5, not strictly greater
   })
-  it('170lb top set chains correctly', () => {
-    const j1 = calcNextJokerWeight(170)         // 180
-    const j2 = calcNextJokerWeight(j1)          // 180 * 1.05 = 189 → 190
+  it('returns 5% when amrap reps are below double the goal', () => {
+    expect(calcJokerIncrement(6, 5)).toBe(0.05)   // week 1: hit 6, goal 5
+    expect(calcJokerIncrement(6, 3)).toBe(0.05)   // week 2: hit 6 === 2*3
+    expect(calcJokerIncrement(2, 1)).toBe(0.05)   // week 3: hit 2 === 2*1
+  })
+  it('returns 10% when amrap reps surpass double the goal', () => {
+    expect(calcJokerIncrement(11, 5)).toBe(0.10)  // week 1: hit 11 > 10
+    expect(calcJokerIncrement(7, 3)).toBe(0.10)   // week 2: hit 7 > 6
+    expect(calcJokerIncrement(3, 1)).toBe(0.10)   // week 3: hit 3 > 2
+  })
+})
+
+describe('calcNextJokerWeight', () => {
+  it('adds 5% and rounds to nearest 5', () => {
+    expect(calcNextJokerWeight(170, 0.05)).toBe(180)  // 170 * 1.05 = 178.5 → 180
+  })
+  it('adds 10% and rounds to nearest 5', () => {
+    expect(calcNextJokerWeight(170, 0.10)).toBe(185)  // 170 * 1.10 = 187 → 185
+  })
+  it('170lb chains correctly at 5%', () => {
+    const j1 = calcNextJokerWeight(170, 0.05)   // 180
+    const j2 = calcNextJokerWeight(j1, 0.05)    // 180 * 1.05 = 189 → 190
     expect(j1).toBe(180)
     expect(j2).toBe(190)
   })
 })
 
 describe('calcJokerSet', () => {
-  it('produces a correctly shaped JokerSet', () => {
-    const s = calcJokerSet(170, 1, 5)
+  it('produces a correctly shaped JokerSet at 5%', () => {
+    const s = calcJokerSet(170, 1, 5, 0.05)
     expect(s).toEqual({ type: 'joker', setNumber: 1, weight: 180, reps: 5, isAmrap: false })
   })
+  it('produces a correctly shaped JokerSet at 10%', () => {
+    const s = calcJokerSet(170, 1, 5, 0.10)
+    expect(s).toEqual({ type: 'joker', setNumber: 1, weight: 185, reps: 5, isAmrap: false })
+  })
   it('setNumber is preserved', () => {
-    expect(calcJokerSet(170, 3, 3).setNumber).toBe(3)
+    expect(calcJokerSet(170, 3, 3, 0.05).setNumber).toBe(3)
   })
 })
 

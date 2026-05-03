@@ -9,9 +9,11 @@ import {
   calcWarmup,
   calcAmrapTargets,
   calcJokerSet,
+  calcJokerIncrement,
   calcNextJokerWeight,
   shouldShowJokerButton,
   targetReps,
+  JOKER_MIN_REPS,
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
 import type { RestType } from '../store/workoutStore'
@@ -132,9 +134,13 @@ export default function Workout() {
 
   const handleAddJoker = () => {
     const amrapSet = allSets.find(s => s.type === 'main' && (s as MainSet).isAmrap) as MainSet | undefined
+    const amrapIdx = amrapSet ? allSets.indexOf(amrapSet) : -1
+    const loggedAmrapReps = amrapIdx >= 0 ? (loggedSets[amrapIdx]?.reps ?? 0) : 0
+    const weekGoalReps = JOKER_MIN_REPS[activeSession!.week] ?? 1
+    const increment = calcJokerIncrement(loggedAmrapReps, weekGoalReps)
     const lastWeight = jokerSets.length > 0 ? jokerSets[jokerSets.length - 1].weight : (amrapSet?.weight ?? 0)
     const jokerReps = ({ 1: 5, 2: 3, 3: 1 } as Record<number, number>)[activeSession!.week] ?? 5
-    const newJoker = calcJokerSet(lastWeight, jokerSets.length + 1, jokerReps)
+    const newJoker = calcJokerSet(lastWeight, jokerSets.length + 1, jokerReps, increment)
     const updatedJokers = [...jokerSets, newJoker]
     setJokerSets(updatedJokers)
     setAllSets(prev => {
@@ -226,8 +232,11 @@ export default function Workout() {
   })
 
   const amrapSet = mainSets.find(s => s.isAmrap)
+  const amrapIdx = amrapSet ? allSets.indexOf(amrapSet) : -1
+  const loggedAmrapReps = amrapIdx >= 0 ? (loggedSets[amrapIdx]?.reps ?? 0) : 0
+  const jokerIncrement = calcJokerIncrement(loggedAmrapReps, JOKER_MIN_REPS[activeSession.week] ?? 1)
   const lastJokerWeight = jokerCount > 0 ? jokerSetsRendered[jokerCount - 1].weight : (amrapSet?.weight ?? 0)
-  const nextJokerWeight = calcNextJokerWeight(lastJokerWeight)
+  const nextJokerWeight = calcNextJokerWeight(lastJokerWeight, jokerIncrement)
 
   return (
     <div className="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">

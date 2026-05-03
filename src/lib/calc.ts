@@ -53,17 +53,18 @@ export interface JokerSet {
   isAmrap: false
 }
 
-export const JOKER_INCREMENT = 0.05
-
 export const JOKER_MIN_REPS: Record<number, number> = { 1: 5, 2: 3, 3: 1 }
 
-export const calcNextJokerWeight = (prevWeight: number): number =>
-  roundToNearest5(prevWeight * (1 + JOKER_INCREMENT))
+export const calcJokerIncrement = (amrapReps: number, weekGoalReps: number): number =>
+  amrapReps > 2 * weekGoalReps ? 0.10 : 0.05
 
-export const calcJokerSet = (prevWeight: number, setNumber: number, reps: number): JokerSet => ({
+export const calcNextJokerWeight = (prevWeight: number, increment: number): number =>
+  roundToNearest5(prevWeight * (1 + increment))
+
+export const calcJokerSet = (prevWeight: number, setNumber: number, reps: number, increment: number): JokerSet => ({
   type: 'joker',
   setNumber,
-  weight: calcNextJokerWeight(prevWeight),
+  weight: calcNextJokerWeight(prevWeight, increment),
   reps,
   isAmrap: false,
 })
