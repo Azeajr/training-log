@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { seedDatabase } from './db/seed'
 import { db } from './db/db'
 import { useSettingsStore } from './store/settingsStore'
@@ -9,9 +9,10 @@ import BottomNav from './components/BottomNav'
 import Setup from './screens/Setup'
 import Today from './screens/Today'
 import Workout from './screens/Workout'
-import History from './screens/History'
-import HistoryEdit from './screens/HistoryEdit'
-import Settings from './screens/Settings'
+
+const History = lazy(() => import('./screens/History'))
+const HistoryEdit = lazy(() => import('./screens/HistoryEdit'))
+const Settings = lazy(() => import('./screens/Settings'))
 
 function AppShell() {
   const activeSession = useWorkoutStore((s) => s.activeSession)
@@ -28,14 +29,16 @@ function AppShell() {
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        <Routes>
-          <Route path="/" element={<Navigate to={activeSession ? '/workout' : '/today'} replace />} />
-          <Route path="/today" element={<Today />} />
-          <Route path="/workout" element={<Workout />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/history/:sessionId/edit" element={<HistoryEdit />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
+        <Suspense>
+          <Routes>
+            <Route path="/" element={<Navigate to={activeSession ? '/workout' : '/today'} replace />} />
+            <Route path="/today" element={<Today />} />
+            <Route path="/workout" element={<Workout />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/history/:sessionId/edit" element={<HistoryEdit />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </Suspense>
       </main>
       <BottomNav />
     </div>
