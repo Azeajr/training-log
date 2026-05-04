@@ -22,6 +22,8 @@ export const ACCESSORY_PERCENTAGE = 0.75
 export const ACCESSORY_SETS = 5
 export const ACCESSORY_REPS = 10
 
+export const BAR_WEIGHT = 45
+
 export const roundToNearest5 = (weight: number): number =>
   Math.round(weight / 5) * 5
 
@@ -38,7 +40,7 @@ export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4): MainSet[] => {
   const reps = MAIN_REPS[week]
   return percentages.map((pct, i) => ({
     setNumber: i + 1,
-    weight: roundToNearest5(tm * pct),
+    weight: Math.max(BAR_WEIGHT, roundToNearest5(tm * pct)),
     reps: reps[i],
     isAmrap: week !== 4 && i === 2,
     type: 'main',
@@ -95,7 +97,7 @@ export interface FslSet {
 }
 
 export const calcFslSets = (tm: number): FslSet[] => {
-  const weight = roundToNearest5(tm * FSL_PERCENTAGE)
+  const weight = Math.max(BAR_WEIGHT, roundToNearest5(tm * FSL_PERCENTAGE))
   return Array.from({ length: FSL_SETS }, (_, i) => ({
     setNumber: i + 1,
     weight,
@@ -131,12 +133,11 @@ export const calcWarmup = (
   workingWeight: number,
   liftType: 'upper' | 'lower'
 ): WarmupSet[] => {
-  const barWeight = 45
   const base = liftType === 'lower' ? 135 : 95
   const increment = Math.round((tm * 0.1) / 5) * 5
 
   const sets: WarmupSet[] = [
-    { setNumber: 1, weight: barWeight, reps: 10, type: 'warmup' }
+    { setNumber: 1, weight: BAR_WEIGHT, reps: 10, type: 'warmup' }
   ]
 
   if (base >= workingWeight) return sets

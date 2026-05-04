@@ -16,7 +16,7 @@ export default function Setup({ onComplete }: Props) {
     OHP: 0, Bench: 0, Squat: 0, Deadlift: 0,
   })
 
-  const MIN_TM = 115
+  const MIN_TM = 45
   const allValid = LIFTS.every(l => tms[l] >= MIN_TM)
 
   const handleComplete = async () => {
