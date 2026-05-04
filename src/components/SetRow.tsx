@@ -15,6 +15,7 @@ interface Props {
   onLog: (reps: number, weight: number) => void
   onEdit: (reps: number, weight: number) => void
   onWeightChange?: (weight: number) => void
+  onDelete?: () => void
 }
 
 export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedWeight, amrapTargets, onLog, onEdit, onWeightChange, onDelete }: Props) {
