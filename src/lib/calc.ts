@@ -128,11 +128,15 @@ export interface WarmupSet {
   type: 'warmup'
 }
 
+const WARMUP_E1RM_THRESHOLD = 10
+
 export const calcWarmup = (
   tm: number,
   workingWeight: number,
-  liftType: 'upper' | 'lower'
+  liftType: 'upper' | 'lower',
+  firstSetReps: number,
 ): WarmupSet[] => {
+  if (estimated1RM(workingWeight, firstSetReps) < estimated1RM(BAR_WEIGHT, 10) + WARMUP_E1RM_THRESHOLD) return []
   const base = liftType === 'lower' ? 135 : 95
   const increment = Math.round((tm * 0.1) / 5) * 5
 

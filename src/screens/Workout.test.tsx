@@ -98,7 +98,7 @@ function renderWorkout() {
 
 // Compute the expected layout for TM=95, week=1, upper body
 const mainSets = calcMainSets(TM, 1)
-const warmupSets = calcWarmup(TM, mainSets[0].weight, 'upper')
+const warmupSets = calcWarmup(TM, mainSets[0].weight, 'upper', mainSets[0].reps)
 const WARMUP_COUNT = warmupSets.length   // 1 for TM=95
 const MAIN_COUNT = mainSets.length       // 3
 
@@ -260,7 +260,7 @@ describe('Workout — joker button integration', () => {
     await waitFor(() => screen.getByText('MAIN'))
 
     const main2 = calcMainSets(TM, 2)
-    const warmup2 = calcWarmup(TM, main2[0].weight, 'upper')
+    const warmup2 = calcWarmup(TM, main2[0].weight, 'upper', main2[0].reps)
 
     act(() => {
       const store = useWorkoutStore.getState()
@@ -328,7 +328,7 @@ describe('Workout — joker button integration', () => {
     await waitFor(() => screen.getByText('MAIN'))
 
     const main3 = calcMainSets(TM, 3)
-    const warmup3 = calcWarmup(TM, main3[0].weight, 'upper')
+    const warmup3 = calcWarmup(TM, main3[0].weight, 'upper', main3[0].reps)
 
     act(() => {
       const store = useWorkoutStore.getState()

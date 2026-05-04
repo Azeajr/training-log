@@ -78,7 +78,7 @@ describe('calcAccessorySets', () => {
 
 describe('calcWarmup', () => {
   it('normal upper body case', () => {
-    const sets = calcWarmup(200, 130, 'upper')
+    const sets = calcWarmup(200, 130, 'upper', 5)
     expect(sets[0]).toMatchObject({ weight: 45, reps: 10, type: 'warmup' })
     expect(sets.length).toBeGreaterThan(1)
     const last = sets[sets.length - 1]
@@ -86,12 +86,12 @@ describe('calcWarmup', () => {
     expect(last.weight).toBeLessThan(130)
   })
   it('base weight >= working weight returns bar only', () => {
-    const sets = calcWarmup(200, 90, 'upper')
+    const sets = calcWarmup(200, 90, 'upper', 5)
     expect(sets).toHaveLength(1)
     expect(sets[0].weight).toBe(45)
   })
   it('lower body uses 135 base', () => {
-    const sets = calcWarmup(300, 180, 'lower')
+    const sets = calcWarmup(300, 180, 'lower', 5)
     expect(sets[0].weight).toBe(45)
     expect(sets.some(s => s.weight === 135)).toBe(true)
   })
