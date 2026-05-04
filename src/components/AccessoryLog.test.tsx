@@ -70,6 +70,20 @@ describe('AccessoryLog — weight tap-to-reveal', () => {
   })
 })
 
+describe('AccessoryLog — prospective weight in active set row', () => {
+  it('shows calculatedWeight in the active set row by default', () => {
+    render(<AccessoryLog accessory={ACCESSORY} exercise={EXERCISE} />)
+    expect(screen.getByText('75lb ×')).toBeInTheDocument()
+  })
+
+  it('updates the active set row weight immediately when the stepper changes', async () => {
+    render(<AccessoryLog accessory={ACCESSORY} exercise={EXERCISE} />)
+    await userEvent.click(weightLabelBtn())
+    await userEvent.click(screen.getAllByRole('button', { name: '+' })[0]) // 75 → 77.5
+    expect(screen.getByText('77.5lb ×')).toBeInTheDocument()
+  })
+})
+
 describe('AccessoryLog — logging with unchanged weight', () => {
   it('logs with calculatedWeight and does not write a TM record', async () => {
     render(<AccessoryLog accessory={ACCESSORY} exercise={EXERCISE} />)
