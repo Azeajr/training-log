@@ -21,7 +21,10 @@ interface Props {
 
 export default function AccessoryLog({ accessory, exercise }: Props) {
   const { logAccessorySet, startRest } = useWorkoutStore()
-  const [weight, setWeight] = useState(accessory.calculatedWeight ?? 0)
+  const [weight, setWeight] = useState(() => {
+    const last = accessory.loggedSets[accessory.loggedSets.length - 1]
+    return last?.weight ?? accessory.calculatedWeight ?? 0
+  })
   const [weightEditing, setWeightEditing] = useState(false)
   const [reps, setReps] = useState(10)
   const [duration, setDuration] = useState<number | null>(null)

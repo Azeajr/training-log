@@ -131,3 +131,21 @@ describe('AccessoryLog — logging with changed weight', () => {
     expect(db.accessoryTrainingMaxes.add).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('AccessoryLog — weight persistence across remount', () => {
+  it('initialises weight from last logged set, not calculatedWeight, after remount', () => {
+    const accessoryWithLog = {
+      ...ACCESSORY,
+      loggedSets: [{ exerciseId: 1, setNumber: 1, weight: 50, reps: 10 }],
+    }
+    render(<AccessoryLog accessory={accessoryWithLog} exercise={EXERCISE} />)
+    // Weight label must show 50 (from the logged set), not 75 (calculatedWeight)
+    expect(screen.getByRole('button', { name: /^50lb$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^75lb$/ })).toBeNull()
+  })
+
+  it('falls back to calculatedWeight when no sets have been logged yet', () => {
+    render(<AccessoryLog accessory={ACCESSORY} exercise={EXERCISE} />)
+    expect(screen.getByRole('button', { name: /^75lb$/ })).toBeInTheDocument()
+  })
+})

@@ -66,7 +66,11 @@ export default function Workout() {
     const tmWeight = latestTm.weight
 
     const main = calcMainSets(tmWeight, activeSession.week)
-    const fsl = calcFslSets(tmWeight)
+    const loggedFsl = loggedSets.filter(s => s.type === 'fsl')
+    const fslOverride = loggedFsl.length > 0 ? loggedFsl[loggedFsl.length - 1].weight : null
+    const fsl = calcFslSets(tmWeight).map((s, i) =>
+      fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
+    )
     const warmup = calcWarmup(tmWeight, main[0].weight, l.liftType)
     const restoredJokers: JokerSet[] = loggedSets
       .filter(s => s.type === 'joker')

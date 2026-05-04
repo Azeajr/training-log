@@ -17,7 +17,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Workout from './Workout'
 import { useWorkoutStore } from '../store/workoutStore'
-import { calcMainSets, calcWarmup } from '../lib/calc'
+import { calcMainSets, calcWarmup, calcFslSets } from '../lib/calc'
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
 
@@ -342,5 +342,39 @@ describe('Workout — joker button integration', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /\+ JOKER SET/ })).toBeInTheDocument()
     )
+  })
+})
+
+describe('Workout — FSL weight persistence across remount', () => {
+  beforeEach(() => {
+    resetStore()
+  })
+
+  it('pending FSL sets restore the override weight logged before navigating away', async () => {
+    const fslBase = calcFslSets(TM)[0].weight   // 60 for TM=95
+    const adjusted = fslBase + 5                // 65
+
+    act(() => {
+      const store = useWorkoutStore.getState()
+      warmupSets.forEach((s, i) => {
+        store.logSet({ sessionId: 10, type: 'warmup', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false })
+        store.advanceSet()
+      })
+      mainSets.forEach((s, i) => {
+        store.logSet({ sessionId: 10, type: 'main', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false })
+        store.advanceSet()
+      })
+      // First FSL set logged at adjusted weight (simulates user override before leaving the screen)
+      store.logSet({ sessionId: 10, type: 'fsl', setNumber: 1, weight: adjusted, reps: 10, isAmrap: false })
+      store.advanceSet()
+    })
+
+    renderWorkout()
+    await waitFor(() => screen.getByText(/FSL/i))
+
+    // fslBase (60lb) should appear only once — from the completed main set 1, not from any pending FSL row
+    expect(screen.getAllByText(`${fslBase}lb`)).toHaveLength(1)
+    // The adjusted weight should appear for all 5 FSL rows (1 completed + 4 pending)
+    expect(screen.getAllByText(`${adjusted}lb`).length).toBeGreaterThanOrEqual(4)
   })
 })
