@@ -252,6 +252,12 @@ describe('shouldShowJokerButton', () => {
     const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(5), logged(5, 'joker')]
     expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 2, ...base })).toBe(false)
   })
+
+  it('false once any FSL set has been logged (prevents index corruption)', () => {
+    // warmup(1) + main(3) + jokers(0) = 4; loggedSets has 5 entries → FSL started
+    const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(5), logged(10, 'fsl')]
+    expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 0, ...base })).toBe(false)
+  })
 })
 
 describe('calcPlatesPerSide', () => {

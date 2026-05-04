@@ -78,6 +78,8 @@ export const shouldShowJokerButton = (params: {
 }): boolean => {
   const { week, loggedSets, warmupCount, mainCount, jokerCount } = params
   if (week === 4) return false
+  // Once FSL has started, inserting a joker would shift indices and corrupt the logged set mapping.
+  if (loggedSets.length > warmupCount + mainCount + jokerCount) return false
   // Check the last relevant set: AMRAP when no jokers, last joker otherwise.
   // If that set hasn't been logged yet (joker is pending), hide the button.
   const lastRelevantIdx = warmupCount + mainCount + jokerCount - 1
