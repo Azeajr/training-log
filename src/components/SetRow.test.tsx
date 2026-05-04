@@ -45,6 +45,15 @@ describe('SetRow — pending (not active, not completed)', () => {
     rerender(<SetRow {...props} set={{ ...BASE_SET, weight: 175 }} />)
     expect(screen.getByText('175lb')).toBeInTheDocument()
   })
+
+  it('syncs weight when set becomes active with a cascaded weight simultaneously', () => {
+    type Props = ComponentProps<typeof SetRow>
+    // Simulates the batch-render case: set.weight changes at the same time isActive flips true
+    const props: Props = { set: BASE_SET, isActive: false, isCompleted: false, onLog: vi.fn(), onEdit: vi.fn() }
+    const { rerender } = render(<SetRow {...props} />)
+    rerender(<SetRow {...props} set={{ ...BASE_SET, weight: 175 }} isActive={true} />)
+    expect(screen.getByRole('button', { name: /^175lb$/ })).toBeInTheDocument()
+  })
 })
 
 describe('SetRow — active', () => {
