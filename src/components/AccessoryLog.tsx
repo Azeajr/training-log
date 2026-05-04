@@ -94,6 +94,7 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
       {!done && (
         <div className="flex items-center gap-2 mt-2 pl-2">
           <span className="text-warn text-xs">Set {nextSet}:</span>
+          <span className="text-muted font-mono text-xs">{weight}lb ×</span>
           {type === 'reps' && (
             <Stepper value={reps} onChange={setReps} step={1} min={0} />
           )}
