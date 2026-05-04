@@ -276,6 +276,48 @@ describe('Workout — joker button integration', () => {
     )
   })
 
+  it('section order: WARM UP → MAIN → FSL with no jokers', async () => {
+    renderWorkout()
+    await waitFor(() => screen.getByText('MAIN'))
+
+    const warmupEl = screen.getByText('WARM UP')
+    const mainEl   = screen.getByText('MAIN')
+    const fslEl    = screen.getByText(/FSL/i)
+
+    const before = (a: HTMLElement, b: HTMLElement) =>
+      !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+
+    expect(before(warmupEl, mainEl)).toBe(true)
+    expect(before(mainEl, fslEl)).toBe(true)
+  })
+
+  it('section order: JOKER SETS lands between MAIN and FSL', async () => {
+    renderWorkout()
+    await waitFor(() => screen.getByText('MAIN'))
+
+    act(() => {
+      const store = useWorkoutStore.getState()
+      warmupSets.forEach((s, i) => { store.logSet({ sessionId: 10, type: 'warmup', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false }); store.advanceSet() })
+      mainSets.slice(0, -1).forEach((s, i) => { store.logSet({ sessionId: 10, type: 'main', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false }); store.advanceSet() })
+      const amrap = mainSets[MAIN_COUNT - 1]
+      store.logSet({ sessionId: 10, type: 'main', setNumber: MAIN_COUNT, weight: amrap.weight, reps: 8, isAmrap: true })
+      store.advanceSet()
+    })
+
+    const jokerBtn = await screen.findByRole('button', { name: /\+ JOKER SET/ })
+    await userEvent.click(jokerBtn)
+
+    const mainEl   = screen.getByText('MAIN')
+    const jokerEl  = screen.getByText('JOKER SETS')
+    const fslEl    = screen.getByText(/FSL/i)
+
+    const before = (a: HTMLElement, b: HTMLElement) =>
+      !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+
+    expect(before(mainEl, jokerEl)).toBe(true)
+    expect(before(jokerEl, fslEl)).toBe(true)
+  })
+
   it('week 3: joker button appears with minimum 1 rep on AMRAP', async () => {
     useWorkoutStore.setState(s => ({
       ...s,
