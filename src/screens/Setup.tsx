@@ -12,11 +12,12 @@ const LIFTS = ['OHP', 'Bench', 'Squat', 'Deadlift'] as const
 
 export default function Setup({ onComplete }: Props) {
   const [step, setStep] = useState<1 | 2>(1)
+  const MIN_TM = 45
+
   const [tms, setTms] = useState<Record<string, number>>({
-    OHP: 0, Bench: 0, Squat: 0, Deadlift: 0,
+    OHP: MIN_TM, Bench: MIN_TM, Squat: MIN_TM, Deadlift: MIN_TM,
   })
 
-  const MIN_TM = 45
   const allValid = LIFTS.every(l => tms[l] >= MIN_TM)
 
   const handleComplete = async () => {
