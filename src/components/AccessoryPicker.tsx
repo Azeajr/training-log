@@ -67,7 +67,7 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
   }
 
   const handleSaveTm = async () => {
-    if (!settingTm || tmWeight <= 0) return
+    if (!settingTm || tmWeight < 0) return
     await db.accessoryTrainingMaxes.add({
       exerciseId: settingTm.id!,
       weight: tmWeight,
@@ -85,7 +85,7 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
   }
 
   if (settingTm) {
-    const workingWeight = tmWeight > 0 ? roundToNearest5(tmWeight * 0.75) : null
+    const workingWeight = tmWeight >= 0 ? roundToNearest5(tmWeight * 0.75) : null
     return (
       <div className="fixed inset-0 bg-bg z-50 p-4">
         <Rule label="SET TRAINING MAX" className="text-muted mb-4" />
@@ -117,7 +117,7 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
           </button>
           <button
             onClick={handleSaveTm}
-            disabled={tmWeight <= 0}
+            disabled={tmWeight < 0}
             className="border border-accent text-accent px-6 py-2 font-mono disabled:opacity-40"
           >
             SAVE

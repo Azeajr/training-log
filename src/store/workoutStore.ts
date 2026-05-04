@@ -30,6 +30,7 @@ interface WorkoutState {
   logSet: (set: LoggedSet) => void
   editSet: (index: number, updates: Partial<LoggedSet>) => void
   advanceSet: () => void
+  deleteLastSet: () => void
   startRest: (type: RestType) => void
   stopRest: () => void
   addAccessory: (accessory: ActiveAccessory) => void
@@ -75,6 +76,14 @@ export const useWorkoutStore = create<WorkoutState>()(
       advanceSet: () => set((state) => ({
         currentSetIndex: state.currentSetIndex + 1,
       })),
+
+      deleteLastSet: () => set((state) => {
+        if (state.loggedSets.length === 0) return state
+        return {
+          loggedSets: state.loggedSets.slice(0, -1),
+          currentSetIndex: Math.max(0, state.currentSetIndex - 1),
+        }
+      }),
 
       startRest: (type) => set({
         isResting: true,

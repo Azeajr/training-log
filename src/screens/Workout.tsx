@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
 import type { Lift, Exercise } from '../db/db'
@@ -35,6 +35,7 @@ export default function Workout() {
     logSet,
     editSet,
     advanceSet,
+    deleteLastSet,
     startRest,
     clearSession,
     setNotes,
@@ -48,6 +49,8 @@ export default function Workout() {
   const [skipConfirm, setSkipConfirm] = useState(false)
   const [exitConfirm, setExitConfirm] = useState(false)
   const [cycleCompleteData, setCycleCompleteData] = useState<Array<{ liftName: string; weight: number }> | null>(null)
+  const prevAmrapSetsRef = useRef<Array<{ weight: number; reps: number; label: string }>>([])
+  const tmWeightRef = useRef<number>(0)
 
   useEffect(() => {
     if (!activeSession) return
@@ -64,15 +67,17 @@ export default function Workout() {
     const latestTm = tms[tms.length - 1]
     if (!latestTm) return
     const tmWeight = latestTm.weight
+    tmWeightRef.current = tmWeight
 
     const main = calcMainSets(tmWeight, activeSession.week)
-    const loggedFsl = loggedSets.filter(s => s.type === 'fsl')
+    const freshLoggedSets = useWorkoutStore.getState().loggedSets
+    const loggedFsl = freshLoggedSets.filter(s => s.type === 'fsl')
     const fslOverride = loggedFsl.length > 0 ? loggedFsl[loggedFsl.length - 1].weight : null
     const fsl = calcFslSets(tmWeight).map((s, i) =>
       fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
     )
     const warmup = calcWarmup(tmWeight, main[0].weight, l.liftType)
-    const restoredJokers: JokerSet[] = loggedSets
+    const restoredJokers: JokerSet[] = freshLoggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
     setJokerSets(restoredJokers)
@@ -87,8 +92,10 @@ export default function Workout() {
           activeSession.cycleId
         )
         if (prevSets.length > 0) {
+          prevAmrapSetsRef.current = prevSets
           setAmrapTargets(calcAmrapTargets(prevSets, amrapSet.weight))
         } else {
+          prevAmrapSetsRef.current = []
           // No history — derive goal from TM (TM ≈ 90% of true 1RM)
           const est1RM = tmWeight / 0.9
           setAmrapTargets([{
@@ -102,6 +109,37 @@ export default function Workout() {
 
     const allExercises = await db.exercises.toArray()
     setExercises(allExercises)
+  }
+
+  const handleAmrapWeightChange = (weight: number) => {
+    if (prevAmrapSetsRef.current.length > 0) {
+      setAmrapTargets(calcAmrapTargets(prevAmrapSetsRef.current, weight))
+    } else if (tmWeightRef.current > 0) {
+      const est1RM = tmWeightRef.current / 0.9
+      setAmrapTargets([{
+        label: 'goal',
+        reps: targetReps(est1RM, weight),
+        est1RM: Math.round(est1RM),
+      }])
+    }
+  }
+
+  const handleDeleteSet = async () => {
+    const lastSet = loggedSets[loggedSets.length - 1]
+    if (!lastSet) return
+    if (lastSet.id) await db.sets.delete(lastSet.id)
+    if (lastSet.type === 'joker') {
+      const updatedJokers = jokerSets.slice(0, -1)
+      setJokerSets(updatedJokers)
+      setAllSets(prev => {
+        const w = prev.filter(s => s.type === 'warmup') as WarmupSet[]
+        const m = prev.filter(s => s.type === 'main') as MainSet[]
+        const f = prev.filter(s => s.type === 'fsl') as FslSet[]
+        return [...w, ...m, ...updatedJokers, ...f]
+      })
+    }
+    deleteLastSet()
+    loadData()
   }
 
   const handleLog = (setIndex: number, reps: number, weight: number) => {
@@ -121,6 +159,12 @@ export default function Workout() {
     if (s.type === 'fsl' && weight !== s.weight) {
       setAllSets(prev => prev.map((ps, idx) =>
         ps.type === 'fsl' && idx > setIndex ? { ...ps, weight } : ps
+      ))
+    }
+
+    if (s.type === 'main' && s.setNumber === 1 && weight !== s.weight) {
+      setAllSets(prev => prev.map(ps =>
+        ps.type === 'fsl' ? { ...ps, weight } : ps
       ))
     }
 
@@ -270,6 +314,7 @@ export default function Workout() {
               loggedWeight={loggedSets[i]?.weight}
               onLog={(reps, weight) => handleLog(i, reps, weight)}
               onEdit={(reps, weight) => handleEdit(i, reps, weight)}
+              onDelete={i === currentSetIndex - 1 ? handleDeleteSet : undefined}
             />
           ))}
         </div>
@@ -290,6 +335,8 @@ export default function Workout() {
                 amrapTargets={s.isAmrap ? amrapTargets : undefined}
                 onLog={(reps, weight) => handleLog(globalIdx, reps, weight)}
                 onEdit={(reps, weight) => handleEdit(globalIdx, reps, weight)}
+                onWeightChange={s.isAmrap ? handleAmrapWeightChange : undefined}
+                onDelete={globalIdx === currentSetIndex - 1 ? handleDeleteSet : undefined}
               />
             )
           })}
@@ -308,6 +355,7 @@ export default function Workout() {
                     loggedWeight={loggedSets[globalIdx]?.weight}
                     onLog={(reps, weight) => handleLog(globalIdx, reps, weight)}
                     onEdit={(reps, weight) => handleEdit(globalIdx, reps, weight)}
+                    onDelete={globalIdx === currentSetIndex - 1 ? handleDeleteSet : undefined}
                   />
                 )
               })}
@@ -338,6 +386,7 @@ export default function Workout() {
                 loggedWeight={loggedSets[globalIdx]?.weight}
                 onLog={(reps, weight) => handleLog(globalIdx, reps, weight)}
                 onEdit={(reps, weight) => handleEdit(globalIdx, reps, weight)}
+                onDelete={globalIdx === currentSetIndex - 1 ? handleDeleteSet : undefined}
               />
             )
           })}

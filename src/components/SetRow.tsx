@@ -14,15 +14,17 @@ interface Props {
   amrapTargets?: AmrapTarget[]
   onLog: (reps: number, weight: number) => void
   onEdit: (reps: number, weight: number) => void
+  onWeightChange?: (weight: number) => void
 }
 
-export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedWeight, amrapTargets, onLog, onEdit }: Props) {
+export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedWeight, amrapTargets, onLog, onEdit, onWeightChange, onDelete }: Props) {
   const [reps, setReps] = useState(set.reps)
   const [weight, setWeight] = useState(set.weight)
   const [weightEditing, setWeightEditing] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editReps, setEditReps] = useState(loggedReps ?? set.reps)
   const [editWeight, setEditWeight] = useState(loggedWeight ?? set.weight)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
 
   const isAmrap = set.isAmrap ?? false
@@ -40,13 +42,38 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
   if (isCompleted && !editing) {
     return (
       <div
-        className="flex items-center gap-3 py-3 pl-3 text-sm text-muted cursor-pointer hover:text-text-dim active:text-text border-l-4 border-transparent"
-        onClick={() => { setEditing(true); setEditReps(loggedReps ?? set.reps); setEditWeight(loggedWeight ?? set.weight) }}
+        className="flex items-center gap-3 py-3 pl-3 text-sm text-muted border-l-4 border-transparent"
+        onClick={() => { if (!deleteConfirm) { setEditing(true); setEditReps(loggedReps ?? set.reps); setEditWeight(loggedWeight ?? set.weight) } }}
       >
-        <span className="w-16 text-right font-mono">{loggedWeight ?? set.weight}lb</span>
-        <span>x {loggedReps}</span>
+        <span className="w-16 text-right font-mono cursor-pointer hover:text-text-dim">{loggedWeight ?? set.weight}lb</span>
+        <span className="cursor-pointer hover:text-text-dim">x {loggedReps}</span>
         {isAmrap && <span className="text-xs tracking-widest">AMRAP</span>}
         <span className="text-accent text-xs tracking-widest">done</span>
+        {onDelete && !deleteConfirm && (
+          <button
+            onClick={e => { e.stopPropagation(); setDeleteConfirm(true) }}
+            className="ml-auto text-faint text-xs hover:text-danger font-mono"
+          >
+            undo
+          </button>
+        )}
+        {onDelete && deleteConfirm && (
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-danger text-xs">undo set?</span>
+            <button
+              onClick={e => { e.stopPropagation(); onDelete() }}
+              className="text-danger text-xs font-mono border border-danger px-1"
+            >
+              yes
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); setDeleteConfirm(false) }}
+              className="text-muted text-xs font-mono"
+            >
+              no
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -90,7 +117,7 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
           {weightEditing && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-faint uppercase tracking-widest w-8">wt</span>
-              <Stepper value={weight} onChange={setWeight} step={2.5} min={0} />
+              <Stepper value={weight} onChange={v => { setWeight(v); onWeightChange?.(v) }} step={2.5} min={0} />
             </div>
           )}
           <div className="flex items-center gap-2">

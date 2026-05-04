@@ -16,7 +16,8 @@ export default function Setup({ onComplete }: Props) {
     OHP: 0, Bench: 0, Squat: 0, Deadlift: 0,
   })
 
-  const allValid = LIFTS.every(l => tms[l] > 0)
+  const MIN_TM = 115
+  const allValid = LIFTS.every(l => tms[l] >= MIN_TM)
 
   const handleComplete = async () => {
     const now = new Date()
@@ -46,11 +47,11 @@ export default function Setup({ onComplete }: Props) {
                   value={tms[lift]}
                   onChange={v => setTms(prev => ({ ...prev, [lift]: v }))}
                   step={5}
-                  min={0}
+                  min={MIN_TM}
                 />
                 <span className="text-muted text-sm">lb</span>
               </div>
-              {tms[lift] > 0 && (
+              {tms[lift] >= MIN_TM && (
                 <div className="text-faint text-xs font-mono mt-1 ml-24">
                   {'W1: ' + calcMainSets(tms[lift], 1).map(s => s.weight).join(' · ') + ' lb'}
                 </div>

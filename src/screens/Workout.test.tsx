@@ -345,6 +345,119 @@ describe('Workout — joker button integration', () => {
   })
 })
 
+describe('Workout — Main Set 1 → FSL weight cascade', () => {
+  beforeEach(() => {
+    resetStore()
+  })
+
+  it('adjusting Main Set 1 weight on log cascades to all pending FSL sets', async () => {
+    // Pre-log warmup sets so Main Set 1 is active on mount
+    act(() => {
+      const store = useWorkoutStore.getState()
+      warmupSets.forEach((s, i) => {
+        store.logSet({ sessionId: 10, type: 'warmup', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false })
+        store.advanceSet()
+      })
+    })
+
+    renderWorkout()
+    await waitFor(() => screen.getByText('MAIN'))
+
+    const main1Weight = mainSets[0].weight  // 60 for TM=95
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(`^${main1Weight}`) }))
+
+    const plusBtns = screen.getAllByRole('button', { name: '+' })
+    await userEvent.click(plusBtns[0])  // weight: 60 → 62.5
+
+    await userEvent.click(screen.getByRole('button', { name: 'LOG' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByText('62.5lb').length).toBeGreaterThanOrEqual(5)
+    )
+  })
+})
+
+describe('Workout — AMRAP weight → target reps recalculation', () => {
+  beforeEach(() => {
+    resetStore()
+  })
+
+  it('changing AMRAP weight instantly recalculates target reps', async () => {
+    // Pre-log warmup + first two main sets so the AMRAP set is active on mount
+    act(() => {
+      const store = useWorkoutStore.getState()
+      warmupSets.forEach((s, i) => {
+        store.logSet({ sessionId: 10, type: 'warmup', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false })
+        store.advanceSet()
+      })
+      mainSets.slice(0, -1).forEach((s, i) => {
+        store.logSet({ sessionId: 10, type: 'main', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false })
+        store.advanceSet()
+      })
+    })
+
+    renderWorkout()
+    await waitFor(() => screen.getByText(/10 reps/))  // initial AMRAP target
+
+    const amrapWeight = mainSets[MAIN_COUNT - 1].weight  // 80 for TM=95
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(`^${amrapWeight}`) }))
+
+    const plusBtns = screen.getAllByRole('button', { name: '+' })
+    await userEvent.click(plusBtns[0])  // weight: 80 → 82.5
+
+    await waitFor(() => expect(screen.getByText(/9 reps/)).toBeInTheDocument())
+    expect(screen.queryByText(/10 reps/)).toBeNull()
+  })
+})
+
+describe('Workout — set deletion (undo last logged set)', () => {
+  beforeEach(() => {
+    resetStore()
+  })
+
+  it('undo button appears only on the most recently logged set', async () => {
+    act(() => {
+      const store = useWorkoutStore.getState()
+      warmupSets.forEach((s, i) => {
+        store.logSet({ sessionId: 10, type: 'warmup', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false })
+        store.advanceSet()
+      })
+      // Log first main set
+      store.logSet({ sessionId: 10, type: 'main', setNumber: 1, weight: mainSets[0].weight, reps: mainSets[0].reps, isAmrap: false })
+      store.advanceSet()
+    })
+
+    renderWorkout()
+    await waitFor(() => screen.getByText('MAIN'))
+
+    // Exactly one "undo" button visible (on the last logged set)
+    expect(screen.getAllByRole('button', { name: 'undo' })).toHaveLength(1)
+  })
+
+  it('confirming undo removes the set and re-activates its slot', async () => {
+    act(() => {
+      const store = useWorkoutStore.getState()
+      warmupSets.forEach((s, i) => {
+        store.logSet({ sessionId: 10, type: 'warmup', setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false })
+        store.advanceSet()
+      })
+    })
+
+    renderWorkout()
+    await waitFor(() => screen.getByText('MAIN'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'undo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'yes' }))
+
+    // After deletion, the warmup slot should be active again (LOG button visible)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'LOG' })).toBeInTheDocument()
+    )
+    // No more "undo" button (nothing logged)
+    expect(screen.queryByRole('button', { name: 'undo' })).toBeNull()
+  })
+})
+
 describe('Workout — FSL weight persistence across remount', () => {
   beforeEach(() => {
     resetStore()
