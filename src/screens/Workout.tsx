@@ -114,6 +114,12 @@ export default function Workout() {
     advanceSet()
     db.sets.add(setData).then(dbId => editSet(setIndex, { id: dbId }))
 
+    if (s.type === 'fsl' && weight !== s.weight) {
+      setAllSets(prev => prev.map((ps, idx) =>
+        ps.type === 'fsl' && idx > setIndex ? { ...ps, weight } : ps
+      ))
+    }
+
     const nextS = allSets[setIndex + 1]
     let restType: RestType
     if (reps < s.reps) {

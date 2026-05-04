@@ -33,6 +33,10 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
     }
   }, [isActive])
 
+  useEffect(() => {
+    if (!isActive && !isCompleted) setWeight(set.weight)
+  }, [set.weight])
+
   if (isCompleted && !editing) {
     return (
       <div

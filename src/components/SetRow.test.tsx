@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SetRow from './SetRow'
+import type { ComponentProps } from 'react'
 
 const BASE_SET = {
   type: 'main' as const,
@@ -34,6 +35,15 @@ describe('SetRow — pending (not active, not completed)', () => {
   it('shows JOKER badge on pending joker set', () => {
     render(<SetRow set={{ ...BASE_SET, type: 'joker' as const }} isActive={false} isCompleted={false} onLog={vi.fn()} onEdit={vi.fn()} />)
     expect(screen.getByText('JOKER')).toBeInTheDocument()
+  })
+
+  it('syncs displayed weight when set.weight prop changes (FSL cascade)', () => {
+    type Props = ComponentProps<typeof SetRow>
+    const props: Props = { set: BASE_SET, isActive: false, isCompleted: false, onLog: vi.fn(), onEdit: vi.fn() }
+    const { rerender } = render(<SetRow {...props} />)
+    expect(screen.getByText('170lb')).toBeInTheDocument()
+    rerender(<SetRow {...props} set={{ ...BASE_SET, weight: 175 }} />)
+    expect(screen.getByText('175lb')).toBeInTheDocument()
   })
 })
 
