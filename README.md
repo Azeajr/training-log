@@ -40,6 +40,15 @@ Open `http://localhost:5173` and enter your training maxes to begin.
 npm test
 ```
 
+Tests are split into two layers:
+
+| Layer | Location | Tools |
+|---|---|---|
+| Unit | `src/lib/*.test.ts`, `src/store/*.test.ts` | Vitest |
+| Component integration | `src/screens/*.test.tsx`, `src/components/*.test.tsx` | Vitest + RTL + jsdom |
+
+Component integration tests render the full component tree and interact through `userEvent`. The goal is to replace all DB mocks with `fake-indexeddb` so tests exercise the real Dexie layer. See [ROADMAP.md](ROADMAP.md) for current coverage status.
+
 ## Program Structure
 
 Each cycle is 4 weeks across 4 lifts (OHP, Deadlift, Bench, Squat):
@@ -51,6 +60,6 @@ Each cycle is 4 weeks across 4 lifts (OHP, Deadlift, Bench, Squat):
 | 3 | 75% × 5 | 85% × 3 | 95% × 1+ |
 | 4 (deload) | 40% × 5 | 50% × 5 | 60% × 5 |
 
-FSL (First Set Last) is 5 × 10 @ 65% of TM after every non-deload session.
+FSL (First Set Last) is 5 × 10 at the first working set weight after every non-deload session (65% / 70% / 75% TM for weeks 1 / 2 / 3).
 
 TM progression after each deload: +5 lb upper body, +10 lb lower body.

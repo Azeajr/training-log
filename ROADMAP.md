@@ -17,6 +17,9 @@ Weight on the active set defaults to the programmed value. Tap the weight displa
 ### Component-Level Workout Tests
 RTL integration tests (`src/screens/Workout.test.tsx`) cover the joker-button flow — successful AMRAP, failed AMRAP, week 2/3 minimums, pending-joker suppression — without requiring a browser. Removes reliance on Playwright as the sole regression gate for core workout logic.
 
+### FSL Weight Fix
+`calcFslSets` was hardcoded to 65% TM regardless of week. FSL now derives its weight from the actual first main set (70% on week 2, 75% on week 3), matching the "First Set Last" definition. Parameterised tests cover all four weeks.
+
 ### Joker Sets
 After logging the AMRAP top set with reps ≥ the week's minimum (≥5/≥3/≥1), a "+ JOKER SET Xlb" button appears. Each joker uses the same rep scheme as the main sets. Button reappears after each successful joker. Disabled on deload week. Joker sets survive reload.
 
@@ -25,6 +28,22 @@ Weight increment is determined by AMRAP performance: if reps strictly exceed dou
 ---
 
 ## Planned
+
+### Full Integration Test Suite
+
+Replace all `vi.mock('../db/db', ...)` stubs with a real in-memory Dexie instance backed by `fake-indexeddb`. Add `*.test.tsx` files for every untested screen and component. Coverage target: every user-visible interaction path exercises the full stack from UI event → Zustand store → IndexedDB → rendered output, with no DB layer mocked.
+
+**Untested screens:** `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`
+
+**Untested components:** `AccessoryPicker`, `AmrapTargets`, `SessionPreview`, `RestTimer`, `BottomNav`, `DurationInput`
+
+**Approach**
+- Vitest + RTL + `fake-indexeddb` (already installed) — no new dependencies
+- Each screen test seeds the in-memory DB with fixtures in `beforeEach`, renders via `MemoryRouter`, and interacts through `userEvent`
+- Mock only hard external boundaries: `useNavigate`, `Date.now()`, service worker
+- Keep existing unit tests (`calc.ts`, `session.ts`, store) — they stay fast and isolated
+
+---
 
 ### Push Notifications
 
