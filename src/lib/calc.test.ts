@@ -54,14 +54,20 @@ describe('calcMainSets', () => {
 })
 
 describe('calcFslSets', () => {
-  it('returns 5 sets at 65% TM x 10 reps', () => {
-    const sets = calcFslSets(200)
+  it('returns 5 sets at the given first-set weight x 10 reps', () => {
+    const sets = calcFslSets(130)
     expect(sets).toHaveLength(5)
     sets.forEach(s => {
       expect(s.weight).toBe(130)
       expect(s.reps).toBe(10)
       expect(s.type).toBe('fsl')
     })
+  })
+
+  it.each([1, 2, 3, 4] as const)('week %i: FSL weight matches first main set weight', (week) => {
+    const main = calcMainSets(200, week)
+    const fsl = calcFslSets(main[0].weight)
+    fsl.forEach(s => expect(s.weight).toBe(main[0].weight))
   })
 })
 

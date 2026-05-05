@@ -17,7 +17,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Workout from './Workout'
 import { useWorkoutStore } from '../store/workoutStore'
-import { calcMainSets, calcWarmup, calcFslSets } from '../lib/calc'
+import { calcMainSets, calcWarmup } from '../lib/calc'
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
 
@@ -464,7 +464,7 @@ describe('Workout — FSL weight persistence across remount', () => {
   })
 
   it('pending FSL sets restore the override weight logged before navigating away', async () => {
-    const fslBase = calcFslSets(TM)[0].weight   // 60 for TM=95
+    const fslBase = calcMainSets(TM, 1)[0].weight   // 60 for TM=95
     const adjusted = fslBase + 5                // 65
 
     act(() => {

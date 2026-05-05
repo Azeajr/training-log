@@ -73,7 +73,7 @@ export default function Workout() {
     const freshLoggedSets = useWorkoutStore.getState().loggedSets
     const loggedFsl = freshLoggedSets.filter(s => s.type === 'fsl')
     const fslOverride = loggedFsl.length > 0 ? loggedFsl[loggedFsl.length - 1].weight : null
-    const fsl = calcFslSets(tmWeight).map((s, i) =>
+    const fsl = calcFslSets(main[0].weight).map((s, i) =>
       fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
     )
     const warmup = calcWarmup(tmWeight, main[0].weight, l.liftType, main[0].reps)

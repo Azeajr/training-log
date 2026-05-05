@@ -14,7 +14,6 @@ export const MAIN_REPS = {
   4: [5, 5, 5],
 } as const
 
-export const FSL_PERCENTAGE = 0.65
 export const FSL_SETS = 5
 export const FSL_REPS = 10
 
@@ -96,15 +95,13 @@ export interface FslSet {
   type: 'fsl'
 }
 
-export const calcFslSets = (tm: number): FslSet[] => {
-  const weight = Math.max(BAR_WEIGHT, roundToNearest5(tm * FSL_PERCENTAGE))
-  return Array.from({ length: FSL_SETS }, (_, i) => ({
+export const calcFslSets = (firstSetWeight: number): FslSet[] =>
+  Array.from({ length: FSL_SETS }, (_, i) => ({
     setNumber: i + 1,
-    weight,
+    weight: firstSetWeight,
     reps: FSL_REPS,
     type: 'fsl',
   }))
-}
 
 export interface AccessorySetCalc {
   setNumber: number

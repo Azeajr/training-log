@@ -124,7 +124,7 @@ export default function Today() {
 
   const selectedLift = lifts.find(l => l.id === selectedLiftId)
   const main = selectedLift ? calcMainSets(tm, currentWeek) : []
-  const fsl = selectedLift ? calcFslSets(tm) : []
+  const fsl = selectedLift ? calcFslSets(main[0].weight) : []
   const warmup = selectedLift ? calcWarmup(tm, main[0]?.weight ?? tm, liftType, main[0]?.reps ?? 5) : []
   const activeLiftName = lifts.find(l => l.id === activeSession?.liftId)?.name ?? ''
 
