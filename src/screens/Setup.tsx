@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { db } from '../db/db'
 import { calcMainSets } from '../lib/calc'
+import { useSettingsStore, DEFAULT_BAR_WEIGHT } from '../store/settingsStore'
 import Rule from '../components/Rule'
 import Stepper from '../components/Stepper'
 
@@ -17,6 +18,7 @@ export default function Setup({ onComplete }: Props) {
   const [tms, setTms] = useState<Record<string, number>>({
     OHP: MIN_TM, Bench: MIN_TM, Squat: MIN_TM, Deadlift: MIN_TM,
   })
+  const [barWeight, setBarWeight] = useState(DEFAULT_BAR_WEIGHT)
 
   const allValid = LIFTS.every(l => tms[l] >= MIN_TM)
 
@@ -31,6 +33,13 @@ export default function Setup({ onComplete }: Props) {
       })
     }
     await db.cycles.add({ number: 1, startDate: now, endDate: null })
+    const existing = await db.settings.toCollection().first()
+    if (existing?.id) {
+      await db.settings.update(existing.id, { barWeight })
+    } else {
+      await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, barWeight })
+    }
+    await useSettingsStore.getState().load()
     onComplete()
   }
 
@@ -60,6 +69,13 @@ export default function Setup({ onComplete }: Props) {
             </div>
           ))}
         </div>
+        <div className="mt-6">
+          <div className="flex items-center gap-4">
+            <label className="text-muted w-20 text-sm uppercase tracking-widest">Bar</label>
+            <Stepper value={barWeight} onChange={setBarWeight} step={2.5} min={10} max={100} />
+            <span className="text-muted text-sm">lb</span>
+          </div>
+        </div>
         <button
           onClick={() => setStep(2)}
           disabled={!allValid}
@@ -76,6 +92,10 @@ export default function Setup({ onComplete }: Props) {
       <Rule label="SETUP . STEP 2/2" className="text-muted mb-6" />
       <div className="text-text mb-4">Confirm training maxes:</div>
       <div className="border border-border p-4 space-y-3 mb-8">
+        <div className="flex justify-between">
+          <span className="text-muted uppercase text-sm tracking-widest">Bar</span>
+          <span className="text-text font-mono">{barWeight} lb</span>
+        </div>
         {LIFTS.map(lift => (
           <div key={lift}>
             <div className="flex justify-between">

@@ -126,21 +126,21 @@ describe('Settings screen', () => {
     await db.exercises.bulkAdd([{ name: 'Chinups', type: 'reps' }])
     render(<Settings />)
     await waitFor(() => {
-      expect(screen.getByText(/EXERCISES/)).toBeInTheDocument()
+      expect(screen.getAllByText(/EXERCISES/).length).toBeGreaterThan(0)
       expect(screen.getByText('Chinups')).toBeInTheDocument()
     })
   })
 
   it('+ ADD EXERCISE reveals name input', async () => {
     render(<Settings />)
-    await waitFor(() => screen.getByText(/EXERCISES/))
+    await waitFor(() => screen.getAllByText(/EXERCISES/))
     await userEvent.click(screen.getByRole('button', { name: '+ ADD EXERCISE' }))
     expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
   })
 
   it('adding an exercise saves to DB and shows in list', async () => {
     render(<Settings />)
-    await waitFor(() => screen.getByText(/EXERCISES/))
+    await waitFor(() => screen.getAllByText(/EXERCISES/))
     await userEvent.click(screen.getByRole('button', { name: '+ ADD EXERCISE' }))
 
     await userEvent.type(screen.getByPlaceholderText('Exercise name'), 'Dips')

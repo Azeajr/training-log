@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { db } from '../db/db'
-import type { Lift, Exercise } from '../db/db'
+import type { Lift, Exercise, LiftAccessory } from '../db/db'
 import { useSettingsStore, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../lib/exportImport'
 import { calcMainSets } from '../lib/calc'
@@ -14,12 +14,15 @@ export default function Settings() {
   const [editingTm, setEditingTm] = useState<number | null>(null)
   const [tmInput, setTmInput] = useState(0)
   const [exercises, setExercises] = useState<Exercise[]>([])
+  const [liftAccessories, setLiftAccessories] = useState<LiftAccessory[]>([])
   const [newExName, setNewExName] = useState('')
   const [newExType, setNewExType] = useState<'reps' | 'timed' | 'distance'>('reps')
   const [showAddEx, setShowAddEx] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const [editingEx, setEditingEx] = useState<number | null>(null)
   const [editExName, setEditExName] = useState('')
+  const [addToLift, setAddToLift] = useState<number | null>(null)
+  const [addToLiftExId, setAddToLiftExId] = useState<number | null>(null)
   const [importConfirm, setImportConfirm] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
@@ -39,6 +42,8 @@ export default function Settings() {
     setTms(tmMap)
     const allEx = await db.exercises.toArray()
     setExercises(allEx)
+    const allLA = await db.liftAccessories.toArray()
+    setLiftAccessories(allLA)
   }
 
   const handleSaveTm = async (liftId: number) => {
@@ -70,6 +75,19 @@ export default function Settings() {
     if (used > 0) return
     await db.exercises.delete(id)
     setDeleteConfirm(null)
+    load()
+  }
+
+  const handleAddToLift = async (liftId: number, exerciseId: number) => {
+    const nextOrder = liftAccessories.filter(la => la.liftId === liftId).length
+    await db.liftAccessories.add({ liftId, exerciseId, order: nextOrder })
+    setAddToLift(null)
+    setAddToLiftExId(null)
+    load()
+  }
+
+  const handleRemoveFromLift = async (laId: number) => {
+    await db.liftAccessories.delete(laId)
     load()
   }
 
@@ -193,6 +211,88 @@ export default function Settings() {
       {/* Exercises */}
       <div className="mb-6">
         <Rule label="EXERCISES" className="text-muted mb-2" />
+
+        {/* Per-lift groups */}
+        {lifts.map(lift => {
+          const assigned = liftAccessories
+            .filter(la => la.liftId === lift.id)
+            .sort((a, b) => a.order - b.order)
+          const assignedIds = new Set(assigned.map(la => la.exerciseId))
+          const available = exercises.filter(ex => !assignedIds.has(ex.id!))
+          return (
+            <div key={lift.id} className="mb-3">
+              <div className="text-muted text-xs uppercase tracking-widest mb-1">{lift.name}</div>
+              {assigned.length === 0 && (
+                <div className="text-faint text-xs pl-2 py-1">no exercises</div>
+              )}
+              {assigned.map(la => {
+                const ex = exercises.find(e => e.id === la.exerciseId)
+                if (!ex) return null
+                return (
+                  <div key={la.id} className="flex items-center justify-between py-0.5 pl-2 border-b border-border-dim">
+                    {editingEx === ex.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <input
+                          type="text"
+                          value={editExName}
+                          onChange={e => setEditExName(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleRenameExercise(ex.id!); if (e.key === 'Escape') setEditingEx(null) }}
+                          className="bg-surface border border-accent text-text px-2 py-0.5 flex-1 focus:outline-none text-sm font-mono"
+                          autoFocus
+                        />
+                        <button onClick={() => handleRenameExercise(ex.id!)} className="text-accent text-xs font-mono">SAVE</button>
+                        <button onClick={() => setEditingEx(null)} className="text-muted text-xs">cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-text text-xs">{ex.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted text-xs border border-border-dim px-1">{ex.type}</span>
+                          <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name) }} className="text-faint text-xs hover:text-accent font-mono">✎</button>
+                          <button onClick={() => handleRemoveFromLift(la.id!)} className="text-faint text-xs hover:text-danger font-mono">✕</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+              {addToLift === lift.id ? (
+                <div className="flex items-center gap-2 mt-1 pl-2">
+                  <select
+                    value={addToLiftExId ?? ''}
+                    onChange={e => setAddToLiftExId(Number(e.target.value) || null)}
+                    className="bg-surface border border-border text-text px-2 py-0.5 text-xs focus:outline-none flex-1"
+                  >
+                    <option value="">pick exercise</option>
+                    {available.map(ex => (
+                      <option key={ex.id} value={ex.id}>{ex.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => addToLiftExId && handleAddToLift(lift.id!, addToLiftExId)}
+                    disabled={!addToLiftExId}
+                    className="border border-accent text-accent px-2 py-0.5 text-xs disabled:border-border disabled:text-muted"
+                  >
+                    ADD
+                  </button>
+                  <button onClick={() => { setAddToLift(null); setAddToLiftExId(null) }} className="text-muted text-xs">cancel</button>
+                </div>
+              ) : (
+                available.length > 0 && (
+                  <button
+                    onClick={() => { setAddToLift(lift.id!); setAddToLiftExId(null) }}
+                    className="mt-1 pl-2 text-faint text-xs hover:text-accent"
+                  >
+                    + assign
+                  </button>
+                )
+              )}
+            </div>
+          )
+        })}
+
+        {/* All exercises (global list with add/delete) */}
+        <Rule label="ALL EXERCISES" className="text-muted mt-4 mb-2" />
         {exercises.map(ex => (
           <div key={ex.id} className="py-1 border-b border-border-dim">
             {editingEx === ex.id ? (
