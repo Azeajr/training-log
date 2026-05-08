@@ -95,7 +95,7 @@ describe('Today screen', () => {
   })
 
   it('selecting a different lift updates the preview', async () => {
-    const liftIds = await seedBase()
+    await seedBase()
     renderToday()
     await waitFor(() => screen.getByRole('button', { name: /Bench/ }))
 

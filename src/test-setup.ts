@@ -24,7 +24,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 window.HTMLElement.prototype.scrollIntoView = () => {}
 
 // recharts uses ResizeObserver internally
-global.ResizeObserver = class ResizeObserver {
+window.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}

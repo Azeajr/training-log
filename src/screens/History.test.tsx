@@ -108,7 +108,7 @@ describe('History screen', () => {
 
   it('expanded session shows EDIT link', async () => {
     const [liftId] = (await db.lifts.bulkAdd([LIFTS[0]], { allKeys: true })) as number[]
-    const sessionId = await db.sessions.add({
+    await db.sessions.add({
       cycleId: 1,
       liftId,
       week: 1 as const,
