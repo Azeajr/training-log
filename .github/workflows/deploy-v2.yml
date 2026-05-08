@@ -1,0 +1,32 @@
+name: Deploy V2 to Cloudflare Pages
+
+on:
+  push:
+    branches: [feat/perf-v2]
+
+jobs:
+  deploy-v2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - run: npm run build
+
+      - name: Create v2 project if missing
+        run: npx wrangler pages project create training-log-v2 --production-branch feat/perf-v2 || true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5141f0dec18e8fb0aa0942a9f09f982d
+
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy dist --project-name training-log-v2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5141f0dec18e8fb0aa0942a9f09f982d
