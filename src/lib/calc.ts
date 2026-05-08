@@ -164,7 +164,7 @@ export const calcWarmup = (
 }
 
 export const estimated1RM = (weight: number, reps: number): number =>
-  weight * (1 + reps / 30)
+  reps === 1 ? weight : weight * (1 + reps / 30)
 
 export const targetReps = (prev1RM: number, todayWeight: number): number =>
   Math.ceil((prev1RM / todayWeight - 1) * 30)

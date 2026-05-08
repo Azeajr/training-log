@@ -116,6 +116,9 @@ describe('estimated1RM', () => {
   it('160lb x 17 reps = 250.67', () => {
     expect(estimated1RM(160, 17)).toBeCloseTo(250.67, 1)
   })
+  it('1 rep returns exact weight lifted', () => {
+    expect(estimated1RM(225, 1)).toBe(225)
+  })
 })
 
 describe('targetReps', () => {
