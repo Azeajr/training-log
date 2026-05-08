@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { seedDatabase } from './db/seed'
 import { db } from './db/db'
+import { importFromRawData } from './lib/exportImport'
 import { useSettingsStore } from './store/settingsStore'
 import { useWorkoutStore } from './store/workoutStore'
 import { useSwipeNav } from './hooks/useSwipeNav'
@@ -51,6 +52,13 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
+      if (import.meta.env.VITE_DEMO) {
+        const isEmpty = (await db.trainingMaxes.count()) === 0
+        if (isEmpty) {
+          const res = await fetch('/demo-seed.json')
+          await importFromRawData(await res.json())
+        }
+      }
       await seedDatabase()
       await loadSettings()
       const tmCount = await db.trainingMaxes.count()

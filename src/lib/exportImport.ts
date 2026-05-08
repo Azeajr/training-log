@@ -29,8 +29,11 @@ export async function exportJson(): Promise<void> {
 export async function importJson(file: File): Promise<void> {
   const text = await file.text()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const d = JSON.parse(text) as Record<string, any[]>
+  await importFromRawData(JSON.parse(text) as Record<string, any[]>)
+}
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function importFromRawData(d: Record<string, any[]>): Promise<void> {
   await db.transaction(
     'rw',
     [

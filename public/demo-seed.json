@@ -1,0 +1,2596 @@
+{
+  "exportedAt": "2026-05-08T18:04:36.896Z",
+  "version": 1,
+  "lifts": [
+    {
+      "id": 1,
+      "name": "OHP",
+      "order": 1,
+      "progressionIncrement": 5,
+      "baseWeight": 95,
+      "liftType": "upper"
+    },
+    {
+      "id": 2,
+      "name": "Deadlift",
+      "order": 2,
+      "progressionIncrement": 10,
+      "baseWeight": 135,
+      "liftType": "lower"
+    },
+    {
+      "id": 3,
+      "name": "Bench",
+      "order": 3,
+      "progressionIncrement": 5,
+      "baseWeight": 95,
+      "liftType": "upper"
+    },
+    {
+      "id": 4,
+      "name": "Squat",
+      "order": 4,
+      "progressionIncrement": 10,
+      "baseWeight": 135,
+      "liftType": "lower"
+    }
+  ],
+  "trainingMaxes": [
+    {
+      "id": 8,
+      "liftId": 1,
+      "weight": 80,
+      "setAt": "2026-03-23T04:00:00.000Z"
+    },
+    {
+      "id": 9,
+      "liftId": 3,
+      "weight": 105,
+      "setAt": "2026-03-25T04:00:00.000Z"
+    },
+    {
+      "id": 10,
+      "liftId": 2,
+      "weight": 155,
+      "setAt": "2026-03-27T04:00:00.000Z"
+    },
+    {
+      "id": 11,
+      "liftId": 4,
+      "weight": 155,
+      "setAt": "2026-03-29T04:00:00.000Z"
+    },
+    {
+      "id": 12,
+      "liftId": 1,
+      "weight": 85,
+      "setAt": "2026-03-31T04:00:00.000Z"
+    },
+    {
+      "id": 13,
+      "liftId": 3,
+      "weight": 100,
+      "setAt": "2026-04-04T04:00:00.000Z"
+    },
+    {
+      "id": 14,
+      "liftId": 2,
+      "weight": 155,
+      "setAt": "2026-04-06T04:00:00.000Z"
+    },
+    {
+      "id": 15,
+      "liftId": 4,
+      "weight": 150,
+      "setAt": "2026-04-08T04:00:00.000Z"
+    },
+    {
+      "id": 16,
+      "liftId": 1,
+      "weight": 90,
+      "setAt": "2026-04-09T04:00:00.000Z"
+    },
+    {
+      "id": 17,
+      "liftId": 2,
+      "weight": 165,
+      "setAt": "2026-04-10T04:00:00.000Z"
+    },
+    {
+      "id": 18,
+      "liftId": 3,
+      "weight": 100,
+      "setAt": "2026-04-15T04:00:00.000Z"
+    },
+    {
+      "id": 19,
+      "liftId": 4,
+      "weight": 155,
+      "setAt": "2026-04-15T04:00:00.000Z"
+    },
+    {
+      "id": 20,
+      "liftId": 1,
+      "weight": 60,
+      "setAt": "2026-04-20T04:00:00.000Z"
+    },
+    {
+      "id": 21,
+      "liftId": 3,
+      "weight": 70,
+      "setAt": "2026-04-23T04:00:00.000Z"
+    },
+    {
+      "id": 22,
+      "liftId": 2,
+      "weight": 180,
+      "setAt": "2026-04-29T04:00:00.000Z"
+    },
+    {
+      "id": 23,
+      "liftId": 1,
+      "weight": 90,
+      "setAt": "2026-05-02T03:24:49.629Z"
+    },
+    {
+      "id": 24,
+      "liftId": 3,
+      "weight": 105,
+      "setAt": "2026-05-02T03:24:49.629Z"
+    },
+    {
+      "liftId": 3,
+      "weight": 124,
+      "setAt": "2026-05-02T04:37:55.765Z",
+      "id": 25
+    }
+  ],
+  "accessoryTrainingMaxes": [
+    {
+      "id": 1,
+      "exerciseId": 1,
+      "weight": 120,
+      "incrementLb": 5,
+      "setAt": "2026-04-28T04:00:00.000Z"
+    },
+    {
+      "exerciseId": 9,
+      "weight": 45,
+      "incrementLb": 5,
+      "setAt": "2026-05-02T16:06:54.117Z",
+      "id": 2
+    },
+    {
+      "exerciseId": 14,
+      "weight": 5,
+      "incrementLb": 5,
+      "setAt": "2026-05-04T16:44:43.976Z",
+      "id": 3
+    },
+    {
+      "exerciseId": 14,
+      "weight": 0,
+      "incrementLb": 5,
+      "setAt": "2026-05-04T16:48:31.876Z",
+      "id": 4
+    },
+    {
+      "exerciseId": 14,
+      "weight": 0,
+      "incrementLb": 5,
+      "setAt": "2026-05-04T16:54:06.171Z",
+      "id": 5
+    },
+    {
+      "exerciseId": 2,
+      "weight": 20,
+      "incrementLb": 5,
+      "setAt": "2026-05-04T18:21:52.258Z",
+      "id": 6
+    },
+    {
+      "exerciseId": 2,
+      "weight": 25,
+      "incrementLb": 5,
+      "setAt": "2026-05-04T18:22:03.937Z",
+      "id": 7
+    },
+    {
+      "exerciseId": 2,
+      "weight": 45,
+      "incrementLb": 5,
+      "setAt": "2026-05-04T18:40:55.258Z",
+      "id": 8
+    },
+    {
+      "exerciseId": 3,
+      "weight": 25,
+      "incrementLb": 5,
+      "setAt": "2026-05-06T15:17:09.398Z",
+      "id": 9
+    },
+    {
+      "exerciseId": 3,
+      "weight": 30,
+      "incrementLb": 5,
+      "setAt": "2026-05-06T15:23:43.623Z",
+      "id": 10
+    },
+    {
+      "exerciseId": 6,
+      "weight": 80,
+      "incrementLb": 5,
+      "setAt": "2026-05-07T18:32:11.139Z",
+      "id": 11
+    },
+    {
+      "exerciseId": 6,
+      "weight": 85,
+      "incrementLb": 5,
+      "setAt": "2026-05-07T19:10:16.715Z",
+      "id": 12
+    }
+  ],
+  "cycles": [
+    {
+      "id": 2,
+      "number": 2,
+      "startDate": "2026-03-23T04:00:00.000Z",
+      "endDate": "2026-04-25T04:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "number": 3,
+      "startDate": "2026-04-28T04:00:00.000Z",
+      "endDate": null
+    }
+  ],
+  "sessions": [
+    {
+      "id": 9,
+      "cycleId": 2,
+      "liftId": 1,
+      "week": 1,
+      "date": "2026-03-23T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 10,
+      "cycleId": 2,
+      "liftId": 3,
+      "week": 1,
+      "date": "2026-03-25T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 11,
+      "cycleId": 2,
+      "liftId": 2,
+      "week": 1,
+      "date": "2026-03-27T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 12,
+      "cycleId": 2,
+      "liftId": 4,
+      "week": 1,
+      "date": "2026-03-29T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 13,
+      "cycleId": 2,
+      "liftId": 1,
+      "week": 2,
+      "date": "2026-03-31T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 14,
+      "cycleId": 2,
+      "liftId": 3,
+      "week": 2,
+      "date": "2026-04-04T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 15,
+      "cycleId": 2,
+      "liftId": 2,
+      "week": 2,
+      "date": "2026-04-06T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 16,
+      "cycleId": 2,
+      "liftId": 4,
+      "week": 2,
+      "date": "2026-04-08T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 17,
+      "cycleId": 2,
+      "liftId": 1,
+      "week": 3,
+      "date": "2026-04-09T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 18,
+      "cycleId": 2,
+      "liftId": 2,
+      "week": 3,
+      "date": "2026-04-10T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 19,
+      "cycleId": 2,
+      "liftId": 3,
+      "week": 3,
+      "date": "2026-04-15T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 20,
+      "cycleId": 2,
+      "liftId": 4,
+      "week": 3,
+      "date": "2026-04-15T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 21,
+      "cycleId": 2,
+      "liftId": 1,
+      "week": 4,
+      "date": "2026-04-20T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 22,
+      "cycleId": 2,
+      "liftId": 2,
+      "week": 4,
+      "date": "2026-04-22T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 23,
+      "cycleId": 2,
+      "liftId": 3,
+      "week": 4,
+      "date": "2026-04-23T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 24,
+      "cycleId": 2,
+      "liftId": 4,
+      "week": 4,
+      "date": "2026-04-25T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 25,
+      "cycleId": 3,
+      "liftId": 1,
+      "week": 1,
+      "date": "2026-04-28T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "id": 26,
+      "cycleId": 3,
+      "liftId": 2,
+      "week": 1,
+      "date": "2026-04-29T04:00:00.000Z",
+      "notes": null,
+      "status": "completed"
+    },
+    {
+      "cycleId": 3,
+      "liftId": 3,
+      "week": 1,
+      "date": "2026-05-02T05:15:12.483Z",
+      "notes": "First time on this app",
+      "status": "completed",
+      "id": 27
+    },
+    {
+      "cycleId": 3,
+      "liftId": 4,
+      "week": 1,
+      "date": "2026-05-02T19:10:40.234Z",
+      "notes": "",
+      "status": "completed",
+      "id": 28
+    },
+    {
+      "cycleId": 3,
+      "liftId": 1,
+      "week": 2,
+      "date": "2026-05-04T18:19:53.775Z",
+      "notes": "",
+      "status": "completed",
+      "id": 29
+    },
+    {
+      "cycleId": 3,
+      "liftId": 2,
+      "week": 2,
+      "date": "2026-05-07T03:16:11.180Z",
+      "notes": "Nordic curls with green band\nWithout band would be 130 lbs",
+      "status": "completed",
+      "id": 30
+    },
+    {
+      "cycleId": 3,
+      "liftId": 3,
+      "week": 2,
+      "date": "2026-05-07T22:34:09.619Z",
+      "notes": null,
+      "status": "pending",
+      "id": 31
+    }
+  ],
+  "sets": [
+    {
+      "id": 65,
+      "sessionId": 9,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 50,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 66,
+      "sessionId": 9,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 60,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 67,
+      "sessionId": 9,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": true
+    },
+    {
+      "id": 68,
+      "sessionId": 9,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 50,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 69,
+      "sessionId": 9,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 50,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 70,
+      "sessionId": 9,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 50,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 71,
+      "sessionId": 9,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 50,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 72,
+      "sessionId": 9,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 50,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 73,
+      "sessionId": 10,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 70,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 74,
+      "sessionId": 10,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 80,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 75,
+      "sessionId": 10,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 90,
+      "reps": 10,
+      "isAmrap": true
+    },
+    {
+      "id": 76,
+      "sessionId": 10,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 77,
+      "sessionId": 10,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 78,
+      "sessionId": 10,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 79,
+      "sessionId": 10,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 80,
+      "sessionId": 10,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 81,
+      "sessionId": 11,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 115,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 82,
+      "sessionId": 11,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 125,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 83,
+      "sessionId": 11,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 145,
+      "reps": 12,
+      "isAmrap": true
+    },
+    {
+      "id": 84,
+      "sessionId": 11,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 85,
+      "sessionId": 11,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 86,
+      "sessionId": 11,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 87,
+      "sessionId": 11,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 88,
+      "sessionId": 11,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 89,
+      "sessionId": 12,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 100,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 90,
+      "sessionId": 12,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 115,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 91,
+      "sessionId": 12,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 130,
+      "reps": 10,
+      "isAmrap": true
+    },
+    {
+      "id": 92,
+      "sessionId": 12,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 100,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 93,
+      "sessionId": 12,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 100,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 94,
+      "sessionId": 12,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 100,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 95,
+      "sessionId": 12,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 100,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 96,
+      "sessionId": 12,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 100,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 97,
+      "sessionId": 13,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 98,
+      "sessionId": 13,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 70,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 99,
+      "sessionId": 13,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 75,
+      "reps": 12,
+      "isAmrap": true
+    },
+    {
+      "id": 100,
+      "sessionId": 13,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 101,
+      "sessionId": 13,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 102,
+      "sessionId": 13,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 103,
+      "sessionId": 13,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 65,
+      "reps": 8,
+      "isAmrap": false
+    },
+    {
+      "id": 104,
+      "sessionId": 13,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 65,
+      "reps": 8,
+      "isAmrap": false
+    },
+    {
+      "id": 105,
+      "sessionId": 14,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 70,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 106,
+      "sessionId": 14,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 80,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 107,
+      "sessionId": 14,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 90,
+      "reps": 12,
+      "isAmrap": true
+    },
+    {
+      "id": 108,
+      "sessionId": 14,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 109,
+      "sessionId": 14,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 110,
+      "sessionId": 14,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 111,
+      "sessionId": 14,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 112,
+      "sessionId": 14,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 70,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 113,
+      "sessionId": 15,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 114,
+      "sessionId": 15,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 135,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 115,
+      "sessionId": 15,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 145,
+      "reps": 17,
+      "isAmrap": true
+    },
+    {
+      "id": 116,
+      "sessionId": 15,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 117,
+      "sessionId": 15,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 118,
+      "sessionId": 15,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 119,
+      "sessionId": 15,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 120,
+      "sessionId": 15,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 121,
+      "sessionId": 16,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 105,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 122,
+      "sessionId": 16,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 125,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 123,
+      "sessionId": 16,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 135,
+      "reps": 12,
+      "isAmrap": true
+    },
+    {
+      "id": 124,
+      "sessionId": 16,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 125,
+      "sessionId": 16,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 126,
+      "sessionId": 16,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 127,
+      "sessionId": 16,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 128,
+      "sessionId": 16,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 129,
+      "sessionId": 17,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 130,
+      "sessionId": 17,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 75,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 131,
+      "sessionId": 17,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 85,
+      "reps": 6,
+      "isAmrap": true
+    },
+    {
+      "id": 132,
+      "sessionId": 17,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 133,
+      "sessionId": 17,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 134,
+      "sessionId": 17,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 65,
+      "reps": 9,
+      "isAmrap": false
+    },
+    {
+      "id": 135,
+      "sessionId": 17,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 136,
+      "sessionId": 17,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 137,
+      "sessionId": 18,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 120,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 138,
+      "sessionId": 18,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 140,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 139,
+      "sessionId": 18,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 155,
+      "reps": 12,
+      "isAmrap": true
+    },
+    {
+      "id": 140,
+      "sessionId": 18,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 120,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 141,
+      "sessionId": 18,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 120,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 142,
+      "sessionId": 18,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 120,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 143,
+      "sessionId": 18,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 120,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 144,
+      "sessionId": 18,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 120,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 145,
+      "sessionId": 19,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 75,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 146,
+      "sessionId": 19,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 85,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 147,
+      "sessionId": 19,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 95,
+      "reps": 18,
+      "isAmrap": true
+    },
+    {
+      "id": 148,
+      "sessionId": 19,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 75,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 149,
+      "sessionId": 19,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 75,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 150,
+      "sessionId": 19,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 75,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 151,
+      "sessionId": 19,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 75,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 152,
+      "sessionId": 19,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 75,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 153,
+      "sessionId": 20,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 115,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 154,
+      "sessionId": 20,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 135,
+      "reps": 3,
+      "isAmrap": false
+    },
+    {
+      "id": 155,
+      "sessionId": 20,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 145,
+      "reps": 8,
+      "isAmrap": true
+    },
+    {
+      "id": 156,
+      "sessionId": 20,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 157,
+      "sessionId": 20,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 158,
+      "sessionId": 20,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 159,
+      "sessionId": 20,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 160,
+      "sessionId": 20,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 161,
+      "sessionId": 21,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 45,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 162,
+      "sessionId": 21,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 45,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 163,
+      "sessionId": 21,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 55,
+      "reps": 19,
+      "isAmrap": true
+    },
+    {
+      "id": 164,
+      "sessionId": 21,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 165,
+      "sessionId": 21,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 166,
+      "sessionId": 21,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 167,
+      "sessionId": 21,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 168,
+      "sessionId": 21,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 169,
+      "sessionId": 22,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 95,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 170,
+      "sessionId": 22,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 95,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 171,
+      "sessionId": 22,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 95,
+      "reps": 15,
+      "isAmrap": true
+    },
+    {
+      "id": 172,
+      "sessionId": 22,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 95,
+      "reps": 12,
+      "isAmrap": false
+    },
+    {
+      "id": 173,
+      "sessionId": 22,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 95,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 174,
+      "sessionId": 22,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 95,
+      "reps": 13,
+      "isAmrap": false
+    },
+    {
+      "id": 175,
+      "sessionId": 22,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 95,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 176,
+      "sessionId": 22,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 95,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 177,
+      "sessionId": 23,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 45,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 178,
+      "sessionId": 23,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 65,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 179,
+      "sessionId": 23,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 65,
+      "reps": 25,
+      "isAmrap": true
+    },
+    {
+      "id": 180,
+      "sessionId": 23,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 181,
+      "sessionId": 23,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 182,
+      "sessionId": 23,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 183,
+      "sessionId": 23,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 184,
+      "sessionId": 23,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 185,
+      "sessionId": 24,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 60,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 186,
+      "sessionId": 24,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 75,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 187,
+      "sessionId": 24,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 95,
+      "reps": 15,
+      "isAmrap": true
+    },
+    {
+      "id": 188,
+      "sessionId": 24,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 189,
+      "sessionId": 24,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 190,
+      "sessionId": 24,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 191,
+      "sessionId": 24,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 192,
+      "sessionId": 24,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 193,
+      "sessionId": 25,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 60,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 194,
+      "sessionId": 25,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 70,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 195,
+      "sessionId": 26,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 115,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 196,
+      "sessionId": 26,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 135,
+      "reps": 5,
+      "isAmrap": false
+    },
+    {
+      "id": 197,
+      "sessionId": 26,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 155,
+      "reps": 14,
+      "isAmrap": true
+    },
+    {
+      "id": 198,
+      "sessionId": 26,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 199,
+      "sessionId": 26,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 200,
+      "sessionId": 26,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 201,
+      "sessionId": 26,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 202,
+      "sessionId": 26,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 115,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 203,
+      "sessionId": 25,
+      "type": "warmup",
+      "setNumber": 1,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 204,
+      "sessionId": 25,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 80,
+      "reps": 6,
+      "isAmrap": true
+    },
+    {
+      "id": 205,
+      "sessionId": 25,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 60,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 206,
+      "sessionId": 25,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 60,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 207,
+      "sessionId": 25,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 60,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 208,
+      "sessionId": 25,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 60,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "id": 209,
+      "sessionId": 25,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 60,
+      "reps": 10,
+      "isAmrap": false
+    },
+    {
+      "sessionId": 27,
+      "type": "warmup",
+      "setNumber": 1,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 225
+    },
+    {
+      "sessionId": 27,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 80,
+      "reps": 5,
+      "isAmrap": false,
+      "id": 226
+    },
+    {
+      "sessionId": 27,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 95,
+      "reps": 5,
+      "isAmrap": false,
+      "id": 227
+    },
+    {
+      "sessionId": 27,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 105,
+      "reps": 15,
+      "isAmrap": true,
+      "id": 228
+    },
+    {
+      "sessionId": 27,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 80,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 229
+    },
+    {
+      "sessionId": 27,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 80,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 230
+    },
+    {
+      "sessionId": 27,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 80,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 231
+    },
+    {
+      "sessionId": 27,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 80,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 232
+    },
+    {
+      "sessionId": 27,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 80,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 233
+    },
+    {
+      "sessionId": 28,
+      "type": "warmup",
+      "setNumber": 1,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 325
+    },
+    {
+      "sessionId": 28,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 105,
+      "reps": 5,
+      "isAmrap": false,
+      "id": 326
+    },
+    {
+      "sessionId": 28,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 115,
+      "reps": 5,
+      "isAmrap": false,
+      "id": 327
+    },
+    {
+      "sessionId": 28,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 135,
+      "reps": 15,
+      "isAmrap": true,
+      "id": 328
+    },
+    {
+      "sessionId": 28,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 329
+    },
+    {
+      "sessionId": 28,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 330
+    },
+    {
+      "sessionId": 28,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 331
+    },
+    {
+      "sessionId": 28,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 332
+    },
+    {
+      "sessionId": 28,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 105,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 333
+    },
+    {
+      "sessionId": 29,
+      "type": "warmup",
+      "setNumber": 1,
+      "weight": 45,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 350
+    },
+    {
+      "sessionId": 29,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 3,
+      "isAmrap": false,
+      "id": 351
+    },
+    {
+      "sessionId": 29,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 70,
+      "reps": 3,
+      "isAmrap": false,
+      "id": 352
+    },
+    {
+      "sessionId": 29,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 80,
+      "reps": 10,
+      "isAmrap": true,
+      "id": 353
+    },
+    {
+      "sessionId": 29,
+      "type": "joker",
+      "setNumber": 1,
+      "weight": 95,
+      "reps": 3,
+      "isAmrap": false,
+      "id": 354
+    },
+    {
+      "sessionId": 29,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 355
+    },
+    {
+      "sessionId": 29,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 356
+    },
+    {
+      "sessionId": 29,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 357
+    },
+    {
+      "sessionId": 29,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 65,
+      "reps": 9,
+      "isAmrap": false,
+      "id": 358
+    },
+    {
+      "sessionId": 29,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 65,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 359
+    },
+    {
+      "sessionId": 30,
+      "type": "warmup",
+      "setNumber": 1,
+      "weight": 95,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 360
+    },
+    {
+      "sessionId": 30,
+      "type": "main",
+      "setNumber": 1,
+      "weight": 125,
+      "reps": 3,
+      "isAmrap": false,
+      "id": 361
+    },
+    {
+      "sessionId": 30,
+      "type": "main",
+      "setNumber": 2,
+      "weight": 145,
+      "reps": 3,
+      "isAmrap": false,
+      "id": 363
+    },
+    {
+      "sessionId": 30,
+      "type": "main",
+      "setNumber": 3,
+      "weight": 160,
+      "reps": 16,
+      "isAmrap": true,
+      "id": 364
+    },
+    {
+      "sessionId": 30,
+      "type": "joker",
+      "setNumber": 1,
+      "weight": 175,
+      "reps": 3,
+      "isAmrap": false,
+      "id": 365
+    },
+    {
+      "sessionId": 30,
+      "type": "joker",
+      "setNumber": 2,
+      "weight": 195,
+      "reps": 3,
+      "isAmrap": false,
+      "id": 366
+    },
+    {
+      "sessionId": 30,
+      "type": "fsl",
+      "setNumber": 1,
+      "weight": 125,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 367
+    },
+    {
+      "sessionId": 30,
+      "type": "fsl",
+      "setNumber": 2,
+      "weight": 125,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 368
+    },
+    {
+      "sessionId": 30,
+      "type": "fsl",
+      "setNumber": 3,
+      "weight": 125,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 369
+    },
+    {
+      "sessionId": 30,
+      "type": "fsl",
+      "setNumber": 4,
+      "weight": 125,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 370
+    },
+    {
+      "sessionId": 30,
+      "type": "fsl",
+      "setNumber": 5,
+      "weight": 125,
+      "reps": 10,
+      "isAmrap": false,
+      "id": 371
+    }
+  ],
+  "exercises": [
+    {
+      "id": 1,
+      "name": "Chinups",
+      "type": "reps"
+    },
+    {
+      "id": 2,
+      "name": "Lat Pulldowns",
+      "type": "reps"
+    },
+    {
+      "id": 3,
+      "name": "Bicep Curls",
+      "type": "reps"
+    },
+    {
+      "id": 4,
+      "name": "Glute Ham Raise",
+      "type": "reps"
+    },
+    {
+      "id": 5,
+      "name": "Bulgarian Split Squat",
+      "type": "reps"
+    },
+    {
+      "id": 6,
+      "name": "Nordic Curls",
+      "type": "reps"
+    },
+    {
+      "id": 7,
+      "name": "Hip Thrust",
+      "type": "reps"
+    },
+    {
+      "id": 8,
+      "name": "Barbell Row",
+      "type": "reps"
+    },
+    {
+      "id": 9,
+      "name": "Dumbbell Row",
+      "type": "reps"
+    },
+    {
+      "id": 10,
+      "name": "T Bar Row",
+      "type": "reps"
+    },
+    {
+      "id": 11,
+      "name": "Ab Wheel",
+      "type": "reps"
+    },
+    {
+      "id": 12,
+      "name": "Single Leg Romanian Deadlift",
+      "type": "reps"
+    },
+    {
+      "id": 13,
+      "name": "Romanian Deadlift",
+      "type": "reps"
+    },
+    {
+      "id": 14,
+      "name": "Back Extension",
+      "type": "reps"
+    },
+    {
+      "id": 15,
+      "name": "Good Mornings",
+      "type": "reps"
+    },
+    {
+      "id": 16,
+      "name": "Leg Press",
+      "type": "reps"
+    },
+    {
+      "id": 17,
+      "name": "Loaded Carry",
+      "type": "distance"
+    },
+    {
+      "id": 18,
+      "name": "Plank",
+      "type": "timed"
+    }
+  ],
+  "liftAccessories": [
+    {
+      "id": 1,
+      "liftId": 1,
+      "exerciseId": 1,
+      "order": 1
+    },
+    {
+      "id": 2,
+      "liftId": 1,
+      "exerciseId": 2,
+      "order": 2
+    },
+    {
+      "id": 3,
+      "liftId": 1,
+      "exerciseId": 3,
+      "order": 3
+    },
+    {
+      "id": 4,
+      "liftId": 2,
+      "exerciseId": 4,
+      "order": 1
+    },
+    {
+      "id": 5,
+      "liftId": 2,
+      "exerciseId": 5,
+      "order": 2
+    },
+    {
+      "id": 6,
+      "liftId": 2,
+      "exerciseId": 6,
+      "order": 3
+    },
+    {
+      "id": 7,
+      "liftId": 2,
+      "exerciseId": 7,
+      "order": 4
+    },
+    {
+      "id": 8,
+      "liftId": 3,
+      "exerciseId": 8,
+      "order": 1
+    },
+    {
+      "id": 9,
+      "liftId": 3,
+      "exerciseId": 9,
+      "order": 2
+    },
+    {
+      "id": 10,
+      "liftId": 3,
+      "exerciseId": 10,
+      "order": 3
+    },
+    {
+      "id": 11,
+      "liftId": 4,
+      "exerciseId": 11,
+      "order": 1
+    },
+    {
+      "id": 12,
+      "liftId": 4,
+      "exerciseId": 12,
+      "order": 2
+    },
+    {
+      "id": 13,
+      "liftId": 4,
+      "exerciseId": 13,
+      "order": 3
+    },
+    {
+      "id": 14,
+      "liftId": 4,
+      "exerciseId": 14,
+      "order": 4
+    },
+    {
+      "id": 15,
+      "liftId": 4,
+      "exerciseId": 15,
+      "order": 5
+    },
+    {
+      "id": 16,
+      "liftId": 4,
+      "exerciseId": 16,
+      "order": 6
+    }
+  ],
+  "accessorySets": [
+    {
+      "id": 1,
+      "sessionId": 25,
+      "exerciseId": 1,
+      "setNumber": 1,
+      "weight": 90,
+      "reps": 10,
+      "duration": null,
+      "distance": null
+    },
+    {
+      "id": 2,
+      "sessionId": 25,
+      "exerciseId": 1,
+      "setNumber": 2,
+      "weight": 90,
+      "reps": 10,
+      "duration": null,
+      "distance": null
+    },
+    {
+      "id": 3,
+      "sessionId": 25,
+      "exerciseId": 1,
+      "setNumber": 3,
+      "weight": 90,
+      "reps": 10,
+      "duration": null,
+      "distance": null
+    },
+    {
+      "id": 4,
+      "sessionId": 25,
+      "exerciseId": 1,
+      "setNumber": 4,
+      "weight": 90,
+      "reps": 10,
+      "duration": null,
+      "distance": null
+    },
+    {
+      "id": 5,
+      "sessionId": 25,
+      "exerciseId": 1,
+      "setNumber": 5,
+      "weight": 90,
+      "reps": 10,
+      "duration": null,
+      "distance": null
+    },
+    {
+      "sessionId": 27,
+      "exerciseId": 9,
+      "setNumber": 1,
+      "weight": 35,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 6
+    },
+    {
+      "sessionId": 27,
+      "exerciseId": 9,
+      "setNumber": 2,
+      "weight": 35,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 7
+    },
+    {
+      "sessionId": 27,
+      "exerciseId": 9,
+      "setNumber": 3,
+      "weight": 35,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 8
+    },
+    {
+      "sessionId": 27,
+      "exerciseId": 9,
+      "setNumber": 4,
+      "weight": 35,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 9
+    },
+    {
+      "sessionId": 27,
+      "exerciseId": 9,
+      "setNumber": 5,
+      "weight": 35,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 10
+    },
+    {
+      "sessionId": 28,
+      "exerciseId": 14,
+      "setNumber": 1,
+      "weight": 0,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 11
+    },
+    {
+      "sessionId": 28,
+      "exerciseId": 14,
+      "setNumber": 2,
+      "weight": 0,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 12
+    },
+    {
+      "sessionId": 28,
+      "exerciseId": 14,
+      "setNumber": 3,
+      "weight": 0,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 13
+    },
+    {
+      "sessionId": 28,
+      "exerciseId": 14,
+      "setNumber": 4,
+      "weight": 0,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 14
+    },
+    {
+      "sessionId": 28,
+      "exerciseId": 14,
+      "setNumber": 5,
+      "weight": 0,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 15
+    },
+    {
+      "sessionId": 29,
+      "exerciseId": 3,
+      "setNumber": 1,
+      "weight": 22.5,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 16
+    },
+    {
+      "sessionId": 29,
+      "exerciseId": 3,
+      "setNumber": 2,
+      "weight": 22.5,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 17
+    },
+    {
+      "sessionId": 29,
+      "exerciseId": 3,
+      "setNumber": 3,
+      "weight": 22.5,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 18
+    },
+    {
+      "sessionId": 29,
+      "exerciseId": 3,
+      "setNumber": 4,
+      "weight": 22.5,
+      "reps": 8,
+      "duration": null,
+      "distance": null,
+      "id": 19
+    },
+    {
+      "sessionId": 29,
+      "exerciseId": 3,
+      "setNumber": 5,
+      "weight": 22.5,
+      "reps": 5,
+      "duration": null,
+      "distance": null,
+      "id": 20
+    },
+    {
+      "sessionId": 30,
+      "exerciseId": 6,
+      "setNumber": 1,
+      "weight": 65,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 21
+    },
+    {
+      "sessionId": 30,
+      "exerciseId": 6,
+      "setNumber": 2,
+      "weight": 65,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 22
+    },
+    {
+      "sessionId": 30,
+      "exerciseId": 6,
+      "setNumber": 3,
+      "weight": 65,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 23
+    },
+    {
+      "sessionId": 30,
+      "exerciseId": 6,
+      "setNumber": 4,
+      "weight": 65,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 24
+    },
+    {
+      "sessionId": 30,
+      "exerciseId": 6,
+      "setNumber": 5,
+      "weight": 65,
+      "reps": 10,
+      "duration": null,
+      "distance": null,
+      "id": 25
+    }
+  ],
+  "settings": [
+    {
+      "id": 1,
+      "restTimer1": 90,
+      "restTimer2": 180,
+      "restTimerFail": 300,
+      "theme": "dark",
+      "plates": [
+        {
+          "weight": 45,
+          "count": 2
+        },
+        {
+          "weight": 35,
+          "count": 2
+        },
+        {
+          "weight": 25,
+          "count": 2
+        },
+        {
+          "weight": 15,
+          "count": 0
+        },
+        {
+          "weight": 10,
+          "count": 4
+        },
+        {
+          "weight": 5,
+          "count": 2
+        },
+        {
+          "weight": 2.5,
+          "count": 2
+        }
+      ]
+    }
+  ]
+}
