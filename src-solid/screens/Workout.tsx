@@ -53,9 +53,7 @@ export default function Workout() {
     setLift(l)
 
     const tms = await db.trainingMaxes.where('liftId').equals(l.id!).sortBy('setAt')
-    const latestTm = tms[tms.length - 1]
-    if (!latestTm) return
-    tmWeight = latestTm.weight
+    tmWeight = tms[tms.length - 1]?.weight ?? 0
 
     const main = calcMainSets(tmWeight, session.week)
     const freshLoggedSets = workout.loggedSets
