@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom'
+import 'fake-indexeddb/auto'
 
 // Vitest's jsdom doesn't always expose a functional localStorage.
 // Provide a working in-memory implementation so Zustand's persist middleware works.
@@ -21,3 +22,10 @@ Object.defineProperty(globalThis, 'localStorage', {
 
 // jsdom doesn't implement scrollIntoView
 window.HTMLElement.prototype.scrollIntoView = () => {}
+
+// recharts uses ResizeObserver internally
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
