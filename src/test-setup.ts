@@ -2,6 +2,68 @@ import '@testing-library/jest-dom'
 import 'fake-indexeddb/auto'
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
+import * as calcLib from './lib/calc'
+
+// jsdom has no Worker — provide a stub that handles timer and calc worker messages
+class MockWorker {
+  onmessage: ((e: MessageEvent) => void) | null = null
+  private intervalId: ReturnType<typeof setInterval> | null = null
+  private startTime: number | null = null
+
+  constructor(_url: unknown, _opts?: unknown) {}
+
+  postMessage(data: unknown) {
+    const msg = data as Record<string, unknown>
+
+    // Timer worker protocol
+    if (msg.type === 'start') {
+      this.startTime = (msg.restStartedAt as number) ?? Date.now()
+      if (this.intervalId) clearInterval(this.intervalId)
+      this.intervalId = setInterval(() => {
+        if (this.startTime != null && this.onmessage) {
+          this.onmessage(new MessageEvent('message', {
+            data: { elapsed: Math.floor((Date.now() - this.startTime!) / 1000) },
+          }))
+        }
+      }, 1000)
+    } else if (msg.type === 'stop') {
+      if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null }
+      this.startTime = null
+    } else if (msg.type === 'pause') {
+      if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null }
+    } else if (msg.type === 'resume') {
+      if (this.startTime != null && !this.intervalId) {
+        this.intervalId = setInterval(() => {
+          if (this.startTime != null && this.onmessage) {
+            this.onmessage(new MessageEvent('message', {
+              data: { elapsed: Math.floor((Date.now() - this.startTime!) / 1000) },
+            }))
+          }
+        }, 1000)
+      }
+    // Calc worker protocol (id + fn + args)
+    } else if (typeof msg.id === 'number' && typeof msg.fn === 'string') {
+      const { id, fn, args } = msg as { id: number; fn: string; args: unknown[] }
+      queueMicrotask(() => {
+        if (!this.onmessage) return
+        let result: unknown
+        try {
+          const calcFn = (calcLib as Record<string, unknown>)[fn]
+          result = typeof calcFn === 'function' ? calcFn(...args) : null
+        } catch {
+          result = []
+        }
+        this.onmessage!(new MessageEvent('message', { data: { id, result } }))
+      })
+    }
+  }
+
+  terminate() {
+    if (this.intervalId) clearInterval(this.intervalId)
+  }
+}
+
+Object.defineProperty(globalThis, 'Worker', { value: MockWorker, writable: true, configurable: true })
 
 // Components start async DB chains in useEffect. Test assertions can pass
 // mid-chain, leaving pending awaits that hit db.delete() in the next
@@ -34,9 +96,20 @@ Object.defineProperty(globalThis, 'localStorage', {
 // jsdom doesn't implement scrollIntoView
 window.HTMLElement.prototype.scrollIntoView = () => {}
 
-// recharts uses ResizeObserver internally
+// recharts uses ResizeObserver internally; Tanstack Virtual uses it to measure scroll container
 window.ResizeObserver = class ResizeObserver {
-  observe() {}
+  private cb: ResizeObserverCallback
+  constructor(cb: ResizeObserverCallback) { this.cb = cb }
+  observe(target: Element) {
+    // Report a realistic size so virtual scrollers render items
+    this.cb([{
+      target,
+      contentRect: { height: 600, width: 400, top: 0, left: 0, right: 400, bottom: 600, x: 0, y: 0, toJSON: () => ({}) } as DOMRectReadOnly,
+      borderBoxSize: [{ inlineSize: 400, blockSize: 600 }],
+      contentBoxSize: [{ inlineSize: 400, blockSize: 600 }],
+      devicePixelContentBoxSize: [{ inlineSize: 400, blockSize: 600 }],
+    } as ResizeObserverEntry], this as unknown as ResizeObserver)
+  }
   unobserve() {}
   disconnect() {}
 }

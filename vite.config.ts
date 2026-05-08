@@ -2,6 +2,10 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
   test: {
@@ -9,6 +13,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**'],
+    alias: [
+      // In tests, redirect db-v2 (SQLite) to Dexie db so existing tests keep working
+      { find: /.*\/db\/db-v2$/, replacement: path.resolve(__dirname, 'src/db/db.ts') },
+    ],
   },
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm'],
