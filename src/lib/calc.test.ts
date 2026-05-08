@@ -91,10 +91,19 @@ describe('calcWarmup', () => {
     expect(last.reps).toBe(3)
     expect(last.weight).toBeLessThan(130)
   })
-  it('base weight >= working weight returns bar only', () => {
+  it('upper body base >= working weight returns bar only', () => {
     const sets = calcWarmup(200, 90, 'upper', 5)
     expect(sets).toHaveLength(1)
     expect(sets[0].weight).toBe(45)
+  })
+  it('lower body working weight below 135 base gets intermediate steps', () => {
+    // Deadlift first set 125lb (TM≈190): base=135 > workingWeight=125, still needs warmup
+    const sets = calcWarmup(190, 125, 'lower', 5)
+    expect(sets.length).toBeGreaterThan(1)
+    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
+    const last = sets[sets.length - 1]
+    expect(last.weight).toBeLessThan(125)
+    expect(last.reps).toBe(3)
   })
   it('lower body uses 135 base', () => {
     const sets = calcWarmup(300, 180, 'lower', 5)
