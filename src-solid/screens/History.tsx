@@ -1,0 +1,260 @@
+import { createSignal, createEffect, For, Show } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
+import { createVirtualizer } from '@tanstack/solid-virtual'
+import { db } from '../../src/db/db-v2'
+import type { Session, Lift } from '../../src/db/db-v2'
+import { estimated1RM } from '../../src/lib/calc'
+
+type ViewMode = 'lift' | 'date'
+
+interface SessionRow {
+  session: Session
+  liftName: string
+  amrapWeight?: number
+  amrapReps?: number
+}
+
+interface Detail {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sets: any[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  accessorySets: any[]
+  notes: string | null
+}
+
+function TmChart(props: { data: { date: string; weight: number }[] }) {
+  const W = 400, H = 80, PAD = 20
+  const points = () => {
+    const data = props.data
+    if (data.length < 2) return ''
+    const minW = Math.min(...data.map(d => d.weight))
+    const maxW = Math.max(...data.map(d => d.weight))
+    const range = maxW - minW || 1
+    return data.map((d, i) => {
+      const x = PAD + (i / (data.length - 1)) * (W - PAD * 2)
+      const y = H - PAD - ((d.weight - minW) / range) * (H - PAD * 2)
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    }).join(' ')
+  }
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} class="w-full h-32">
+      <polyline points={points()} fill="none" stroke="var(--color-accent)" stroke-width="1.5" />
+    </svg>
+  )
+}
+
+function HistorySessionRow(props: {
+  row: SessionRow
+  onExpand: (id: number) => void
+  expanded: boolean
+  detail: Detail | null
+}) {
+  const navigate = useNavigate()
+  const sid = () => props.row.session.id!
+  const dateStr = () => new Date(props.row.session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const e1rm = () => props.row.amrapWeight && props.row.amrapReps
+    ? estimated1RM(props.row.amrapWeight, props.row.amrapReps).toFixed(1)
+    : null
+
+  return (
+    <div>
+      <button
+        onClick={() => props.onExpand(sid())}
+        class="w-full text-left border border-border px-3 py-2 text-sm flex justify-between hover:border-muted"
+      >
+        <span class="text-muted">{dateStr()}</span>
+        <span class="text-text">{props.row.liftName} W{props.row.session.week}</span>
+        <span class="text-muted">
+          {props.row.amrapWeight && props.row.amrapReps ? `${props.row.amrapWeight}×${props.row.amrapReps} ~ ${e1rm()}lb` : ''}
+        </span>
+      </button>
+      <Show when={props.expanded ? props.detail : null}>
+        {detail => (
+          <div class="border border-t-0 border-border px-3 py-2 text-xs text-text-dim space-y-1">
+            <div class="flex justify-end mb-1">
+              <button
+                onClick={() => navigate(`/history/${sid()}/edit`)}
+                class="text-xs text-muted hover:text-accent font-mono tracking-widest"
+              >
+                EDIT →
+              </button>
+            </div>
+            <For each={['warmup', 'main', 'fsl'] as const}>
+              {type => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const typeSets = detail().sets.filter((s: any) => s.type === type)
+                return (
+                  <Show when={typeSets.length > 0}>
+                    <div>
+                      <div class="text-muted uppercase tracking-widest mb-0.5">{type}</div>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      <For each={typeSets}>{(s: any) => (
+                        <div class="pl-2">
+                          {s.weight}lb x {s.reps}
+                          <Show when={s.isAmrap && e1rm()}>
+                            <span class="text-muted ml-2">est. 1RM: {e1rm()}lb</span>
+                          </Show>
+                        </div>
+                      )}</For>
+                    </div>
+                  </Show>
+                )
+              }}
+            </For>
+            <Show when={detail().notes}>
+              <div>
+                <div class="text-muted uppercase tracking-widest mb-0.5">NOTES</div>
+                <div class="pl-2 text-text-dim">{detail().notes}</div>
+              </div>
+            </Show>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+export default function History() {
+  const [mode, setMode] = createSignal<ViewMode>('lift')
+  const [lifts, setLifts] = createSignal<Lift[]>([])
+  const [selectedLiftId, setSelectedLiftId] = createSignal<number | null>(null)
+  const [sessions, setSessions] = createSignal<SessionRow[]>([])
+  const [tmHistory, setTmHistory] = createSignal<{ date: string; weight: number }[]>([])
+  const [expanded, setExpanded] = createSignal<number | null>(null)
+  const [detail, setDetail] = createSignal<Detail | null>(null)
+  let scrollEl!: HTMLDivElement
+
+  createEffect(() => { void load() })
+
+  const load = async () => {
+    const m = mode()
+    const selId = selectedLiftId()
+
+    const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+    setLifts(allLifts)
+    if (!selId && allLifts.length > 0) setSelectedLiftId(allLifts[0].id!)
+
+    if (m === 'lift' && (selId ?? allLifts[0]?.id)) {
+      const liftId = selId ?? allLifts[0].id!
+      const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
+      setTmHistory(tms.map(t => ({
+        date: new Date(t.setAt).toLocaleDateString(),
+        weight: t.weight,
+      })))
+      const liftSessions = await db.sessions
+        .where('liftId').equals(liftId)
+        .filter(s => s.status === 'completed')
+        .toArray()
+      liftSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      setSessions(await buildRows(liftSessions, allLifts))
+    } else if (m === 'date') {
+      const allSessions = await db.sessions
+        .filter(s => s.status === 'completed')
+        .toArray()
+      allSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      setSessions(await buildRows(allSessions, allLifts))
+    }
+  }
+
+  const buildRows = async (ss: Session[], allLifts: Lift[]): Promise<SessionRow[]> => {
+    if (ss.length === 0) return []
+    const sessionIds = ss.map(s => s.id!)
+    const amrapSets = await db.sets.where('sessionId').anyOf(sessionIds).filter(s => s.isAmrap).toArray()
+    const amrapBySession = new Map(amrapSets.map(s => [s.sessionId, s]))
+    return ss.map(s => {
+      const lift = allLifts.find(l => l.id === s.liftId)
+      const amrap = amrapBySession.get(s.id!)
+      return {
+        session: s,
+        liftName: lift?.name ?? '?',
+        amrapWeight: amrap?.weight,
+        amrapReps: amrap?.reps ?? undefined,
+      }
+    })
+  }
+
+  const handleExpand = async (sessionId: number) => {
+    if (expanded() === sessionId) { setExpanded(null); setDetail(null); return }
+    setExpanded(sessionId)
+    const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
+    const accSets = await db.accessorySets.where('sessionId').equals(sessionId).toArray()
+    const session = await db.sessions.get(sessionId)
+    setDetail({ sets, accessorySets: accSets, notes: session?.notes ?? null })
+  }
+
+  const virtualizer = createVirtualizer({
+    get count() { return sessions().length },
+    getScrollElement: () => scrollEl,
+    estimateSize: () => 40,
+    overscan: 5,
+  })
+
+  return (
+    <div class="p-4 font-mono">
+      <div class="flex gap-0 mb-4 border border-border">
+        <For each={['lift', 'date'] as ViewMode[]}>
+          {m => (
+            <button
+              onClick={() => setMode(m)}
+              class={`flex-1 py-2 text-xs uppercase tracking-widest ${
+                mode() === m ? 'bg-surface-high text-accent' : 'text-muted hover:text-text'
+              }`}
+            >
+              By {m}
+            </button>
+          )}
+        </For>
+      </div>
+
+      <Show when={mode() === 'lift'}>
+        <div class="flex gap-0 mb-4">
+          <For each={lifts()}>
+            {l => (
+              <button
+                onClick={() => setSelectedLiftId(l.id!)}
+                class={`flex-1 border py-1 text-xs uppercase tracking-widest ${
+                  selectedLiftId() === l.id
+                    ? 'border-accent text-accent'
+                    : 'border-border text-muted'
+                }`}
+              >
+                {l.name}
+              </button>
+            )}
+          </For>
+        </div>
+        <Show when={tmHistory().length > 1}>
+          <div class="mb-4 h-32">
+            <TmChart data={tmHistory()} />
+          </div>
+        </Show>
+      </Show>
+
+      <Show
+        when={sessions().length > 0}
+        fallback={<div class="text-muted text-sm">No completed sessions yet.</div>}
+      >
+        <div ref={el => (scrollEl = el)} class="overflow-auto max-h-[60vh]">
+          <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+            <For each={virtualizer.getVirtualItems()}>
+              {vItem => (
+                <div
+                  data-index={vItem.index}
+                  ref={el => virtualizer.measureElement(el)}
+                  style={{ position: 'absolute', top: '0', left: '0', width: '100%', transform: `translateY(${vItem.start}px)` }}
+                >
+                  <HistorySessionRow
+                    row={sessions()[vItem.index]}
+                    onExpand={handleExpand}
+                    expanded={expanded() === sessions()[vItem.index].session.id}
+                    detail={expanded() === sessions()[vItem.index].session.id ? detail() : null}
+                  />
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+    </div>
+  )
+}

@@ -18,7 +18,7 @@ import {
   calcJokerIncrement,
   shouldShowJokerButton,
 } from './calc'
-import { DEFAULT_PLATES } from '../store/settingsStore'
+import { DEFAULT_PLATES } from '../../src-solid/store/settingsStore'
 
 describe('roundToNearest5', () => {
   it('rounds down at 162', () => expect(roundToNearest5(162)).toBe(160))

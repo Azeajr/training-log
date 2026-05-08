@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
+import solid from 'vite-plugin-solid'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath } from 'url'
@@ -7,7 +7,8 @@ import path from 'path'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
-export default defineConfig({
+export default defineConfig(() => {
+  return {
   test: {
     globals: true,
     environment: 'jsdom',
@@ -28,7 +29,7 @@ export default defineConfig({
     },
   },
   plugins: [
-    react(),
+    solid(),
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
@@ -58,4 +59,5 @@ export default defineConfig({
       }
     })
   ]
+  }
 })

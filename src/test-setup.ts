@@ -1,6 +1,5 @@
 import '@testing-library/jest-dom'
 import 'fake-indexeddb/auto'
-import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
 import * as calcLib from './lib/calc'
 
@@ -70,12 +69,10 @@ Object.defineProperty(globalThis, 'Worker', { value: MockWorker, writable: true,
 // beforeEach. One setTimeout(0) drains all pending fake-indexeddb microtasks
 // before the DB is torn down.
 afterEach(async () => {
-  cleanup()
   await new Promise(r => setTimeout(r, 0))
 })
 
 // Vitest's jsdom doesn't always expose a functional localStorage.
-// Provide a working in-memory implementation so Zustand's persist middleware works.
 const makeLocalStorage = () => {
   const store: Record<string, string> = {}
   return {
@@ -96,7 +93,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 // jsdom doesn't implement scrollIntoView
 window.HTMLElement.prototype.scrollIntoView = () => {}
 
-// recharts uses ResizeObserver internally; Tanstack Virtual uses it to measure scroll container
+// Tanstack Virtual uses ResizeObserver to measure scroll container
 window.ResizeObserver = class ResizeObserver {
   private cb: ResizeObserverCallback
   constructor(cb: ResizeObserverCallback) { this.cb = cb }

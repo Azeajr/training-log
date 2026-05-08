@@ -15,34 +15,25 @@
     "debug:browser:nowipe": "node scripts/debug-browser.js --no-wipe"
   },
   "dependencies": {
+    "@solidjs/router": "^0.16.1",
     "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
     "@tailwindcss/vite": "^4.2.4",
-    "@tanstack/react-virtual": "^3.13.24",
+    "@tanstack/solid-virtual": "^3.13.24",
     "dexie": "^4.4.2",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "react-is": "^19.2.5",
-    "react-router-dom": "^7.14.2",
-    "recharts": "^3.8.1",
-    "tailwindcss": "^4.2.4",
-    "zustand": "^5.0.12"
+    "solid-js": "^1.9.12",
+    "tailwindcss": "^4.2.4"
   },
   "overrides": {
     "serialize-javascript": ">=7.0.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@solidjs/testing-library": "^0.8.10",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.12.2",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.2.1",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.5.0",
     "jsdom": "^29.1.1",
@@ -51,6 +42,7 @@
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10",
     "vite-plugin-pwa": "^1.2.0",
+    "vite-plugin-solid": "^2.11.12",
     "vitest": "^4.1.5"
   }
 }
