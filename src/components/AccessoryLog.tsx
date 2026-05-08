@@ -20,7 +20,7 @@ interface Props {
 }
 
 export default function AccessoryLog({ accessory, exercise }: Props) {
-  const { logAccessorySet, startRest } = useWorkoutStore()
+  const { logAccessorySet, editAccessorySet, deleteLastAccessorySet, startRest } = useWorkoutStore()
   const [weight, setWeight] = useState(() => {
     const last = accessory.loggedSets[accessory.loggedSets.length - 1]
     return last?.weight ?? accessory.calculatedWeight ?? 0
@@ -29,9 +29,34 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
   const [reps, setReps] = useState(10)
   const [duration, setDuration] = useState<number | null>(null)
   const [distance, setDistance] = useState(0)
+  const [editingSetIdx, setEditingSetIdx] = useState<number | null>(null)
+  const [editWeight, setEditWeight] = useState(0)
+  const [editReps, setEditReps] = useState(0)
+  const [editDuration, setEditDuration] = useState<number | null>(null)
+  const [editDistance, setEditDistance] = useState(0)
+  const [undoConfirm, setUndoConfirm] = useState(false)
   const tmWritten = useRef(false)
   const type = exercise?.type ?? 'reps'
   const nextSet = accessory.loggedSets.length + 1
+
+  const startEditSet = (i: number) => {
+    const s = accessory.loggedSets[i]
+    setEditWeight(s.weight ?? 0)
+    setEditReps(s.reps ?? 10)
+    setEditDuration(s.duration ?? null)
+    setEditDistance(s.distance ?? 0)
+    setEditingSetIdx(i)
+  }
+
+  const saveEditSet = (i: number) => {
+    editAccessorySet(accessory.exerciseId, i, {
+      weight: editWeight,
+      reps: type === 'reps' ? editReps : null,
+      duration: type === 'timed' ? editDuration : null,
+      distance: type === 'distance' ? editDistance : null,
+    })
+    setEditingSetIdx(null)
+  }
 
   const handleLog = async () => {
     if (weight !== (accessory.calculatedWeight ?? 0) && !tmWritten.current) {
@@ -84,16 +109,45 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
           <Stepper value={weight} onChange={setWeight} step={2.5} min={0} />
         </div>
       )}
-      {accessory.loggedSets.map((s, i) => (
-        <div key={i} className="text-muted text-xs pl-2 py-0.5">
-          Set {i + 1}:
-          {s.weight != null && <> {s.weight}lb</>}
-          {s.reps != null && <> × {s.reps}</>}
-          {s.duration != null && <> {s.duration}s</>}
-          {s.distance != null && <> {s.distance}ft</>}
-          <span className="text-accent ml-2">done</span>
-        </div>
-      ))}
+      {accessory.loggedSets.map((s, i) => {
+        const isLast = i === accessory.loggedSets.length - 1
+        if (editingSetIdx === i) {
+          return (
+            <div key={i} className="flex items-center gap-2 pl-2 py-1 flex-wrap">
+              <span className="text-warn text-xs">Set {i + 1}:</span>
+              <Stepper value={editWeight} onChange={setEditWeight} step={2.5} min={0} />
+              <span className="text-muted text-xs">lb ×</span>
+              {type === 'reps' && <Stepper value={editReps} onChange={setEditReps} step={1} min={0} />}
+              {type === 'timed' && <DurationInput value={editDuration} onChange={setEditDuration} />}
+              {type === 'distance' && <Stepper value={editDistance} onChange={setEditDistance} step={1} min={0} />}
+              <button onClick={() => saveEditSet(i)} className="border border-accent text-accent px-2 py-0.5 font-mono text-xs">SAVE</button>
+              <button onClick={() => setEditingSetIdx(null)} className="text-muted text-xs">cancel</button>
+            </div>
+          )
+        }
+        return (
+          <div key={i} className="flex items-center gap-1 text-muted text-xs pl-2 py-0.5">
+            <span onClick={() => startEditSet(i)} className="cursor-pointer hover:text-text-dim">
+              Set {i + 1}:
+              {s.weight != null && <> {s.weight}lb</>}
+              {s.reps != null && <> × {s.reps}</>}
+              {s.duration != null && <> {s.duration}s</>}
+              {s.distance != null && <> {s.distance}ft</>}
+            </span>
+            <span className="text-accent ml-1">done</span>
+            {isLast && !undoConfirm && (
+              <button onClick={() => setUndoConfirm(true)} className="ml-auto text-faint text-xs hover:text-danger font-mono">undo</button>
+            )}
+            {isLast && undoConfirm && (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-danger text-xs">undo set?</span>
+                <button onClick={() => { deleteLastAccessorySet(accessory.exerciseId); setUndoConfirm(false) }} className="text-danger text-xs font-mono border border-danger px-1">yes</button>
+                <button onClick={() => setUndoConfirm(false)} className="text-muted text-xs font-mono">no</button>
+              </div>
+            )}
+          </div>
+        )
+      })}
       {!done && (
         <div className="flex items-center gap-2 mt-2 pl-2">
           <span className="text-warn text-xs">Set {nextSet}:</span>

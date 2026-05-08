@@ -35,6 +35,8 @@ interface WorkoutState {
   stopRest: () => void
   addAccessory: (accessory: ActiveAccessory) => void
   logAccessorySet: (exerciseId: number, set: Partial<AccessorySet>) => void
+  editAccessorySet: (exerciseId: number, setIndex: number, updates: Partial<AccessorySet>) => void
+  deleteLastAccessorySet: (exerciseId: number) => void
   completeSession: () => void
   clearSession: () => void
   setNotes: (notes: string) => void
@@ -105,6 +107,22 @@ export const useWorkoutStore = create<WorkoutState>()(
         activeAccessories: state.activeAccessories.map((a) =>
           a.exerciseId === exerciseId
             ? { ...a, loggedSets: [...a.loggedSets, newSet] }
+            : a
+        ),
+      })),
+
+      editAccessorySet: (exerciseId, setIndex, updates) => set((state) => ({
+        activeAccessories: state.activeAccessories.map((a) =>
+          a.exerciseId === exerciseId
+            ? { ...a, loggedSets: a.loggedSets.map((s, i) => i === setIndex ? { ...s, ...updates } : s) }
+            : a
+        ),
+      })),
+
+      deleteLastAccessorySet: (exerciseId) => set((state) => ({
+        activeAccessories: state.activeAccessories.map((a) =>
+          a.exerciseId === exerciseId && a.loggedSets.length > 0
+            ? { ...a, loggedSets: a.loggedSets.slice(0, -1) }
             : a
         ),
       })),

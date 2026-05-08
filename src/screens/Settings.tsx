@@ -18,6 +18,8 @@ export default function Settings() {
   const [newExType, setNewExType] = useState<'reps' | 'timed' | 'distance'>('reps')
   const [showAddEx, setShowAddEx] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [editingEx, setEditingEx] = useState<number | null>(null)
+  const [editExName, setEditExName] = useState('')
   const [importConfirm, setImportConfirm] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
@@ -52,6 +54,14 @@ export default function Settings() {
     await db.exercises.add({ name: newExName.trim(), type: newExType })
     setNewExName('')
     setShowAddEx(false)
+    load()
+  }
+
+  const handleRenameExercise = async (id: number) => {
+    if (!editExName.trim()) return
+    await db.exercises.update(id, { name: editExName.trim() })
+    setEditingEx(null)
+    setEditExName('')
     load()
   }
 
@@ -184,19 +194,39 @@ export default function Settings() {
       <div className="mb-6">
         <Rule label="EXERCISES" className="text-muted mb-2" />
         {exercises.map(ex => (
-          <div key={ex.id} className="flex items-center justify-between py-1 border-b border-border-dim">
-            <span className="text-text">{ex.name}</span>
-            <div className="flex items-center gap-2">
-              <span className="text-muted text-xs border border-border-dim px-1">{ex.type}</span>
-              {deleteConfirm === ex.id ? (
-                <>
-                  <button onClick={() => handleDeleteExercise(ex.id!)} className="text-danger text-xs">DELETE</button>
-                  <button onClick={() => setDeleteConfirm(null)} className="text-muted text-xs">cancel</button>
-                </>
-              ) : (
-                <button onClick={() => setDeleteConfirm(ex.id!)} className="text-faint text-xs hover:text-danger">✕</button>
-              )}
-            </div>
+          <div key={ex.id} className="py-1 border-b border-border-dim">
+            {editingEx === ex.id ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editExName}
+                  onChange={e => setEditExName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleRenameExercise(ex.id!); if (e.key === 'Escape') setEditingEx(null) }}
+                  className="bg-surface border border-accent text-text px-2 py-0.5 flex-1 focus:outline-none text-sm font-mono"
+                  autoFocus
+                />
+                <button onClick={() => handleRenameExercise(ex.id!)} className="text-accent text-xs font-mono">SAVE</button>
+                <button onClick={() => setEditingEx(null)} className="text-muted text-xs">cancel</button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-text">{ex.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted text-xs border border-border-dim px-1">{ex.type}</span>
+                  {deleteConfirm === ex.id ? (
+                    <>
+                      <button onClick={() => handleDeleteExercise(ex.id!)} className="text-danger text-xs">DELETE</button>
+                      <button onClick={() => setDeleteConfirm(null)} className="text-muted text-xs">cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setDeleteConfirm(null) }} className="text-faint text-xs hover:text-accent font-mono">✎</button>
+                      <button onClick={() => { setDeleteConfirm(ex.id!); setEditingEx(null) }} className="text-faint text-xs hover:text-danger">✕</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ))}
         {showAddEx ? (
