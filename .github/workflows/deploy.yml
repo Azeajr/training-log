@@ -24,3 +24,25 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5141f0dec18e8fb0aa0942a9f09f982d
+
+  deploy-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - run: npm run build
+        env:
+          VITE_DEMO: true
+
+      - name: Deploy demo to Cloudflare Pages
+        run: npx wrangler pages deploy dist --project-name training-log-demo
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5141f0dec18e8fb0aa0942a9f09f982d
