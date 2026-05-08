@@ -37,6 +37,7 @@ interface WorkoutState {
   logAccessorySet: (exerciseId: number, set: Partial<AccessorySet>) => void
   editAccessorySet: (exerciseId: number, setIndex: number, updates: Partial<AccessorySet>) => void
   deleteLastAccessorySet: (exerciseId: number) => void
+  removeAccessory: (exerciseId: number) => void
   completeSession: () => void
   clearSession: () => void
   setNotes: (notes: string) => void
@@ -125,6 +126,10 @@ export const useWorkoutStore = create<WorkoutState>()(
             ? { ...a, loggedSets: a.loggedSets.slice(0, -1) }
             : a
         ),
+      })),
+
+      removeAccessory: (exerciseId) => set((state) => ({
+        activeAccessories: state.activeAccessories.filter((a) => a.exerciseId !== exerciseId),
       })),
 
       completeSession: () => set((state) => ({

@@ -151,18 +151,18 @@ describe('Settings screen', () => {
     expect(exercises.find(e => e.name === 'Dips')).toBeDefined()
   })
 
-  it('clicking ✕ shows delete confirmation', async () => {
+  it('clicking archive shows archive confirmation', async () => {
     await db.exercises.bulkAdd([{ name: 'Chinups', type: 'reps' }])
     render(<Settings />)
     await waitFor(() => screen.getByText('Chinups'))
 
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'archive' }))
 
-    expect(screen.getByRole('button', { name: 'DELETE' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ARCHIVE' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'cancel' })).toBeInTheDocument()
   })
 
-  it('confirming delete removes exercise from DB and list', async () => {
+  it('confirming archive hides exercise from active list and marks archived in DB', async () => {
     const [exId] = (await db.exercises.bulkAdd(
       [{ name: 'Chinups', type: 'reps' }],
       { allKeys: true }
@@ -170,19 +170,20 @@ describe('Settings screen', () => {
     render(<Settings />)
     await waitFor(() => screen.getByText('Chinups'))
 
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
-    await userEvent.click(screen.getByRole('button', { name: 'DELETE' }))
+    await userEvent.click(screen.getByRole('button', { name: 'archive' }))
+    await userEvent.click(screen.getByRole('button', { name: 'ARCHIVE' }))
 
-    await waitFor(() => expect(screen.queryByText('Chinups')).toBeNull())
-    expect(await db.exercises.get(exId)).toBeUndefined()
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.archived).toBe(true)
+    })
   })
 
-  it('does not delete exercise that has logged accessory sets', async () => {
+  it('archives exercise even when it has logged accessory sets, preserving history', async () => {
     const [exId] = (await db.exercises.bulkAdd(
       [{ name: 'Chinups', type: 'reps' }],
       { allKeys: true }
     )) as number[]
-    // Add an accessory set using this exercise
     await db.accessorySets.add({
       sessionId: 1, exerciseId: exId, setNumber: 1,
       weight: 50, reps: 10, duration: null, distance: null,
@@ -191,13 +192,30 @@ describe('Settings screen', () => {
     render(<Settings />)
     await waitFor(() => screen.getByText('Chinups'))
 
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
-    await userEvent.click(screen.getByRole('button', { name: 'DELETE' }))
+    await userEvent.click(screen.getByRole('button', { name: 'archive' }))
+    await userEvent.click(screen.getByRole('button', { name: 'ARCHIVE' }))
 
-    // Exercise should still be in DB
     await waitFor(async () => {
       const ex = await db.exercises.get(exId)
-      expect(ex).toBeDefined()
+      expect(ex?.archived).toBe(true)
+    })
+    const sets = await db.accessorySets.where('exerciseId').equals(exId).toArray()
+    expect(sets.length).toBe(1)
+  })
+
+  it('unarchiving an exercise restores it to the active list', async () => {
+    const [exId] = (await db.exercises.bulkAdd(
+      [{ name: 'Chinups', type: 'reps', archived: true }],
+      { allKeys: true }
+    )) as number[]
+    render(<Settings />)
+    await waitFor(() => screen.getByRole('button', { name: 'unarchive' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'unarchive' }))
+
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.archived).toBe(false)
     })
   })
 

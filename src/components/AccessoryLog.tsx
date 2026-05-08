@@ -20,7 +20,7 @@ interface Props {
 }
 
 export default function AccessoryLog({ accessory, exercise }: Props) {
-  const { logAccessorySet, editAccessorySet, deleteLastAccessorySet, startRest } = useWorkoutStore()
+  const { logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory, startRest } = useWorkoutStore()
   const [weight, setWeight] = useState(() => {
     const last = accessory.loggedSets[accessory.loggedSets.length - 1]
     return last?.weight ?? accessory.calculatedWeight ?? 0
@@ -35,6 +35,7 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
   const [editDuration, setEditDuration] = useState<number | null>(null)
   const [editDistance, setEditDistance] = useState(0)
   const [undoConfirm, setUndoConfirm] = useState(false)
+  const [removeConfirm, setRemoveConfirm] = useState(false)
   const tmWritten = useRef(false)
   const type = exercise?.type ?? 'reps'
   const nextSet = accessory.loggedSets.length + 1
@@ -93,15 +94,26 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
 
   return (
     <div className="border border-border p-3 mb-3">
-      <div className="text-text text-sm mb-1 uppercase tracking-widest">
-        {accessory.exerciseName}
-        <span className="text-muted ml-2 text-xs">5x10 @</span>
-        <button
-          onClick={() => setWeightEditing(w => !w)}
-          className={`text-xs font-mono ml-1 border-b ${weightEditing ? 'text-accent border-accent' : 'text-muted border-muted border-dashed'}`}
-        >
-          {weight}lb
-        </button>
+      <div className="text-text text-sm mb-1 uppercase tracking-widest flex items-center">
+        <span className="flex-1">
+          {accessory.exerciseName}
+          <span className="text-muted ml-2 text-xs">5x10 @</span>
+          <button
+            onClick={() => setWeightEditing(w => !w)}
+            className={`text-xs font-mono ml-1 border-b ${weightEditing ? 'text-accent border-accent' : 'text-muted border-muted border-dashed'}`}
+          >
+            {weight}lb
+          </button>
+        </span>
+        {!removeConfirm ? (
+          <button onClick={() => setRemoveConfirm(true)} className="text-faint text-xs font-mono hover:text-danger ml-2">✕</button>
+        ) : (
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-danger text-xs">remove?</span>
+            <button onClick={() => removeAccessory(accessory.exerciseId)} className="text-danger text-xs font-mono border border-danger px-1">yes</button>
+            <button onClick={() => setRemoveConfirm(false)} className="text-muted text-xs font-mono">no</button>
+          </div>
+        )}
       </div>
       {weightEditing && (
         <div className="flex items-center gap-2 pl-2 mb-2">

@@ -47,6 +47,7 @@ export interface Exercise {
   id?: number
   name: string
   type: 'reps' | 'timed' | 'distance'
+  archived?: boolean
 }
 
 export interface LiftAccessory {

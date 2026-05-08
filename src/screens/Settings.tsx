@@ -18,7 +18,7 @@ export default function Settings() {
   const [newExName, setNewExName] = useState('')
   const [newExType, setNewExType] = useState<'reps' | 'timed' | 'distance'>('reps')
   const [showAddEx, setShowAddEx] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [archiveConfirm, setArchiveConfirm] = useState<number | null>(null)
   const [editingEx, setEditingEx] = useState<number | null>(null)
   const [editExName, setEditExName] = useState('')
   const [addToLift, setAddToLift] = useState<number | null>(null)
@@ -70,11 +70,15 @@ export default function Settings() {
     load()
   }
 
-  const handleDeleteExercise = async (id: number) => {
-    const used = await db.accessorySets.where('exerciseId').equals(id).count()
-    if (used > 0) return
-    await db.exercises.delete(id)
-    setDeleteConfirm(null)
+  const handleArchiveExercise = async (id: number) => {
+    await db.exercises.update(id, { archived: true })
+    await db.liftAccessories.where('exerciseId').equals(id).delete()
+    setArchiveConfirm(null)
+    load()
+  }
+
+  const handleUnarchiveExercise = async (id: number) => {
+    await db.exercises.update(id, { archived: false })
     load()
   }
 
@@ -218,7 +222,7 @@ export default function Settings() {
             .filter(la => la.liftId === lift.id)
             .sort((a, b) => a.order - b.order)
           const assignedIds = new Set(assigned.map(la => la.exerciseId))
-          const available = exercises.filter(ex => !assignedIds.has(ex.id!))
+          const available = exercises.filter(ex => !assignedIds.has(ex.id!) && !ex.archived)
           return (
             <div key={lift.id} className="mb-3">
               <div className="text-muted text-xs uppercase tracking-widest mb-1">{lift.name}</div>
@@ -294,7 +298,7 @@ export default function Settings() {
 
         {/* All exercises (global list with add/delete) */}
         <Rule label="ALL EXERCISES" className="text-muted mt-4 mb-2" />
-        {exercises.map(ex => (
+        {exercises.filter(ex => !ex.archived).map(ex => (
           <div key={ex.id} className="py-1 border-b border-border-dim">
             {editingEx === ex.id ? (
               <div className="flex flex-col gap-2">
@@ -315,15 +319,15 @@ export default function Settings() {
               <div className="flex items-center justify-between">
                 <span className="text-text">{ex.name}</span>
                 <div className="flex items-center gap-4">
-                  {deleteConfirm === ex.id ? (
+                  {archiveConfirm === ex.id ? (
                     <>
-                      <button onClick={() => handleDeleteExercise(ex.id!)} className="text-danger text-lg sm:text-xl">DELETE</button>
-                      <button onClick={() => setDeleteConfirm(null)} className="text-muted text-lg sm:text-xl">cancel</button>
+                      <button onClick={() => handleArchiveExercise(ex.id!)} className="text-danger text-lg sm:text-xl">ARCHIVE</button>
+                      <button onClick={() => setArchiveConfirm(null)} className="text-muted text-lg sm:text-xl">cancel</button>
                     </>
                   ) : (
                     <>
-                      <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setDeleteConfirm(null) }} className="text-muted text-xs hover:text-accent">edit</button>
-                      <button onClick={() => { setDeleteConfirm(ex.id!); setEditingEx(null) }} className="text-muted text-xs hover:text-danger">del</button>
+                      <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setArchiveConfirm(null) }} className="text-muted text-xs hover:text-accent">edit</button>
+                      <button onClick={() => { setArchiveConfirm(ex.id!); setEditingEx(null) }} className="text-muted text-xs hover:text-danger">archive</button>
                     </>
                   )}
                 </div>
@@ -331,6 +335,17 @@ export default function Settings() {
             )}
           </div>
         ))}
+        {exercises.some(ex => ex.archived) && (
+          <>
+            <Rule label="ARCHIVED" className="text-faint mt-4 mb-2" />
+            {exercises.filter(ex => ex.archived).map(ex => (
+              <div key={ex.id} className="py-1 border-b border-border-dim flex items-center justify-between">
+                <span className="text-faint text-sm">{ex.name}</span>
+                <button onClick={() => handleUnarchiveExercise(ex.id!)} className="text-muted text-xs hover:text-accent">unarchive</button>
+              </div>
+            ))}
+          </>
+        )}
         {showAddEx ? (
           <div className="flex items-center gap-2 mt-2">
             <input
