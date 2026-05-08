@@ -138,8 +138,8 @@ export default function Settings() {
                 <>
                   <Stepper value={tmInput} onChange={setTmInput} step={5} min={0} />
                   <span className="text-muted text-xs">lb</span>
-                  <button onClick={() => handleSaveTm(l.id!)} className="text-accent text-xs">SAVE</button>
-                  <button onClick={() => setEditingTm(null)} className="text-muted text-xs">cancel</button>
+                  <button onClick={() => handleSaveTm(l.id!)} className="border border-accent text-accent px-2 py-0.5 text-xs font-mono tracking-widest">SAVE</button>
+                  <button onClick={() => setEditingTm(null)} className="text-muted text-xs font-mono">cancel</button>
                 </>
               ) : (
                 <>
@@ -245,7 +245,7 @@ export default function Settings() {
                           autoFocus
                         />
                         <div className="flex gap-3">
-                          <button onClick={() => handleRenameExercise(ex.id!)} className="text-accent text-lg sm:text-xl font-mono">SAVE</button>
+                          <button onClick={() => handleRenameExercise(ex.id!)} className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
                           <button onClick={() => setEditingEx(null)} className="text-muted text-lg sm:text-xl">cancel</button>
                         </div>
                       </div>
@@ -313,7 +313,7 @@ export default function Settings() {
                   autoFocus
                 />
                 <div className="flex gap-3">
-                  <button onClick={() => handleRenameExercise(ex.id!)} className="text-accent text-lg sm:text-xl font-mono">SAVE</button>
+                  <button onClick={() => handleRenameExercise(ex.id!)} className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
                   <button onClick={() => setEditingEx(null)} className="text-muted text-lg sm:text-xl">cancel</button>
                 </div>
               </div>
@@ -323,7 +323,7 @@ export default function Settings() {
                 <div className="flex items-center gap-4">
                   {archiveConfirm === ex.id ? (
                     <>
-                      <button onClick={() => handleArchiveExercise(ex.id!)} className="text-danger text-lg sm:text-xl">ARCHIVE</button>
+                      <button onClick={() => handleArchiveExercise(ex.id!)} className="border border-danger text-danger px-2 py-1 text-lg sm:text-xl font-mono">ARCHIVE</button>
                       <button onClick={() => setArchiveConfirm(null)} className="text-muted text-lg sm:text-xl">cancel</button>
                     </>
                   ) : (

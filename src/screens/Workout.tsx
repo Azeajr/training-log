@@ -449,7 +449,7 @@ export default function Workout() {
             </button>
             <button
               onClick={() => setSkipConfirm(false)}
-              className="border border-border text-muted px-3 py-4 font-mono text-xs"
+              className="text-muted px-3 py-4 font-mono text-xs"
             >
               CANCEL
             </button>
@@ -469,7 +469,7 @@ export default function Workout() {
             <span className="text-muted text-xs">discard this attempt?</span>
             <button
               onClick={handleExit}
-              className="border border-muted text-text-dim px-3 py-1 font-mono text-xs tracking-widest"
+              className="border border-danger text-danger px-3 py-1 font-mono text-xs tracking-widest"
             >
               CONFIRM EXIT
             </button>

@@ -259,7 +259,7 @@ export default function HistoryEdit() {
         <button
           onClick={handleSave}
           disabled={isSaving}
-          className="border border-accent text-accent px-4 py-1 text-xs font-mono tracking-widest hover:bg-accent hover:text-on-accent disabled:opacity-50"
+          className="border border-accent text-accent px-4 py-1 text-xs font-mono tracking-widest disabled:opacity-50"
         >
           {isSaving ? 'SAVING...' : 'SAVE'}
         </button>
@@ -349,7 +349,7 @@ export default function HistoryEdit() {
       <button
         onClick={handleSave}
         disabled={isSaving}
-        className="w-full border border-accent text-accent py-4 font-mono text-sm tracking-widest hover:bg-accent hover:text-on-accent disabled:opacity-50"
+        className="w-full border border-accent text-accent py-4 font-mono text-sm tracking-widest disabled:opacity-50"
       >
         {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
       </button>

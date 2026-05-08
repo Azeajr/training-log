@@ -111,7 +111,7 @@ export default function Setup({ onComplete }: Props) {
       <div className="flex gap-4">
         <button
           onClick={() => setStep(1)}
-          className="border border-border px-4 py-2 font-mono text-text hover:border-accent hover:text-accent"
+          className="border border-border px-4 py-2 font-mono text-muted hover:border-accent hover:text-accent"
         >
           BACK
         </button>
