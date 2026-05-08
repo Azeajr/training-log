@@ -1,4 +1,4 @@
-import { db } from './db'
+import { db } from './db-v2'
 
 const LIFTS = [
   { name: 'OHP'      as const, order: 1, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' as const },

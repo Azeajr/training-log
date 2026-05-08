@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { db } from '../db/db'
-import type { Lift, Exercise, LiftAccessory } from '../db/db'
+import { db } from '../db/db-v2'
+import type { Lift, Exercise, LiftAccessory } from '../db/db-v2'
 import { useSettingsStore, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../lib/exportImport'
 import { calcMainSets } from '../lib/calc'

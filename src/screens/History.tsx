@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { db } from '../db/db'
-import type { Session, Lift } from '../db/db'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { db } from '../db/db-v2'
+import type { Session, Lift } from '../db/db-v2'
 import { estimated1RM } from '../lib/calc'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -14,15 +15,83 @@ interface SessionRow {
   amrapReps?: number
 }
 
-export default function History() {
+interface RowProps {
+  row: SessionRow
+  onExpand: (id: number) => void
+  expanded: boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  detail: { sets: any[]; accessorySets: any[]; notes: string | null } | null
+}
+
+const HistorySessionRow = memo(function HistorySessionRow({ row, onExpand, expanded, detail }: RowProps) {
   const navigate = useNavigate()
+  const sid = row.session.id!
+  const dateStr = new Date(row.session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const e1rm = row.amrapWeight && row.amrapReps
+    ? estimated1RM(row.amrapWeight, row.amrapReps).toFixed(1)
+    : null
+
+  return (
+    <div>
+      <button
+        onClick={() => onExpand(sid)}
+        className="w-full text-left border border-border px-3 py-2 text-sm flex justify-between hover:border-muted"
+      >
+        <span className="text-muted">{dateStr}</span>
+        <span className="text-text">{row.liftName} W{row.session.week}</span>
+        <span className="text-muted">
+          {row.amrapWeight && row.amrapReps ? `${row.amrapWeight}×${row.amrapReps} ~ ${e1rm}lb` : ''}
+        </span>
+      </button>
+      {expanded && detail && (
+        <div className="border border-t-0 border-border px-3 py-2 text-xs text-text-dim space-y-1">
+          <div className="flex justify-end mb-1">
+            <button
+              onClick={() => navigate(`/history/${sid}/edit`)}
+              className="text-xs text-muted hover:text-accent font-mono tracking-widest"
+            >
+              EDIT →
+            </button>
+          </div>
+          {['warmup', 'main', 'fsl'].map(type => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const typeSets = detail.sets.filter((s: any) => s.type === type)
+            if (!typeSets.length) return null
+            return (
+              <div key={type}>
+                <div className="text-muted uppercase tracking-widest mb-0.5">{type}</div>
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {typeSets.map((s: any, i: number) => (
+                  <div key={i} className="pl-2">
+                    {s.weight}lb x {s.reps}
+                    {s.isAmrap && e1rm && <span className="text-muted ml-2">est. 1RM: {e1rm}lb</span>}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+          {detail.notes && (
+            <div>
+              <div className="text-muted uppercase tracking-widest mb-0.5">NOTES</div>
+              <div className="pl-2 text-text-dim">{detail.notes}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+})
+
+export default function History() {
   const [mode, setMode] = useState<ViewMode>('lift')
   const [lifts, setLifts] = useState<Lift[]>([])
   const [selectedLiftId, setSelectedLiftId] = useState<number | null>(null)
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [tmHistory, setTmHistory] = useState<{ date: string; weight: number }[]>([])
   const [expanded, setExpanded] = useState<number | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [detail, setDetail] = useState<{ sets: any[]; accessorySets: any[]; notes: string | null } | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { load() }, [mode, selectedLiftId])
 
@@ -44,33 +113,32 @@ export default function History() {
         .filter(s => s.status === 'completed')
         .toArray()
       liftSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      const rows = await buildRows(liftSessions, allLifts)
-      setSessions(rows)
+      setSessions(await buildRows(liftSessions, allLifts))
     } else if (mode === 'date') {
       const allSessions = await db.sessions
         .filter(s => s.status === 'completed')
         .toArray()
       allSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      const rows = await buildRows(allSessions, allLifts)
-      setSessions(rows)
+      setSessions(await buildRows(allSessions, allLifts))
     }
   }
 
   const buildRows = async (ss: Session[], allLifts: Lift[]): Promise<SessionRow[]> => {
-    const rows: SessionRow[] = []
-    for (const s of ss) {
+    if (ss.length === 0) return []
+    const sessionIds = ss.map(s => s.id!)
+    const amrapSets = await db.sets.where('sessionId').anyOf(sessionIds).filter(s => s.isAmrap).toArray()
+    const amrapBySession = new Map(amrapSets.map(s => [s.sessionId, s]))
+
+    return ss.map(s => {
       const lift = allLifts.find(l => l.id === s.liftId)
-      const amrap = s.id
-        ? await db.sets.where('sessionId').equals(s.id).filter(st => st.isAmrap).first()
-        : undefined
-      rows.push({
+      const amrap = amrapBySession.get(s.id!)
+      return {
         session: s,
         liftName: lift?.name ?? '?',
         amrapWeight: amrap?.weight,
-        amrapReps: amrap?.reps,
-      })
-    }
-    return rows
+        amrapReps: amrap?.reps ?? undefined,
+      }
+    })
   }
 
   const handleExpand = async (sessionId: number) => {
@@ -81,6 +149,13 @@ export default function History() {
     const session = await db.sessions.get(sessionId)
     setDetail({ sets, accessorySets: accSets, notes: session?.notes ?? null })
   }
+
+  const virtualizer = useVirtualizer({
+    count: sessions.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 40,
+    overscan: 5,
+  })
 
   return (
     <div className="p-4 font-mono">
@@ -134,67 +209,29 @@ export default function History() {
         </>
       )}
 
-      <div className="space-y-1">
-        {sessions.map(row => {
-          const sid = row.session.id!
-          const dateStr = new Date(row.session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          const e1rm = row.amrapWeight && row.amrapReps
-            ? estimated1RM(row.amrapWeight, row.amrapReps).toFixed(1)
-            : null
-          return (
-            <div key={sid}>
-              <button
-                onClick={() => handleExpand(sid)}
-                className="w-full text-left border border-border px-3 py-2 text-sm flex justify-between hover:border-muted"
+      {sessions.length === 0 ? (
+        <div className="text-muted text-sm">No completed sessions yet.</div>
+      ) : (
+        <div ref={scrollRef} className="overflow-auto max-h-[60vh]">
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map(vItem => (
+              <div
+                key={vItem.key}
+                data-index={vItem.index}
+                ref={virtualizer.measureElement}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vItem.start}px)` }}
               >
-                <span className="text-muted">{dateStr}</span>
-                <span className="text-text">{row.liftName} W{row.session.week}</span>
-                <span className="text-muted">
-                  {row.amrapWeight && row.amrapReps
-                    ? `${row.amrapWeight}×${row.amrapReps} ~ ${e1rm}lb`
-                    : ''}
-                </span>
-              </button>
-              {expanded === sid && detail && (
-                <div className="border border-t-0 border-border px-3 py-2 text-xs text-text-dim space-y-1">
-                  <div className="flex justify-end mb-1">
-                    <button
-                      onClick={() => navigate(`/history/${sid}/edit`)}
-                      className="text-xs text-muted hover:text-accent font-mono tracking-widest"
-                    >
-                      EDIT →
-                    </button>
-                  </div>
-                  {['warmup', 'main', 'fsl'].map(type => {
-                    const typeSets = detail.sets.filter(s => s.type === type)
-                    if (!typeSets.length) return null
-                    return (
-                      <div key={type}>
-                        <div className="text-muted uppercase tracking-widest mb-0.5">{type}</div>
-                        {typeSets.map((s: any, i: number) => (
-                          <div key={i} className="pl-2">
-                            {s.weight}lb x {s.reps}
-                            {s.isAmrap && e1rm && <span className="text-muted ml-2">est. 1RM: {e1rm}lb</span>}
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  })}
-                  {detail.notes && (
-                    <div>
-                      <div className="text-muted uppercase tracking-widest mb-0.5">NOTES</div>
-                      <div className="pl-2 text-text-dim">{detail.notes}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
-        {sessions.length === 0 && (
-          <div className="text-muted text-sm">No completed sessions yet.</div>
-        )}
-      </div>
+                <HistorySessionRow
+                  row={sessions[vItem.index]}
+                  onExpand={handleExpand}
+                  expanded={expanded === sessions[vItem.index].session.id}
+                  detail={expanded === sessions[vItem.index].session.id ? detail : null}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

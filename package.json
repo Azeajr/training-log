@@ -15,7 +15,9 @@
     "debug:browser:nowipe": "node scripts/debug-browser.js --no-wipe"
   },
   "dependencies": {
+    "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
     "@tailwindcss/vite": "^4.2.4",
+    "@tanstack/react-virtual": "^3.13.24",
     "dexie": "^4.4.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

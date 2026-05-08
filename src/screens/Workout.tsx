@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { db } from '../db/db'
-import type { Lift, Exercise } from '../db/db'
+import { db } from '../db/db-v2'
+import type { Lift, Exercise } from '../db/db-v2'
 import { useWorkoutStore } from '../store/workoutStore'
 import {
   calcMainSets,
   calcFslSets,
-  calcWarmup,
-  calcAmrapTargets,
   calcJokerSet,
   calcJokerIncrement,
   calcNextJokerWeight,
@@ -15,6 +13,7 @@ import {
   targetReps,
   JOKER_MIN_REPS,
 } from '../lib/calc'
+import { useCalcWorker } from '../hooks/useCalcWorker'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
 import type { RestType } from '../store/workoutStore'
 import { getAmrapTargets, advanceCycleIfComplete } from '../lib/session'
@@ -51,6 +50,7 @@ export default function Workout() {
   const [cycleCompleteData, setCycleCompleteData] = useState<Array<{ liftName: string; weight: number }> | null>(null)
   const prevAmrapSetsRef = useRef<Array<{ weight: number; reps: number; label: string }>>([])
   const tmWeightRef = useRef<number>(0)
+  const calcWorker = useCalcWorker()
 
   useEffect(() => {
     if (!activeSession) return
@@ -76,7 +76,7 @@ export default function Workout() {
     const fsl = calcFslSets(main[0].weight).map((s, i) =>
       fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
     )
-    const warmup = calcWarmup(tmWeight, main[0].weight, l.liftType, main[0].reps)
+    const warmup = await calcWorker.calcWarmup(tmWeight, main[0].weight, l.liftType, main[0].reps)
     const restoredJokers: JokerSet[] = freshLoggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
@@ -93,7 +93,7 @@ export default function Workout() {
         )
         if (prevSets.length > 0) {
           prevAmrapSetsRef.current = prevSets
-          setAmrapTargets(calcAmrapTargets(prevSets, amrapSet.weight))
+          setAmrapTargets(await calcWorker.calcAmrapTargets(prevSets, amrapSet.weight))
         } else {
           prevAmrapSetsRef.current = []
           // No history — derive goal from TM (TM ≈ 90% of true 1RM)
@@ -111,9 +111,9 @@ export default function Workout() {
     setExercises(allExercises)
   }
 
-  const handleAmrapWeightChange = (weight: number) => {
+  const handleAmrapWeightChange = async (weight: number) => {
     if (prevAmrapSetsRef.current.length > 0) {
-      setAmrapTargets(calcAmrapTargets(prevAmrapSetsRef.current, weight))
+      setAmrapTargets(await calcWorker.calcAmrapTargets(prevAmrapSetsRef.current, weight))
     } else if (tmWeightRef.current > 0) {
       const est1RM = tmWeightRef.current / 0.9
       setAmrapTargets([{

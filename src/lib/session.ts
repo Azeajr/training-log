@@ -1,4 +1,35 @@
-import { db, TrainingDB } from '../db/db'
+import { db } from '../db/db-v2'
+import type {
+  Lift, TrainingMax, Cycle, Session, AccessorySet, AccessoryTrainingMax,
+} from '../db/db-v2'
+
+interface TableLike<T> {
+  toArray(): Promise<T[]>
+  add(obj: Omit<T, 'id'>): Promise<number>
+  where(field: string): {
+    equals(v: unknown): {
+      toArray(): Promise<T[]>
+      first(): Promise<T | undefined>
+      sortBy(field: string): Promise<T[]>
+      filter(fn: (row: T) => boolean): {
+        first(): Promise<T | undefined>
+        toArray(): Promise<T[]>
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    anyOf(values: any[]): { toArray(): Promise<T[]> }
+  }
+  orderBy(field: string): { last(): Promise<T | undefined> }
+}
+
+interface TrainingDB {
+  lifts: TableLike<Lift>
+  trainingMaxes: TableLike<TrainingMax>
+  cycles: TableLike<Cycle>
+  sessions: TableLike<Session>
+  accessorySets: TableLike<AccessorySet>
+  accessoryTrainingMaxes: TableLike<AccessoryTrainingMax>
+}
 
 export async function getNextSession(database: TrainingDB = db): Promise<{
   liftId: number

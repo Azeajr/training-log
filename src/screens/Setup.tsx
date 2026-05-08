@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { db } from '../db/db'
+import { db } from '../db/db-v2'
 import { calcMainSets } from '../lib/calc'
 import { useSettingsStore, DEFAULT_BAR_WEIGHT } from '../store/settingsStore'
 import Rule from '../components/Rule'

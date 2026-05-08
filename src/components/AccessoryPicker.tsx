@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { db } from '../db/db'
-import type { Exercise, LiftAccessory } from '../db/db'
+import { db } from '../db/db-v2'
+import type { Exercise, LiftAccessory } from '../db/db-v2'
 import { useWorkoutStore } from '../store/workoutStore'
 import { roundToNearest5 } from '../lib/calc'
 import Rule from './Rule'

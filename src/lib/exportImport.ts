@@ -1,8 +1,23 @@
-import { db } from '../db/db'
+import { db } from '../db/db-v2'
 import type {
   Lift, TrainingMax, AccessoryTrainingMax, Cycle, Session,
   Set, Exercise, LiftAccessory, AccessorySet, Settings,
-} from '../db/db'
+} from '../db/db-v2'
+
+const PENDING_EXPORT_KEY = 'pending-export'
+
+export async function retryPendingExport(): Promise<void> {
+  const pending = localStorage.getItem(PENDING_EXPORT_KEY)
+  if (!pending) return
+  try {
+    const { content, filename } = JSON.parse(pending) as { content: string; filename: string }
+    triggerDownload(content, filename, 'application/json')
+    localStorage.removeItem(PENDING_EXPORT_KEY)
+  } catch {
+    // corrupt entry — clear it
+    localStorage.removeItem(PENDING_EXPORT_KEY)
+  }
+}
 
 export async function exportJson(): Promise<void> {
   const data = {
@@ -19,11 +34,13 @@ export async function exportJson(): Promise<void> {
     accessorySets: await db.accessorySets.toArray(),
     settings: await db.settings.toArray(),
   }
-  triggerDownload(
-    JSON.stringify(data, null, 2),
-    `training-log-${new Date().toISOString().split('T')[0]}.json`,
-    'application/json'
-  )
+  const content = JSON.stringify(data, null, 2)
+  const filename = `training-log-${new Date().toISOString().split('T')[0]}.json`
+  try {
+    triggerDownload(content, filename, 'application/json')
+  } catch {
+    localStorage.setItem(PENDING_EXPORT_KEY, JSON.stringify({ content, filename }))
+  }
 }
 
 export async function importJson(file: File): Promise<void> {

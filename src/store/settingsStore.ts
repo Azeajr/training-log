@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { db } from '../db/db'
-import type { PlateConfig } from '../db/db'
+import { db } from '../db/db-v2'
+import type { PlateConfig } from '../db/db-v2'
 
 export const THEMES = {
   dark: {

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWorkoutStore } from '../store/workoutStore'
 import { formatDuration } from '../lib/calc'
+import { usePageVisibility } from '../hooks/usePageVisibility'
 
 const NORMAL_THRESHOLD = 90
 const TRANSITION_THRESHOLD = 60
 const FAIL_NUDGE = 180
 const FAIL_MAX = 300
 
-// Module-level AudioContext reused across renders
 let audioCtx: AudioContext | null = null
 
 function getAudioCtx(): AudioContext {
@@ -41,7 +41,6 @@ function vibrate(pattern: number | number[]) {
   if ('vibrate' in navigator) navigator.vibrate(pattern)
 }
 
-// Three escalating cue levels
 function playCue(level: 'nudge' | 'warning' | 'critical') {
   if (level === 'nudge') {
     playTone(880, 0.15)
@@ -58,23 +57,37 @@ function playCue(level: 'nudge' | 'warning' | 'critical') {
   }
 }
 
+let timerWorker: Worker | null = null
+function getTimerWorker(): Worker {
+  if (!timerWorker) {
+    timerWorker = new Worker(new URL('../workers/timer.worker.ts', import.meta.url), { type: 'module' })
+  }
+  return timerWorker
+}
+
 export default function RestTimer() {
   const { isResting, restStartedAt, restType, stopRest } = useWorkoutStore()
   const [elapsed, setElapsed] = useState(0)
   const prevElapsed = useRef(-1)
+  const isVisible = usePageVisibility()
 
   useEffect(() => {
     if (!isResting || restStartedAt == null) {
       prevElapsed.current = -1
+      getTimerWorker().postMessage({ type: 'stop' })
       return
     }
-    const tick = () => setElapsed(Math.floor((Date.now() - restStartedAt) / 1000))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
+    const worker = getTimerWorker()
+    worker.onmessage = (e: MessageEvent<{ elapsed: number }>) => setElapsed(e.data.elapsed)
+    worker.postMessage({ type: 'start', restStartedAt })
+    return () => { worker.postMessage({ type: 'stop' }) }
   }, [isResting, restStartedAt])
 
-  // Fire audio + vibration exactly once when crossing each threshold
+  useEffect(() => {
+    if (!isResting) return
+    getTimerWorker().postMessage({ type: isVisible ? 'resume' : 'pause' })
+  }, [isVisible, isResting])
+
   useEffect(() => {
     if (!isResting || elapsed === 0) return
     const prev = prevElapsed.current
