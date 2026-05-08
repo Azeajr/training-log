@@ -240,16 +240,16 @@ export default function Settings() {
                           className="bg-surface border border-accent text-text px-2 py-0.5 flex-1 focus:outline-none text-sm font-mono"
                           autoFocus
                         />
-                        <button onClick={() => handleRenameExercise(ex.id!)} className="text-accent text-xs font-mono">SAVE</button>
-                        <button onClick={() => setEditingEx(null)} className="text-muted text-xs">cancel</button>
+                        <button onClick={() => handleRenameExercise(ex.id!)} className="text-accent text-sm font-mono">SAVE</button>
+                        <button onClick={() => setEditingEx(null)} className="text-muted text-sm">cancel</button>
                       </div>
                     ) : (
                       <>
                         <span className="text-text text-xs">{ex.name}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-muted text-xs border border-border-dim px-1">{ex.type}</span>
-                          <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name) }} className="text-faint text-xs hover:text-accent font-mono">✎</button>
-                          <button onClick={() => handleRemoveFromLift(la.id!)} className="text-faint text-xs hover:text-danger font-mono">✕</button>
+                          <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name) }} className="text-faint text-sm hover:text-accent font-mono p-1">✎</button>
+                          <button onClick={() => handleRemoveFromLift(la.id!)} className="text-faint text-sm hover:text-danger font-mono p-1">✕</button>
                         </div>
                       </>
                     )}
@@ -271,17 +271,17 @@ export default function Settings() {
                   <button
                     onClick={() => addToLiftExId && handleAddToLift(lift.id!, addToLiftExId)}
                     disabled={!addToLiftExId}
-                    className="border border-accent text-accent px-2 py-0.5 text-xs disabled:border-border disabled:text-muted"
+                    className="border border-accent text-accent px-2 py-1 text-sm disabled:border-border disabled:text-muted"
                   >
                     ADD
                   </button>
-                  <button onClick={() => { setAddToLift(null); setAddToLiftExId(null) }} className="text-muted text-xs">cancel</button>
+                  <button onClick={() => { setAddToLift(null); setAddToLiftExId(null) }} className="text-muted text-sm">cancel</button>
                 </div>
               ) : (
                 available.length > 0 && (
                   <button
                     onClick={() => { setAddToLift(lift.id!); setAddToLiftExId(null) }}
-                    className="mt-1 pl-2 text-faint text-xs hover:text-accent"
+                    className="mt-1 pl-2 text-faint text-sm hover:text-accent"
                   >
                     + assign
                   </button>
@@ -305,8 +305,8 @@ export default function Settings() {
                   className="bg-surface border border-accent text-text px-2 py-0.5 flex-1 focus:outline-none text-sm font-mono"
                   autoFocus
                 />
-                <button onClick={() => handleRenameExercise(ex.id!)} className="text-accent text-xs font-mono">SAVE</button>
-                <button onClick={() => setEditingEx(null)} className="text-muted text-xs">cancel</button>
+                <button onClick={() => handleRenameExercise(ex.id!)} className="text-accent text-sm font-mono">SAVE</button>
+                <button onClick={() => setEditingEx(null)} className="text-muted text-sm">cancel</button>
               </div>
             ) : (
               <div className="flex items-center justify-between">
@@ -315,13 +315,13 @@ export default function Settings() {
                   <span className="text-muted text-xs border border-border-dim px-1">{ex.type}</span>
                   {deleteConfirm === ex.id ? (
                     <>
-                      <button onClick={() => handleDeleteExercise(ex.id!)} className="text-danger text-xs">DELETE</button>
-                      <button onClick={() => setDeleteConfirm(null)} className="text-muted text-xs">cancel</button>
+                      <button onClick={() => handleDeleteExercise(ex.id!)} className="text-danger text-sm">DELETE</button>
+                      <button onClick={() => setDeleteConfirm(null)} className="text-muted text-sm">cancel</button>
                     </>
                   ) : (
                     <>
-                      <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setDeleteConfirm(null) }} className="text-faint text-xs hover:text-accent font-mono">✎</button>
-                      <button onClick={() => { setDeleteConfirm(ex.id!); setEditingEx(null) }} className="text-faint text-xs hover:text-danger">✕</button>
+                      <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setDeleteConfirm(null) }} className="text-faint text-sm hover:text-accent font-mono p-1">✎</button>
+                      <button onClick={() => { setDeleteConfirm(ex.id!); setEditingEx(null) }} className="text-faint text-sm hover:text-danger p-1">✕</button>
                     </>
                   )}
                 </div>
@@ -347,13 +347,13 @@ export default function Settings() {
               <option value="timed">timed</option>
               <option value="distance">distance</option>
             </select>
-            <button onClick={handleAddExercise} className="border border-accent text-accent px-2 py-1 text-xs">ADD</button>
-            <button onClick={() => setShowAddEx(false)} className="text-muted text-xs">cancel</button>
+            <button onClick={handleAddExercise} className="border border-accent text-accent px-2 py-1 text-sm">ADD</button>
+            <button onClick={() => setShowAddEx(false)} className="text-muted text-sm">cancel</button>
           </div>
         ) : (
           <button
             onClick={() => setShowAddEx(true)}
-            className="mt-2 border border-border text-muted px-3 py-1 text-xs hover:border-accent hover:text-accent"
+            className="mt-2 border border-border text-muted px-3 py-1 text-sm hover:border-accent hover:text-accent"
           >
             + ADD EXERCISE
           </button>
