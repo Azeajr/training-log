@@ -20,11 +20,12 @@ class SqliteClient {
   }
 
   private send<T>(type: string, sql: string | undefined, params: unknown[]): Promise<T> {
-    return new Promise((resolve, reject) => {
+    const doSend = (): Promise<T> => new Promise((resolve, reject) => {
       const id = this.nextId++
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject })
       this.worker.postMessage({ id, type, sql, params })
     })
+    return type !== 'init' ? this.ready.then(doSend) : doSend()
   }
 
   query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
