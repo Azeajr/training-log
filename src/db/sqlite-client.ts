@@ -256,7 +256,7 @@ export class SQLiteTable<T> {
 
   async add(obj: Omit<T, 'id'> | T): Promise<number> {
     const row = toSqlRow(obj as Record<string, unknown>, this.schema)
-    delete row.id
+    if (row.id == null) delete row.id
     const cols = Object.keys(row).filter((k) => row[k] !== undefined)
     const values = cols.map((k) => row[k])
     const placeholders = cols.map(() => '?').join(',')
