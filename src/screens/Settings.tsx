@@ -262,25 +262,27 @@ export default function Settings() {
                 )
               })}
               {addToLift === lift.id ? (
-                <div className="flex items-center gap-2 mt-1 pl-2">
+                <div className="flex flex-col gap-2 mt-1 pl-2">
                   <select
                     value={addToLiftExId ?? ''}
                     onChange={e => setAddToLiftExId(Number(e.target.value) || null)}
-                    className="bg-surface border border-border text-text px-2 py-0.5 text-xs focus:outline-none flex-1"
+                    className="bg-surface border border-border text-text px-2 py-0.5 text-xs focus:outline-none w-full"
                   >
                     <option value="">pick exercise</option>
                     {available.map(ex => (
                       <option key={ex.id} value={ex.id}>{ex.name}</option>
                     ))}
                   </select>
-                  <button
-                    onClick={() => addToLiftExId && handleAddToLift(lift.id!, addToLiftExId)}
-                    disabled={!addToLiftExId}
-                    className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted"
-                  >
-                    ADD
-                  </button>
-                  <button onClick={() => { setAddToLift(null); setAddToLiftExId(null) }} className="text-muted text-lg sm:text-xl">cancel</button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => addToLiftExId && handleAddToLift(lift.id!, addToLiftExId)}
+                      disabled={!addToLiftExId}
+                      className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted"
+                    >
+                      ADD
+                    </button>
+                    <button onClick={() => { setAddToLift(null); setAddToLiftExId(null) }} className="text-muted text-lg sm:text-xl">cancel</button>
+                  </div>
                 </div>
               ) : (
                 available.length > 0 && (
@@ -347,25 +349,29 @@ export default function Settings() {
           </>
         )}
         {showAddEx ? (
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              type="text"
-              value={newExName}
-              onChange={e => setNewExName(e.target.value)}
-              placeholder="Exercise name"
-              className="bg-surface border border-border text-text px-2 py-1 flex-1 focus:outline-none focus:border-accent"
-            />
-            <select
-              value={newExType}
-              onChange={e => setNewExType(e.target.value as any)}
-              className="bg-surface border border-border text-text px-2 py-1 focus:outline-none"
-            >
-              <option value="reps">reps</option>
-              <option value="timed">timed</option>
-              <option value="distance">distance</option>
-            </select>
-            <button onClick={handleAddExercise} className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">ADD</button>
-            <button onClick={() => setShowAddEx(false)} className="text-muted text-lg sm:text-xl">cancel</button>
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newExName}
+                onChange={e => setNewExName(e.target.value)}
+                placeholder="Exercise name"
+                className="bg-surface border border-border text-text px-2 py-1 flex-1 focus:outline-none focus:border-accent"
+              />
+              <select
+                value={newExType}
+                onChange={e => setNewExType(e.target.value as any)}
+                className="bg-surface border border-border text-text px-2 py-1 focus:outline-none"
+              >
+                <option value="reps">reps</option>
+                <option value="timed">timed</option>
+                <option value="distance">distance</option>
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={handleAddExercise} className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">ADD</button>
+              <button onClick={() => setShowAddEx(false)} className="text-muted text-lg sm:text-xl">cancel</button>
+            </div>
           </div>
         ) : (
           <button
