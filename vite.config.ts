@@ -34,7 +34,7 @@ export default defineConfig(() => {
     VitePWA({
       registerType: 'prompt',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,wasm}'],
+        globPatterns: ['**/*.{js,css,ico,png,wasm}'],
         runtimeCaching: [
           {
             urlPattern: /\.wasm$/,

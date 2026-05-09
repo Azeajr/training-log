@@ -46,9 +46,14 @@ class SqliteClient {
       throw err
     }
   }
+
+  terminate() {
+    this.worker.terminate()
+  }
 }
 
 export const sqliteClient = new SqliteClient()
+addEventListener('pagehide', () => sqliteClient.terminate())
 export const dbReady = sqliteClient.ready
 
 // Serialization helpers

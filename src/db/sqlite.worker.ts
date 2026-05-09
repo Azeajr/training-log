@@ -100,15 +100,24 @@ CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTra
 async function init(): Promise<{ persistent: boolean }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sqlite3 = await (sqlite3InitModule as any)({ print: () => {}, printErr: () => {} })
-  const hasOpfs = 'opfs' in sqlite3
-  if (hasOpfs) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    db = new (sqlite3 as any).oo1.OpfsDb('/training-log.db')
-  } else {
-    db = new sqlite3.oo1.DB()
+  if ('installOpfsSAHPoolVfs' in sqlite3) {
+    // SAH pool locks files exclusively; previous worker may not have released handles yet — retry
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const poolUtil = await (sqlite3 as any).installOpfsSAHPoolVfs({})
+        db = new poolUtil.OpfsSAHPoolDb('/training-log.db')
+        db.exec(SCHEMA)
+        return { persistent: true }
+      } catch {
+        if (attempt < 9) await new Promise(r => setTimeout(r, 150))
+      }
+    }
+    console.warn('[sqlite] OPFS SAH pool unavailable after retries, falling back to in-memory')
   }
+  db = new sqlite3.oo1.DB()
   db.exec(SCHEMA)
-  return { persistent: hasOpfs }
+  return { persistent: false }
 }
 
 self.onmessage = async (e: MessageEvent<InMsg>) => {
