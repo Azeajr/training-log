@@ -14,6 +14,15 @@ Given a target weight, show which plates to load on each side of the bar. Shown 
 ### Per-Set Weight Adjustment
 Weight on the active set defaults to the programmed value. Tap the weight display to reveal the stepper (signalled by a dashed underline; accent colour when open). Stored on the set record; TM is unchanged. Completed sets can be re-edited inline.
 
+### React → SolidJS Migration
+Rewrote the full app from React 19 + React Router v7 + Zustand to SolidJS 1.9 + @solidjs/router + SolidJS stores. All screens, components, and state management ported; routing structure unchanged. Build tool updated to vite-plugin-solid.
+
+### SQLite Wasm (Worker-based) Database
+Replaced Dexie/IndexedDB with SQLite Wasm running in a dedicated Web Worker. All DB reads and writes go through a message-passing interface; the main thread never blocks on IO. Schema and query layer rewritten; data import/export retained.
+
+### Performance & Mobile Optimization
+Nine-phase optimization pass targeting mobile frame rate and startup time: layout shift elimination, lazy screen loading, virtualizer removal in History (plain `For` loop), loading placeholder during DB init, DB race fix (gate non-init worker messages on ready promise), and React-remnant cleanup.
+
 ### Component-Level Workout Tests
 RTL integration tests (`src/screens/Workout.test.tsx`) cover the joker-button flow — successful AMRAP, failed AMRAP, week 2/3 minimums, pending-joker suppression — without requiring a browser. Removes reliance on Playwright as the sole regression gate for core workout logic.
 
@@ -21,7 +30,7 @@ RTL integration tests (`src/screens/Workout.test.tsx`) cover the joker-button fl
 `calcFslSets` was hardcoded to 65% TM regardless of week. FSL now derives its weight from the actual first main set (70% on week 2, 75% on week 3), matching the "First Set Last" definition. Parameterised tests cover all four weeks.
 
 ### Full Integration Test Suite
-RTL + Vitest + `fake-indexeddb` covering every screen and key component: `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`, `AccessoryPicker`, `AmrapTargets`, `SessionPreview`, `RestTimer`, `BottomNav`, `DurationInput`. 245 tests across 19 files. Every user-visible interaction path exercises the full stack from UI event → Zustand store → IndexedDB → rendered output with no DB layer mocked.
+`@solidjs/testing-library` + Vitest + `fake-indexeddb` covering every screen and key component: `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`, `AccessoryPicker`, `AmrapTargets`, `SessionPreview`, `RestTimer`, `BottomNav`, `DurationInput`. Every user-visible interaction path exercises the full stack from UI event → SolidJS store → SQLite → rendered output with no DB layer mocked.
 
 ### Joker Sets
 After logging the AMRAP top set with reps ≥ the week's minimum (≥5/≥3/≥1), a "+ JOKER SET Xlb" button appears. Each joker uses the same rep scheme as the main sets. Button reappears after each successful joker. Disabled on deload week. Joker sets survive reload.

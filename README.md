@@ -20,13 +20,13 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 
 | Layer | Library |
 |---|---|
-| UI | React 19, TypeScript, Tailwind CSS 4 |
-| Routing | React Router v7 |
-| State | Zustand 5 |
-| Database | Dexie (IndexedDB) 4 |
-| Charts | Recharts 3 |
+| UI | SolidJS 1.9, TypeScript, Tailwind CSS 4 |
+| Routing | @solidjs/router 0.16 |
+| State | SolidJS stores |
+| Database | SQLite Wasm (Worker-based) |
+| Charts | Custom SVG |
 | Build | Vite + vite-plugin-pwa |
-| Tests | Vitest |
+| Tests | Vitest + @solidjs/testing-library |
 
 ## Getting Started
 
@@ -48,9 +48,9 @@ Tests are split into two layers:
 | Layer | Location | Tools |
 |---|---|---|
 | Unit | `src/lib/*.test.ts`, `src/store/*.test.ts` | Vitest |
-| Component integration | `src/screens/*.test.tsx`, `src/components/*.test.tsx` | Vitest + RTL + jsdom |
+| Component integration | `src-solid/screens/*.test.tsx`, `src-solid/components/*.test.tsx` | Vitest + @solidjs/testing-library + jsdom |
 
-Component integration tests render the full component tree and interact through `userEvent`. The goal is to replace all DB mocks with `fake-indexeddb` so tests exercise the real Dexie layer. See [ROADMAP.md](ROADMAP.md) for current coverage status.
+Component integration tests render the full component tree and interact through `userEvent`. Every screen exercises the full stack: UI event → SolidJS store → SQLite → rendered output. No DB layer is mocked — tests run against `fake-indexeddb` through the real SQLite Wasm layer.
 
 ## Program Structure
 
