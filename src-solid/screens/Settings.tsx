@@ -142,12 +142,16 @@ export default function Settings() {
                   </button>
                 </>
               }>
-                <>
-                  <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} />
-                  <span class="text-muted text-xs">lb</span>
-                  <button onClick={() => handleSaveTm(l.id!)} class="border border-accent text-accent px-2 py-0.5 text-xs font-mono tracking-widest">SAVE</button>
-                  <button onClick={() => setEditingTm(null)} class="text-muted text-xs font-mono">cancel</button>
-                </>
+                <div class="flex flex-col gap-2 flex-1">
+                  <div class="flex items-center gap-2">
+                    <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} />
+                    <span class="text-muted text-xs">lb</span>
+                  </div>
+                  <div class="flex gap-3">
+                    <button onClick={() => handleSaveTm(l.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono tracking-widest">SAVE</button>
+                    <button onClick={() => setEditingTm(null)} class="text-muted text-lg sm:text-xl">cancel</button>
+                  </div>
+                </div>
               </Show>
             </div>
             <Show when={editingTm() === l.id && tmInput() > 0}>

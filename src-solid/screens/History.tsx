@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For, Show } from 'solid-js'
-import { useNavigate } from '@solidjs/router'
+import { useNavigate, useSearchParams } from '@solidjs/router'
 import { db } from '../../src/db/db-v2'
 import type { Session, Lift } from '../../src/db/db-v2'
 import { estimated1RM } from '../../src/lib/calc'
@@ -78,7 +78,7 @@ function HistorySessionRow(props: {
                 EDIT →
               </button>
             </div>
-            <For each={['warmup', 'main', 'fsl'] as const}>
+            <For each={['warmup', 'main', 'fsl', 'joker'] as const}>
               {type => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const typeSets = detail().sets.filter((s: any) => s.type === type)
@@ -114,9 +114,13 @@ function HistorySessionRow(props: {
 }
 
 export default function History() {
+  const [searchParams] = useSearchParams()
   const [mode, setMode] = createSignal<ViewMode>('lift')
   const [lifts, setLifts] = createSignal<Lift[]>([])
-  const [selectedLiftId, setSelectedLiftId] = createSignal<number | null>(null)
+  const rawLiftId = searchParams.liftId
+  const [selectedLiftId, setSelectedLiftId] = createSignal<number | null>(
+    rawLiftId ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId) : null
+  )
   const [sessions, setSessions] = createSignal<SessionRow[]>([])
   const [tmHistory, setTmHistory] = createSignal<{ date: string; weight: number }[]>([])
   const [expanded, setExpanded] = createSignal<number | null>(null)

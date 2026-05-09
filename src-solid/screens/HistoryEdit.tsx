@@ -43,6 +43,7 @@ export default function HistoryEdit() {
   const sid = parseInt(params.sessionId ?? '0')
 
   const [sessionInfo, setSessionInfo] = createSignal<{ liftName: string; week: number; date: string } | null>(null)
+  const [liftId, setLiftId] = createSignal<number | null>(null)
   const [editSets, setEditSets] = createSignal<EditSet[]>([])
   const [editAccessories, setEditAccessories] = createSignal<EditAccessory[]>([])
   const [deletedAccessoryIds, setDeletedAccessoryIds] = createSignal<number[]>([])
@@ -59,6 +60,7 @@ export default function HistoryEdit() {
     const lift = await db.lifts.get(session.liftId)
     if (!lift) return
 
+    setLiftId(session.liftId)
     setSessionInfo({
       liftName: lift.name,
       week: session.week,
@@ -229,7 +231,7 @@ export default function HistoryEdit() {
         }
       }
       await db.sessions.update(sid, { notes: notes() })
-      navigate('/history')
+      navigate(liftId() != null ? `/history?liftId=${liftId()}` : '/history')
     } finally {
       setIsSaving(false)
     }
@@ -244,7 +246,7 @@ export default function HistoryEdit() {
         <div class="p-4 font-mono pb-24 max-w-3xl mx-auto">
           <div class="flex items-center justify-between mb-6">
             <button
-              onClick={() => navigate('/history')}
+              onClick={() => navigate(liftId() != null ? `/history?liftId=${liftId()}` : '/history')}
               class="text-muted hover:text-text text-xs tracking-widest"
             >
               ← BACK
@@ -262,7 +264,7 @@ export default function HistoryEdit() {
             </button>
           </div>
 
-          <For each={(['warmup', 'main', 'fsl'] as const)}>
+          <For each={(['warmup', 'main', 'fsl', 'joker'] as const)}>
             {type => {
               const rows = () => editSets()
                 .map((s, i) => ({ s, i }))
@@ -271,7 +273,7 @@ export default function HistoryEdit() {
                 <Show when={rows().length > 0}>
                   <div class="mb-6">
                     <div class="text-muted uppercase text-xs tracking-widest mb-2">
-                      {type === 'fsl' ? 'FSL' : type}
+                      {type === 'fsl' ? 'FSL' : type === 'joker' ? 'JOKER' : type}
                     </div>
                     <For each={rows()}>
                       {({ s, i }) => (
@@ -323,13 +325,21 @@ export default function HistoryEdit() {
                           </>
                         </Show>
                         <Show when={acc.exerciseType === 'timed'}>
-                          <DurationInput
-                            value={s.duration}
-                            onChange={val => updateAccSet(ai(), si(), 'duration', val)}
-                          />
+                          <>
+                            <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai(), si(), 'weight', v)} step={2.5} min={0} />
+                            <span class="text-muted text-xs">lb ×</span>
+                            <DurationInput
+                              value={s.duration}
+                              onChange={val => updateAccSet(ai(), si(), 'duration', val)}
+                            />
+                          </>
                         </Show>
                         <Show when={acc.exerciseType === 'distance'}>
-                          <Stepper value={s.distance ?? 0} onChange={v => updateAccSet(ai(), si(), 'distance', v)} step={1} min={0} />
+                          <>
+                            <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai(), si(), 'weight', v)} step={2.5} min={0} />
+                            <span class="text-muted text-xs">lb ×</span>
+                            <Stepper value={s.distance ?? 0} onChange={v => updateAccSet(ai(), si(), 'distance', v)} step={1} min={0} />
+                          </>
                         </Show>
                       </div>
                     )}
