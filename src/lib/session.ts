@@ -1,6 +1,6 @@
 import { db } from '../db/db-v2'
 import type {
-  Lift, TrainingMax, Cycle, Session, AccessorySet, AccessoryTrainingMax,
+  Lift, TrainingMax, Cycle, Session, Set, AccessorySet, AccessoryTrainingMax,
 } from '../db/db-v2'
 
 interface TableLike<T> {
@@ -27,6 +27,7 @@ interface TrainingDB {
   trainingMaxes: TableLike<TrainingMax>
   cycles: TableLike<Cycle>
   sessions: TableLike<Session>
+  sets: TableLike<Set>
   accessorySets: TableLike<AccessorySet>
   accessoryTrainingMaxes: TableLike<AccessoryTrainingMax>
 }
@@ -154,9 +155,10 @@ export async function applyAccessoryTmProgression(database: TrainingDB = db, cyc
 export async function getAmrapTargets(
   liftId: number,
   currentWeek: number,
-  currentCycleId: number
+  currentCycleId: number,
+  database: TrainingDB = db,
 ): Promise<Array<{ weight: number; reps: number; label: string }>> {
-  const allSessions = await db.sessions
+  const allSessions = await database.sessions
     .where('liftId').equals(liftId)
     .filter(s => s.status === 'completed' && s.week !== 4)
     .toArray()
@@ -166,7 +168,7 @@ export async function getAmrapTargets(
   )
 
   const getAmrapSet = (sessionId: number) =>
-    db.sets
+    database.sets
       .where('sessionId').equals(sessionId)
       .filter(s => s.isAmrap)
       .first()

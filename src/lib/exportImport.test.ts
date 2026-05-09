@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { db } from '../db/db'
-import { importFromRawData, exportJson } from './exportImport'
+import { importFromRawData, exportJson, exportCsv, importJson, retryPendingExport } from './exportImport'
 
 beforeEach(async () => {
   await db.delete()
@@ -108,6 +108,8 @@ describe('exportJson', () => {
     vi.stubGlobal('URL', { ...URL, createObjectURL: () => { throw new Error('not implemented') }, revokeObjectURL: () => {} })
   })
 
+  afterEach(() => { vi.unstubAllGlobals() })
+
   it('includes barWeight and plates in exported settings', async () => {
     const plates = [{ weight: 45, count: 4 }, { weight: 25, count: 4 }]
     await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, barWeight: 35, plates })
@@ -141,5 +143,215 @@ describe('exportJson', () => {
     const [row] = await db.settings.toArray()
     expect(row.barWeight).toBe(55)
     expect(row.plates).toEqual(plates)
+  })
+})
+
+// V(G)=5 (session loop × has-sets branch × completed filter); paths P1..P8
+describe('exportCsv', () => {
+  let capturedBlob: Blob | undefined
+
+  beforeEach(() => {
+    capturedBlob = undefined
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn((b: Blob) => { capturedBlob = b; return 'mock-url' }),
+      revokeObjectURL: vi.fn(),
+    })
+  })
+
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  async function seedLiftAndSession(opts: { status?: 'completed' | 'pending'; week?: 1|2|3|4; notes?: string; date?: Date } = {}) {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: opts.week ?? 1,
+      date: opts.date ?? new Date('2026-03-15T00:00:00.000Z'),
+      notes: opts.notes ?? null,
+      status: opts.status ?? 'completed',
+    })
+    return { liftId, cycleId, sessionId }
+  }
+
+  it('P1: emits correct header row', async () => { // structure
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    const header = csv.split('\n')[0]
+    expect(header).toBe('"date","lift","week","type","set_number","weight_lb","reps","is_amrap","session_notes"')
+  })
+
+  it('P2: only includes completed sessions — TF branch (pending excluded)', async () => {
+    await seedLiftAndSession({ status: 'pending' })
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    const lines = csv.split('\n').filter(Boolean)
+    expect(lines).toHaveLength(1) // header only
+  })
+
+  it('P3: formats date as YYYY-MM-DD', async () => {
+    const { sessionId } = await seedLiftAndSession({ date: new Date('2026-03-15T00:00:00.000Z') })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('"2026-03-15"')
+  })
+
+  it('P4: includes all set types in rows — BVA: max iterations', async () => {
+    const { sessionId } = await seedLiftAndSession()
+    await db.sets.bulkAdd([
+      { sessionId, type: 'warmup', setNumber: 1, weight: 50,  reps: 5, isAmrap: false },
+      { sessionId, type: 'main',   setNumber: 1, weight: 100, reps: 5, isAmrap: false },
+      { sessionId, type: 'fsl',    setNumber: 1, weight: 65,  reps: 10, isAmrap: false },
+      { sessionId, type: 'joker',  setNumber: 1, weight: 110, reps: 3, isAmrap: false },
+    ])
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('"warmup"')
+    expect(csv).toContain('"main"')
+    expect(csv).toContain('"fsl"')
+    expect(csv).toContain('"joker"')
+  })
+
+  it('P5: session with no sets emits one row with empty fields — BVA: 0-iter inner loop', async () => {
+    await seedLiftAndSession()
+    // no sets added
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    const lines = csv.split('\n').filter(Boolean)
+    expect(lines).toHaveLength(2) // header + 1 data row
+    expect(lines[1]).toContain('"OHP"')
+    expect(lines[1]).toContain('""') // empty type field
+  })
+
+  it('P6: escapes double-quotes in session notes', async () => {
+    const { sessionId } = await seedLiftAndSession({ notes: 'PR "attempt"' })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('"PR ""attempt"""')
+  })
+
+  it('P7: maps liftId to lift name — liftMap lookup', async () => {
+    const { sessionId } = await seedLiftAndSession()
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('"OHP"')
+  })
+
+  it('P8: empty DB produces only header row — BVA: 0-iter outer loop', async () => { // no lifts or sessions
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    const lines = csv.split('\n').filter(Boolean)
+    expect(lines).toHaveLength(1)
+  })
+})
+
+// V(G)=2 (file.text → JSON.parse); paths P1..P3
+describe('importJson', () => {
+  it('P1: parses valid JSON File and populates DB via importFromRawData', async () => {
+    const data = {
+      lifts: [{ id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
+      trainingMaxes: [], accessoryTrainingMaxes: [], cycles: [], sessions: [],
+      sets: [], exercises: [], liftAccessories: [], accessorySets: [], settings: [],
+    }
+    const file = new File([JSON.stringify(data)], 'export.json', { type: 'application/json' })
+
+    await importJson(file)
+
+    const lifts = await db.lifts.toArray()
+    expect(lifts).toHaveLength(1)
+    expect(lifts[0].name).toBe('OHP')
+  })
+
+  it('P2: round-trip — exportJson localStorage fallback → importJson restores DB', async () => {
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => { throw new Error('not implemented') }, revokeObjectURL: () => {} })
+    await db.lifts.add({ name: 'Bench', order: 3, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await exportJson()
+    const { content } = JSON.parse(localStorage.getItem('pending-export')!) as { content: string }
+
+    await db.delete()
+    await db.open()
+    vi.unstubAllGlobals()
+
+    const file = new File([content], 'export.json', { type: 'application/json' })
+    await importJson(file)
+
+    const lifts = await db.lifts.toArray()
+    expect(lifts[0].name).toBe('Bench')
+  })
+
+  it('P3: throws on invalid JSON — SyntaxError propagates', async () => {
+    const file = new File(['not json {{{'], 'bad.json', { type: 'application/json' })
+
+    await expect(importJson(file)).rejects.toThrow(SyntaxError)
+  })
+})
+
+// V(G)=3 (has-pending × is-valid-json); paths P1..P4
+describe('retryPendingExport', () => {
+  let capturedBlob: Blob | undefined
+
+  beforeEach(() => {
+    capturedBlob = undefined
+    localStorage.clear()
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn((b: Blob) => { capturedBlob = b; return 'mock-url' }),
+      revokeObjectURL: vi.fn(),
+    })
+  })
+
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('P1: does nothing when no pending export — FF branch', async () => {
+    await retryPendingExport()
+
+    expect(capturedBlob).toBeUndefined()
+    expect(localStorage.getItem('pending-export')).toBeNull()
+  })
+
+  it('P2: triggers download and removes localStorage entry for valid pending export — TT branch', async () => {
+    localStorage.setItem('pending-export', JSON.stringify({ content: '{"data":1}', filename: 'export.json' }))
+
+    await retryPendingExport()
+
+    expect(capturedBlob).toBeDefined()
+    const text = await capturedBlob!.text()
+    expect(text).toBe('{"data":1}')
+    expect(localStorage.getItem('pending-export')).toBeNull()
+  })
+
+  it('P3: clears corrupt JSON entry silently — catch block', async () => {
+    localStorage.setItem('pending-export', 'NOT VALID JSON {{{')
+
+    await retryPendingExport()
+
+    expect(capturedBlob).toBeUndefined()
+    expect(localStorage.getItem('pending-export')).toBeNull()
+  })
+
+  it('P4: clears entry with missing filename field — partial valid JSON falls into catch', async () => {
+    // triggerDownload will throw if filename is not a string (a.download = undefined)
+    // but JSON.parse succeeds, so the try body runs but download may behave oddly.
+    // The key invariant: the key must be removed regardless.
+    localStorage.setItem('pending-export', JSON.stringify({ content: 'hello' })) // no filename
+
+    await retryPendingExport()
+
+    // download attempted (blob captured) and key removed
+    expect(localStorage.getItem('pending-export')).toBeNull()
   })
 })

@@ -18,6 +18,13 @@ export default defineConfig(() => {
       // In tests, redirect db-v2 (SQLite) to Dexie db so existing tests keep working
       { find: /.*\/db\/db-v2$/, replacement: path.resolve(__dirname, 'src/db/db.ts') },
     ],
+    coverage: {
+      provider: 'v8' as const,
+      reporter: ['text', 'html', 'lcov'],
+      include: ['src/lib/**/*.ts', 'src-solid/screens/**/*.tsx', 'src-solid/store/**/*.ts'],
+      exclude: ['**/*.test.*', '**/db-v2.ts', '**/seed.ts'],
+      thresholds: { statements: 80, branches: 80, functions: 80, lines: 80 },
+    },
   },
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm'],
