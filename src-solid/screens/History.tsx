@@ -1,6 +1,5 @@
 import { createSignal, createEffect, For, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { createVirtualizer } from '@tanstack/solid-virtual'
 import { db } from '../../src/db/db-v2'
 import type { Session, Lift } from '../../src/db/db-v2'
 import { estimated1RM } from '../../src/lib/calc'
@@ -122,7 +121,6 @@ export default function History() {
   const [tmHistory, setTmHistory] = createSignal<{ date: string; weight: number }[]>([])
   const [expanded, setExpanded] = createSignal<number | null>(null)
   const [detail, setDetail] = createSignal<Detail | null>(null)
-  let scrollEl!: HTMLDivElement
 
   createEffect(() => { void load() })
 
@@ -182,13 +180,6 @@ export default function History() {
     setDetail({ sets, accessorySets: accSets, notes: session?.notes ?? null })
   }
 
-  const virtualizer = createVirtualizer({
-    get count() { return sessions().length },
-    getScrollElement: () => scrollEl,
-    estimateSize: () => 40,
-    overscan: 5,
-  })
-
   return (
     <div class="p-4 font-mono">
       <div class="flex gap-0 mb-4 border border-border">
@@ -234,25 +225,17 @@ export default function History() {
         when={sessions().length > 0}
         fallback={<div class="text-muted text-sm">No completed sessions yet.</div>}
       >
-        <div ref={el => (scrollEl = el)} class="overflow-auto max-h-[60vh]">
-          <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
-            <For each={virtualizer.getVirtualItems()}>
-              {vItem => (
-                <div
-                  data-index={vItem.index}
-                  ref={el => virtualizer.measureElement(el)}
-                  style={{ position: 'absolute', top: '0', left: '0', width: '100%', transform: `translateY(${vItem.start}px)` }}
-                >
-                  <HistorySessionRow
-                    row={sessions()[vItem.index]}
-                    onExpand={handleExpand}
-                    expanded={expanded() === sessions()[vItem.index].session.id}
-                    detail={expanded() === sessions()[vItem.index].session.id ? detail() : null}
-                  />
-                </div>
-              )}
-            </For>
-          </div>
+        <div class="overflow-auto max-h-[60vh]">
+          <For each={sessions()}>
+            {row => (
+              <HistorySessionRow
+                row={row}
+                onExpand={handleExpand}
+                expanded={expanded() === row.session.id}
+                detail={expanded() === row.session.id ? detail() : null}
+              />
+            )}
+          </For>
         </div>
       </Show>
     </div>
