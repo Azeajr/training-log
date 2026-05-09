@@ -3,6 +3,7 @@ import { db } from '../../src/db/db-v2'
 import type { Lift, Exercise, LiftAccessory } from '../../src/db/db-v2'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../../src/lib/exportImport'
+import { showToast } from '../store/toastStore'
 import { calcMainSets } from '../../src/lib/calc'
 import Rule from '../components/Rule'
 import Stepper from '../components/Stepper'
@@ -110,6 +111,7 @@ export default function Settings() {
       setPendingFile(null)
       await loadSettings()
       load()
+      showToast('Import complete')
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed')
     }
@@ -308,10 +310,11 @@ export default function Settings() {
                       <button onClick={() => { setArchiveConfirm(ex.id!); setEditingEx(null) }} class="text-muted text-xs hover:text-danger">archive</button>
                     </>
                   }>
-                    <>
-                      <button onClick={() => handleArchiveExercise(ex.id!)} class="border border-danger text-danger px-2 py-1 text-lg sm:text-xl font-mono">ARCHIVE</button>
-                      <button onClick={() => setArchiveConfirm(null)} class="text-muted text-lg sm:text-xl">cancel</button>
-                    </>
+                    <div class="flex items-center gap-2">
+                      <span class="text-danger text-xs">archive?</span>
+                      <button onClick={() => handleArchiveExercise(ex.id!)} class="text-danger text-xs font-mono border border-danger px-1">yes</button>
+                      <button onClick={() => setArchiveConfirm(null)} class="text-muted text-xs font-mono">no</button>
+                    </div>
                   </Show>
                 </div>
               </div>
@@ -444,18 +447,18 @@ export default function Settings() {
             <Show when={importError()}>
               <div class="text-danger text-xs mb-3">{importError()}</div>
             </Show>
-            <div class="flex gap-3">
+            <div class="flex items-center gap-2 mt-2">
               <button
                 onClick={handleImportConfirmed}
-                class="border border-warn text-warn px-4 py-2 text-xs uppercase tracking-widest hover:bg-warn hover:text-zinc-900"
+                class="text-danger text-xs font-mono border border-danger px-1"
               >
-                CONFIRM IMPORT
+                yes
               </button>
               <button
                 onClick={() => { setImportConfirm(false); setPendingFile(null); setImportError(null) }}
-                class="text-muted text-xs hover:text-text"
+                class="text-muted text-xs font-mono"
               >
-                cancel
+                no
               </button>
             </div>
           </div>

@@ -83,4 +83,54 @@ describe('Settings', () => {
     fireEvent.change(fileInput)
     expect(await screen.findByText(/OVERWRITE ALL DATA/i)).toBeInTheDocument()
   })
+
+  it('IMPORT JSON no button dismisses confirm without importing', async () => {
+    render(() => <Settings />)
+    await screen.findByRole('button', { name: /IMPORT JSON/i })
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]')!
+    const file = new File(['{"lifts":[]}'], 'backup.json', { type: 'application/json' })
+    Object.defineProperty(fileInput, 'files', { value: [file], writable: false })
+    fireEvent.change(fileInput)
+    await screen.findByText(/OVERWRITE ALL DATA/i)
+    fireEvent.click(screen.getByRole('button', { name: /^no$/i }))
+    await waitFor(() => expect(screen.queryByText(/OVERWRITE ALL DATA/i)).toBeNull())
+  })
+
+  describe('archive exercise confirm', () => {
+    beforeEach(async () => {
+      await db.exercises.add({ name: 'Curl', type: 'reps' } as never)
+    })
+
+    it('clicking archive shows inline archive? confirm', async () => {
+      render(() => <Settings />)
+      const archiveBtn = await screen.findByRole('button', { name: /^archive$/i })
+      fireEvent.click(archiveBtn)
+      expect(await screen.findByText(/archive\?/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^yes$/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^no$/i })).toBeInTheDocument()
+    })
+
+    it('no dismisses confirm without archiving', async () => {
+      render(() => <Settings />)
+      const archiveBtn = await screen.findByRole('button', { name: /^archive$/i })
+      fireEvent.click(archiveBtn)
+      await screen.findByText(/archive\?/i)
+      fireEvent.click(screen.getByRole('button', { name: /^no$/i }))
+      await waitFor(() => expect(screen.queryByText(/archive\?/i)).toBeNull())
+      const ex = await db.exercises.get(1)
+      expect(ex?.archived).toBeFalsy()
+    })
+
+    it('yes archives the exercise', async () => {
+      render(() => <Settings />)
+      const archiveBtn = await screen.findByRole('button', { name: /^archive$/i })
+      fireEvent.click(archiveBtn)
+      await screen.findByText(/archive\?/i)
+      fireEvent.click(screen.getByRole('button', { name: /^yes$/i }))
+      await waitFor(async () => {
+        const ex = await db.exercises.get(1)
+        expect(ex?.archived).toBe(true)
+      })
+    })
+  })
 })

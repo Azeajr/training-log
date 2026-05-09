@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@solidjs/testing-library'
 import Stepper from './Stepper'
 
@@ -95,5 +95,83 @@ describe('Stepper', () => {
     fireEvent.input(input, { target: { value: '999' } })
     fireEvent.blur(input)
     expect(calls[0]).toBe(10)
+  })
+
+  describe('long-press', () => {
+    afterEach(() => vi.useRealTimers())
+
+    it('fires onChange repeatedly while holding + button', () => {
+      vi.useFakeTimers()
+      const calls: number[] = []
+      render(() => <Stepper value={10} onChange={v => calls.push(v)} step={5} min={0} />)
+      const plusBtn = screen.getByText('+').closest('button')!
+      fireEvent.pointerDown(plusBtn)
+      vi.advanceTimersByTime(400) // triggers long-press start
+      vi.advanceTimersByTime(160) // 2 interval ticks at 80ms each
+      fireEvent.pointerUp(plusBtn)
+      expect(calls.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('fires onChange repeatedly while holding − button', () => {
+      vi.useFakeTimers()
+      const calls: number[] = []
+      render(() => <Stepper value={100} onChange={v => calls.push(v)} step={5} min={0} />)
+      const minusBtn = screen.getByText('−').closest('button')!
+      fireEvent.pointerDown(minusBtn)
+      vi.advanceTimersByTime(400)
+      vi.advanceTimersByTime(160)
+      fireEvent.pointerUp(minusBtn)
+      expect(calls.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('stops firing after pointerUp', () => {
+      vi.useFakeTimers()
+      const calls: number[] = []
+      render(() => <Stepper value={10} onChange={v => calls.push(v)} step={5} min={0} />)
+      const plusBtn = screen.getByText('+').closest('button')!
+      fireEvent.pointerDown(plusBtn)
+      vi.advanceTimersByTime(480)
+      fireEvent.pointerUp(plusBtn)
+      const countAfterUp = calls.length
+      vi.advanceTimersByTime(200) // interval should be cleared
+      expect(calls.length).toBe(countAfterUp)
+    })
+
+    it('stops firing after pointerLeave', () => {
+      vi.useFakeTimers()
+      const calls: number[] = []
+      render(() => <Stepper value={10} onChange={v => calls.push(v)} step={5} min={0} />)
+      const plusBtn = screen.getByText('+').closest('button')!
+      fireEvent.pointerDown(plusBtn)
+      vi.advanceTimersByTime(480)
+      fireEvent.pointerLeave(plusBtn)
+      const countAfterLeave = calls.length
+      vi.advanceTimersByTime(200)
+      expect(calls.length).toBe(countAfterLeave)
+    })
+
+    it('suppresses the click onChange that fires natively after a long-press', () => {
+      vi.useFakeTimers()
+      const calls: number[] = []
+      render(() => <Stepper value={10} onChange={v => calls.push(v)} step={5} min={0} />)
+      const plusBtn = screen.getByText('+').closest('button')!
+      fireEvent.pointerDown(plusBtn)
+      vi.advanceTimersByTime(480) // long-press active + 1 tick
+      fireEvent.pointerUp(plusBtn)
+      const countAfterUp = calls.length
+      fireEvent.click(plusBtn) // native click fires after pointerUp — should be suppressed
+      expect(calls.length).toBe(countAfterUp)
+    })
+
+    it('does not activate long-press before threshold', () => {
+      vi.useFakeTimers()
+      const calls: number[] = []
+      render(() => <Stepper value={10} onChange={v => calls.push(v)} step={5} min={0} />)
+      const plusBtn = screen.getByText('+').closest('button')!
+      fireEvent.pointerDown(plusBtn)
+      vi.advanceTimersByTime(300) // below 400ms threshold
+      fireEvent.pointerUp(plusBtn)
+      expect(calls.length).toBe(0) // only click would fire, not long-press
+    })
   })
 })

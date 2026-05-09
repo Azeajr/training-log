@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js'
+import { createSignal, Show, onCleanup } from 'solid-js'
 
 interface Props {
   value: number
@@ -19,6 +19,28 @@ export default function Stepper(props: Props) {
   const [editing, setEditing] = createSignal(false)
   const [raw, setRaw] = createSignal('')
 
+  let pressTimer: ReturnType<typeof setTimeout> | null = null
+  let pressInterval: ReturnType<typeof setInterval> | null = null
+  let longPressActive = false
+
+  const clearPress = () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
+    if (pressInterval) { clearInterval(pressInterval); pressInterval = null }
+  }
+
+  onCleanup(clearPress)
+
+  const startPress = (delta: number) => {
+    longPressActive = false
+    pressTimer = setTimeout(() => {
+      longPressActive = true
+      pressInterval = setInterval(() => {
+        const next = Math.min(max(), Math.max(min(), safeAdd(props.value, delta)))
+        props.onChange(next)
+      }, 80)
+    }, 400)
+  }
+
   const commit = () => {
     const n = parseFloat(raw())
     if (!isNaN(n)) props.onChange(Math.min(max(), Math.max(min(), n)))
@@ -29,7 +51,10 @@ export default function Stepper(props: Props) {
     <div class="flex items-center font-mono">
       <button
         type="button"
-        onClick={() => props.onChange(safeAdd(props.value, -step()))}
+        onClick={() => { if (longPressActive) { longPressActive = false; return } props.onChange(safeAdd(props.value, -step())) }}
+        onPointerDown={() => startPress(-step())}
+        onPointerUp={clearPress}
+        onPointerLeave={clearPress}
         disabled={props.value <= min()}
         class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30"
       >
@@ -59,7 +84,10 @@ export default function Stepper(props: Props) {
       </Show>
       <button
         type="button"
-        onClick={() => props.onChange(safeAdd(props.value, step()))}
+        onClick={() => { if (longPressActive) { longPressActive = false; return } props.onChange(safeAdd(props.value, step())) }}
+        onPointerDown={() => startPress(step())}
+        onPointerUp={clearPress}
+        onPointerLeave={clearPress}
         disabled={props.value >= max()}
         class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30"
       >

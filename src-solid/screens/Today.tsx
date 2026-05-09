@@ -181,34 +181,26 @@ export default function Today() {
               >
                 START WORKOUT
               </button>
+              <Show when={showAbandonConfirm()}>
+                <div class="flex items-center gap-2 mt-3">
+                  <span class="text-warn text-xs">abandon {activeLiftName()} session?</span>
+                  <button
+                    onClick={handleAbandonAndStart}
+                    class="text-danger text-xs font-mono border border-danger px-1"
+                  >
+                    yes
+                  </button>
+                  <button
+                    onClick={() => setShowAbandonConfirm(false)}
+                    class="text-muted text-xs font-mono"
+                  >
+                    no
+                  </button>
+                </div>
+              </Show>
             </Show>
           </div>
         </div>
-
-        <Show when={showAbandonConfirm()}>
-          <div class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div class="bg-surface border border-border p-6 font-mono max-w-sm w-full">
-              <div class="text-text uppercase tracking-widest text-sm mb-2">ABANDON SESSION?</div>
-              <div class="text-muted text-xs mb-6">
-                Your {activeLiftName()} session is unfinished. Starting a new lift will discard it.
-              </div>
-              <div class="flex gap-3">
-                <button
-                  onClick={handleAbandonAndStart}
-                  class="flex-1 border border-danger text-danger py-3 text-xs tracking-widest font-mono"
-                >
-                  ABANDON
-                </button>
-                <button
-                  onClick={() => setShowAbandonConfirm(false)}
-                  class="flex-1 border border-border text-muted py-3 text-xs tracking-widest font-mono"
-                >
-                  CANCEL
-                </button>
-              </div>
-            </div>
-          </div>
-        </Show>
       </div>
     </Show>
   )

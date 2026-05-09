@@ -299,13 +299,15 @@ export default function HistoryEdit() {
               {(acc, ai) => (
                 <div class="border border-border p-3 mb-3">
                   <div class="flex items-center justify-between mb-2">
-                    <button
-                      onClick={() => setShowPicker(ai())}
-                      class="text-text text-sm uppercase tracking-widest hover:text-accent"
-                    >
-                      {acc.exerciseName}
-                      <span class="text-muted text-xs ml-2 normal-case tracking-normal">tap to swap</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                      <span class="text-text text-sm uppercase tracking-widest">{acc.exerciseName}</span>
+                      <button
+                        onClick={() => setShowPicker(ai())}
+                        class="text-muted text-xs hover:text-accent"
+                      >
+                        swap
+                      </button>
+                    </div>
                     <button
                       onClick={() => deleteAccessory(ai())}
                       class="text-muted hover:text-danger text-xs font-mono px-1"

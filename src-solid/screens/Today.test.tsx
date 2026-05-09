@@ -55,7 +55,7 @@ describe('Today', () => {
     // click START WORKOUT — OHP is active but Squat is selected
     const startBtn = screen.getByRole('button', { name: /START WORKOUT/i })
     fireEvent.click(startBtn)
-    expect(await screen.findByText(/ABANDON SESSION\?/i)).toBeInTheDocument()
+    expect(await screen.findByText(/abandon.*session\?/i)).toBeInTheDocument()
   })
 
   it('CANCEL closes the abandon confirm modal', async () => {
@@ -64,10 +64,10 @@ describe('Today', () => {
     const squatBtn = await screen.findByRole('button', { name: /Squat/i })
     fireEvent.click(squatBtn)
     fireEvent.click(screen.getByRole('button', { name: /START WORKOUT/i }))
-    await screen.findByText(/ABANDON SESSION\?/i)
-    fireEvent.click(screen.getByRole('button', { name: /^CANCEL$/i }))
+    await screen.findByText(/abandon.*session\?/i)
+    fireEvent.click(screen.getByRole('button', { name: /^no$/i }))
     await waitFor(() => {
-      expect(screen.queryByText(/ABANDON SESSION\?/i)).toBeNull()
+      expect(screen.queryByText(/abandon.*session\?/i)).toBeNull()
     })
   })
 

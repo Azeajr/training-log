@@ -1,6 +1,7 @@
 import { Router, Route, useNavigate, useLocation } from '@solidjs/router'
 import { lazy, Suspense, Show, onMount, type ParentProps } from 'solid-js'
 import BottomNav from './components/BottomNav'
+import Toast from './components/Toast'
 import { db } from '../src/db/db-v2'
 
 const ScreenFallback = () => (
@@ -41,6 +42,7 @@ function AppShell(props: ParentProps) {
         </Suspense>
       </main>
       <Show when={location.pathname !== '/setup'}>
+        <Toast />
         <BottomNav />
       </Show>
     </div>
