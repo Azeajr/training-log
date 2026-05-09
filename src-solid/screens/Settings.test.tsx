@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@solidjs/testing-library'
 import { db } from '../../src/db/db'
 import Settings from './Settings'
@@ -6,6 +6,12 @@ import Settings from './Settings'
 beforeEach(async () => {
   await db.delete()
   await db.open()
+})
+
+afterEach(async () => {
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 0))
+  }
 })
 
 describe('Settings', () => {

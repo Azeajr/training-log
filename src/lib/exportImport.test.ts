@@ -177,7 +177,7 @@ describe('exportCsv', () => {
 
     const csv = await capturedBlob!.text()
     const header = csv.split('\n')[0]
-    expect(header).toBe('"date","lift","week","type","set_number","weight_lb","reps","is_amrap","session_notes"')
+    expect(header).toBe('"date","lift","week","type","set_number","weight_lb","reps","is_amrap","session_notes","exercise_name"')
   })
 
   it('P2: only includes completed sessions — TF branch (pending excluded)', async () => {
