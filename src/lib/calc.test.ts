@@ -91,10 +91,26 @@ describe('calcWarmup', () => {
     expect(last.reps).toBe(3)
     expect(last.weight).toBeLessThan(130)
   })
-  it('upper body base >= working weight returns bar only', () => {
+  it('upper body WW below 95 still gets intermediate step', () => {
+    // TM=200 → increment=20; WW=90 → effectiveBase=70
     const sets = calcWarmup(200, 90, 'upper', 5)
-    expect(sets).toHaveLength(1)
-    expect(sets[0].weight).toBe(45)
+    expect(sets).toHaveLength(2)
+    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
+    expect(sets[1]).toMatchObject({ weight: 70, reps: 3 })
+  })
+  it('upper body WW exactly 95 (base) gets intermediate step', () => {
+    // TM=200 → increment=20; WW=95 → effectiveBase=75
+    const sets = calcWarmup(200, 95, 'upper', 5)
+    expect(sets).toHaveLength(2)
+    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
+    expect(sets[1]).toMatchObject({ weight: 75, reps: 3 })
+  })
+  it('upper body WW just above bar produces single intermediate when increment covers gap', () => {
+    // TM=100 → increment=10; WW=65 → effectiveBase=55
+    const sets = calcWarmup(100, 65, 'upper', 5)
+    expect(sets).toHaveLength(2)
+    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
+    expect(sets[1]).toMatchObject({ weight: 55, reps: 3 })
   })
   it('lower body working weight below 135 base gets intermediate steps', () => {
     // Deadlift first set 125lb (TM≈190): base=135 > workingWeight=125, still needs warmup

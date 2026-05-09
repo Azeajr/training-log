@@ -1,7 +1,7 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../../src/db/db-v2'
 import type { Lift, Exercise, LiftAccessory } from '../../src/db/db-v2'
-import { settings, updateSettings, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
+import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../../src/lib/exportImport'
 import { calcMainSets } from '../../src/lib/calc'
 import Rule from '../components/Rule'
@@ -108,6 +108,7 @@ export default function Settings() {
       await importJson(file)
       setImportConfirm(false)
       setPendingFile(null)
+      await loadSettings()
       load()
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed')

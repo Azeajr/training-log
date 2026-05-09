@@ -141,8 +141,6 @@ export const calcWarmup = (
     { setNumber: 1, weight: BAR_WEIGHT, reps: 10, type: 'warmup' }
   ]
 
-  if (liftType === 'upper' && base >= workingWeight) return sets
-
   const effectiveBase = base < workingWeight
     ? base
     : roundToNearest5(workingWeight - increment)

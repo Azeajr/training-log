@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { db } from '../db/db'
-import { importFromRawData } from './exportImport'
+import { importFromRawData, exportJson } from './exportImport'
 
 beforeEach(async () => {
   await db.delete()
@@ -70,6 +70,20 @@ describe('importFromRawData', () => {
     }
   })
 
+  it('restores custom barWeight and plates from settings', async () => {
+    const plates = [{ weight: 45, count: 6 }, { weight: 25, count: 4 }]
+    await importFromRawData({
+      lifts: [], trainingMaxes: [], accessoryTrainingMaxes: [],
+      cycles: [], sessions: [], sets: [], exercises: [],
+      liftAccessories: [], accessorySets: [],
+      settings: [{ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, barWeight: 35, plates }],
+    })
+
+    const [row] = await db.settings.toArray()
+    expect(row.barWeight).toBe(35)
+    expect(row.plates).toEqual(plates)
+  })
+
   it('replaces all existing data on import', async () => {
     await db.lifts.bulkAdd([
       { id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
@@ -84,5 +98,48 @@ describe('importFromRawData', () => {
     })
 
     expect(await db.trainingMaxes.count()).toBe(0)
+  })
+})
+
+describe('exportJson', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    // jsdom doesn't implement URL.createObjectURL — force the localStorage fallback
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => { throw new Error('not implemented') }, revokeObjectURL: () => {} })
+  })
+
+  it('includes barWeight and plates in exported settings', async () => {
+    const plates = [{ weight: 45, count: 4 }, { weight: 25, count: 4 }]
+    await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, barWeight: 35, plates })
+
+    await exportJson()
+
+    const pending = localStorage.getItem('pending-export')
+    expect(pending).not.toBeNull()
+    const { content } = JSON.parse(pending!) as { content: string }
+    const data = JSON.parse(content)
+    expect(data.settings).toHaveLength(1)
+    expect(data.settings[0].barWeight).toBe(35)
+    expect(data.settings[0].plates).toEqual(plates)
+  })
+
+  it('round-trip preserves custom plate configuration', async () => {
+    const plates = [{ weight: 45, count: 6 }, { weight: 10, count: 2 }]
+    await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, barWeight: 55, plates })
+
+    await exportJson()
+
+    const { content } = JSON.parse(localStorage.getItem('pending-export')!) as { content: string }
+    const exported = JSON.parse(content)
+
+    await db.delete()
+    await db.open()
+    localStorage.clear()
+
+    await importFromRawData(exported)
+
+    const [row] = await db.settings.toArray()
+    expect(row.barWeight).toBe(55)
+    expect(row.plates).toEqual(plates)
   })
 })
