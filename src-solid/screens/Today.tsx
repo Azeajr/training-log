@@ -58,7 +58,7 @@ export default function Today() {
     setSelectedLiftId(liftId)
     const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
     const latest = tms[tms.length - 1]
-    if (latest) setTm(latest.weight)
+    setTm(latest?.weight ?? 0)
     const lift = lifts().find(l => l.id === liftId)
     if (lift) setLiftType(lift.liftType)
   }
@@ -165,10 +165,19 @@ export default function Today() {
           <div>
             <Show when={selectedLift()}>
               <Rule label={`${selectedLift()!.name} . TODAY`} class="text-muted mb-4" />
-              <SessionPreview warmup={warmup()} main={main()} fsl={fsl()} />
+              <Show when={tm() === 0}>
+                <p class="text-warn text-xs uppercase tracking-widest mb-4">
+                  No training max set for {selectedLift()!.name} —{' '}
+                  <A href="/settings" class="underline">add one in Settings</A> before starting.
+                </p>
+              </Show>
+              <Show when={tm() > 0}>
+                <SessionPreview warmup={warmup()} main={main()} fsl={fsl()} />
+              </Show>
               <button
                 onClick={handleStart}
-                class="mt-6 border border-accent text-accent px-6 py-4 font-mono w-full tracking-widest text-sm"
+                disabled={tm() === 0}
+                class="mt-6 border border-accent text-accent px-6 py-4 font-mono w-full tracking-widest text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 START WORKOUT
               </button>
