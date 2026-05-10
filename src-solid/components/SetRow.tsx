@@ -31,7 +31,7 @@ export default function SetRow(props: Props) {
   const isAmrap = () => props.set.isAmrap ?? false
 
   createEffect(() => {
-    if (props.isActive) rowEl?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (props.isActive) rowEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   })
 
   createEffect(() => {

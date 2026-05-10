@@ -35,7 +35,7 @@ export default function AccessoryPicker(props: Props) {
     const result: PickerRow[] = []
     for (const la of accessories.sort((a, b) => a.order - b.order)) {
       const ex = exercises.find(e => e.id === la.exerciseId)
-      if (!ex) continue
+      if (!ex || ex.archived) continue
       const tms = await db.accessoryTrainingMaxes.where('exerciseId').equals(ex.id!).sortBy('setAt')
       const latest = tms[tms.length - 1] ?? null
       result.push({
@@ -88,7 +88,7 @@ export default function AccessoryPicker(props: Props) {
     <Show
       when={settingTm()}
       fallback={
-        <div class="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
+        <div class="fixed inset-0 bg-bg z-50 px-4 pb-4 overflow-y-auto" style={{ 'padding-top': 'max(1rem, env(safe-area-inset-top, 0px))' }}>
           <div class="flex items-center justify-between mb-4">
             <Rule label="SELECT ASSISTANCE EXERCISE" class="text-muted" />
             <button onClick={props.onClose} class="text-muted hover:text-text font-mono">✕</button>
@@ -117,7 +117,7 @@ export default function AccessoryPicker(props: Props) {
       }
     >
       {ex => (
-        <div class="fixed inset-0 bg-bg z-50 p-4">
+        <div class="fixed inset-0 bg-bg z-50 px-4 pb-4" style={{ 'padding-top': 'max(1rem, env(safe-area-inset-top, 0px))' }}>
           <Rule label="SET TRAINING MAX" class="text-muted mb-4" />
           <div class="text-text mb-6 uppercase tracking-widest">{ex().name}</div>
           <div class="space-y-5">

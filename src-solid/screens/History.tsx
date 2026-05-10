@@ -6,6 +6,8 @@ import { estimated1RM } from '../../src/lib/calc'
 
 type ViewMode = 'lift' | 'date'
 
+const HISTORY_LIFT_KEY = 'history-lift'
+
 interface SessionRow {
   session: Session
   liftName: string
@@ -78,7 +80,7 @@ function HistorySessionRow(props: {
                 EDIT →
               </button>
             </div>
-            <For each={['warmup', 'main', 'fsl', 'joker'] as const}>
+            <For each={['warmup', 'main', 'joker', 'fsl'] as const}>
               {type => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const typeSets = detail().sets.filter((s: any) => s.type === type)
@@ -118,8 +120,11 @@ export default function History() {
   const [mode, setMode] = createSignal<ViewMode>('lift')
   const [lifts, setLifts] = createSignal<Lift[]>([])
   const rawLiftId = searchParams.liftId
+  const storedLiftId = localStorage.getItem(HISTORY_LIFT_KEY)
   const [selectedLiftId, setSelectedLiftId] = createSignal<number | null>(
-    rawLiftId ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId) : null
+    rawLiftId
+      ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId)
+      : storedLiftId ? parseInt(storedLiftId, 10) : null
   )
   const [sessions, setSessions] = createSignal<SessionRow[]>([])
   const [tmHistory, setTmHistory] = createSignal<{ date: string; weight: number }[]>([])
@@ -206,7 +211,7 @@ export default function History() {
           <For each={lifts()}>
             {l => (
               <button
-                onClick={() => setSelectedLiftId(l.id!)}
+                onClick={() => { setSelectedLiftId(l.id!); localStorage.setItem(HISTORY_LIFT_KEY, String(l.id!)) }}
                 class={`flex-1 border py-1 text-xs uppercase tracking-widest ${
                   selectedLiftId() === l.id
                     ? 'border-accent text-accent'

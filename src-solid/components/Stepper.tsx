@@ -56,7 +56,7 @@ export default function Stepper(props: Props) {
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
         disabled={props.value <= min()}
-        class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30"
+        class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30 select-none touch-manipulation"
       >
         −
       </button>
@@ -89,7 +89,7 @@ export default function Stepper(props: Props) {
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
         disabled={props.value >= max()}
-        class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30"
+        class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30 select-none touch-manipulation"
       >
         +
       </button>
