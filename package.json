@@ -21,7 +21,6 @@
     "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/solid-virtual": "^3.13.24",
-    "dexie": "^4.4.2",
     "solid-js": "^1.9.12",
     "tailwindcss": "^4.2.4"
   },
@@ -29,6 +28,7 @@
     "serialize-javascript": ">=7.0.5"
   },
   "devDependencies": {
+    "dexie": "^4.4.2",
     "@eslint/js": "^10.0.1",
     "@solidjs/testing-library": "^0.8.10",
     "@stryker-mutator/core": "^9.6.1",

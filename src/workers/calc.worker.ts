@@ -4,7 +4,7 @@ import {
   calcAmrapTargets,
   estimated1RM,
 } from '../lib/calc'
-import type { PlateConfig } from '../db/db-v2'
+import type { PlateConfig } from '../types/domain'
 
 type CalcMessage =
   | { id: number; fn: 'calcWarmup'; args: Parameters<typeof calcWarmup> }

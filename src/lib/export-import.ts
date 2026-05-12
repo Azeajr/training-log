@@ -1,4 +1,4 @@
-import { db } from '../db/index'
+import type { TrainingDB } from './types'
 import type {
   Lift, TrainingMax, AccessoryTrainingMax, Cycle, Session,
   Set, Exercise, LiftAccessory, AccessorySet, Settings,
@@ -14,12 +14,11 @@ export async function retryPendingExport(): Promise<void> {
     triggerDownload(content, filename, 'application/json')
     localStorage.removeItem(PENDING_EXPORT_KEY)
   } catch {
-    // corrupt entry — clear it
     localStorage.removeItem(PENDING_EXPORT_KEY)
   }
 }
 
-export async function exportJson(): Promise<void> {
+export async function exportJson(db: TrainingDB): Promise<void> {
   const data = {
     exportedAt: new Date().toISOString(),
     version: 1,
@@ -43,14 +42,14 @@ export async function exportJson(): Promise<void> {
   }
 }
 
-export async function importJson(file: File): Promise<void> {
+export async function importJson(db: TrainingDB, file: File): Promise<void> {
   const text = await file.text()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await importFromRawData(JSON.parse(text) as Record<string, any[]>)
+  await importFromRawData(db, JSON.parse(text) as Record<string, any[]>)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function importFromRawData(d: Record<string, any[]>): Promise<void> {
+export async function importFromRawData(db: TrainingDB, d: Record<string, any[]>): Promise<void> {
   await db.transaction(
     'rw',
     [
@@ -85,8 +84,6 @@ export async function importFromRawData(d: Record<string, any[]>): Promise<void>
       if (d.settings?.length)
         await db.settings.bulkAdd(d.settings as Settings[])
 
-      // Only clear accessory tables when the key is present in the payload.
-      // Old-format backups lack these keys; clearing without re-populating would silently wipe data.
       if ('accessoryTrainingMaxes' in d) {
         await db.accessoryTrainingMaxes.clear()
         if (d.accessoryTrainingMaxes?.length)
@@ -101,7 +98,7 @@ export async function importFromRawData(d: Record<string, any[]>): Promise<void>
   )
 }
 
-export async function exportCsv(): Promise<void> {
+export async function exportCsv(db: TrainingDB): Promise<void> {
   const sessions = await db.sessions.toArray()
   const sets = await db.sets.toArray()
   const lifts = await db.lifts.toArray()
@@ -126,30 +123,15 @@ export async function exportCsv(): Promise<void> {
     } else {
       for (const s of sessionSets) {
         rows.push([
-          dateStr,
-          liftName,
-          String(session.week),
-          s.type,
-          String(s.setNumber),
-          String(s.weight),
-          String(s.reps),
-          s.isAmrap ? 'true' : 'false',
-          session.notes ?? '',
-          '',
+          dateStr, liftName, String(session.week), s.type, String(s.setNumber),
+          String(s.weight), String(s.reps), s.isAmrap ? 'true' : 'false', session.notes ?? '', '',
         ])
       }
       for (const a of sessionAccessorySets) {
         rows.push([
-          dateStr,
-          liftName,
-          String(session.week),
-          'accessory',
-          String(a.setNumber),
-          a.weight != null ? String(a.weight) : '',
-          a.reps != null ? String(a.reps) : '',
-          'false',
-          session.notes ?? '',
-          exerciseMap[a.exerciseId] ?? String(a.exerciseId),
+          dateStr, liftName, String(session.week), 'accessory', String(a.setNumber),
+          a.weight != null ? String(a.weight) : '', a.reps != null ? String(a.reps) : '',
+          'false', session.notes ?? '', exerciseMap[a.exerciseId] ?? String(a.exerciseId),
         ])
       }
     }

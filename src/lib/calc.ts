@@ -1,4 +1,4 @@
-import type { PlateConfig } from '../db/db'
+import type { PlateConfig } from '../types/domain'
 
 export const MAIN_PERCENTAGES = {
   1: [0.65, 0.75, 0.85],
