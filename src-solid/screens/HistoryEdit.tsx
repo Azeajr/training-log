@@ -379,8 +379,9 @@ export default function HistoryEdit() {
           <Show when={showPicker() !== null}>
             <div class="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
               <div class="flex items-center justify-between mb-4">
+                <button onClick={() => setShowPicker(null)} class="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
                 <Rule label="SELECT EXERCISE" class="text-muted" />
-                <button onClick={() => setShowPicker(null)} class="text-muted hover:text-text font-mono">✕</button>
+                <div class="w-14" />
               </div>
               <div class="space-y-1">
                 <For each={liftExercises()}>

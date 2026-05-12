@@ -2,6 +2,7 @@ import { createSignal, createEffect, Show } from 'solid-js'
 import type { Set } from '../../src/db/db'
 import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../../src/lib/calc'
+import { estimated1RM } from '../../src/lib/calc'
 import Stepper from './Stepper'
 import PlateDisplay from './PlateDisplay'
 
@@ -62,6 +63,11 @@ export default function SetRow(props: Props) {
                 <span class="text-xs tracking-widest">AMRAP</span>
               </Show>
               <span class="text-accent text-xs tracking-widest">done</span>
+              <Show when={props.loggedReps != null && props.loggedReps > 0}>
+                <span class="text-faint text-xs font-mono ml-auto">
+                  {estimated1RM(props.loggedWeight ?? props.set.weight, props.loggedReps!).toFixed(0)}lb e1RM
+                </span>
+              </Show>
               <Show when={props.onDelete && !deleteConfirm()}>
                 <button
                   onClick={e => { e.stopPropagation(); setDeleteConfirm(true) }}
@@ -117,6 +123,9 @@ export default function SetRow(props: Props) {
             <Show when={props.set.type === 'joker'}>
               <span class="text-xs text-faint tracking-widest">JOKER</span>
             </Show>
+            <span class="text-faint text-xs font-mono ml-auto">
+              {estimated1RM(props.set.weight, props.set.reps).toFixed(0)}lb e1RM
+            </span>
           </div>
         }
       >

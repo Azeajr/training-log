@@ -90,8 +90,9 @@ export default function AccessoryPicker(props: Props) {
       fallback={
         <div class="fixed inset-0 bg-bg z-50 px-4 pb-4 overflow-y-auto" style={{ 'padding-top': 'max(1rem, env(safe-area-inset-top, 0px))' }}>
           <div class="flex items-center justify-between mb-4">
+            <button onClick={props.onClose} class="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
             <Rule label="SELECT ASSISTANCE EXERCISE" class="text-muted" />
-            <button onClick={props.onClose} class="text-muted hover:text-text font-mono">✕</button>
+            <div class="w-14" />
           </div>
           <div class="space-y-1">
             <For each={rows()}>

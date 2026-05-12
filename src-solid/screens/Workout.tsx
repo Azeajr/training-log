@@ -181,7 +181,7 @@ export default function Workout() {
   const handleComplete = async () => {
     const session = workout.activeSession
     if (!session?.id) return
-    await db.sessions.update(session.id, { status: 'completed', notes: workout.notes })
+    await db.sessions.update(session.id, { status: 'completed', notes: workout.notes, date: new Date() })
     for (const acc of workout.activeAccessories) {
       for (const s of acc.loggedSets) {
         if (s.setNumber != null) {
@@ -360,6 +360,20 @@ export default function Workout() {
                     )
                   }}
                 </For>
+                <Show when={fslSets().length > 0 && workout.loggedSets.filter(s => s.type === 'fsl').length >= fslSets().length}>
+                  <button
+                    onClick={() => {
+                      const last = fslSets()[fslSets().length - 1]
+                      setAllSets(prev => [
+                        ...prev,
+                        { type: 'fsl' as const, setNumber: fslSets().length + 1, weight: last.weight, reps: last.reps },
+                      ])
+                    }}
+                    class="w-full border border-border text-muted py-2 font-mono text-xs tracking-widest hover:border-accent hover:text-accent mt-2"
+                  >
+                    + ADD FSL SET
+                  </button>
+                </Show>
               </div>
             </div>
 

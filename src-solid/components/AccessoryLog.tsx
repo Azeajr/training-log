@@ -22,7 +22,8 @@ interface Props {
 export default function AccessoryLog(props: Props) {
   const type = () => props.exercise?.type ?? 'reps'
   const nextSet = createMemo(() => props.accessory.loggedSets.length + 1)
-  const done = createMemo(() => props.accessory.loggedSets.length >= 5)
+  const [addingExtra, setAddingExtra] = createSignal(false)
+  const done = createMemo(() => props.accessory.loggedSets.length >= 5 && !addingExtra())
 
   const initWeight = () => {
     const last = props.accessory.loggedSets[props.accessory.loggedSets.length - 1]
@@ -187,10 +188,18 @@ export default function AccessoryLog(props: Props) {
           <Show when={type() === 'distance'}>
             <Stepper value={distance()} onChange={setDistance} step={1} min={0} />
           </Show>
-          <button onClick={handleLog} class="border border-accent text-accent px-3 py-1 font-mono text-xs">
+          <button onClick={() => { void handleLog(); setAddingExtra(false) }} class="border border-accent text-accent px-3 py-1 font-mono text-xs">
             LOG
           </button>
         </div>
+      </Show>
+      <Show when={props.accessory.loggedSets.length >= 5 && !addingExtra()}>
+        <button
+          onClick={() => setAddingExtra(true)}
+          class="w-full text-left pl-2 mt-1 text-faint text-xs font-mono hover:text-accent tracking-widest"
+        >
+          + ADD SET
+        </button>
       </Show>
     </div>
   )

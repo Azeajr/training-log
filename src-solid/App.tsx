@@ -31,7 +31,8 @@ function AppShell(props: ParentProps) {
   return (
     <div
       class="bg-bg min-h-screen font-mono text-text flex flex-col"
-      style={{ 'padding-top': 'env(safe-area-inset-top, 0px)' }}
+      style={{ 'padding-top': 'env(safe-area-inset-top, 0px)', 'user-select': 'none', '-webkit-user-select': 'none' }}
+      onContextMenu={e => e.preventDefault()}
     >
       <main
         class="flex-1 overflow-y-auto"

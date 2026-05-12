@@ -51,7 +51,7 @@ export default function Stepper(props: Props) {
     <div class="flex items-center font-mono">
       <button
         type="button"
-        onClick={() => { if (longPressActive) { longPressActive = false; return } props.onChange(safeAdd(props.value, -step())) }}
+        onClick={() => { if (longPressActive) { longPressActive = false; return } const v = Math.max(min(), safeAdd(props.value, -step())); props.onChange(v); if (editing()) setRaw(fmt(v)) }}
         onPointerDown={() => startPress(-step())}
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
@@ -84,7 +84,7 @@ export default function Stepper(props: Props) {
       </Show>
       <button
         type="button"
-        onClick={() => { if (longPressActive) { longPressActive = false; return } props.onChange(safeAdd(props.value, step())) }}
+        onClick={() => { if (longPressActive) { longPressActive = false; return } const v = Math.min(max(), safeAdd(props.value, step())); props.onChange(v); if (editing()) setRaw(fmt(v)) }}
         onPointerDown={() => startPress(step())}
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
