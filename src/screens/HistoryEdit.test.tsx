@@ -115,10 +115,10 @@ describe('HistoryEdit screen', () => {
     await userEvent.clear(textarea)
     await userEvent.type(textarea, 'New notes')
     await userEvent.click(screen.getByRole('button', { name: 'SAVE' }))
-    await waitFor(() => mockNavigate.mock.calls.length > 0)
-
-    const updated = await db.sessions.get(sessionId)
-    expect(updated?.notes).toBe('New notes')
+    await waitFor(async () => {
+      const updated = await db.sessions.get(sessionId)
+      expect(updated?.notes).toBe('New notes')
+    })
   })
 
   it('shows + ADD ACCESSORY button', async () => {
