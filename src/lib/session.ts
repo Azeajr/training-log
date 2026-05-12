@@ -152,6 +152,21 @@ export async function applyAccessoryTmProgression(database: TrainingDB = db, cyc
   }
 }
 
+export async function deloadTms(database: TrainingDB = db, pct = 0.10): Promise<void> {
+  const lifts = await database.lifts.toArray()
+  for (const lift of lifts) {
+    const tms = await database.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
+    const current = tms[tms.length - 1]
+    if (current) {
+      await database.trainingMaxes.add({
+        liftId: lift.id!,
+        weight: Math.round(current.weight * (1 - pct) / 5) * 5,
+        setAt: new Date(),
+      })
+    }
+  }
+}
+
 export async function getAmrapTargets(
   liftId: number,
   currentWeek: number,

@@ -16,7 +16,7 @@ import {
 import { useCalcWorker } from '../../src/hooks/useCalcWorker'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../../src/lib/calc'
 import type { RestType } from '../store/workoutStore'
-import { getAmrapTargets, advanceCycleIfComplete } from '../../src/lib/session'
+import { getAmrapTargets, advanceCycleIfComplete, deloadTms } from '../../src/lib/session'
 import SetRow from '../components/SetRow'
 import AccessoryPicker from '../components/AccessoryPicker'
 import AccessoryLog from '../components/AccessoryLog'
@@ -485,9 +485,15 @@ export default function Workout() {
                     </div>
                     <button
                       onClick={handleCycleCompleteDismiss}
-                      class="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono"
+                      class="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono mb-2"
                     >
                       CONTINUE
+                    </button>
+                    <button
+                      onClick={async () => { await deloadTms(); handleCycleCompleteDismiss() }}
+                      class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-danger hover:text-danger"
+                    >
+                      DELOAD INSTEAD  −10%
                     </button>
                   </div>
                 </div>

@@ -3,6 +3,7 @@ import { db } from '../../src/db/db-v2'
 import type { Lift, Exercise, LiftAccessory } from '../../src/db/db-v2'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../../src/lib/exportImport'
+import { deloadTms } from '../../src/lib/session'
 import { showToast } from '../store/toastStore'
 import { calcMainSets } from '../../src/lib/calc'
 import Rule from '../components/Rule'
@@ -23,6 +24,7 @@ export default function Settings() {
   const [editExName, setEditExName] = createSignal('')
   const [addToLift, setAddToLift] = createSignal<number | null>(null)
   const [addToLiftExId, setAddToLiftExId] = createSignal<number | null>(null)
+  const [deloadConfirm, setDeloadConfirm] = createSignal(false)
   const [importConfirm, setImportConfirm] = createSignal(false)
   const [pendingFile, setPendingFile] = createSignal<File | null>(null)
   const [importError, setImportError] = createSignal<string | null>(null)
@@ -164,6 +166,27 @@ export default function Settings() {
             </Show>
           </div>
         )}</For>
+        <div class="mt-3">
+          <Show when={!deloadConfirm()} fallback={
+            <div class="flex items-center gap-3">
+              <span class="text-danger text-xs">drop all TMs by 10%?</span>
+              <button
+                onClick={async () => { await deloadTms(); await load(); setDeloadConfirm(false); showToast('TMs deloaded −10%') }}
+                class="border border-danger text-danger px-2 py-1 text-xs font-mono"
+              >
+                confirm
+              </button>
+              <button onClick={() => setDeloadConfirm(false)} class="text-muted text-xs font-mono">cancel</button>
+            </div>
+          }>
+            <button
+              onClick={() => setDeloadConfirm(true)}
+              class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
+            >
+              DELOAD ALL  −10%
+            </button>
+          </Show>
+        </div>
       </div>
 
       {/* Rest Timers */}
