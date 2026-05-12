@@ -90,7 +90,8 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
     setWeightEditing(false)
   }
 
-  const done = accessory.loggedSets.length >= 5
+  const [addingExtra, setAddingExtra] = useState(false)
+  const done = accessory.loggedSets.length >= 5 && !addingExtra
 
   return (
     <div className="border border-border p-3 mb-3">
@@ -174,12 +175,20 @@ export default function AccessoryLog({ accessory, exercise }: Props) {
             <Stepper value={distance} onChange={setDistance} step={1} min={0} />
           )}
           <button
-            onClick={handleLog}
+            onClick={() => { handleLog(); setAddingExtra(false) }}
             className="border border-accent text-accent px-3 py-1 font-mono text-xs"
           >
             LOG
           </button>
         </div>
+      )}
+      {accessory.loggedSets.length >= 5 && !addingExtra && (
+        <button
+          onClick={() => setAddingExtra(true)}
+          className="w-full text-left pl-2 mt-1 text-faint text-xs font-mono hover:text-accent tracking-widest"
+        >
+          + ADD SET
+        </button>
       )}
     </div>
   )

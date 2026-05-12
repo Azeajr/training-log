@@ -3,6 +3,7 @@ import { db } from '../db/db'
 import type { Lift, Exercise, LiftAccessory } from '../db/db'
 import { useSettingsStore, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
 import { exportJson, importJson, exportCsv } from '../lib/exportImport'
+import { deloadTms } from '../lib/session'
 import { calcMainSets } from '../lib/calc'
 import Rule from '../components/Rule'
 import Stepper from '../components/Stepper'
@@ -26,6 +27,7 @@ export default function Settings() {
   const [importConfirm, setImportConfirm] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [deloadConfirm, setDeloadConfirm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { load() }, [])
@@ -160,6 +162,27 @@ export default function Settings() {
             )}
           </div>
         ))}
+        <div className="mt-3">
+          {!deloadConfirm ? (
+            <button
+              onClick={() => setDeloadConfirm(true)}
+              className="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
+            >
+              DELOAD ALL  −10%
+            </button>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="text-danger text-xs">drop all TMs by 10%?</span>
+              <button
+                onClick={async () => { await deloadTms(); await load(); setDeloadConfirm(false) }}
+                className="border border-danger text-danger px-2 py-1 text-xs font-mono"
+              >
+                confirm
+              </button>
+              <button onClick={() => setDeloadConfirm(false)} className="text-muted text-xs font-mono">cancel</button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Rest Timers */}

@@ -25,7 +25,7 @@ export default function Stepper({ value, onChange, step = 1, min = 0, max = Infi
     <div className="flex items-center font-mono">
       <button
         type="button"
-        onClick={() => onChange(safeAdd(value, -step))}
+        onClick={() => { const v = Math.max(min, safeAdd(value, -step)); onChange(v); if (editing) setRaw(fmt(v)) }}
         disabled={value <= min}
         className="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30"
       >
@@ -52,7 +52,7 @@ export default function Stepper({ value, onChange, step = 1, min = 0, max = Infi
       )}
       <button
         type="button"
-        onClick={() => onChange(safeAdd(value, step))}
+        onClick={() => { const v = Math.min(max, safeAdd(value, step)); onChange(v); if (editing) setRaw(fmt(v)) }}
         disabled={value >= max}
         className="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30"
       >
