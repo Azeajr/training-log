@@ -1,7 +1,7 @@
-import { db } from '../db/db-v2'
+import { db } from '../db/index'
 import type {
   Lift, TrainingMax, Cycle, Session, Set, AccessorySet, AccessoryTrainingMax,
-} from '../db/db-v2'
+} from '../types/domain'
 
 interface TableLike<T> {
   toArray(): Promise<T[]>
