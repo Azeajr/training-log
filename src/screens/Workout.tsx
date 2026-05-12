@@ -17,7 +17,7 @@ import {
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
 import type { RestType } from '../store/workoutStore'
-import { getAmrapTargets, advanceCycleIfComplete } from '../lib/session'
+import { getAmrapTargets, advanceCycleIfComplete, deloadTms } from '../lib/session'
 import SetRow from '../components/SetRow'
 import AccessoryPicker from '../components/AccessoryPicker'
 import AccessoryLog from '../components/AccessoryLog'
@@ -207,7 +207,7 @@ export default function Workout() {
 
   const handleComplete = async () => {
     if (!activeSession?.id) return
-    await db.sessions.update(activeSession.id, { status: 'completed', notes })
+    await db.sessions.update(activeSession.id, { status: 'completed', notes, date: new Date() })
     for (const acc of activeAccessories) {
       for (const s of acc.loggedSets) {
         if (s.setNumber != null) {
@@ -390,6 +390,20 @@ export default function Workout() {
               />
             )
           })}
+          {fslSets.length > 0 && loggedSets.filter(s => s.type === 'fsl').length >= fslSets.length && (
+            <button
+              onClick={() => {
+                const lastFsl = fslSets[fslSets.length - 1]
+                setAllSets(prev => [
+                  ...prev,
+                  { type: 'fsl' as const, setNumber: fslSets.length + 1, weight: lastFsl.weight, reps: lastFsl.reps },
+                ])
+              }}
+              className="w-full border border-border text-muted py-2 font-mono text-xs tracking-widest hover:border-accent hover:text-accent mt-2"
+            >
+              + ADD FSL SET
+            </button>
+          )}
         </div>
 
       </div>
@@ -502,9 +516,15 @@ export default function Workout() {
             </div>
             <button
               onClick={handleCycleCompleteDismiss}
-              className="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono"
+              className="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono mb-2"
             >
               CONTINUE
+            </button>
+            <button
+              onClick={async () => { await deloadTms(); handleCycleCompleteDismiss() }}
+              className="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-danger hover:text-danger"
+            >
+              DELOAD INSTEAD  −10%
             </button>
           </div>
         </div>

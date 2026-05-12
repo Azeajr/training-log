@@ -130,8 +130,9 @@ export default function AccessoryPicker({ liftId, onClose }: Props) {
   return (
     <div className="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
+        <button onClick={onClose} className="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
         <Rule label="SELECT ASSISTANCE EXERCISE" className="text-muted" />
-        <button onClick={onClose} className="text-muted hover:text-text font-mono">✕</button>
+        <div className="w-14" />
       </div>
       <div className="space-y-1">
         {rows.map(row => (

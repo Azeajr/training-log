@@ -136,11 +136,11 @@ describe('AccessoryPicker', () => {
     expect(btn).toBeDisabled()
   })
 
-  it('onClose is called when X button is clicked', async () => {
+  it('onClose is called when BACK button is clicked', async () => {
     const onClose = vi.fn()
     render(<AccessoryPicker liftId={liftId} onClose={onClose} />)
     await waitFor(() => screen.getByText('Chinups'))
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: /BACK/ }))
     expect(onClose).toHaveBeenCalled()
   })
 })

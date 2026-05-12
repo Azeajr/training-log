@@ -5,7 +5,6 @@ import { db } from './db/db'
 import { importFromRawData } from './lib/exportImport'
 import { useSettingsStore } from './store/settingsStore'
 import { useWorkoutStore } from './store/workoutStore'
-import { useSwipeNav } from './hooks/useSwipeNav'
 import BottomNav from './components/BottomNav'
 import Setup from './screens/Setup'
 import Today from './screens/Today'
@@ -17,18 +16,16 @@ const Settings = lazy(() => import('./screens/Settings'))
 
 function AppShell() {
   const activeSession = useWorkoutStore((s) => s.activeSession)
-  const { onTouchStart, onTouchEnd } = useSwipeNav()
 
   return (
     <div
       className="bg-bg min-h-screen font-mono text-text flex flex-col"
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)', userSelect: 'none', WebkitUserSelect: 'none' }}
+      onContextMenu={e => e.preventDefault()}
     >
       <main
         className="flex-1 overflow-y-auto"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 3.5rem)' }}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
       >
         <Suspense>
           <Routes>

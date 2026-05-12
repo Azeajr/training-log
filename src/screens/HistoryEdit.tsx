@@ -357,8 +357,9 @@ export default function HistoryEdit() {
       {showPicker !== null && (
         <div className="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
+            <button onClick={() => setShowPicker(null)} className="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
             <Rule label="SELECT EXERCISE" className="text-muted" />
-            <button onClick={() => setShowPicker(null)} className="text-muted hover:text-text font-mono">✕</button>
+            <div className="w-14" />
           </div>
           <div className="space-y-1">
             {liftExercises.map(({ exercise }) => {

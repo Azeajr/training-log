@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { Set } from '../db/db'
 import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../lib/calc'
+import { estimated1RM } from '../lib/calc'
 import Stepper from './Stepper'
 import PlateDisplay from './PlateDisplay'
 
@@ -50,6 +51,11 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
         <span className="cursor-pointer hover:text-text-dim">x {loggedReps}</span>
         {isAmrap && <span className="text-xs tracking-widest">AMRAP</span>}
         <span className="text-accent text-xs tracking-widest">done</span>
+        {loggedReps != null && loggedReps > 0 && (
+          <span className="text-faint text-xs font-mono ml-auto">
+            {estimated1RM(loggedWeight ?? set.weight, loggedReps).toFixed(0)}lb e1RM
+          </span>
+        )}
         {onDelete && !deleteConfirm && (
           <button
             onClick={e => { e.stopPropagation(); setDeleteConfirm(true) }}
@@ -144,6 +150,9 @@ export default function SetRow({ set, isActive, isCompleted, loggedReps, loggedW
       <span>x {set.reps}{isAmrap ? '+' : ''}</span>
       {isAmrap && <span className="text-xs text-faint tracking-widest">AMRAP</span>}
       {isJoker && <span className="text-xs text-faint tracking-widest">JOKER</span>}
+      <span className="text-faint text-xs font-mono ml-auto">
+        {estimated1RM(set.weight, set.reps).toFixed(0)}lb e1RM
+      </span>
     </div>
   )
 }
