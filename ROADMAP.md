@@ -37,6 +37,10 @@ After logging the AMRAP top set with reps ≥ the week's minimum (≥5/≥3/≥1
 
 Weight increment is determined by AMRAP performance: if reps strictly exceed double the week's goal (>10 on 5s week, >6 on 3s week, >2 on 1s week), each joker jumps +10%; otherwise +5%. Both increment sizes round to nearest 5lb.
 
+### Custom Accessory Exercises
+
+Add new exercises (name + type: reps/timed/distance) from Settings and assign them to lifts. Create, rename, and archive exercises; archived exercises are hidden from the picker but history is preserved.
+
 ---
 
 ## Planned
@@ -76,6 +80,17 @@ Permission request — `Notification.requestPermission()` triggered by a deliber
 
 ---
 
+### Onboarding — Methodology Overview
+
+Add an informational section to the setup wizard explaining 5/3/1 basics before the user enters training maxes.
+
+**Key terms to define**
+- **Training Max (TM)** — the weight the program calculates sets from; typically 85–90% of true 1RM
+- **AMRAP (Plus sets)** — the final main set each week: lift as many reps as possible; performance drives joker sets and TM recommendations
+- **Cycle structure** — 4 weeks: week 1 (5s), week 2 (3s), week 3 (5/3/1), week 4 (deload); TM increments after each deload
+
+---
+
 ### Estimated 1RM History Chart
 
 The History screen already shows TM over time. An estimated 1RM chart from AMRAP performance would be more meaningful — it reflects actual strength rather than programmed TM.
@@ -102,12 +117,6 @@ If the user bumped up the weight on the top set (AMRAP set) relative to the plan
 - Compare logged weight vs planned weight on the AMRAP set
 - Only trigger if logged weight > planned (voluntary bump up, not a bail)
 - Skip if cycle is on deload week (no AMRAP)
-
----
-
-### Custom Accessory Exercises
-
-Currently the exercise list is seeded at startup and fixed. Allow adding new exercises (name + type: reps/timed/distance) from Settings, and assigning them to lifts.
 
 ---
 

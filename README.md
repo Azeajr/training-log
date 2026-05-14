@@ -48,7 +48,7 @@ Tests are split into two layers:
 | Layer | Location | Tools |
 |---|---|---|
 | Unit | `src/lib/*.test.ts`, `src/store/*.test.ts` | Vitest |
-| Component integration | `src-solid/screens/*.test.tsx`, `src-solid/components/*.test.tsx` | Vitest + @solidjs/testing-library + jsdom |
+| Component integration | `src/screens/*.test.tsx`, `src/components/*.test.tsx` | Vitest + @solidjs/testing-library + jsdom |
 
 Component integration tests render the full component tree and interact through `userEvent`. Every screen exercises the full stack: UI event → SolidJS store → SQLite → rendered output. No DB layer is mocked — tests run against `fake-indexeddb` through the real SQLite Wasm layer.
 
