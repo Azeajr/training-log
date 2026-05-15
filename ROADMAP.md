@@ -173,3 +173,34 @@ A structured week inserted between Leader and Anchor cycles (or every 2–3 cycl
 ### Assistance Category Tracking
 
 Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Track rep totals per category per session and show progress toward the Wendler target of 25–100 reps from each bucket every workout.
+
+---
+
+### Accessory Data Cleanup
+
+Settings button to purge stale accessory data accumulated from old imports or schema changes:
+
+1. Delete `liftAccessories` rows where `exerciseId` no longer exists in `exercises`
+2. Delete `accessoryTrainingMaxes` rows where `exerciseId` no longer exists
+3. Delete `accessorySets` rows where `sessionId` no longer exists in `sessions`
+4. Archive exercises that have no `liftAccessories` and no `accessorySets` history
+
+Requires confirmation dialog. Irreversible without a JSON backup.
+
+---
+
+### Accessory TM Progression Rate
+
+`incrementLb` is stored per exercise on `accessoryTrainingMaxes` but there is no UI to set it — the picker hardcodes a default. Expose a per-exercise increment field in Settings or the AccessoryPicker TM setup screen so users can control how fast each exercise progresses.
+
+---
+
+### Session Notes Indicator in History
+
+`sessions.notes` is stored and editable in HistoryEdit but invisible in the History list view. Surface a visual indicator (dot or truncated preview) on session rows that have notes, so users can find annotated sessions without expanding each one.
+
+---
+
+### Manual Week Override
+
+No way to correct program state without resetting all history. A week override in Settings would let users set the current week directly — useful when a deload was done informally outside the app, or after illness/travel breaks the normal progression.
