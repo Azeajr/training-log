@@ -2,8 +2,7 @@
 
 A progressive strength training tracker built for the **5/3/1 program**. Designed as a mobile-first PWA for use at the gym.
 
-**Live app:** https://training-log.pages.dev  
-**Demo (pre-seeded data):** https://training-log-demo.pages.dev
+**Live app:** https://531-log.pages.dev
 
 ## Features
 
@@ -77,8 +76,6 @@ Any set at or above the first working weight is skipped. Weights below 45 lb are
 
 TM progression after each deload: +5 lb upper body, +10 lb lower body.
 
-## Demo Deployment
+## Deployment
 
-The demo at `training-log-demo.pages.dev` is built with `VITE_DEMO=true`. On first visit to an empty database it fetches `/demo-seed.json` and seeds ~2.5 cycles of pre-filled data so you can explore history, charts, and editing without entering your own numbers. Your data in the production app is completely separate — the demo flag is baked into the build, not a URL parameter, so it can never affect a production deployment.
-
-Both deployments run as parallel jobs in `.github/workflows/deploy.yml` on every push to `main`.
+Pushes to `main` deploy automatically to Cloudflare Pages via `.github/workflows/deploy.yml`.
