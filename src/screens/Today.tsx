@@ -25,8 +25,6 @@ export default function Today() {
   const [currentWeek, setCurrentWeek] = createSignal<1 | 2 | 3 | 4>(1)
   const [currentCycleId, setCurrentCycleId] = createSignal<number>(1)
   const [tm, setTm] = createSignal(0)
-  const [liftType, setLiftType] = createSignal<'upper' | 'lower'>('upper')
-
   onMount(() => { void load() })
 
   const load = async () => {
@@ -49,9 +47,6 @@ export default function Today() {
     const latestTm = currentTms[currentTms.length - 1]
     if (latestTm) setTm(latestTm.weight)
 
-    const lift = allLifts.find(l => l.id === next.liftId)
-    if (lift) setLiftType(lift.liftType)
-
     setLoading(false)
   }
 
@@ -60,8 +55,6 @@ export default function Today() {
     const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
     const latest = tms[tms.length - 1]
     setTm(latest?.weight ?? 0)
-    const lift = lifts().find(l => l.id === liftId)
-    if (lift) setLiftType(lift.liftType)
   }
 
   const launchSession = async () => {
@@ -108,7 +101,7 @@ export default function Today() {
   const selectedLift = () => lifts().find(l => l.id === selectedLiftId())
   const main = () => selectedLift() ? calcMainSets(tm(), currentWeek()) : []
   const fsl = () => main().length > 0 ? calcFslSets(main()[0].weight) : []
-  const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm(), liftType(), main()[0]?.reps ?? 5) : []
+  const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm(), main()[0]?.reps ?? 5) : []
 
   const statusLabel = (ws: WeekStatus) => {
     if (ws.liftId === selectedLiftId()) return '->'
