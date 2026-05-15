@@ -101,7 +101,7 @@ export default function Today() {
   const selectedLift = () => lifts().find(l => l.id === selectedLiftId())
   const main = () => selectedLift() ? calcMainSets(tm(), currentWeek()) : []
   const fsl = () => main().length > 0 ? calcFslSets(main()[0].weight) : []
-  const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm(), main()[0]?.reps ?? 5) : []
+  const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm()) : []
 
   const statusLabel = (ws: WeekStatus) => {
     if (ws.liftId === selectedLiftId()) return '->'

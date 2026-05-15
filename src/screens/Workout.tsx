@@ -58,7 +58,7 @@ export default function Workout() {
     const fsl = calcFslSets(main[0].weight).map((s, i) =>
       fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
     )
-    const warmup = await calcWorker.calcWarmup(tmWeight, main[0].weight, main[0].reps)
+    const warmup = await calcWorker.calcWarmup(tmWeight, main[0].weight)
     const restoredJokers: JokerSet[] = freshLoggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
