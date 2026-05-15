@@ -7,7 +7,7 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 
 ## Features
 
-- **5/3/1 program logic** — calculates warmup, main, and FSL sets from your training max each week
+- **5/3/1 program logic** — calculates warmup, main, and FSL sets from your training max each week; warmup follows Wendler's 40/50/60% TM prescription (3 sets × 5/5/3 reps)
 - **AMRAP tracking** — logs rep PRs on the third main set and shows targets based on prior performance
 - **Accessory work** — select assistance exercises per lift, log reps/weight/duration/distance
 - **Rest timer** — in-session countdown with audio and vibration cues; different durations for normal, transition, and failed sets
@@ -64,6 +64,16 @@ Each cycle is 4 weeks across 4 lifts (OHP, Deadlift, Bench, Squat):
 | 4 (deload) | 40% × 5 | 50% × 5 | 60% × 5 |
 
 FSL (First Set Last) is 5 × 10 at the first working set weight after every non-deload session (65% / 70% / 75% TM for weeks 1 / 2 / 3).
+
+Warmup sets follow Wendler's prescription — 3 sets calculated from TM, not working weight:
+
+| Set | Weight | Reps |
+|---|---|---|
+| 1 | 40% TM | 5 |
+| 2 | 50% TM | 5 |
+| 3 | 60% TM | 3 |
+
+Any set at or above the first working weight is skipped. Weights below 45 lb are floored to bar weight. Consecutive sets that round to the same weight are deduplicated.
 
 TM progression after each deload: +5 lb upper body, +10 lb lower body.
 
