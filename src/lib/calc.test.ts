@@ -83,51 +83,42 @@ describe('calcAccessorySets', () => {
 })
 
 describe('calcWarmup', () => {
-  it('heavy WW opens at 135', () => {
-    // targetOpener = e1RM(300,5)*0.45 = 350*0.45 = 157.5 → 135 ✓
-    const sets = calcWarmup(400, 300, 5)
-    expect(sets[0]).toMatchObject({ weight: 135, reps: 10, type: 'warmup' })
-    expect(sets.length).toBeGreaterThan(1)
-    const last = sets[sets.length - 1]
-    expect(last.reps).toBe(3)
-    expect(last.weight).toBeLessThan(300)
+  it('standard case — 3 sets at 40/50/60% TM', () => {
+    // TM=300: 120×5, 150×5, 180×3; WW=210 so all three qualify
+    const sets = calcWarmup(300, 210)
+    expect(sets).toHaveLength(3)
+    expect(sets[0]).toMatchObject({ weight: 120, reps: 5, type: 'warmup' })
+    expect(sets[1]).toMatchObject({ weight: 150, reps: 5 })
+    expect(sets[2]).toMatchObject({ weight: 180, reps: 3 })
   })
-  it('moderate WW opens at 95', () => {
-    // targetOpener = e1RM(200,5)*0.45 = 233.3*0.45 = 105 → 95 ✓ (135 > 105)
-    const sets = calcWarmup(300, 200, 5)
-    expect(sets[0]).toMatchObject({ weight: 95, reps: 10, type: 'warmup' })
-    expect(sets.length).toBeGreaterThan(1)
-    const last = sets[sets.length - 1]
-    expect(last.reps).toBe(3)
-    expect(last.weight).toBeLessThan(200)
+  it('drops sets at or above working weight', () => {
+    // TM=200: 80×5, 100×5, 120×3; WW=115 → 120 ≥ 115, cut to 2 sets
+    const sets = calcWarmup(200, 115)
+    expect(sets).toHaveLength(2)
+    expect(sets[0]).toMatchObject({ weight: 80, reps: 5 })
+    expect(sets[1]).toMatchObject({ weight: 100, reps: 5 })
   })
-  it('WW just below 95 threshold opens at 65', () => {
-    // targetOpener = e1RM(180,5)*0.45 = 210*0.45 = 94.5 → 95 > 94.5 ✗, 65 ✓
-    const sets = calcWarmup(250, 180, 5)
-    expect(sets[0]).toMatchObject({ weight: 65, reps: 10 })
+  it('floors weight at 45lb (bar)', () => {
+    // TM=95: 40%=38 → 45, 50%=47.5 → 45 (dedup), 60%=57→55; WW=70
+    const sets = calcWarmup(95, 70)
+    expect(sets[0]).toMatchObject({ weight: 45, reps: 5 })
+    // dedup: second set also rounds to 45 → skipped
+    expect(sets.every(s => s.weight >= 45)).toBe(true)
   })
-  it('light WW opens at 45', () => {
-    // targetOpener = e1RM(90,5)*0.45 = 105*0.45 = 47.25 → 65 > 47.25 ✗, 45 ✓
-    const sets = calcWarmup(150, 90, 5)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
-  })
-  it('WW too light returns empty', () => {
-    // targetOpener = e1RM(65,5)*0.45 = 75.8*0.45 = 34.1 → 45 > 34.1 ✗ — no opener
-    const sets = calcWarmup(100, 65, 5)
+  it('returns empty when all warmup weights meet or exceed WW', () => {
+    // TM=200: 80×5, WW=75 → 80 ≥ 75, nothing qualifies
+    const sets = calcWarmup(200, 75)
     expect(sets).toHaveLength(0)
   })
-  it('opener-only when single step covers gap', () => {
-    // WW=90, TM=300 → increment=30; effectiveBase=75 < 90 → one intermediate at 75×3
-    const sets = calcWarmup(300, 90, 5)
-    expect(sets).toHaveLength(2)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
-    expect(sets[1]).toMatchObject({ reps: 3 })
+  it('deduplicates consecutive identical weights', () => {
+    // TM=75: 40%=30→45, 50%=37.5→40→45 (dedup), 60%=45 (dedup); WW=200
+    const sets = calcWarmup(75, 200)
+    const weights = sets.map(s => s.weight)
+    expect(new Set(weights).size).toBe(weights.length)
   })
-  it('week-3 (1-rep) uses stricter threshold — opener lighter relative to WW', () => {
-    // WW=270 week-3: targetOpener = e1RM(270,1)*0.45 = 270*0.45 = 121.5 → 95 ✓
-    // same WW week-1 (5r): targetOpener = e1RM(270,5)*0.45 = 315*0.45 = 141.75 → 135 ✓
-    expect(calcWarmup(400, 270, 1)[0].weight).toBe(95)
-    expect(calcWarmup(400, 270, 5)[0].weight).toBe(135)
+  it('setNumber increments correctly after dedup', () => {
+    const sets = calcWarmup(300, 210)
+    sets.forEach((s, i) => expect(s.setNumber).toBe(i + 1))
   })
 })
 

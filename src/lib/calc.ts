@@ -125,42 +125,23 @@ export interface WarmupSet {
   type: 'warmup'
 }
 
-const WARMUP_OPENERS = [135, 95, 65, 45]
-const WARMUP_OPENER_RATIO = 0.60
+const WARMUP_PERCENTAGES: { pct: number; reps: number }[] = [
+  { pct: 0.40, reps: 5 },
+  { pct: 0.50, reps: 5 },
+  { pct: 0.60, reps: 3 },
+]
 
 export const calcWarmup = (
   tm: number,
   workingWeight: number,
-  firstSetReps: number,
 ): WarmupSet[] => {
-  const wwE1rm = estimated1RM(workingWeight, firstSetReps)
-  const targetOpenerWeight = (wwE1rm * WARMUP_OPENER_RATIO) / (1 + 10 / 30)
-  const opener = WARMUP_OPENERS.find(w => w < workingWeight && w <= targetOpenerWeight)
-  if (opener === undefined) return []
-
-  const increment = Math.round((tm * 0.1) / 5) * 5
-
-  const sets: WarmupSet[] = [
-    { setNumber: 1, weight: opener, reps: 10, type: 'warmup' }
-  ]
-
-  const effectiveBase = opener < workingWeight - increment
-    ? opener + increment
-    : roundToNearest5(workingWeight - increment)
-
-  if (effectiveBase <= opener || effectiveBase >= workingWeight) return sets
-
-  let current = effectiveBase
-  let setNumber = 2
-
-  while (current + increment < workingWeight) {
-    sets.push({ setNumber, weight: current, reps: 5, type: 'warmup' })
-    current += increment
-    setNumber++
+  const sets: WarmupSet[] = []
+  for (const { pct, reps } of WARMUP_PERCENTAGES) {
+    const weight = Math.max(BAR_WEIGHT, roundToNearest5(tm * pct))
+    if (weight >= workingWeight) break
+    if (sets.length > 0 && weight === sets[sets.length - 1].weight) continue
+    sets.push({ setNumber: sets.length + 1, weight, reps, type: 'warmup' })
   }
-
-  sets.push({ setNumber, weight: current, reps: 3, type: 'warmup' })
-
   return sets
 }
 
