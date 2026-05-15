@@ -1,38 +1,39 @@
-import { useEffect, useRef, useState } from 'react'
-import { db } from '../db/db'
-import type { Lift, Exercise, LiftAccessory } from '../db/db'
-import { useSettingsStore, THEMES, DEFAULT_PLATES } from '../store/settingsStore'
-import { exportJson, importJson, exportCsv } from '../lib/exportImport'
-import { deloadTms } from '../lib/session'
+import { createSignal, onMount, For, Show } from 'solid-js'
+import { db } from '../db/index'
+import type { Lift, Exercise, LiftAccessory } from '../types/domain'
+import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
+import { exportJson, importJson, exportCsv } from '../lib/export-import'
+import { deloadTms } from '../lib/cycle'
+import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
+import { setTm } from '../lib/training-max'
+import { useConfirmation } from '../hooks/use-confirmation'
+import { showToast } from '../store/toast-store'
 import { calcMainSets } from '../lib/calc'
-import Rule from '../components/Rule'
-import Stepper from '../components/Stepper'
+import Rule from '../components/layout/Rule'
+import Stepper from '../components/forms/Stepper'
 
 export default function Settings() {
-  const { restTimer1, restTimer2, restTimerFail, theme, barWeight, plates, update } = useSettingsStore()
-  const [lifts, setLifts] = useState<Lift[]>([])
-  const [tms, setTms] = useState<Record<number, number>>({})
-  const [editingTm, setEditingTm] = useState<number | null>(null)
-  const [tmInput, setTmInput] = useState(0)
-  const [exercises, setExercises] = useState<Exercise[]>([])
-  const [liftAccessories, setLiftAccessories] = useState<LiftAccessory[]>([])
-  const [newExName, setNewExName] = useState('')
-  const [newExType, setNewExType] = useState<'reps' | 'timed' | 'distance'>('reps')
-  const [showAddEx, setShowAddEx] = useState(false)
-  const [archiveConfirm, setArchiveConfirm] = useState<number | null>(null)
-  const [editingEx, setEditingEx] = useState<number | null>(null)
-  const [editExName, setEditExName] = useState('')
-  const [addToLift, setAddToLift] = useState<number | null>(null)
-  const [addToLiftExId, setAddToLiftExId] = useState<number | null>(null)
-  const [importConfirm, setImportConfirm] = useState(false)
-  const [pendingFile, setPendingFile] = useState<File | null>(null)
-  const [importError, setImportError] = useState<string | null>(null)
-  const [deloadConfirm, setDeloadConfirm] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { confirm } = useConfirmation()
 
-  useEffect(() => { load() }, [])
+  const [lifts, setLifts] = createSignal<Lift[]>([])
+  const [tms, setTms] = createSignal<Record<number, number>>({})
+  const [editingTm, setEditingTm] = createSignal<number | null>(null)
+  const [tmInput, setTmInput] = createSignal(0)
+  const [exercises, setExercises] = createSignal<Exercise[]>([])
+  const [liftAccessories, setLiftAccessories] = createSignal<LiftAccessory[]>([])
+  const [newExName, setNewExName] = createSignal('')
+  const [newExType, setNewExType] = createSignal<'reps' | 'timed' | 'distance'>('reps')
+  const [showAddEx, setShowAddEx] = createSignal(false)
+  const [editingEx, setEditingEx] = createSignal<number | null>(null)
+  const [editExName, setEditExName] = createSignal('')
+  const [addToLift, setAddToLift] = createSignal<number | null>(null)
+  const [addToLiftExId, setAddToLiftExId] = createSignal<number | null>(null)
+  const [importError, setImportError] = createSignal<string | null>(null)
+  let fileInputRef!: HTMLInputElement
 
-  const load = async () => {
+  onMount(load)
+
+  async function load() {
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
     const tmMap: Record<number, number> = {}
@@ -42,418 +43,385 @@ export default function Settings() {
       if (latest) tmMap[l.id!] = latest.weight
     }
     setTms(tmMap)
-    const allEx = await db.exercises.toArray()
-    setExercises(allEx)
-    const allLA = await db.liftAccessories.toArray()
-    setLiftAccessories(allLA)
+    setExercises(await db.exercises.toArray())
+    setLiftAccessories(await db.liftAccessories.toArray())
   }
 
   const handleSaveTm = async (liftId: number) => {
-    if (tmInput <= 0) return
-    await db.trainingMaxes.add({ liftId, weight: tmInput, setAt: new Date() })
+    if (tmInput() <= 0) return
+    await setTm(db, liftId, tmInput())
     setEditingTm(null)
     setTmInput(0)
     load()
   }
 
   const handleAddExercise = async () => {
-    if (!newExName.trim()) return
-    await db.exercises.add({ name: newExName.trim(), type: newExType })
+    if (!newExName().trim()) return
+    await createExercise(db, newExName().trim(), newExType())
     setNewExName('')
     setShowAddEx(false)
     load()
   }
 
   const handleRenameExercise = async (id: number) => {
-    if (!editExName.trim()) return
-    await db.exercises.update(id, { name: editExName.trim() })
+    if (!editExName().trim()) return
+    await renameExercise(db, id, editExName().trim())
     setEditingEx(null)
     setEditExName('')
     load()
   }
 
   const handleArchiveExercise = async (id: number) => {
-    await db.exercises.update(id, { archived: true })
-    await db.liftAccessories.where('exerciseId').equals(id).delete()
-    setArchiveConfirm(null)
+    if (!await confirm('Archive this exercise?', { destructive: true, confirmLabel: 'ARCHIVE' })) return
+    await archiveExercise(db, id)
     load()
   }
 
   const handleUnarchiveExercise = async (id: number) => {
-    await db.exercises.update(id, { archived: false })
+    await unarchiveExercise(db, id)
     load()
   }
 
   const handleAddToLift = async (liftId: number, exerciseId: number) => {
-    const nextOrder = liftAccessories.filter(la => la.liftId === liftId).length
-    await db.liftAccessories.add({ liftId, exerciseId, order: nextOrder })
+    const count = liftAccessories().filter(la => la.liftId === liftId).length
+    await addExerciseToLift(db, liftId, exerciseId, count)
     setAddToLift(null)
     setAddToLiftExId(null)
     load()
   }
 
   const handleRemoveFromLift = async (laId: number) => {
-    await db.liftAccessories.delete(laId)
+    await removeExerciseFromLift(db, laId)
     load()
   }
 
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPendingFile(file)
-    setImportConfirm(true)
-    setImportError(null)
-    e.target.value = ''
+  const handleDeload = async () => {
+    if (!await confirm('Drop all TMs by 10%?', { destructive: true, confirmLabel: 'DELOAD' })) return
+    await deloadTms(db)
+    await load()
+    showToast('TMs deloaded −10%')
   }
 
-  const handleImportConfirmed = async () => {
-    if (!pendingFile) return
+  const handleFileSelected = (e: Event & { currentTarget: HTMLInputElement }) => {
+    const file = e.currentTarget.files?.[0]
+    if (!file) return
+    setImportError(null)
+    e.currentTarget.value = ''
+    void handleImport(file)
+  }
+
+  const handleImport = async (file: File) => {
+    if (!await confirm(`Overwrite all data with ${file.name}? This cannot be undone.`, { destructive: true, confirmLabel: 'IMPORT' })) return
     try {
-      await importJson(pendingFile)
-      setImportConfirm(false)
-      setPendingFile(null)
+      await importJson(db, file)
+      await loadSettings()
       load()
+      showToast('Import complete')
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed')
     }
   }
 
   const timerStep = (field: 'restTimer1' | 'restTimer2' | 'restTimerFail', delta: number) => {
-    const current = { restTimer1, restTimer2, restTimerFail }[field]
-    const next = Math.max(30, current + delta)
-    update({ [field]: next })
+    const next = Math.max(30, settings[field] + delta)
+    updateSettings({ [field]: next })
   }
 
   const fmtTimer = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
   return (
-    <div className="p-4 font-mono text-sm">
+    <div class="p-4 font-mono text-sm">
 
-      {/* Training Maxes */}
-      <div className="mb-6">
-        <Rule label="TRAINING MAXES" className="text-muted mb-2" />
-        {lifts.map(l => (
-          <div key={l.id} className="py-1 border-b border-border-dim">
-            <div className="flex items-center gap-3">
-              <span className="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
-              {editingTm === l.id ? (
+      <div class="mb-6">
+        <Rule label="TRAINING MAXES" class="text-muted mb-2" />
+        <For each={lifts()}>{(l) => (
+          <div class="py-1 border-b border-border-dim">
+            <div class="flex items-center gap-3">
+              <span class="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
+              <Show when={editingTm() === l.id} fallback={
                 <>
-                  <Stepper value={tmInput} onChange={setTmInput} step={5} min={0} />
-                  <span className="text-muted text-xs">lb</span>
-                  <button onClick={() => handleSaveTm(l.id!)} className="border border-accent text-accent px-2 py-0.5 text-xs font-mono tracking-widest">SAVE</button>
-                  <button onClick={() => setEditingTm(null)} className="text-muted text-xs font-mono">cancel</button>
-                </>
-              ) : (
-                <>
-                  <span className="text-text">{tms[l.id!] ?? '—'} lb</span>
+                  <span class="text-text">{tms()[l.id!] ?? '—'} lb</span>
                   <button
-                    onClick={() => { setEditingTm(l.id!); setTmInput(tms[l.id!] ?? 0) }}
-                    className="text-muted text-xs hover:text-accent"
+                    onClick={() => { setEditingTm(l.id!); setTmInput(tms()[l.id!] ?? 0) }}
+                    class="text-muted text-xs hover:text-accent"
                   >
                     edit
                   </button>
                 </>
-              )}
+              }>
+                <div class="flex flex-col gap-2 flex-1">
+                  <div class="flex items-center gap-2">
+                    <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} />
+                    <span class="text-muted text-xs">lb</span>
+                  </div>
+                  <div class="flex gap-3">
+                    <button onClick={() => handleSaveTm(l.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono tracking-widest">SAVE</button>
+                    <button onClick={() => setEditingTm(null)} class="text-muted text-lg sm:text-xl">cancel</button>
+                  </div>
+                </div>
+              </Show>
             </div>
-            {editingTm === l.id && tmInput > 0 && (
-              <div className="text-faint text-xs font-mono mt-1 ml-24">
-                {'W1: ' + calcMainSets(tmInput, 1).map(s => s.weight).join(' · ') + ' lb'}
+            <Show when={editingTm() === l.id && tmInput() > 0}>
+              <div class="text-faint text-xs font-mono mt-1 ml-24">
+                {'W1: ' + calcMainSets(tmInput(), 1).map(s => s.weight).join(' · ') + ' lb'}
               </div>
-            )}
+            </Show>
           </div>
-        ))}
-        <div className="mt-3">
-          {!deloadConfirm ? (
-            <button
-              onClick={() => setDeloadConfirm(true)}
-              className="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
-            >
-              DELOAD ALL  −10%
-            </button>
-          ) : (
-            <div className="flex items-center gap-3">
-              <span className="text-danger text-xs">drop all TMs by 10%?</span>
-              <button
-                onClick={async () => { await deloadTms(); await load(); setDeloadConfirm(false) }}
-                className="border border-danger text-danger px-2 py-1 text-xs font-mono"
-              >
-                confirm
-              </button>
-              <button onClick={() => setDeloadConfirm(false)} className="text-muted text-xs font-mono">cancel</button>
-            </div>
-          )}
+        )}</For>
+        <div class="mt-3">
+          <button
+            onClick={() => void handleDeload()}
+            class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
+          >
+            DELOAD ALL  −10%
+          </button>
         </div>
       </div>
 
-      {/* Rest Timers */}
-      <div className="mb-6">
-        <Rule label="REST TIMERS" className="text-muted mb-2" />
-        {(
-          [
-            { label: 'First', field: 'restTimer1' as const, value: restTimer1 },
-            { label: 'Second', field: 'restTimer2' as const, value: restTimer2 },
-            { label: 'Failed', field: 'restTimerFail' as const, value: restTimerFail },
-          ]
-        ).map(({ label, field, value }) => (
-          <div key={field} className="flex items-center gap-3 py-1 border-b border-border-dim">
-            <span className="text-muted w-16 text-xs uppercase tracking-widest">{label}</span>
-            <button onClick={() => timerStep(field, -30)} className="border border-border px-2 py-0.5 text-muted hover:text-text">-</button>
-            <span className="text-text w-12 text-center">{fmtTimer(value)}</span>
-            <button onClick={() => timerStep(field, 30)} className="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
+      <div class="mb-6">
+        <Rule label="REST TIMERS" class="text-muted mb-2" />
+        <For each={[
+          { label: 'First',  field: 'restTimer1'   as const, value: settings.restTimer1 },
+          { label: 'Second', field: 'restTimer2'   as const, value: settings.restTimer2 },
+          { label: 'Failed', field: 'restTimerFail' as const, value: settings.restTimerFail },
+        ]}>{({ label, field, value }) => (
+          <div class="flex items-center gap-3 py-1 border-b border-border-dim">
+            <span class="text-muted w-16 text-xs uppercase tracking-widest">{label}</span>
+            <button onClick={() => timerStep(field, -30)} class="border border-border px-2 py-0.5 text-muted hover:text-text">-</button>
+            <span class="text-text w-12 text-center">{fmtTimer(value)}</span>
+            <button onClick={() => timerStep(field, 30)} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
           </div>
-        ))}
+        )}</For>
       </div>
 
-      {/* Theme */}
-      <div className="mb-6">
-        <Rule label="THEME" className="text-muted mb-3" />
-        <div className="flex gap-4">
-          {(Object.entries(THEMES) as [string, typeof THEMES[keyof typeof THEMES]][]).map(([key, t]) => (
-            <button
-              key={key}
-              onClick={() => update({ theme: key })}
-              className="flex flex-col items-center gap-1.5"
-            >
+      <div class="mb-6">
+        <Rule label="THEME" class="text-muted mb-3" />
+        <div class="flex gap-4">
+          <For each={Object.entries(THEMES) as [string, typeof THEMES[keyof typeof THEMES]][]}>{([key, t]) => (
+            <button onClick={() => updateSettings({ theme: key })} class="flex flex-col items-center gap-1.5">
               <div
-                className="w-14 h-10 p-1 rounded-sm border-2 flex flex-col gap-1 transition-all"
+                class="w-14 h-10 p-1 rounded-sm border-2 flex flex-col gap-1 transition-all"
                 style={{
-                  backgroundColor: t.vars['--color-bg'],
-                  borderColor: theme === key ? t.vars['--color-accent'] : 'transparent',
+                  'background-color': t.vars['--color-bg'],
+                  'border-color': settings.theme === key ? t.vars['--color-accent'] : 'transparent',
                 }}
               >
-                <div className="flex-1 rounded-sm" style={{ backgroundColor: t.vars['--color-surface'] }} />
-                <div className="h-1 w-1/2 rounded-full" style={{ backgroundColor: t.vars['--color-accent'] }} />
+                <div class="flex-1 rounded-sm" style={{ 'background-color': t.vars['--color-surface'] }} />
+                <div class="h-1 w-1/2 rounded-full" style={{ 'background-color': t.vars['--color-accent'] }} />
               </div>
               <span
-                className="text-xs uppercase tracking-widest"
-                style={{ color: theme === key ? 'var(--color-accent)' : 'var(--color-muted)' }}
+                class="text-xs uppercase tracking-widest"
+                style={{ color: settings.theme === key ? 'var(--color-accent)' : 'var(--color-muted)' }}
               >
                 {t.label}
               </span>
             </button>
-          ))}
+          )}</For>
         </div>
       </div>
 
-      {/* Exercises */}
-      <div className="mb-6">
-        <Rule label="EXERCISES" className="text-muted mb-2" />
+      <div class="mb-6">
+        <Rule label="EXERCISES" class="text-muted mb-2" />
 
-        {/* Per-lift groups */}
-        {lifts.map(lift => {
-          const assigned = liftAccessories
+        <For each={lifts()}>{(lift) => {
+          const assigned = () => liftAccessories()
             .filter(la => la.liftId === lift.id)
             .sort((a, b) => a.order - b.order)
-          const assignedIds = new Set(assigned.map(la => la.exerciseId))
-          const available = exercises.filter(ex => !assignedIds.has(ex.id!) && !ex.archived)
+          const assignedIds = () => new Set(assigned().map(la => la.exerciseId))
+          const available = () => exercises().filter(ex => !assignedIds().has(ex.id!) && !ex.archived)
           return (
-            <div key={lift.id} className="mb-3">
-              <div className="text-muted text-xs uppercase tracking-widest mb-1">{lift.name}</div>
-              {assigned.length === 0 && (
-                <div className="text-faint text-xs pl-2 py-1">no exercises</div>
-              )}
-              {assigned.map(la => {
-                const ex = exercises.find(e => e.id === la.exerciseId)
-                if (!ex) return null
+            <div class="mb-3">
+              <div class="text-muted text-xs uppercase tracking-widest mb-1">{lift.name}</div>
+              <Show when={assigned().length === 0}>
+                <div class="text-faint text-xs pl-2 py-1">no exercises</div>
+              </Show>
+              <For each={assigned()}>{(la) => {
+                const ex = () => exercises().find(e => e.id === la.exerciseId)
                 return (
-                  <div key={la.id} className="flex items-center justify-between py-0.5 pl-2 border-b border-border-dim">
-                    {editingEx === ex.id ? (
-                      <div className="flex flex-col gap-2 flex-1">
-                        <input
-                          type="text"
-                          value={editExName}
-                          onChange={e => setEditExName(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') handleRenameExercise(ex.id!); if (e.key === 'Escape') setEditingEx(null) }}
-                          className="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
-                          autoFocus
-                        />
-                        <div className="flex gap-3">
-                          <button onClick={() => handleRenameExercise(ex.id!)} className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
-                          <button onClick={() => setEditingEx(null)} className="text-muted text-lg sm:text-xl">cancel</button>
+                  <Show when={ex()}>
+                    <div class="flex items-center justify-between py-0.5 pl-2 border-b border-border-dim">
+                      <Show when={editingEx() === ex()!.id} fallback={
+                        <>
+                          <span class="text-text text-xs">{ex()!.name}</span>
+                          <div class="flex items-center gap-4">
+                            <button onClick={() => { setEditingEx(ex()!.id!); setEditExName(ex()!.name) }} class="text-muted text-xs hover:text-accent">edit</button>
+                            <button onClick={() => handleRemoveFromLift(la.id!)} class="text-muted text-xs hover:text-danger">del</button>
+                          </div>
+                        </>
+                      }>
+                        <div class="flex flex-col gap-2 flex-1">
+                          <input
+                            type="text"
+                            value={editExName()}
+                            onInput={e => setEditExName(e.currentTarget.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleRenameExercise(ex()!.id!); if (e.key === 'Escape') setEditingEx(null) }}
+                            class="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
+                            autofocus
+                          />
+                          <div class="flex gap-3">
+                            <button onClick={() => handleRenameExercise(ex()!.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
+                            <button onClick={() => setEditingEx(null)} class="text-muted text-lg sm:text-xl">cancel</button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <>
-                        <span className="text-text text-xs">{ex.name}</span>
-                        <div className="flex items-center gap-4">
-                          <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name) }} className="text-muted text-xs hover:text-accent">edit</button>
-                          <button onClick={() => handleRemoveFromLift(la.id!)} className="text-muted text-xs hover:text-danger">del</button>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                      </Show>
+                    </div>
+                  </Show>
                 )
-              })}
-              {addToLift === lift.id ? (
-                <div className="flex flex-col gap-2 mt-1 pl-2">
-                  <select
-                    value={addToLiftExId ?? ''}
-                    onChange={e => setAddToLiftExId(Number(e.target.value) || null)}
-                    className="bg-surface border border-border text-text px-2 py-0.5 text-xs focus:outline-none w-full"
-                  >
-                    <option value="">pick exercise</option>
-                    {available.map(ex => (
-                      <option key={ex.id} value={ex.id}>{ex.name}</option>
-                    ))}
-                  </select>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => addToLiftExId && handleAddToLift(lift.id!, addToLiftExId)}
-                      disabled={!addToLiftExId}
-                      className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted"
-                    >
-                      ADD
-                    </button>
-                    <button onClick={() => { setAddToLift(null); setAddToLiftExId(null) }} className="text-muted text-lg sm:text-xl">cancel</button>
-                  </div>
-                </div>
-              ) : (
-                available.length > 0 && (
+              }}</For>
+              <Show when={addToLift() === lift.id} fallback={
+                <Show when={available().length > 0}>
                   <button
                     onClick={() => { setAddToLift(lift.id!); setAddToLiftExId(null) }}
-                    className="mt-1 pl-2 text-faint text-lg sm:text-xl hover:text-accent"
+                    class="mt-1 pl-2 text-faint text-lg sm:text-xl hover:text-accent"
                   >
                     + assign
                   </button>
-                )
-              )}
+                </Show>
+              }>
+                <div class="flex flex-col gap-2 mt-1 pl-2">
+                  <select
+                    value={addToLiftExId() ?? ''}
+                    onChange={e => setAddToLiftExId(Number(e.currentTarget.value) || null)}
+                    class="bg-surface border border-border text-text px-2 py-0.5 text-xs focus:outline-none w-full"
+                  >
+                    <option value="">pick exercise</option>
+                    <For each={available()}>{(ex) => (
+                      <option value={ex.id}>{ex.name}</option>
+                    )}</For>
+                  </select>
+                  <div class="flex gap-3">
+                    <button
+                      onClick={() => { const id = addToLiftExId(); if (id) handleAddToLift(lift.id!, id) }}
+                      disabled={!addToLiftExId()}
+                      class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted"
+                    >
+                      ADD
+                    </button>
+                    <button onClick={() => { setAddToLift(null); setAddToLiftExId(null) }} class="text-muted text-lg sm:text-xl">cancel</button>
+                  </div>
+                </div>
+              </Show>
             </div>
           )
-        })}
+        }}</For>
 
-        {/* All exercises (global list with add/delete) */}
-        <Rule label="ALL EXERCISES" className="text-muted mt-4 mb-2" />
-        {exercises.filter(ex => !ex.archived).map(ex => (
-          <div key={ex.id} className="py-1 border-b border-border-dim">
-            {editingEx === ex.id ? (
-              <div className="flex flex-col gap-2">
+        <Rule label="ALL EXERCISES" class="text-muted mt-4 mb-2" />
+        <For each={exercises().filter(ex => !ex.archived)}>{(ex) => (
+          <div class="py-1 border-b border-border-dim">
+            <Show when={editingEx() === ex.id} fallback={
+              <div class="flex items-center justify-between">
+                <span class="text-text">{ex.name}</span>
+                <div class="flex items-center gap-4">
+                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name) }} class="text-muted text-xs hover:text-accent">edit</button>
+                  <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
+                </div>
+              </div>
+            }>
+              <div class="flex flex-col gap-2">
                 <input
                   type="text"
-                  value={editExName}
-                  onChange={e => setEditExName(e.target.value)}
+                  value={editExName()}
+                  onInput={e => setEditExName(e.currentTarget.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleRenameExercise(ex.id!); if (e.key === 'Escape') setEditingEx(null) }}
-                  className="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
-                  autoFocus
+                  class="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
+                  autofocus
                 />
-                <div className="flex gap-3">
-                  <button onClick={() => handleRenameExercise(ex.id!)} className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
-                  <button onClick={() => setEditingEx(null)} className="text-muted text-lg sm:text-xl">cancel</button>
+                <div class="flex gap-3">
+                  <button onClick={() => handleRenameExercise(ex.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
+                  <button onClick={() => setEditingEx(null)} class="text-muted text-lg sm:text-xl">cancel</button>
                 </div>
               </div>
-            ) : (
-              <div className="flex items-center justify-between">
-                <span className="text-text">{ex.name}</span>
-                <div className="flex items-center gap-4">
-                  {archiveConfirm === ex.id ? (
-                    <>
-                      <button onClick={() => handleArchiveExercise(ex.id!)} className="border border-danger text-danger px-2 py-1 text-lg sm:text-xl font-mono">ARCHIVE</button>
-                      <button onClick={() => setArchiveConfirm(null)} className="text-muted text-lg sm:text-xl">cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setArchiveConfirm(null) }} className="text-muted text-xs hover:text-accent">edit</button>
-                      <button onClick={() => { setArchiveConfirm(ex.id!); setEditingEx(null) }} className="text-muted text-xs hover:text-danger">archive</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
+            </Show>
           </div>
-        ))}
-        {exercises.some(ex => ex.archived) && (
+        )}</For>
+
+        <Show when={exercises().some(ex => ex.archived)}>
           <>
-            <Rule label="ARCHIVED" className="text-faint mt-4 mb-2" />
-            {exercises.filter(ex => ex.archived).map(ex => (
-              <div key={ex.id} className="py-1 border-b border-border-dim flex items-center justify-between">
-                <span className="text-faint text-sm">{ex.name}</span>
-                <button onClick={() => handleUnarchiveExercise(ex.id!)} className="text-muted text-xs hover:text-accent">unarchive</button>
+            <Rule label="ARCHIVED" class="text-faint mt-4 mb-2" />
+            <For each={exercises().filter(ex => ex.archived)}>{(ex) => (
+              <div class="py-1 border-b border-border-dim flex items-center justify-between">
+                <span class="text-faint text-sm">{ex.name}</span>
+                <button onClick={() => handleUnarchiveExercise(ex.id!)} class="text-muted text-xs hover:text-accent">unarchive</button>
               </div>
-            ))}
+            )}</For>
           </>
-        )}
-        {showAddEx ? (
-          <div className="flex flex-col gap-2 mt-2">
-            <div className="flex gap-2">
+        </Show>
+
+        <Show when={showAddEx()} fallback={
+          <button
+            onClick={() => setShowAddEx(true)}
+            class="mt-2 border border-border text-muted px-3 py-1 text-lg sm:text-xl hover:border-accent hover:text-accent"
+          >
+            + ADD EXERCISE
+          </button>
+        }>
+          <div class="flex flex-col gap-2 mt-2">
+            <div class="flex gap-2">
               <input
                 type="text"
-                value={newExName}
-                onChange={e => setNewExName(e.target.value)}
+                value={newExName()}
+                onInput={e => setNewExName(e.currentTarget.value)}
                 placeholder="Exercise name"
-                className="bg-surface border border-border text-text px-2 py-1 flex-1 focus:outline-none focus:border-accent"
+                class="bg-surface border border-border text-text px-2 py-1 flex-1 focus:outline-none focus:border-accent"
               />
               <select
-                value={newExType}
-                onChange={e => setNewExType(e.target.value as any)}
-                className="bg-surface border border-border text-text px-2 py-1 focus:outline-none"
+                value={newExType()}
+                onChange={e => setNewExType(e.currentTarget.value as 'reps' | 'timed' | 'distance')}
+                class="bg-surface border border-border text-text px-2 py-1 focus:outline-none"
               >
                 <option value="reps">reps</option>
                 <option value="timed">timed</option>
                 <option value="distance">distance</option>
               </select>
             </div>
-            <div className="flex gap-3">
-              <button onClick={handleAddExercise} className="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">ADD</button>
-              <button onClick={() => setShowAddEx(false)} className="text-muted text-lg sm:text-xl">cancel</button>
+            <div class="flex gap-3">
+              <button onClick={handleAddExercise} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">ADD</button>
+              <button onClick={() => setShowAddEx(false)} class="text-muted text-lg sm:text-xl">cancel</button>
             </div>
           </div>
-        ) : (
-          <button
-            onClick={() => setShowAddEx(true)}
-            className="mt-2 border border-border text-muted px-3 py-1 text-lg sm:text-xl hover:border-accent hover:text-accent"
-          >
-            + ADD EXERCISE
-          </button>
-        )}
+        </Show>
       </div>
 
-      {/* Plates */}
-      <div className="mb-6">
-        <Rule label="PLATES" className="text-muted mb-2" />
-        <div className="flex items-center gap-3 py-1 border-b border-border-dim">
-          <span className="text-muted w-20 uppercase tracking-widest text-xs">Bar</span>
-          <Stepper value={barWeight} onChange={v => update({ barWeight: v })} step={2.5} min={10} max={100} />
-          <span className="text-muted text-xs">lb</span>
+      <div class="mb-6">
+        <Rule label="PLATES" class="text-muted mb-2" />
+        <div class="flex items-center gap-3 py-1 border-b border-border-dim">
+          <span class="text-muted w-20 uppercase tracking-widest text-xs">Bar</span>
+          <Stepper value={settings.barWeight} onChange={v => updateSettings({ barWeight: v })} step={2.5} min={10} max={100} />
+          <span class="text-muted text-xs">lb</span>
         </div>
-        {DEFAULT_PLATES.map(({ weight }) => {
-          const plate = plates.find(p => p.weight === weight) ?? { weight, count: 0 }
+        <For each={DEFAULT_PLATES}>{({ weight }) => {
+          const plate = () => settings.plates.find(p => p.weight === weight) ?? { weight, count: 0 }
           return (
-            <div key={weight} className="flex items-center gap-3 py-1 border-b border-border-dim">
-              <span className="text-muted w-20 text-right font-mono text-xs">{weight} lb</span>
+            <div class="flex items-center gap-3 py-1 border-b border-border-dim">
+              <span class="text-muted w-20 text-right font-mono text-xs">{weight} lb</span>
               <Stepper
-                value={plate.count}
+                value={plate().count}
                 onChange={v => {
-                  const next = plates.some(p => p.weight === weight)
-                    ? plates.map(p => p.weight === weight ? { ...p, count: v } : p)
-                    : [...plates, { weight, count: v }]
-                  update({ plates: next })
+                  const next = settings.plates.some(p => p.weight === weight)
+                    ? settings.plates.map(p => p.weight === weight ? { ...p, count: v } : p)
+                    : [...settings.plates, { weight, count: v }]
+                  updateSettings({ plates: next })
                 }}
                 step={1}
                 min={0}
               />
             </div>
           )
-        })}
+        }}</For>
       </div>
 
-      {/* Data */}
       <div>
-        <Rule label="DATA" className="text-muted mb-3" />
-        <div className="flex flex-wrap gap-3 mb-4">
-          <button
-            onClick={exportJson}
-            className="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent"
-          >
+        <Rule label="DATA" class="text-muted mb-3" />
+        <div class="flex flex-wrap gap-3 mb-4">
+          <button onClick={() => void exportJson(db)} class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent">
             EXPORT JSON
           </button>
-          <button
-            onClick={exportCsv}
-            className="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent"
-          >
+          <button onClick={() => void exportCsv(db)} class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent">
             EXPORT CSV
           </button>
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
+            onClick={() => fileInputRef.click()}
+            class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
           >
             IMPORT JSON
           </button>
@@ -461,40 +429,16 @@ export default function Settings() {
             ref={fileInputRef}
             type="file"
             accept=".json"
-            className="hidden"
+            class="hidden"
             onChange={handleFileSelected}
           />
         </div>
 
-        {importConfirm && (
-          <div className="border border-warn p-4 mb-4">
-            <div className="text-warn text-xs uppercase tracking-widest mb-2">
-              OVERWRITE ALL DATA?
-            </div>
-            <div className="text-text-dim text-xs mb-3">
-              This will replace all training history with the contents of <span className="text-text">{pendingFile?.name}</span>. This cannot be undone.
-            </div>
-            {importError && (
-              <div className="text-danger text-xs mb-3">{importError}</div>
-            )}
-            <div className="flex gap-3">
-              <button
-                onClick={handleImportConfirmed}
-                className="border border-warn text-warn px-4 py-2 text-xs uppercase tracking-widest hover:bg-warn hover:text-zinc-900"
-              >
-                CONFIRM IMPORT
-              </button>
-              <button
-                onClick={() => { setImportConfirm(false); setPendingFile(null); setImportError(null) }}
-                className="text-muted text-xs hover:text-text"
-              >
-                cancel
-              </button>
-            </div>
-          </div>
-        )}
+        <Show when={importError()}>
+          <div class="text-danger text-xs mb-3">{importError()}</div>
+        </Show>
 
-        <div className="text-faint text-xs leading-relaxed">
+        <div class="text-faint text-xs leading-relaxed">
           JSON backup restores all history. CSV exports completed sessions for spreadsheets.
         </div>
       </div>

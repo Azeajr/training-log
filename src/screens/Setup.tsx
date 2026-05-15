@@ -1,127 +1,128 @@
-import { useState } from 'react'
-import { db } from '../db/db'
-import { calcMainSets } from '../lib/calc'
-import { useSettingsStore, DEFAULT_BAR_WEIGHT } from '../store/settingsStore'
-import Rule from '../components/Rule'
-import Stepper from '../components/Stepper'
+import { createSignal, createResource, createEffect, For, Show } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
+import { db } from '../db/index'
+import Rule from '../components/layout/Rule'
+import Stepper from '../components/forms/Stepper'
 
-interface Props {
-  onComplete: () => void
-}
+export default function Setup() {
+  const navigate = useNavigate()
+  const [step, setStep] = createSignal<1 | 2>(1)
+  const [tmValues, setTmValues] = createSignal<Record<number, number>>({})
+  const [saving, setSaving] = createSignal(false)
 
-const LIFTS = ['OHP', 'Bench', 'Squat', 'Deadlift'] as const
+  const [lifts] = createResource(() => db.lifts.orderBy('order').toArray())
 
-export default function Setup({ onComplete }: Props) {
-  const [step, setStep] = useState<1 | 2>(1)
-  const MIN_TM = 45
-
-  const [tms, setTms] = useState<Record<string, number>>({
-    OHP: MIN_TM, Bench: MIN_TM, Squat: MIN_TM, Deadlift: MIN_TM,
+  createEffect(() => {
+    const ls = lifts()
+    if (!ls) return
+    const defaults: Record<number, number> = {}
+    for (const l of ls) defaults[l.id!] = l.baseWeight
+    setTmValues(defaults)
   })
-  const [barWeight, setBarWeight] = useState(DEFAULT_BAR_WEIGHT)
 
-  const allValid = LIFTS.every(l => tms[l] >= MIN_TM)
-
-  const handleComplete = async () => {
-    const now = new Date()
-    const lifts = await db.lifts.toArray()
-    for (const lift of lifts) {
-      await db.trainingMaxes.add({
-        liftId: lift.id!,
-        weight: tms[lift.name],
-        setAt: now,
-      })
-    }
-    await db.cycles.add({ number: 1, startDate: now, endDate: null })
-    const existing = await db.settings.toCollection().first()
-    if (existing?.id) {
-      await db.settings.update(existing.id, { barWeight })
-    } else {
-      await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, barWeight })
-    }
-    await useSettingsStore.getState().load()
-    onComplete()
+  function setTmVal(liftId: number, v: number) {
+    setTmValues(prev => ({ ...prev, [liftId]: v }))
   }
 
-  if (step === 1) {
-    return (
-      <div className="p-4 max-w-sm mx-auto pt-12">
-        <Rule label="SETUP . STEP 1/2" className="text-muted mb-6" />
-        <div className="text-text mb-6">Enter your training maxes:</div>
-        <div className="space-y-4">
-          {LIFTS.map(lift => (
-            <div key={lift}>
-              <div className="flex items-center gap-4">
-                <label className="text-muted w-20 text-sm uppercase tracking-widest">{lift}</label>
-                <Stepper
-                  value={tms[lift]}
-                  onChange={v => setTms(prev => ({ ...prev, [lift]: v }))}
-                  step={5}
-                  min={MIN_TM}
-                />
-                <span className="text-muted text-sm">lb</span>
-              </div>
-              {tms[lift] >= MIN_TM && (
-                <div className="text-faint text-xs font-mono mt-1 ml-24">
-                  {'W1: ' + calcMainSets(tms[lift], 1).map(s => s.weight).join(' · ') + ' lb'}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="mt-6">
-          <div className="flex items-center gap-4">
-            <label className="text-muted w-20 text-sm uppercase tracking-widest">Bar</label>
-            <Stepper value={barWeight} onChange={setBarWeight} step={2.5} min={10} max={100} />
-            <span className="text-muted text-sm">lb</span>
-          </div>
-        </div>
-        <button
-          onClick={() => setStep(2)}
-          disabled={!allValid}
-          className="mt-8 border border-accent text-accent px-6 py-2 font-mono disabled:border-border disabled:text-muted"
-        >
-          NEXT
-        </button>
-      </div>
-    )
+  async function handleStart() {
+    setSaving(true)
+    const ls = lifts()!
+    const vals = tmValues()
+    for (const lift of ls) {
+      await db.trainingMaxes.add({
+        liftId: lift.id!,
+        weight: vals[lift.id!] ?? lift.baseWeight,
+        setAt: new Date(),
+      })
+    }
+    navigate('/today', { replace: true })
   }
 
   return (
-    <div className="p-4 max-w-sm mx-auto pt-12">
-      <Rule label="SETUP . STEP 2/2" className="text-muted mb-6" />
-      <div className="text-text mb-4">Confirm training maxes:</div>
-      <div className="border border-border p-4 space-y-3 mb-8">
-        <div className="flex justify-between">
-          <span className="text-muted uppercase text-sm tracking-widest">Bar</span>
-          <span className="text-text font-mono">{barWeight} lb</span>
+    <div class="max-w-md mx-auto px-4 py-8">
+      <div class="mb-8">
+        <p class="text-muted text-xs uppercase tracking-widest mb-1">TRAINING LOG</p>
+        <h1 class="text-text text-xl font-mono">
+          {step() === 1 ? 'STEP 1 OF 2 — TRAINING MAXES' : 'STEP 2 OF 2 — CONFIRM'}
+        </h1>
+      </div>
+
+      <Show when={step() === 1}>
+        <p class="text-muted text-xs mb-6">
+          Enter your estimated 1-rep max for each lift. The program will calculate working weights from these.
+        </p>
+
+        <Rule label="LIFTS" class="text-muted mb-3" />
+
+        <Show when={lifts.loading}>
+          <p class="text-muted text-sm">Loading…</p>
+        </Show>
+
+        <For each={lifts()}>
+          {(lift) => (
+            <div class="flex items-center gap-3 py-2 border-b border-border-dim">
+              <span class="text-text w-24 text-sm uppercase tracking-widest">{lift.name}</span>
+              <Stepper
+                value={tmValues()[lift.id!] ?? lift.baseWeight}
+                onChange={v => setTmVal(lift.id!, v)}
+                step={5}
+                min={45}
+                max={1000}
+              />
+              <span class="text-muted text-xs">lb</span>
+            </div>
+          )}
+        </For>
+
+        <div class="mt-8 flex flex-col gap-3">
+          <button
+            onClick={() => setStep(2)}
+            disabled={lifts.loading || !lifts()}
+            class="border border-accent text-accent px-4 py-2 text-sm uppercase tracking-widest disabled:opacity-40"
+          >
+            NEXT
+          </button>
+          <button
+            onClick={() => navigate('/settings')}
+            class="text-muted text-xs uppercase tracking-widest py-2"
+          >
+            IMPORT INSTEAD
+          </button>
         </div>
-        {LIFTS.map(lift => (
-          <div key={lift}>
-            <div className="flex justify-between">
-              <span className="text-muted uppercase text-sm tracking-widest">{lift}</span>
-              <span className="text-text font-mono">{tms[lift]} lb</span>
+      </Show>
+
+      <Show when={step() === 2}>
+        <p class="text-muted text-xs mb-6">
+          Review your training maxes. You can change these any time in Settings.
+        </p>
+
+        <Rule label="TRAINING MAXES" class="text-muted mb-3" />
+
+        <For each={lifts()}>
+          {(lift) => (
+            <div class="flex items-center justify-between py-2 border-b border-border-dim">
+              <span class="text-text text-sm uppercase tracking-widest">{lift.name}</span>
+              <span class="text-accent font-mono">{tmValues()[lift.id!] ?? lift.baseWeight} lb</span>
             </div>
-            <div className="text-faint text-xs font-mono mt-0.5">
-              {'W1: ' + calcMainSets(tms[lift], 1).map(s => s.weight).join(' · ') + ' lb'}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-4">
-        <button
-          onClick={() => setStep(1)}
-          className="border border-border px-4 py-2 font-mono text-muted hover:border-accent hover:text-accent"
-        >
-          BACK
-        </button>
-        <button
-          onClick={handleComplete}
-          className="border border-accent text-accent px-6 py-2 font-mono"
-        >
-          START TRAINING
-        </button>
-      </div>
+          )}
+        </For>
+
+        <div class="mt-8 flex flex-col gap-3">
+          <button
+            onClick={handleStart}
+            disabled={saving()}
+            class="border border-accent text-accent px-4 py-2 text-sm uppercase tracking-widest disabled:opacity-40"
+          >
+            {saving() ? 'STARTING…' : 'START TRAINING'}
+          </button>
+          <button
+            onClick={() => setStep(1)}
+            class="text-muted text-xs uppercase tracking-widest py-2"
+          >
+            BACK
+          </button>
+        </div>
+      </Show>
     </div>
   )
 }

@@ -14,6 +14,15 @@ Given a target weight, show which plates to load on each side of the bar. Shown 
 ### Per-Set Weight Adjustment
 Weight on the active set defaults to the programmed value. Tap the weight display to reveal the stepper (signalled by a dashed underline; accent colour when open). Stored on the set record; TM is unchanged. Completed sets can be re-edited inline.
 
+### React → SolidJS Migration
+Rewrote the full app from React 19 + React Router v7 + Zustand to SolidJS 1.9 + @solidjs/router + SolidJS stores. All screens, components, and state management ported; routing structure unchanged. Build tool updated to vite-plugin-solid.
+
+### SQLite Wasm (Worker-based) Database
+Replaced Dexie/IndexedDB with SQLite Wasm running in a dedicated Web Worker. All DB reads and writes go through a message-passing interface; the main thread never blocks on IO. Schema and query layer rewritten; data import/export retained.
+
+### Performance & Mobile Optimization
+Nine-phase optimization pass targeting mobile frame rate and startup time: layout shift elimination, lazy screen loading, virtualizer removal in History (plain `For` loop), loading placeholder during DB init, DB race fix (gate non-init worker messages on ready promise), and React-remnant cleanup.
+
 ### Component-Level Workout Tests
 RTL integration tests (`src/screens/Workout.test.tsx`) cover the joker-button flow — successful AMRAP, failed AMRAP, week 2/3 minimums, pending-joker suppression — without requiring a browser. Removes reliance on Playwright as the sole regression gate for core workout logic.
 
@@ -21,12 +30,20 @@ RTL integration tests (`src/screens/Workout.test.tsx`) cover the joker-button fl
 `calcFslSets` was hardcoded to 65% TM regardless of week. FSL now derives its weight from the actual first main set (70% on week 2, 75% on week 3), matching the "First Set Last" definition. Parameterised tests cover all four weeks.
 
 ### Full Integration Test Suite
-RTL + Vitest + `fake-indexeddb` covering every screen and key component: `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`, `AccessoryPicker`, `AmrapTargets`, `SessionPreview`, `RestTimer`, `BottomNav`, `DurationInput`. 245 tests across 19 files. Every user-visible interaction path exercises the full stack from UI event → Zustand store → IndexedDB → rendered output with no DB layer mocked.
+`@solidjs/testing-library` + Vitest + `fake-indexeddb` covering every screen and key component: `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`, `AccessoryPicker`, `AmrapTargets`, `SessionPreview`, `RestTimer`, `BottomNav`, `DurationInput`. Every user-visible interaction path exercises the full stack from UI event → SolidJS store → SQLite → rendered output with no DB layer mocked.
 
 ### Joker Sets
 After logging the AMRAP top set with reps ≥ the week's minimum (≥5/≥3/≥1), a "+ JOKER SET Xlb" button appears. Each joker uses the same rep scheme as the main sets. Button reappears after each successful joker. Disabled on deload week. Joker sets survive reload.
 
 Weight increment is determined by AMRAP performance: if reps strictly exceed double the week's goal (>10 on 5s week, >6 on 3s week, >2 on 1s week), each joker jumps +10%; otherwise +5%. Both increment sizes round to nearest 5lb.
+
+### Warmup Sets
+
+Warmup follows Wendler's 40/50/60% TM prescription: three sets at 5/5/3 reps calculated from TM (not working weight). Any set at or above the first working weight is dropped; weights below 45 lb floor to bar weight; consecutive sets that round to the same weight are deduplicated. Identical scheme for all lifts — no upper/lower special-casing.
+
+### Custom Accessory Exercises
+
+Add new exercises (name + type: reps/timed/distance) from Settings and assign them to lifts. Create, rename, and archive exercises; archived exercises are hidden from the picker but history is preserved.
 
 ---
 
@@ -67,6 +84,17 @@ Permission request — `Notification.requestPermission()` triggered by a deliber
 
 ---
 
+### Onboarding — Methodology Overview
+
+Add an informational section to the setup wizard explaining 5/3/1 basics before the user enters training maxes.
+
+**Key terms to define**
+- **Training Max (TM)** — the weight the program calculates sets from; typically 85–90% of true 1RM
+- **AMRAP (Plus sets)** — the final main set each week: lift as many reps as possible; performance drives joker sets and TM recommendations
+- **Cycle structure** — 4 weeks: week 1 (5s), week 2 (3s), week 3 (5/3/1), week 4 (deload); TM increments after each deload
+
+---
+
 ### Estimated 1RM History Chart
 
 The History screen already shows TM over time. An estimated 1RM chart from AMRAP performance would be more meaningful — it reflects actual strength rather than programmed TM.
@@ -93,12 +121,6 @@ If the user bumped up the weight on the top set (AMRAP set) relative to the plan
 - Compare logged weight vs planned weight on the AMRAP set
 - Only trigger if logged weight > planned (voluntary bump up, not a bail)
 - Skip if cycle is on deload week (no AMRAP)
-
----
-
-### Custom Accessory Exercises
-
-Currently the exercise list is seeded at startup and fixed. Allow adding new exercises (name + type: reps/timed/distance) from Settings, and assigning them to lifts.
 
 ---
 
@@ -151,3 +173,34 @@ A structured week inserted between Leader and Anchor cycles (or every 2–3 cycl
 ### Assistance Category Tracking
 
 Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Track rep totals per category per session and show progress toward the Wendler target of 25–100 reps from each bucket every workout.
+
+---
+
+### Accessory Data Cleanup
+
+Settings button to purge stale accessory data accumulated from old imports or schema changes:
+
+1. Delete `liftAccessories` rows where `exerciseId` no longer exists in `exercises`
+2. Delete `accessoryTrainingMaxes` rows where `exerciseId` no longer exists
+3. Delete `accessorySets` rows where `sessionId` no longer exists in `sessions`
+4. Archive exercises that have no `liftAccessories` and no `accessorySets` history
+
+Requires confirmation dialog. Irreversible without a JSON backup.
+
+---
+
+### Accessory TM Progression Rate
+
+`incrementLb` is stored per exercise on `accessoryTrainingMaxes` but there is no UI to set it — the picker hardcodes a default. Expose a per-exercise increment field in Settings or the AccessoryPicker TM setup screen so users can control how fast each exercise progresses.
+
+---
+
+### Session Notes Indicator in History
+
+`sessions.notes` is stored and editable in HistoryEdit but invisible in the History list view. Surface a visual indicator (dot or truncated preview) on session rows that have notes, so users can find annotated sessions without expanding each one.
+
+---
+
+### Manual Week Override
+
+No way to correct program state without resetting all history. A week override in Settings would let users set the current week directly — useful when a deload was done informally outside the app, or after illness/travel breaks the normal progression.

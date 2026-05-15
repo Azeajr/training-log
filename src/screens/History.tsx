@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { db } from '../db/db'
-import type { Session, Lift } from '../db/db'
+import { createSignal, createEffect, For, Show } from 'solid-js'
+import { useNavigate, useSearchParams } from '@solidjs/router'
+import { db } from '../db/index'
+import type { Session, Lift } from '../types/domain'
 import { estimated1RM } from '../lib/calc'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 type ViewMode = 'lift' | 'date'
+
+const HISTORY_LIFT_KEY = 'history-lift'
 
 interface SessionRow {
   session: Session
@@ -14,67 +15,173 @@ interface SessionRow {
   amrapReps?: number
 }
 
-export default function History() {
-  const navigate = useNavigate()
-  const [mode, setMode] = useState<ViewMode>('lift')
-  const [lifts, setLifts] = useState<Lift[]>([])
-  const [selectedLiftId, setSelectedLiftId] = useState<number | null>(null)
-  const [sessions, setSessions] = useState<SessionRow[]>([])
-  const [tmHistory, setTmHistory] = useState<{ date: string; weight: number }[]>([])
-  const [expanded, setExpanded] = useState<number | null>(null)
-  const [detail, setDetail] = useState<{ sets: any[]; accessorySets: any[]; notes: string | null } | null>(null)
+interface Detail {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sets: any[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  accessorySets: any[]
+  notes: string | null
+}
 
-  useEffect(() => { load() }, [mode, selectedLiftId])
+function TmChart(props: { data: { date: string; weight: number }[] }) {
+  const W = 400, H = 80, PAD = 20
+  const points = () => {
+    const data = props.data
+    if (data.length < 2) return ''
+    const minW = Math.min(...data.map(d => d.weight))
+    const maxW = Math.max(...data.map(d => d.weight))
+    const range = maxW - minW || 1
+    return data.map((d, i) => {
+      const x = PAD + (i / (data.length - 1)) * (W - PAD * 2)
+      const y = H - PAD - ((d.weight - minW) / range) * (H - PAD * 2)
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    }).join(' ')
+  }
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} class="w-full h-32">
+      <polyline points={points()} fill="none" stroke="var(--color-accent)" stroke-width="1.5" />
+    </svg>
+  )
+}
+
+function HistorySessionRow(props: {
+  row: SessionRow
+  onExpand: (id: number) => void
+  expanded: boolean
+  detail: Detail | null
+}) {
+  const navigate = useNavigate()
+  const sid = () => props.row.session.id!
+  const dateStr = () => new Date(props.row.session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const e1rm = () => props.row.amrapWeight && props.row.amrapReps
+    ? estimated1RM(props.row.amrapWeight, props.row.amrapReps).toFixed(1)
+    : null
+
+  return (
+    <div>
+      <button
+        onClick={() => props.onExpand(sid())}
+        class="w-full text-left border border-border px-3 py-2 text-sm flex justify-between hover:border-muted"
+      >
+        <span class="text-muted">{dateStr()}</span>
+        <span class="text-text">{props.row.liftName} W{props.row.session.week}</span>
+        <span class="text-muted">
+          {props.row.amrapWeight && props.row.amrapReps ? `${props.row.amrapWeight}×${props.row.amrapReps} ~ ${e1rm()}lb` : ''}
+        </span>
+      </button>
+      <Show when={props.expanded ? props.detail : null}>
+        {detail => (
+          <div class="border border-t-0 border-border px-3 py-2 text-xs text-text-dim space-y-1">
+            <div class="flex justify-end mb-1">
+              <button
+                onClick={() => navigate(`/history/${sid()}/edit`)}
+                class="text-xs text-muted hover:text-accent font-mono tracking-widest"
+              >
+                EDIT →
+              </button>
+            </div>
+            <For each={['warmup', 'main', 'joker', 'fsl'] as const}>
+              {type => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const typeSets = detail().sets.filter((s: any) => s.type === type)
+                return (
+                  <Show when={typeSets.length > 0}>
+                    <div>
+                      <div class="text-muted uppercase tracking-widest mb-0.5">{type}</div>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      <For each={typeSets}>{(s: any) => (
+                        <div class="pl-2">
+                          {s.weight}lb x {s.reps}
+                          <Show when={s.isAmrap && e1rm()}>
+                            <span class="text-muted ml-2">est. 1RM: {e1rm()}lb</span>
+                          </Show>
+                        </div>
+                      )}</For>
+                    </div>
+                  </Show>
+                )
+              }}
+            </For>
+            <Show when={detail().notes}>
+              <div>
+                <div class="text-muted uppercase tracking-widest mb-0.5">NOTES</div>
+                <div class="pl-2 text-text-dim">{detail().notes}</div>
+              </div>
+            </Show>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+export default function History() {
+  const [searchParams] = useSearchParams()
+  const [mode, setMode] = createSignal<ViewMode>('lift')
+  const [lifts, setLifts] = createSignal<Lift[]>([])
+  const rawLiftId = searchParams.liftId
+  const storedLiftId = localStorage.getItem(HISTORY_LIFT_KEY)
+  const [selectedLiftId, setSelectedLiftId] = createSignal<number | null>(
+    rawLiftId
+      ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId)
+      : storedLiftId ? parseInt(storedLiftId, 10) : null
+  )
+  const [sessions, setSessions] = createSignal<SessionRow[]>([])
+  const [tmHistory, setTmHistory] = createSignal<{ date: string; weight: number }[]>([])
+  const [expanded, setExpanded] = createSignal<number | null>(null)
+  const [detail, setDetail] = createSignal<Detail | null>(null)
+
+  createEffect(() => { void load() })
 
   const load = async () => {
+    const m = mode()
+    const selId = selectedLiftId()
+
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
-    if (!selectedLiftId && allLifts.length > 0) setSelectedLiftId(allLifts[0].id!)
+    if (!selId && allLifts.length > 0) setSelectedLiftId(allLifts[0].id!)
 
-    if (mode === 'lift' && (selectedLiftId ?? allLifts[0]?.id)) {
-      const liftId = selectedLiftId ?? allLifts[0].id!
+    if (m === 'lift' && (selId ?? allLifts[0]?.id)) {
+      const liftId = selId ?? allLifts[0].id!
       const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
       setTmHistory(tms.map(t => ({
         date: new Date(t.setAt).toLocaleDateString(),
         weight: t.weight,
       })))
-
       const liftSessions = await db.sessions
         .where('liftId').equals(liftId)
         .filter(s => s.status === 'completed')
         .toArray()
       liftSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      const rows = await buildRows(liftSessions, allLifts)
-      setSessions(rows)
-    } else if (mode === 'date') {
+      setSessions(await buildRows(liftSessions, allLifts))
+    } else if (m === 'date') {
       const allSessions = await db.sessions
         .filter(s => s.status === 'completed')
         .toArray()
       allSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      const rows = await buildRows(allSessions, allLifts)
-      setSessions(rows)
+      setSessions(await buildRows(allSessions, allLifts))
     }
   }
 
   const buildRows = async (ss: Session[], allLifts: Lift[]): Promise<SessionRow[]> => {
-    const rows: SessionRow[] = []
-    for (const s of ss) {
+    if (ss.length === 0) return []
+    const sessionIds = ss.map(s => s.id!)
+    const amrapSets = await db.sets.where('sessionId').anyOf(sessionIds).filter(s => s.isAmrap).toArray()
+    const amrapBySession = new Map(amrapSets.map(s => [s.sessionId, s]))
+    return ss.map(s => {
       const lift = allLifts.find(l => l.id === s.liftId)
-      const amrap = s.id
-        ? await db.sets.where('sessionId').equals(s.id).filter(st => st.isAmrap).first()
-        : undefined
-      rows.push({
+      const amrap = amrapBySession.get(s.id!)
+      return {
         session: s,
         liftName: lift?.name ?? '?',
         amrapWeight: amrap?.weight,
-        amrapReps: amrap?.reps,
-      })
-    }
-    return rows
+        amrapReps: amrap?.reps ?? undefined,
+      }
+    })
   }
 
   const handleExpand = async (sessionId: number) => {
-    if (expanded === sessionId) { setExpanded(null); setDetail(null); return }
+    if (expanded() === sessionId) { setExpanded(null); setDetail(null); return }
     setExpanded(sessionId)
     const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
     const accSets = await db.accessorySets.where('sessionId').equals(sessionId).toArray()
@@ -83,118 +190,63 @@ export default function History() {
   }
 
   return (
-    <div className="p-4 font-mono">
-      <div className="flex gap-0 mb-4 border border-border">
-        {(['lift', 'date'] as ViewMode[]).map(m => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`flex-1 py-2 text-xs uppercase tracking-widest ${
-              mode === m ? 'bg-surface-high text-accent' : 'text-muted hover:text-text'
-            }`}
-          >
-            By {m}
-          </button>
-        ))}
+    <div class="p-4 font-mono">
+      <div class="flex gap-0 mb-4 border border-border">
+        <For each={['lift', 'date'] as ViewMode[]}>
+          {m => (
+            <button
+              onClick={() => setMode(m)}
+              class={`flex-1 py-2 text-xs uppercase tracking-widest ${
+                mode() === m ? 'bg-surface-high text-accent' : 'text-muted hover:text-text'
+              }`}
+            >
+              By {m}
+            </button>
+          )}
+        </For>
       </div>
 
-      {mode === 'lift' && (
-        <>
-          <div className="flex gap-0 mb-4">
-            {lifts.map(l => (
+      <Show when={mode() === 'lift'}>
+        <div class="flex gap-0 mb-4">
+          <For each={lifts()}>
+            {l => (
               <button
-                key={l.id}
-                onClick={() => setSelectedLiftId(l.id!)}
-                className={`flex-1 border py-1 text-xs uppercase tracking-widest ${
-                  selectedLiftId === l.id
+                onClick={() => { setSelectedLiftId(l.id!); localStorage.setItem(HISTORY_LIFT_KEY, String(l.id!)) }}
+                class={`flex-1 border py-1 text-xs uppercase tracking-widest ${
+                  selectedLiftId() === l.id
                     ? 'border-accent text-accent'
                     : 'border-border text-muted'
                 }`}
               >
                 {l.name}
               </button>
-            ))}
+            )}
+          </For>
+        </div>
+        <Show when={tmHistory().length > 1}>
+          <div class="mb-4 h-32">
+            <TmChart data={tmHistory()} />
           </div>
-          {tmHistory.length > 1 && (
-            <div className="mb-4 h-32">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={tmHistory}>
-                  <XAxis dataKey="date" tick={{ fill: '#71717a', fontSize: 10 }} />
-                  <YAxis tick={{ fill: '#71717a', fontSize: 10 }} />
-                  <Tooltip
-                    contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', fontFamily: 'monospace' }}
-                    labelStyle={{ color: '#71717a' }}
-                    itemStyle={{ color: '#4ade80' }}
-                  />
-                  <Line type="monotone" dataKey="weight" stroke="#4ade80" dot={false} strokeWidth={1.5} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </>
-      )}
+        </Show>
+      </Show>
 
-      <div className="space-y-1">
-        {sessions.map(row => {
-          const sid = row.session.id!
-          const dateStr = new Date(row.session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          const e1rm = row.amrapWeight && row.amrapReps
-            ? estimated1RM(row.amrapWeight, row.amrapReps).toFixed(1)
-            : null
-          return (
-            <div key={sid}>
-              <button
-                onClick={() => handleExpand(sid)}
-                className="w-full text-left border border-border px-3 py-2 text-sm flex justify-between hover:border-muted"
-              >
-                <span className="text-muted">{dateStr}</span>
-                <span className="text-text">{row.liftName} W{row.session.week}</span>
-                <span className="text-muted">
-                  {row.amrapWeight && row.amrapReps
-                    ? `${row.amrapWeight}×${row.amrapReps} ~ ${e1rm}lb`
-                    : ''}
-                </span>
-              </button>
-              {expanded === sid && detail && (
-                <div className="border border-t-0 border-border px-3 py-2 text-xs text-text-dim space-y-1">
-                  <div className="flex justify-end mb-1">
-                    <button
-                      onClick={() => navigate(`/history/${sid}/edit`)}
-                      className="text-xs text-muted hover:text-accent font-mono tracking-widest"
-                    >
-                      EDIT →
-                    </button>
-                  </div>
-                  {['warmup', 'main', 'fsl'].map(type => {
-                    const typeSets = detail.sets.filter(s => s.type === type)
-                    if (!typeSets.length) return null
-                    return (
-                      <div key={type}>
-                        <div className="text-muted uppercase tracking-widest mb-0.5">{type}</div>
-                        {typeSets.map((s: any, i: number) => (
-                          <div key={i} className="pl-2">
-                            {s.weight}lb x {s.reps}
-                            {s.isAmrap && e1rm && <span className="text-muted ml-2">est. 1RM: {e1rm}lb</span>}
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  })}
-                  {detail.notes && (
-                    <div>
-                      <div className="text-muted uppercase tracking-widest mb-0.5">NOTES</div>
-                      <div className="pl-2 text-text-dim">{detail.notes}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
-        {sessions.length === 0 && (
-          <div className="text-muted text-sm">No completed sessions yet.</div>
-        )}
-      </div>
+      <Show
+        when={sessions().length > 0}
+        fallback={<div class="text-muted text-sm">No completed sessions yet.</div>}
+      >
+        <div class="overflow-auto max-h-[60vh]">
+          <For each={sessions()}>
+            {row => (
+              <HistorySessionRow
+                row={row}
+                onExpand={handleExpand}
+                expanded={expanded() === row.session.id}
+                detail={expanded() === row.session.id ? detail() : null}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   )
 }

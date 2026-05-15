@@ -18,7 +18,7 @@ import {
   calcJokerIncrement,
   shouldShowJokerButton,
 } from './calc'
-import { DEFAULT_PLATES } from '../store/settingsStore'
+import { DEFAULT_PLATES } from '../store/settings-store'
 
 describe('roundToNearest5', () => {
   it('rounds down at 162', () => expect(roundToNearest5(162)).toBe(160))
@@ -83,32 +83,42 @@ describe('calcAccessorySets', () => {
 })
 
 describe('calcWarmup', () => {
-  it('normal upper body case', () => {
-    const sets = calcWarmup(200, 130, 'upper', 5)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10, type: 'warmup' })
-    expect(sets.length).toBeGreaterThan(1)
-    const last = sets[sets.length - 1]
-    expect(last.reps).toBe(3)
-    expect(last.weight).toBeLessThan(130)
+  it('standard case — 3 sets at 40/50/60% TM', () => {
+    // TM=300: 120×5, 150×5, 180×3; WW=210 so all three qualify
+    const sets = calcWarmup(300, 210)
+    expect(sets).toHaveLength(3)
+    expect(sets[0]).toMatchObject({ weight: 120, reps: 5, type: 'warmup' })
+    expect(sets[1]).toMatchObject({ weight: 150, reps: 5 })
+    expect(sets[2]).toMatchObject({ weight: 180, reps: 3 })
   })
-  it('upper body base >= working weight returns bar only', () => {
-    const sets = calcWarmup(200, 90, 'upper', 5)
-    expect(sets).toHaveLength(1)
-    expect(sets[0].weight).toBe(45)
+  it('drops sets at or above working weight', () => {
+    // TM=200: 80×5, 100×5, 120×3; WW=115 → 120 ≥ 115, cut to 2 sets
+    const sets = calcWarmup(200, 115)
+    expect(sets).toHaveLength(2)
+    expect(sets[0]).toMatchObject({ weight: 80, reps: 5 })
+    expect(sets[1]).toMatchObject({ weight: 100, reps: 5 })
   })
-  it('lower body working weight below 135 base gets intermediate steps', () => {
-    // Deadlift first set 125lb (TM≈190): base=135 > workingWeight=125, still needs warmup
-    const sets = calcWarmup(190, 125, 'lower', 5)
-    expect(sets.length).toBeGreaterThan(1)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
-    const last = sets[sets.length - 1]
-    expect(last.weight).toBeLessThan(125)
-    expect(last.reps).toBe(3)
+  it('floors weight at 45lb (bar)', () => {
+    // TM=95: 40%=38 → 45, 50%=47.5 → 45 (dedup), 60%=57→55; WW=70
+    const sets = calcWarmup(95, 70)
+    expect(sets[0]).toMatchObject({ weight: 45, reps: 5 })
+    // dedup: second set also rounds to 45 → skipped
+    expect(sets.every(s => s.weight >= 45)).toBe(true)
   })
-  it('lower body uses 135 base', () => {
-    const sets = calcWarmup(300, 180, 'lower', 5)
-    expect(sets[0].weight).toBe(45)
-    expect(sets.some(s => s.weight === 135)).toBe(true)
+  it('returns empty when all warmup weights meet or exceed WW', () => {
+    // TM=200: 80×5, WW=75 → 80 ≥ 75, nothing qualifies
+    const sets = calcWarmup(200, 75)
+    expect(sets).toHaveLength(0)
+  })
+  it('deduplicates consecutive identical weights', () => {
+    // TM=75: 40%=30→45, 50%=37.5→40→45 (dedup), 60%=45 (dedup); WW=200
+    const sets = calcWarmup(75, 200)
+    const weights = sets.map(s => s.weight)
+    expect(new Set(weights).size).toBe(weights.length)
+  })
+  it('setNumber increments correctly after dedup', () => {
+    const sets = calcWarmup(300, 210)
+    sets.forEach((s, i) => expect(s.setNumber).toBe(i + 1))
   })
 })
 

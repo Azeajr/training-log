@@ -121,3 +121,4 @@ export class TrainingDB extends Dexie {
 }
 
 export const db = new TrainingDB()
+export const dbReady: Promise<{ persistent: boolean }> = Promise.resolve({ persistent: false })

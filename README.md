@@ -7,7 +7,7 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 
 ## Features
 
-- **5/3/1 program logic** — calculates warmup, main, and FSL sets from your training max each week
+- **5/3/1 program logic** — calculates warmup, main, and FSL sets from your training max each week; warmup follows Wendler's 40/50/60% TM prescription (3 sets × 5/5/3 reps)
 - **AMRAP tracking** — logs rep PRs on the third main set and shows targets based on prior performance
 - **Accessory work** — select assistance exercises per lift, log reps/weight/duration/distance
 - **Rest timer** — in-session countdown with audio and vibration cues; different durations for normal, transition, and failed sets
@@ -20,13 +20,13 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 
 | Layer | Library |
 |---|---|
-| UI | React 19, TypeScript, Tailwind CSS 4 |
-| Routing | React Router v7 |
-| State | Zustand 5 |
-| Database | Dexie (IndexedDB) 4 |
-| Charts | Recharts 3 |
+| UI | SolidJS 1.9, TypeScript, Tailwind CSS 4 |
+| Routing | @solidjs/router 0.16 |
+| State | SolidJS stores |
+| Database | SQLite Wasm (Worker-based) |
+| Charts | Custom SVG |
 | Build | Vite + vite-plugin-pwa |
-| Tests | Vitest |
+| Tests | Vitest + @solidjs/testing-library |
 
 ## Getting Started
 
@@ -48,9 +48,9 @@ Tests are split into two layers:
 | Layer | Location | Tools |
 |---|---|---|
 | Unit | `src/lib/*.test.ts`, `src/store/*.test.ts` | Vitest |
-| Component integration | `src/screens/*.test.tsx`, `src/components/*.test.tsx` | Vitest + RTL + jsdom |
+| Component integration | `src/screens/*.test.tsx`, `src/components/*.test.tsx` | Vitest + @solidjs/testing-library + jsdom |
 
-Component integration tests render the full component tree and interact through `userEvent`. The goal is to replace all DB mocks with `fake-indexeddb` so tests exercise the real Dexie layer. See [ROADMAP.md](ROADMAP.md) for current coverage status.
+Component integration tests render the full component tree and interact through `userEvent`. Every screen exercises the full stack: UI event → SolidJS store → SQLite → rendered output. No DB layer is mocked — tests run against `fake-indexeddb` through the real SQLite Wasm layer.
 
 ## Program Structure
 
@@ -64,6 +64,16 @@ Each cycle is 4 weeks across 4 lifts (OHP, Deadlift, Bench, Squat):
 | 4 (deload) | 40% × 5 | 50% × 5 | 60% × 5 |
 
 FSL (First Set Last) is 5 × 10 at the first working set weight after every non-deload session (65% / 70% / 75% TM for weeks 1 / 2 / 3).
+
+Warmup sets follow Wendler's prescription — 3 sets calculated from TM, not working weight:
+
+| Set | Weight | Reps |
+|---|---|---|
+| 1 | 40% TM | 5 |
+| 2 | 50% TM | 5 |
+| 3 | 60% TM | 3 |
+
+Any set at or above the first working weight is skipped. Weights below 45 lb are floored to bar weight. Consecutive sets that round to the same weight are deduplicated.
 
 TM progression after each deload: +5 lb upper body, +10 lb lower body.
 

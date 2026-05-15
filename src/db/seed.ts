@@ -1,4 +1,4 @@
-import { db } from './db'
+import { db } from './index'
 
 const LIFTS = [
   { name: 'OHP'      as const, order: 1, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' as const },
@@ -79,6 +79,20 @@ async function _seedDatabase() {
   // Seed settings if missing
   const settingsCount = await db.settings.count()
   if (settingsCount === 0) {
-    await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300 })
+    await db.settings.add({
+      restTimer1: 90,
+      restTimer2: 180,
+      restTimerFail: 300,
+      barWeight: 45,
+      plates: [
+        { weight: 45,  count: 4 },
+        { weight: 35,  count: 2 },
+        { weight: 25,  count: 4 },
+        { weight: 15,  count: 2 },
+        { weight: 10,  count: 4 },
+        { weight: 5,   count: 4 },
+        { weight: 2.5, count: 4 },
+      ],
+    })
   }
 }
