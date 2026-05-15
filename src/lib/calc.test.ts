@@ -83,48 +83,51 @@ describe('calcAccessorySets', () => {
 })
 
 describe('calcWarmup', () => {
-  it('normal upper body case', () => {
-    const sets = calcWarmup(200, 130, 'upper', 5)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10, type: 'warmup' })
+  it('heavy WW opens at 135', () => {
+    // targetOpener = e1RM(300,5)*0.45 = 350*0.45 = 157.5 → 135 ✓
+    const sets = calcWarmup(400, 300, 5)
+    expect(sets[0]).toMatchObject({ weight: 135, reps: 10, type: 'warmup' })
     expect(sets.length).toBeGreaterThan(1)
     const last = sets[sets.length - 1]
     expect(last.reps).toBe(3)
-    expect(last.weight).toBeLessThan(130)
+    expect(last.weight).toBeLessThan(300)
   })
-  it('upper body WW below 95 still gets intermediate step', () => {
-    // TM=200 → increment=20; WW=90 → effectiveBase=70
-    const sets = calcWarmup(200, 90, 'upper', 5)
-    expect(sets).toHaveLength(2)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
-    expect(sets[1]).toMatchObject({ weight: 70, reps: 3 })
-  })
-  it('upper body WW exactly 95 (base) gets intermediate step', () => {
-    // TM=200 → increment=20; WW=95 → effectiveBase=75
-    const sets = calcWarmup(200, 95, 'upper', 5)
-    expect(sets).toHaveLength(2)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
-    expect(sets[1]).toMatchObject({ weight: 75, reps: 3 })
-  })
-  it('upper body WW just above bar produces single intermediate when increment covers gap', () => {
-    // TM=100 → increment=10; WW=65 → effectiveBase=55
-    const sets = calcWarmup(100, 65, 'upper', 5)
-    expect(sets).toHaveLength(2)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
-    expect(sets[1]).toMatchObject({ weight: 55, reps: 3 })
-  })
-  it('lower body working weight below 135 base gets intermediate steps', () => {
-    // Deadlift first set 125lb (TM≈190): base=135 > workingWeight=125, still needs warmup
-    const sets = calcWarmup(190, 125, 'lower', 5)
+  it('moderate WW opens at 95', () => {
+    // targetOpener = e1RM(200,5)*0.45 = 233.3*0.45 = 105 → 95 ✓ (135 > 105)
+    const sets = calcWarmup(300, 200, 5)
+    expect(sets[0]).toMatchObject({ weight: 95, reps: 10, type: 'warmup' })
     expect(sets.length).toBeGreaterThan(1)
-    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
     const last = sets[sets.length - 1]
-    expect(last.weight).toBeLessThan(125)
     expect(last.reps).toBe(3)
+    expect(last.weight).toBeLessThan(200)
   })
-  it('lower body uses 135 base', () => {
-    const sets = calcWarmup(300, 180, 'lower', 5)
-    expect(sets[0].weight).toBe(45)
-    expect(sets.some(s => s.weight === 135)).toBe(true)
+  it('WW just below 95 threshold opens at 65', () => {
+    // targetOpener = e1RM(180,5)*0.45 = 210*0.45 = 94.5 → 95 > 94.5 ✗, 65 ✓
+    const sets = calcWarmup(250, 180, 5)
+    expect(sets[0]).toMatchObject({ weight: 65, reps: 10 })
+  })
+  it('light WW opens at 45', () => {
+    // targetOpener = e1RM(90,5)*0.45 = 105*0.45 = 47.25 → 65 > 47.25 ✗, 45 ✓
+    const sets = calcWarmup(150, 90, 5)
+    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
+  })
+  it('WW too light returns empty', () => {
+    // targetOpener = e1RM(65,5)*0.45 = 75.8*0.45 = 34.1 → 45 > 34.1 ✗ — no opener
+    const sets = calcWarmup(100, 65, 5)
+    expect(sets).toHaveLength(0)
+  })
+  it('opener-only when single step covers gap', () => {
+    // WW=90, TM=300 → increment=30; effectiveBase=75 < 90 → one intermediate at 75×3
+    const sets = calcWarmup(300, 90, 5)
+    expect(sets).toHaveLength(2)
+    expect(sets[0]).toMatchObject({ weight: 45, reps: 10 })
+    expect(sets[1]).toMatchObject({ reps: 3 })
+  })
+  it('week-3 (1-rep) uses stricter threshold — opener lighter relative to WW', () => {
+    // WW=270 week-3: targetOpener = e1RM(270,1)*0.45 = 270*0.45 = 121.5 → 95 ✓
+    // same WW week-1 (5r): targetOpener = e1RM(270,5)*0.45 = 315*0.45 = 141.75 → 135 ✓
+    expect(calcWarmup(400, 270, 1)[0].weight).toBe(95)
+    expect(calcWarmup(400, 270, 5)[0].weight).toBe(135)
   })
 })
 

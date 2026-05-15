@@ -125,27 +125,30 @@ export interface WarmupSet {
   type: 'warmup'
 }
 
-const WARMUP_E1RM_THRESHOLD = 10
+const WARMUP_OPENERS = [135, 95, 65, 45]
+const WARMUP_OPENER_RATIO = 0.60
 
 export const calcWarmup = (
   tm: number,
   workingWeight: number,
-  liftType: 'upper' | 'lower',
   firstSetReps: number,
 ): WarmupSet[] => {
-  if (estimated1RM(workingWeight, firstSetReps) < estimated1RM(BAR_WEIGHT, 10) + WARMUP_E1RM_THRESHOLD) return []
-  const base = liftType === 'lower' ? 135 : 95
+  const wwE1rm = estimated1RM(workingWeight, firstSetReps)
+  const targetOpenerWeight = (wwE1rm * WARMUP_OPENER_RATIO) / (1 + 10 / 30)
+  const opener = WARMUP_OPENERS.find(w => w < workingWeight && w <= targetOpenerWeight)
+  if (opener === undefined) return []
+
   const increment = Math.round((tm * 0.1) / 5) * 5
 
   const sets: WarmupSet[] = [
-    { setNumber: 1, weight: BAR_WEIGHT, reps: 10, type: 'warmup' }
+    { setNumber: 1, weight: opener, reps: 10, type: 'warmup' }
   ]
 
-  const effectiveBase = base < workingWeight
-    ? base
+  const effectiveBase = opener < workingWeight - increment
+    ? opener + increment
     : roundToNearest5(workingWeight - increment)
 
-  if (effectiveBase <= BAR_WEIGHT) return sets
+  if (effectiveBase <= opener || effectiveBase >= workingWeight) return sets
 
   let current = effectiveBase
   let setNumber = 2
