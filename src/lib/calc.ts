@@ -1,4 +1,4 @@
-import type { PlateConfig } from '../db/db'
+import type { PlateConfig } from '../types/domain'
 
 export const MAIN_PERCENTAGES = {
   1: [0.65, 0.75, 0.85],
@@ -125,41 +125,23 @@ export interface WarmupSet {
   type: 'warmup'
 }
 
-const WARMUP_E1RM_THRESHOLD = 10
+const WARMUP_PERCENTAGES: { pct: number; reps: number }[] = [
+  { pct: 0.40, reps: 5 },
+  { pct: 0.50, reps: 5 },
+  { pct: 0.60, reps: 3 },
+]
 
 export const calcWarmup = (
   tm: number,
   workingWeight: number,
-  liftType: 'upper' | 'lower',
-  firstSetReps: number,
 ): WarmupSet[] => {
-  if (estimated1RM(workingWeight, firstSetReps) < estimated1RM(BAR_WEIGHT, 10) + WARMUP_E1RM_THRESHOLD) return []
-  const base = liftType === 'lower' ? 135 : 95
-  const increment = Math.round((tm * 0.1) / 5) * 5
-
-  const sets: WarmupSet[] = [
-    { setNumber: 1, weight: BAR_WEIGHT, reps: 10, type: 'warmup' }
-  ]
-
-  if (liftType === 'upper' && base >= workingWeight) return sets
-
-  const effectiveBase = base < workingWeight
-    ? base
-    : roundToNearest5(workingWeight - increment)
-
-  if (effectiveBase <= BAR_WEIGHT) return sets
-
-  let current = effectiveBase
-  let setNumber = 2
-
-  while (current + increment < workingWeight) {
-    sets.push({ setNumber, weight: current, reps: 5, type: 'warmup' })
-    current += increment
-    setNumber++
+  const sets: WarmupSet[] = []
+  for (const { pct, reps } of WARMUP_PERCENTAGES) {
+    const weight = Math.max(BAR_WEIGHT, roundToNearest5(tm * pct))
+    if (weight >= workingWeight) break
+    if (sets.length > 0 && weight === sets[sets.length - 1].weight) continue
+    sets.push({ setNumber: sets.length + 1, weight, reps, type: 'warmup' })
   }
-
-  sets.push({ setNumber, weight: current, reps: 3, type: 'warmup' })
-
   return sets
 }
 

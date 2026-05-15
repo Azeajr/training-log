@@ -1,4 +1,36 @@
-import { db, TrainingDB } from '../db/db'
+import { db } from '../db/index'
+import type {
+  Lift, TrainingMax, Cycle, Session, Set, AccessorySet, AccessoryTrainingMax,
+} from '../types/domain'
+
+interface TableLike<T> {
+  toArray(): Promise<T[]>
+  add(obj: Omit<T, 'id'>): Promise<number>
+  where(field: string): {
+    equals(v: unknown): {
+      toArray(): Promise<T[]>
+      first(): Promise<T | undefined>
+      sortBy(field: string): Promise<T[]>
+      filter(fn: (row: T) => boolean): {
+        first(): Promise<T | undefined>
+        toArray(): Promise<T[]>
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    anyOf(values: any[]): { toArray(): Promise<T[]> }
+  }
+  orderBy(field: string): { last(): Promise<T | undefined> }
+}
+
+interface TrainingDB {
+  lifts: TableLike<Lift>
+  trainingMaxes: TableLike<TrainingMax>
+  cycles: TableLike<Cycle>
+  sessions: TableLike<Session>
+  sets: TableLike<Set>
+  accessorySets: TableLike<AccessorySet>
+  accessoryTrainingMaxes: TableLike<AccessoryTrainingMax>
+}
 
 export async function getNextSession(database: TrainingDB = db): Promise<{
   liftId: number
@@ -138,9 +170,10 @@ export async function deloadTms(database: TrainingDB = db, pct = 0.10): Promise<
 export async function getAmrapTargets(
   liftId: number,
   currentWeek: number,
-  currentCycleId: number
+  currentCycleId: number,
+  database: TrainingDB = db,
 ): Promise<Array<{ weight: number; reps: number; label: string }>> {
-  const allSessions = await db.sessions
+  const allSessions = await database.sessions
     .where('liftId').equals(liftId)
     .filter(s => s.status === 'completed' && s.week !== 4)
     .toArray()
@@ -150,7 +183,7 @@ export async function getAmrapTargets(
   )
 
   const getAmrapSet = (sessionId: number) =>
-    db.sets
+    database.sets
       .where('sessionId').equals(sessionId)
       .filter(s => s.isAmrap)
       .first()

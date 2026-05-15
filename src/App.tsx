@@ -1,82 +1,72 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { seedDatabase } from './db/seed'
-import { db } from './db/db'
-import { importFromRawData } from './lib/exportImport'
-import { useSettingsStore } from './store/settingsStore'
-import { useWorkoutStore } from './store/workoutStore'
-import BottomNav from './components/BottomNav'
-import Setup from './screens/Setup'
-import Today from './screens/Today'
-import Workout from './screens/Workout'
+import { Router, Route, useNavigate, useLocation } from '@solidjs/router'
+import { lazy, Suspense, Show, onMount, type ParentProps } from 'solid-js'
+import { createConfirmation, ConfirmationContext } from './hooks/use-confirmation'
+import BottomNav from './components/layout/BottomNav'
+import Toast from './components/layout/Toast'
+import ConfirmationDialog from './components/modals/ConfirmationDialog'
+import { db } from './db/index'
 
+const ScreenFallback = () => (
+  <div class="flex items-center justify-center h-full min-h-[50vh] text-text/40 text-sm">
+    Loading…
+  </div>
+)
+
+const Today = lazy(() => import('./screens/Today'))
+const Workout = lazy(() => import('./screens/Workout'))
 const History = lazy(() => import('./screens/History'))
 const HistoryEdit = lazy(() => import('./screens/HistoryEdit'))
 const Settings = lazy(() => import('./screens/Settings'))
+const Setup = lazy(() => import('./screens/Setup'))
 
-function AppShell() {
-  const activeSession = useWorkoutStore((s) => s.activeSession)
+function AppShell(props: ParentProps) {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  onMount(async () => {
+    if (location.pathname !== '/setup') {
+      const count = await db.trainingMaxes.count()
+      if (count === 0) navigate('/setup', { replace: true })
+    }
+  })
 
   return (
     <div
-      className="bg-bg min-h-screen font-mono text-text flex flex-col"
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)', userSelect: 'none', WebkitUserSelect: 'none' }}
+      class="bg-bg min-h-screen font-mono text-text flex flex-col"
+      style={{ 'padding-top': 'env(safe-area-inset-top, 0px)', 'user-select': 'none', '-webkit-user-select': 'none' }}
       onContextMenu={e => e.preventDefault()}
     >
       <main
-        className="flex-1 overflow-y-auto"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 3.5rem)' }}
+        class="flex-1 overflow-y-auto"
+        style={{ 'padding-bottom': 'calc(env(safe-area-inset-bottom, 0px) + 3.5rem)' }}
       >
-        <Suspense>
-          <Routes>
-            <Route path="/" element={<Navigate to={activeSession ? '/workout' : '/today'} replace />} />
-            <Route path="/today" element={<Today />} />
-            <Route path="/workout" element={<Workout />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/history/:sessionId/edit" element={<HistoryEdit />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+        <Suspense fallback={<ScreenFallback />}>
+          {props.children}
         </Suspense>
       </main>
-      <BottomNav />
+      <Show when={location.pathname !== '/setup'}>
+        <Toast />
+        <BottomNav />
+      </Show>
     </div>
   )
 }
 
 export default function App() {
-  const loadSettings = useSettingsStore((s) => s.load)
-  const [setupComplete, setSetupComplete] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    const init = async () => {
-      if (import.meta.env.VITE_DEMO) {
-        const isEmpty = (await db.trainingMaxes.count()) === 0
-        if (isEmpty) {
-          const res = await fetch('/demo-seed.json')
-          await importFromRawData(await res.json())
-        }
-      }
-      await seedDatabase()
-      await loadSettings()
-      const tmCount = await db.trainingMaxes.count()
-      setSetupComplete(tmCount > 0)
-    }
-    init()
-  }, [])
-
-  if (setupComplete === null) return null
-
-  if (!setupComplete) {
-    return (
-      <div className="bg-bg min-h-screen font-mono text-text">
-        <Setup onComplete={() => setSetupComplete(true)} />
-      </div>
-    )
-  }
+  const confirmation = createConfirmation()
 
   return (
-    <BrowserRouter>
-      <AppShell />
-    </BrowserRouter>
+    <ConfirmationContext.Provider value={confirmation}>
+      <Router root={AppShell}>
+        <Route path="/" component={Today} />
+        <Route path="/today" component={Today} />
+        <Route path="/workout" component={Workout} />
+        <Route path="/history" component={History} />
+        <Route path="/history/:sessionId/edit" component={HistoryEdit} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/setup" component={Setup} />
+      </Router>
+      <ConfirmationDialog />
+    </ConfirmationContext.Provider>
   )
 }

@@ -1,10 +1,15 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { render } from 'solid-js/web'
 import './index.css'
-import App from './App.tsx'
+import App from './App'
+import { dbReady } from './db/index'
+import { seedDatabase } from './db/seed'
+import { loadSettings } from './store/settings-store'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+dbReady
+  .then(seedDatabase)
+  .then(loadSettings)
+  .then(() => {
+    const root = document.getElementById('root')!
+    root.innerHTML = ''
+    render(() => <App />, root)
+  })

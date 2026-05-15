@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, afterEach, describe, it, expect } from 'vitest'
 import { TrainingDB, type Lift } from '../db/db'
-import { getNextSession, advanceCycleIfComplete } from './session'
+import { getNextSession, advanceCycleIfComplete, applyTmProgression, applyAccessoryTmProgression, getAmrapTargets } from './session'
 
 let db: TrainingDB
 
@@ -185,5 +185,218 @@ describe('advanceCycleIfComplete', () => {
     const { advanced } = await advanceCycleIfComplete(db)
 
     expect(advanced).toBe(true)
+  })
+})
+
+// V(G)=3 (loop over lifts × has-TM branch); independent paths P1..P3
+describe('applyTmProgression', () => {
+  it('P1: increments each lift TM by its progressionIncrement', async () => { // happy path
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+
+    await applyTmProgression(db)
+
+    const byName = Object.fromEntries(
+      await Promise.all(lifts.map(async l => {
+        const tms = await db.trainingMaxes.where('liftId').equals(l.id!).sortBy('setAt')
+        return [l.name, tms[tms.length - 1].weight] as [string, number]
+      }))
+    )
+    expect(byName['OHP']).toBe(205)      // BVA: upper +5
+    expect(byName['Deadlift']).toBe(210) // BVA: lower +10
+    expect(byName['Bench']).toBe(205)    // BVA: upper +5
+    expect(byName['Squat']).toBe(210)    // BVA: lower +10
+  })
+
+  it('P2: does not add TM when no prior TM exists for lift', async () => { // branch: no currentTm
+    await seedLifts()
+    // no TMs seeded
+
+    await applyTmProgression(db)
+
+    expect(await db.trainingMaxes.count()).toBe(0)
+  })
+
+  it('P3: creates a new TM row and preserves the original', async () => { // invariant: add not update
+    const lifts = await seedLifts()
+    await seedTms(lifts, 100)
+
+    await applyTmProgression(db)
+
+    const ohpTms = await db.trainingMaxes.where('liftId').equals(lifts[0].id!).sortBy('setAt')
+    expect(ohpTms).toHaveLength(2)
+    expect(ohpTms[0].weight).toBe(100) // original preserved
+    expect(ohpTms[1].weight).toBe(105) // new row added
+  })
+})
+
+// V(G)=4 (outer loop over exercises × has-TM branch + inner anyOf); paths P1..P4
+describe('applyAccessoryTmProgression', () => {
+  async function seedAccessoryData() {
+    const lifts = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: lifts[0].id!, week: 1, date: new Date(), notes: null, status: 'completed',
+    })
+    const ex1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const ex2 = await db.exercises.add({ name: 'Dip', type: 'reps' })
+    return { cycleId, sessionId, ex1, ex2 }
+  }
+
+  it('P1: increments accessory TM by incrementLb for exercise used in cycle', async () => { // happy path
+    const { cycleId, sessionId, ex1 } = await seedAccessoryData()
+    await db.accessorySets.add({ sessionId, exerciseId: ex1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    await db.accessoryTrainingMaxes.add({ exerciseId: ex1, weight: 50, incrementLb: 5, setAt: new Date('2026-01-01') })
+
+    await applyAccessoryTmProgression(db, cycleId)
+
+    const tms = await db.accessoryTrainingMaxes.where('exerciseId').equals(ex1).sortBy('setAt')
+    expect(tms[tms.length - 1].weight).toBe(55)
+  })
+
+  it('P2: increments each used exercise independently — BVA: max iterations (2 exercises)', async () => {
+    const { cycleId, sessionId, ex1, ex2 } = await seedAccessoryData()
+    await db.accessorySets.bulkAdd([
+      { sessionId, exerciseId: ex1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null },
+      { sessionId, exerciseId: ex2, setNumber: 1, weight: 100, reps: 5, duration: null, distance: null },
+    ])
+    await db.accessoryTrainingMaxes.bulkAdd([
+      { exerciseId: ex1, weight: 50, incrementLb: 5,  setAt: new Date('2026-01-01') },
+      { exerciseId: ex2, weight: 100, incrementLb: 10, setAt: new Date('2026-01-01') },
+    ])
+
+    await applyAccessoryTmProgression(db, cycleId)
+
+    const tms1 = await db.accessoryTrainingMaxes.where('exerciseId').equals(ex1).sortBy('setAt')
+    const tms2 = await db.accessoryTrainingMaxes.where('exerciseId').equals(ex2).sortBy('setAt')
+    expect(tms1[tms1.length - 1].weight).toBe(55)
+    expect(tms2[tms2.length - 1].weight).toBe(110)
+  })
+
+  it('P3: does not increment TM for exercise not used in cycle — BVA: 0 iterations', async () => { // FF branch
+    const { cycleId, ex1 } = await seedAccessoryData()
+    // ex1 has a TM but no accessory sets in this cycle
+    await db.accessoryTrainingMaxes.add({ exerciseId: ex1, weight: 50, incrementLb: 5, setAt: new Date('2026-01-01') })
+
+    await applyAccessoryTmProgression(db, cycleId)
+
+    const tms = await db.accessoryTrainingMaxes.where('exerciseId').equals(ex1).sortBy('setAt')
+    expect(tms).toHaveLength(1) // no new row added
+  })
+
+  it('P4: does not crash when exercise used in cycle has no prior TM', async () => { // edge: no currentTm
+    const { cycleId, sessionId, ex1 } = await seedAccessoryData()
+    await db.accessorySets.add({ sessionId, exerciseId: ex1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    // no accessoryTrainingMaxes for ex1
+
+    await applyAccessoryTmProgression(db, cycleId)
+
+    expect(await db.accessoryTrainingMaxes.count()).toBe(0)
+  })
+})
+
+// V(G)=6 (filter completed+week≠4, find lastSession, find prevCycle, two amrap set lookups); paths P1..P7
+describe('getAmrapTargets', () => {
+  async function seedAmrapSession(
+    opts: { cycleId: number; liftId: number; week: 1|2|3|4; status?: 'completed'|'pending'|'skipped'; amrapWeight?: number; amrapReps?: number; date?: Date }
+  ) {
+    const sessionId = await db.sessions.add({
+      cycleId: opts.cycleId,
+      liftId: opts.liftId,
+      week: opts.week,
+      date: opts.date ?? new Date(),
+      notes: null,
+      status: opts.status ?? 'completed',
+    })
+    if (opts.amrapWeight !== undefined) {
+      await db.sets.add({
+        sessionId, type: 'main', setNumber: 3,
+        weight: opts.amrapWeight, reps: opts.amrapReps ?? 8, isAmrap: true,
+      })
+    }
+    return sessionId
+  }
+
+  it('P1: returns [] when no prior completed sessions exist', async () => { // base case — BVA: 0-iter
+    const lifts = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+
+    const result = await getAmrapTargets(lifts[0].id!, 1, cycleId, db)
+
+    expect(result).toEqual([])
+  })
+
+  it('P2: returns Last session target from most recent completed session', async () => { // happy path
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    // week 2 session — will be lastSession but NOT a prevCycleSession for week 1
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 205, amrapReps: 9 })
+    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
+
+    const result = await getAmrapTargets(lifts[0].id!, 1, cycle2, db)
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ weight: 205, reps: 9, label: 'Last session' })
+  })
+
+  it('P3: returns both Last session and Last cycle when both exist — TT condition', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 200, amrapReps: 7 })
+    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
+    // more recent session in same cycle (different week so it becomes lastSession, not lastCycle)
+    await seedAmrapSession({ cycleId: cycle2, liftId: lifts[0].id!, week: 2, amrapWeight: 205, amrapReps: 9, date: new Date('2026-02-15') })
+
+    const result = await getAmrapTargets(lifts[0].id!, 1, cycle2, db)
+
+    const labels = result.map(r => r.label)
+    expect(labels).toContain('Last session')
+    expect(labels).toContain('Last cycle')
+  })
+
+  it('P4: ignores pending sessions — TF condition (status=pending)', async () => {
+    const lifts = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await seedAmrapSession({ cycleId, liftId: lifts[0].id!, week: 1, status: 'pending', amrapWeight: 205, amrapReps: 8 })
+    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date(), endDate: null })
+
+    const result = await getAmrapTargets(lifts[0].id!, 1, cycle2, db)
+
+    expect(result).toEqual([])
+  })
+
+  it('P5: ignores week-4 sessions — FT condition (week=4 filtered)', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 4, amrapWeight: 205, amrapReps: 8 })
+    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date(), endDate: null })
+
+    const result = await getAmrapTargets(lifts[0].id!, 4, cycle2, db)
+
+    expect(result).toEqual([])
+  })
+
+  it('P6: returns no entry when completed session has no AMRAP set — FF condition', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1 }) // no amrapWeight
+    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date(), endDate: null })
+
+    const result = await getAmrapTargets(lifts[0].id!, 1, cycle2, db)
+
+    expect(result).toEqual([])
+  })
+
+  it('P7: returns most recent session as Last session when multiple prior sessions exist — sort correctness', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 195, amrapReps: 6, date: new Date('2026-01-10') })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 210, amrapReps: 10, date: new Date('2026-01-20') })
+    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
+
+    const result = await getAmrapTargets(lifts[0].id!, 1, cycle2, db)
+
+    // Most recent is week-2 session (Jan 20) → Last session
+    expect(result[0]).toMatchObject({ weight: 210, reps: 10, label: 'Last session' })
   })
 })

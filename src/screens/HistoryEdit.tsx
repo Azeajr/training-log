@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { db } from '../db/db'
-import type { Exercise, LiftAccessory } from '../db/db'
-import DurationInput from '../components/DurationInput'
-import Rule from '../components/Rule'
-import Stepper from '../components/Stepper'
+import { createSignal, onMount, For, Show } from 'solid-js'
+import { useParams, useNavigate } from '@solidjs/router'
+import { db } from '../db/index'
+import type { Exercise, LiftAccessory } from '../types/domain'
+import DurationInput from '../components/forms/DurationInput'
+import Rule from '../components/layout/Rule'
+import Stepper from '../components/forms/Stepper'
 
 interface EditSet {
   id: number
@@ -25,7 +25,7 @@ interface EditAccSet {
 }
 
 interface EditAccessory {
-  originalExerciseId: number  // -1 for newly added groups
+  originalExerciseId: number
   exerciseId: number
   exerciseName: string
   exerciseType: 'reps' | 'timed' | 'distance'
@@ -38,21 +38,21 @@ interface LiftExercise {
 }
 
 export default function HistoryEdit() {
-  const { sessionId } = useParams<{ sessionId: string }>()
+  const params = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
-  const sid = parseInt(sessionId ?? '0')
+  const sid = parseInt(params.sessionId ?? '0')
 
-  const [sessionInfo, setSessionInfo] = useState<{ liftName: string; week: number; date: string } | null>(null)
-  const [editSets, setEditSets] = useState<EditSet[]>([])
-  const [editAccessories, setEditAccessories] = useState<EditAccessory[]>([])
-  const [deletedAccessoryIds, setDeletedAccessoryIds] = useState<number[]>([])
-  const [notes, setNotes] = useState('')
-  const [liftExercises, setLiftExercises] = useState<LiftExercise[]>([])
-  // showPicker: index into editAccessories to swap, or -1 to add new, or null = closed
-  const [showPicker, setShowPicker] = useState<number | null>(null)
-  const [isSaving, setIsSaving] = useState(false)
+  const [sessionInfo, setSessionInfo] = createSignal<{ liftName: string; week: number; date: string } | null>(null)
+  const [liftId, setLiftId] = createSignal<number | null>(null)
+  const [editSets, setEditSets] = createSignal<EditSet[]>([])
+  const [editAccessories, setEditAccessories] = createSignal<EditAccessory[]>([])
+  const [deletedAccessoryIds, setDeletedAccessoryIds] = createSignal<number[]>([])
+  const [notes, setNotes] = createSignal('')
+  const [liftExercises, setLiftExercises] = createSignal<LiftExercise[]>([])
+  const [showPicker, setShowPicker] = createSignal<number | null>(null)
+  const [isSaving, setIsSaving] = createSignal(false)
 
-  useEffect(() => { load() }, [sid])
+  onMount(() => { void load() })
 
   const load = async () => {
     const session = await db.sessions.get(sid)
@@ -60,6 +60,7 @@ export default function HistoryEdit() {
     const lift = await db.lifts.get(session.liftId)
     if (!lift) return
 
+    setLiftId(session.liftId)
     setSessionInfo({
       liftName: lift.name,
       week: session.week,
@@ -137,7 +138,7 @@ export default function HistoryEdit() {
   }
 
   const deleteAccessory = (accIdx: number) => {
-    const acc = editAccessories[accIdx]
+    const acc = editAccessories()[accIdx]
     if (acc.originalExerciseId !== -1) {
       setDeletedAccessoryIds(prev => [...prev, acc.originalExerciseId])
     }
@@ -145,8 +146,9 @@ export default function HistoryEdit() {
   }
 
   const handlePickExercise = (ex: Exercise) => {
-    if (showPicker === null) return
-    if (showPicker === -1) {
+    const picker = showPicker()
+    if (picker === null) return
+    if (picker === -1) {
       setEditAccessories(prev => [...prev, {
         originalExerciseId: -1,
         exerciseId: ex.id!,
@@ -162,7 +164,7 @@ export default function HistoryEdit() {
       }])
     } else {
       setEditAccessories(prev => prev.map((acc, i) => {
-        if (i !== showPicker) return acc
+        if (i !== picker) return acc
         const typeChanged = acc.exerciseType !== ex.type
         return {
           ...acc,
@@ -181,18 +183,16 @@ export default function HistoryEdit() {
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      for (const s of editSets) {
+      for (const s of editSets()) {
         await db.sets.update(s.id, { weight: s.weight, reps: s.reps })
       }
-
-      for (const exId of deletedAccessoryIds) {
+      for (const exId of deletedAccessoryIds()) {
         await db.accessorySets
           .where('sessionId').equals(sid)
           .and(s => s.exerciseId === exId)
           .delete()
       }
-
-      for (const acc of editAccessories) {
+      for (const acc of editAccessories()) {
         if (acc.originalExerciseId === -1) {
           await db.accessorySets.bulkAdd(acc.sets.map(s => ({
             sessionId: sid,
@@ -230,160 +230,185 @@ export default function HistoryEdit() {
           }
         }
       }
-
-      await db.sessions.update(sid, { notes })
-      navigate('/history')
+      await db.sessions.update(sid, { notes: notes() })
+      navigate(liftId() != null ? `/history?liftId=${liftId()}` : '/history')
     } finally {
       setIsSaving(false)
     }
   }
 
-  if (!sessionInfo) return <div className="p-6 font-mono text-muted">Loading...</div>
-
-  const setsByType = (type: 'warmup' | 'main' | 'fsl') =>
-    editSets.map((s, i) => ({ s, i })).filter(({ s }) => s.type === type)
-
   return (
-    <div className="p-4 font-mono pb-24 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={() => navigate('/history')}
-          className="text-muted hover:text-text text-xs tracking-widest"
-        >
-          ← BACK
-        </button>
-        <div className="text-muted text-xs tracking-widest uppercase">
-          {sessionInfo.liftName} W{sessionInfo.week}
-          <span className="text-muted ml-2">{sessionInfo.date}</span>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="border border-accent text-accent px-4 py-1 text-xs font-mono tracking-widest disabled:opacity-50"
-        >
-          {isSaving ? 'SAVING...' : 'SAVE'}
-        </button>
-      </div>
-
-      {(['warmup', 'main', 'fsl'] as const).map(type => {
-        const rows = setsByType(type)
-        if (!rows.length) return null
-        return (
-          <div key={type} className="mb-6">
-            <div className="text-muted uppercase text-xs tracking-widest mb-2">
-              {type === 'fsl' ? 'FSL' : type}
+    <Show
+      when={sessionInfo()}
+      fallback={<div class="p-6 font-mono text-muted">Loading...</div>}
+    >
+      {info => (
+        <div class="p-4 font-mono pb-24 max-w-3xl mx-auto">
+          <div class="flex items-center justify-between mb-6">
+            <button
+              onClick={() => navigate(liftId() != null ? `/history?liftId=${liftId()}` : '/history')}
+              class="text-muted hover:text-text text-xs tracking-widest"
+            >
+              ← BACK
+            </button>
+            <div class="text-muted text-xs tracking-widest uppercase">
+              {info().liftName} W{info().week}
+              <span class="text-muted ml-2">{info().date}</span>
             </div>
-            {rows.map(({ s, i }) => (
-              <div key={i} className="flex items-center gap-2 py-1.5 flex-wrap">
-                <Stepper value={s.weight} onChange={v => updateSet(i, 'weight', v)} step={2.5} min={0} />
-                <span className="text-muted text-xs">lb ×</span>
-                <Stepper value={s.reps} onChange={v => updateSet(i, 'reps', v)} step={1} min={0} />
-                {s.isAmrap && <span className="text-warn text-xs tracking-widest">AMRAP</span>}
-              </div>
-            ))}
+            <button
+              onClick={handleSave}
+              disabled={isSaving()}
+              class="border border-accent text-accent px-4 py-1 text-xs font-mono tracking-widest disabled:opacity-50"
+            >
+              {isSaving() ? 'SAVING...' : 'SAVE'}
+            </button>
           </div>
-        )
-      })}
 
-      <div className="mb-6">
-        <Rule label="ACCESSORIES" className="text-muted mb-2" />
-        {editAccessories.map((acc, ai) => (
-          <div key={ai} className="border border-border p-3 mb-3">
-            <div className="flex items-center justify-between mb-2">
-              <button
-                onClick={() => setShowPicker(ai)}
-                className="text-text text-sm uppercase tracking-widest hover:text-accent"
-              >
-                {acc.exerciseName}
-                <span className="text-muted text-xs ml-2 normal-case tracking-normal">tap to swap</span>
-              </button>
-              <button
-                onClick={() => deleteAccessory(ai)}
-                className="text-muted hover:text-danger text-xs font-mono px-1"
-              >
-                ✕
-              </button>
-            </div>
-            {acc.sets.map((s, si) => (
-              <div key={si} className="flex items-center flex-wrap gap-2 py-1 pl-2">
-                <span className="text-muted text-xs w-10">Set {s.setNumber}</span>
-                {acc.exerciseType === 'reps' && (
-                  <>
-                    <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} />
-                    <span className="text-muted text-xs">lb ×</span>
-                    <Stepper value={s.reps ?? 0} onChange={v => updateAccSet(ai, si, 'reps', v)} step={1} min={0} />
-                  </>
-                )}
-                {acc.exerciseType === 'timed' && (
-                  <DurationInput
-                    value={s.duration}
-                    onChange={val => updateAccSet(ai, si, 'duration', val)}
-                  />
-                )}
-                {acc.exerciseType === 'distance' && (
-                  <Stepper value={s.distance ?? 0} onChange={v => updateAccSet(ai, si, 'distance', v)} step={1} min={0} />
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
-        <button
-          onClick={() => setShowPicker(-1)}
-          className="w-full border border-border py-2 text-muted text-xs tracking-widest hover:border-accent hover:text-accent"
-        >
-          + ADD ACCESSORY
-        </button>
-      </div>
-
-      <div className="mb-6">
-        <div className="text-muted uppercase text-xs tracking-widest mb-2">NOTES</div>
-        <textarea
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          className="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
-          rows={3}
-          placeholder="Session notes..."
-        />
-      </div>
-
-      <button
-        onClick={handleSave}
-        disabled={isSaving}
-        className="w-full border border-accent text-accent py-4 font-mono text-sm tracking-widest disabled:opacity-50"
-      >
-        {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
-      </button>
-
-      {showPicker !== null && (
-        <div className="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setShowPicker(null)} className="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
-            <Rule label="SELECT EXERCISE" className="text-muted" />
-            <div className="w-14" />
-          </div>
-          <div className="space-y-1">
-            {liftExercises.map(({ exercise }) => {
-              const alreadyAdded = showPicker === -1
-                && editAccessories.some(a => a.exerciseId === exercise.id)
+          <For each={(['warmup', 'main', 'fsl', 'joker'] as const)}>
+            {type => {
+              const rows = () => editSets()
+                .map((s, i) => ({ s, i }))
+                .filter(({ s }) => s.type === type)
               return (
-                <button
-                  key={exercise.id}
-                  onClick={() => !alreadyAdded && handlePickExercise(exercise)}
-                  disabled={alreadyAdded}
-                  className={`w-full text-left px-3 py-2 border font-mono text-sm flex justify-between ${
-                    alreadyAdded
-                      ? 'border-border-dim text-muted'
-                      : 'border-border text-text hover:border-accent hover:text-accent'
-                  }`}
-                >
-                  <span>{exercise.name}{alreadyAdded ? ' ✓' : ''}</span>
-                  <span className="text-muted text-xs uppercase">{exercise.type}</span>
-                </button>
+                <Show when={rows().length > 0}>
+                  <div class="mb-6">
+                    <div class="text-muted uppercase text-xs tracking-widest mb-2">
+                      {type === 'fsl' ? 'FSL' : type === 'joker' ? 'JOKER' : type}
+                    </div>
+                    <For each={rows()}>
+                      {({ s, i }) => (
+                        <div class="flex items-center gap-2 py-1.5 flex-wrap">
+                          <Stepper value={s.weight} onChange={v => updateSet(i, 'weight', v)} step={2.5} min={0} />
+                          <span class="text-muted text-xs">lb ×</span>
+                          <Stepper value={s.reps} onChange={v => updateSet(i, 'reps', v)} step={1} min={0} />
+                          <Show when={s.isAmrap}>
+                            <span class="text-warn text-xs tracking-widest">AMRAP</span>
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
               )
-            })}
+            }}
+          </For>
+
+          <div class="mb-6">
+            <Rule label="ACCESSORIES" class="text-muted mb-2" />
+            <For each={editAccessories()}>
+              {(acc, ai) => (
+                <div class="border border-border p-3 mb-3">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-text text-sm uppercase tracking-widest">{acc.exerciseName}</span>
+                      <button
+                        onClick={() => setShowPicker(ai())}
+                        class="text-muted text-xs hover:text-accent"
+                      >
+                        swap
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => deleteAccessory(ai())}
+                      class="text-muted hover:text-danger text-xs font-mono px-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <For each={acc.sets}>
+                    {(s, si) => (
+                      <div class="flex items-center flex-wrap gap-2 py-1 pl-2">
+                        <span class="text-muted text-xs w-10">Set {s.setNumber}</span>
+                        <Show when={acc.exerciseType === 'reps'}>
+                          <>
+                            <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai(), si(), 'weight', v)} step={2.5} min={0} />
+                            <span class="text-muted text-xs">lb ×</span>
+                            <Stepper value={s.reps ?? 0} onChange={v => updateAccSet(ai(), si(), 'reps', v)} step={1} min={0} />
+                          </>
+                        </Show>
+                        <Show when={acc.exerciseType === 'timed'}>
+                          <>
+                            <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai(), si(), 'weight', v)} step={2.5} min={0} />
+                            <span class="text-muted text-xs">lb ×</span>
+                            <DurationInput
+                              value={s.duration}
+                              onChange={val => updateAccSet(ai(), si(), 'duration', val)}
+                            />
+                          </>
+                        </Show>
+                        <Show when={acc.exerciseType === 'distance'}>
+                          <>
+                            <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai(), si(), 'weight', v)} step={2.5} min={0} />
+                            <span class="text-muted text-xs">lb ×</span>
+                            <Stepper value={s.distance ?? 0} onChange={v => updateAccSet(ai(), si(), 'distance', v)} step={1} min={0} />
+                          </>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              )}
+            </For>
+            <button
+              onClick={() => setShowPicker(-1)}
+              class="w-full border border-border py-2 text-muted text-xs tracking-widest hover:border-accent hover:text-accent"
+            >
+              + ADD ACCESSORY
+            </button>
           </div>
+
+          <div class="mb-6">
+            <div class="text-muted uppercase text-xs tracking-widest mb-2">NOTES</div>
+            <textarea
+              value={notes()}
+              onInput={e => setNotes(e.currentTarget.value)}
+              class="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
+              rows={3}
+              placeholder="Session notes..."
+            />
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={isSaving()}
+            class="w-full border border-accent text-accent py-4 font-mono text-sm tracking-widest disabled:opacity-50"
+          >
+            {isSaving() ? 'SAVING...' : 'SAVE CHANGES'}
+          </button>
+
+          <Show when={showPicker() !== null}>
+            <div class="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
+              <div class="flex items-center justify-between mb-4">
+                <button onClick={() => setShowPicker(null)} class="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
+                <Rule label="SELECT EXERCISE" class="text-muted" />
+                <div class="w-14" />
+              </div>
+              <div class="space-y-1">
+                <For each={liftExercises()}>
+                  {({ exercise }) => {
+                    const alreadyAdded = showPicker() === -1
+                      && editAccessories().some(a => a.exerciseId === exercise.id)
+                    return (
+                      <button
+                        onClick={() => !alreadyAdded && handlePickExercise(exercise)}
+                        disabled={alreadyAdded}
+                        class={`w-full text-left px-3 py-2 border font-mono text-sm flex justify-between ${
+                          alreadyAdded
+                            ? 'border-border-dim text-muted'
+                            : 'border-border text-text hover:border-accent hover:text-accent'
+                        }`}
+                      >
+                        <span>{exercise.name}{alreadyAdded ? ' ✓' : ''}</span>
+                        <span class="text-muted text-xs uppercase">{exercise.type}</span>
+                      </button>
+                    )
+                  }}
+                </For>
+              </div>
+            </div>
+          </Show>
         </div>
       )}
-    </div>
+    </Show>
   )
 }
