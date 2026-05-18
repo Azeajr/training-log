@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@solidjs/testing-library'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@solidjs/testing-library'
 import { Router, Route } from '@solidjs/router'
 import History from './History'
 import { db } from '../db/index'
+
+const mockNavigate = vi.fn()
+vi.mock('@solidjs/router', async () => {
+  const actual = await vi.importActual<typeof import('@solidjs/router')>('@solidjs/router')
+  return { ...actual, useNavigate: () => mockNavigate }
+})
 
 const drain = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)) }
 
@@ -38,6 +44,26 @@ async function seedSession(
   }
   return sessionId
 }
+
+// ─── shared seed helpers ──────────────────────────────────────────────────────
+
+async function seedCompletedSession(liftName: 'OHP' | 'Bench' | 'Squat' | 'Deadlift' = 'Bench', msAgo = 1_000_000) {
+  const liftId = await db.lifts.add({ name: liftName, order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+  const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+  const sessionId = await db.sessions.add({
+    cycleId, liftId, week: 1,
+    date: new Date(Date.now() - msAgo),
+    notes: 'felt great', status: 'completed',
+  })
+  await db.sets.bulkAdd([
+    { sessionId, type: 'warmup', setNumber: 1, weight: 45,  reps: 5, isAmrap: false },
+    { sessionId, type: 'main',   setNumber: 1, weight: 100, reps: 5, isAmrap: false },
+    { sessionId, type: 'main',   setNumber: 3, weight: 130, reps: 8, isAmrap: true  },
+  ])
+  return { liftId, cycleId, sessionId }
+}
+
+// ─── estimated 1RM chart ──────────────────────────────────────────────────────
 
 describe('History — estimated 1RM chart', () => {
   beforeEach(async () => {
@@ -109,5 +135,155 @@ describe('History — estimated 1RM chart', () => {
     renderHistory()
     await waitFor(() => expect(screen.getByText('— TM')).toBeInTheDocument())
     expect(screen.queryByText('- - est. 1RM')).not.toBeInTheDocument()
+  })
+})
+
+// ─── session expansion ────────────────────────────────────────────────────────
+
+describe('History — session expansion', () => {
+  beforeEach(async () => {
+    localStorage.clear()
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(),
+      db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+    ])
+    mockNavigate.mockClear()
+  })
+
+  afterEach(drain)
+
+  async function findSessionRowBtn() {
+    return waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const row = btns.find(b => b.textContent?.includes('W1') && b.textContent?.includes('Bench'))
+      expect(row).toBeTruthy()
+      return row!
+    })
+  }
+
+  it('clicking session row expands detail showing set types', async () => {
+    await seedCompletedSession()
+    renderHistory()
+
+    const rowBtn = await findSessionRowBtn()
+    fireEvent.click(rowBtn)
+
+    await waitFor(() => expect(document.body.textContent?.toLowerCase()).toContain('warmup'))
+  })
+
+  it('clicking expanded row again collapses it', async () => {
+    await seedCompletedSession()
+    renderHistory()
+
+    // First click: expand
+    fireEvent.click(await findSessionRowBtn())
+    await screen.findByText('EDIT →')
+
+    // Re-find session row button (sessions may re-render on selectedLiftId change)
+    fireEvent.click(await findSessionRowBtn())
+    await waitFor(() => expect(screen.queryByText('EDIT →')).not.toBeInTheDocument())
+  })
+
+  it('EDIT button in expanded row navigates to /history/:id/edit', async () => {
+    const { sessionId } = await seedCompletedSession()
+    renderHistory()
+
+    const rowBtn = await findSessionRowBtn()
+    fireEvent.click(rowBtn)
+
+    const editBtn = await screen.findByText('EDIT →')
+    fireEvent.click(editBtn)
+    expect(mockNavigate).toHaveBeenCalledWith(`/history/${sessionId}/edit`)
+  })
+
+  it('expanded detail shows notes when session has notes', async () => {
+    await seedCompletedSession()
+    renderHistory()
+
+    const rowBtn = await findSessionRowBtn()
+    fireEvent.click(rowBtn)
+
+    await waitFor(() => expect(document.body.textContent).toContain('felt great'))
+  })
+})
+
+// ─── view modes ───────────────────────────────────────────────────────────────
+
+describe('History — view modes', () => {
+  beforeEach(async () => {
+    localStorage.clear()
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(),
+      db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+    ])
+    mockNavigate.mockClear()
+  })
+
+  afterEach(drain)
+
+  it('shows "No completed sessions yet." fallback when no sessions exist', async () => {
+    await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    renderHistory()
+    await waitFor(() =>
+      expect(screen.getByText('No completed sessions yet.')).toBeInTheDocument()
+    )
+  })
+
+  it('switching to By Date mode shows sessions from all lifts', async () => {
+    const liftId1 = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const liftId2 = await db.lifts.add({ name: 'OHP',   order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await db.sessions.add({ cycleId, liftId: liftId1, week: 1, date: new Date(Date.now() - 2_000_000), notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId: liftId2, week: 1, date: new Date(Date.now() - 1_000_000), notes: null, status: 'completed' })
+
+    renderHistory()
+
+    // Default "By lift" mode selects Bench; OHP session row not shown yet
+    await screen.findByText('Bench')
+
+    // Switch to By date
+    fireEvent.click(screen.getByText('By date'))
+
+    await waitFor(() => {
+      const text = document.body.textContent ?? ''
+      // Both lifts' session rows should appear (each contains lift name + W1)
+      expect((text.match(/W1/g) ?? []).length).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  it('initializes selected lift from localStorage when no URL param', async () => {
+    const liftId1 = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.lifts.add({ name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await db.sessions.add({ cycleId, liftId: liftId1, week: 1, date: new Date(Date.now() - 1_000_000), notes: null, status: 'completed' })
+    localStorage.setItem('history-lift', String(liftId1))
+
+    renderHistory()
+
+    await waitFor(() => {
+      const text = document.body.textContent ?? ''
+      expect(text).toContain('W1')
+    })
+  })
+
+  it('lift tab click updates selected lift', async () => {
+    const liftId1 = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const liftId2 = await db.lifts.add({ name: 'OHP',   order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await db.sessions.add({ cycleId, liftId: liftId1, week: 1, date: new Date(Date.now() - 2_000_000), notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId: liftId2, week: 2, date: new Date(Date.now() - 1_000_000), notes: null, status: 'completed' })
+
+    renderHistory()
+    await screen.findByText('Bench')
+
+    // OHP tab should be visible; click it
+    const ohpTab = (await screen.findAllByRole('button')).find(b => b.textContent?.trim() === 'OHP')!
+    fireEvent.click(ohpTab)
+
+    // OHP session (W2) should appear
+    await waitFor(() => {
+      const text = document.body.textContent ?? ''
+      expect(text).toContain('W2')
+    })
   })
 })
