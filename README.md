@@ -8,10 +8,11 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 
 - **5/3/1 program logic** — calculates warmup, main, and FSL sets from your training max each week; warmup follows Wendler's 40/50/60% TM prescription (3 sets × 5/5/3 reps)
 - **AMRAP tracking** — logs rep PRs on the third main set and shows targets based on prior performance
-- **Accessory work** — select assistance exercises per lift, log reps/weight/duration/distance
+- **Joker sets** — unlock extra sets after a strong AMRAP; weight increment scales with performance
+- **Accessory work** — select assistance exercises per lift, log reps/weight/duration/distance; per-exercise TM progression rate
 - **Rest timer** — in-session countdown with audio and vibration cues; different durations for normal, transition, and failed sets
-- **4-week cycles** — auto-advances week and applies TM progression after each deload
-- **History** — view completed sessions by lift or date, TM progression chart, editable after the fact
+- **4-week cycles** — auto-advances week and applies TM progression after each deload; manual week override in Settings
+- **History** — view completed sessions by lift or date, editable after the fact, estimated 1RM history chart alongside TM
 - **Export / Import** — full JSON or CSV backup and restore
 - **PWA** — installable, works offline
 
@@ -19,13 +20,14 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 
 | Layer | Library |
 |---|---|
-| UI | SolidJS 1.9, TypeScript, Tailwind CSS 4 |
+| UI | SolidJS 1.9, TypeScript 6, Tailwind CSS 4 |
 | Routing | @solidjs/router 0.16 |
 | State | SolidJS stores |
-| Database | SQLite Wasm (Worker-based) |
+| Database | SQLite Wasm (dedicated Web Worker) |
 | Charts | Custom SVG |
-| Build | Vite + vite-plugin-pwa |
-| Tests | Vitest + @solidjs/testing-library |
+| Build | Vite 8 + vite-plugin-pwa |
+| Tests | Vitest 4 + @solidjs/testing-library + Playwright 1 |
+| Mutation | Stryker 9 + @stryker-mutator/vitest-runner |
 
 ## Getting Started
 
@@ -39,17 +41,24 @@ Open `http://localhost:5173` and enter your training maxes to begin.
 ## Running Tests
 
 ```bash
-npm test
+npm test             # unit + component integration (Vitest)
+npm run test:e2e     # end-to-end (Playwright)
+npm run test:coverage  # coverage report (v8)
+npm run test:mutation  # mutation score (Stryker)
 ```
 
-Tests are split into two layers:
+Tests are split into three layers:
 
 | Layer | Location | Tools |
 |---|---|---|
-| Unit | `src/lib/*.test.ts`, `src/store/*.test.ts` | Vitest |
+| Unit | `src/lib/*.test.ts`, `src/store/*.test.ts` | Vitest + fake-indexeddb |
 | Component integration | `src/screens/*.test.tsx`, `src/components/*.test.tsx` | Vitest + @solidjs/testing-library + jsdom |
+| End-to-end | `tests/e2e/*.spec.ts` | Playwright |
 
-Component integration tests render the full component tree and interact through `userEvent`. Every screen exercises the full stack: UI event → SolidJS store → SQLite → rendered output. No DB layer is mocked — tests run against `fake-indexeddb` through the real SQLite Wasm layer.
+Component integration tests render the full component tree and interact through the DOM. Every screen exercises the full stack: UI event → SolidJS store → Dexie/IndexedDB (via fake-indexeddb) → rendered output. No DB layer is mocked.
+
+Coverage targets: ≥80% line, branch, function, statement across `src/lib`, `src/screens`, `src/store`.
+Mutation score target: ≥80% (Stryker, `src/lib` only).
 
 ## Program Structure
 
