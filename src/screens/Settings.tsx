@@ -4,6 +4,7 @@ import type { Lift, Exercise, LiftAccessory } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms } from '../lib/cycle'
+import { buildCleanupPlan } from '../lib/cleanup'
 import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
 import { setTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -106,6 +107,42 @@ export default function Settings() {
   const handleRemoveFromLift = async (laId: number) => {
     await removeExerciseFromLift(db, laId)
     load()
+  }
+
+  const handleCleanupAccessoryData = async () => {
+    if (!await confirm(
+      'Delete orphan accessory rows and archive unused exercises? This cannot be undone.',
+      { destructive: true, confirmLabel: 'CLEANUP' }
+    )) return
+
+    const [allExercises, allLas, allAtms, allSets, allSessions] = await Promise.all([
+      db.exercises.toArray(),
+      db.liftAccessories.toArray(),
+      db.accessoryTrainingMaxes.toArray(),
+      db.accessorySets.toArray(),
+      db.sessions.toArray(),
+    ])
+
+    const plan = buildCleanupPlan(
+      allExercises.map(ex => ({ id: ex.id!, archived: ex.archived })),
+      allLas.map(la => ({ id: la.id!, exerciseId: la.exerciseId })),
+      allAtms.map(atm => ({ id: atm.id!, exerciseId: atm.exerciseId })),
+      allSets.map(s => ({ id: s.id!, sessionId: s.sessionId, exerciseId: s.exerciseId })),
+      allSessions.map(s => ({ id: s.id! })),
+    )
+
+    for (const id of plan.orphanLaIds) await db.liftAccessories.delete(id)
+    for (const id of plan.orphanAtmIds) await db.accessoryTrainingMaxes.delete(id)
+    for (const id of plan.orphanSetIds) await db.accessorySets.delete(id)
+    for (const id of plan.exercisesToArchive) await archiveExercise(db, id)
+
+    const orphanCount = plan.orphanLaIds.length + plan.orphanAtmIds.length + plan.orphanSetIds.length
+    await load()
+    showToast(
+      orphanCount === 0 && plan.exercisesToArchive.length === 0
+        ? 'No orphan data found'
+        : `Removed ${orphanCount} orphan rows, archived ${plan.exercisesToArchive.length} exercises`
+    )
   }
 
   const handleDeload = async () => {
@@ -451,6 +488,12 @@ export default function Settings() {
             class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
           >
             IMPORT JSON
+          </button>
+          <button
+            onClick={() => void handleCleanupAccessoryData()}
+            class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-danger hover:text-danger"
+          >
+            CLEANUP ORPHANS
           </button>
           <input
             ref={fileInputRef}
