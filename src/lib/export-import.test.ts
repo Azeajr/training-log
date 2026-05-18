@@ -54,6 +54,7 @@ describe('retryPendingExport', () => {
     await retryPendingExport()
     expect(localStorage.getItem(PENDING_KEY)).toBeNull()
     expect(URL.createObjectURL).toHaveBeenCalled()
+    expect(capturedBlob!.type).toBe('application/json')
   })
 
   it('clears corrupt localStorage entry without throwing', async () => {
@@ -134,9 +135,23 @@ describe('importFromRawData', () => {
       sessions: [{ id: 1, cycleId: 1, liftId: 1, week: 1, date: '2026-01-06T00:00:00.000Z', notes: null, status: 'completed' }],
       sets: [], exercises: [], liftAccessories: [], settings: [],
     })
+    expect(await db.cycles.count()).toBe(1)
     const sessions = await db.sessions.toArray()
     expect(sessions).toHaveLength(1)
     expect(sessions[0].date).toBeInstanceOf(Date)
+  })
+
+  it('parses date strings in cycles including endDate', async () => {
+    await importFromRawData(db, {
+      lifts: [],
+      trainingMaxes: [],
+      cycles: [{ id: 1, number: 1, startDate: '2026-01-01T00:00:00.000Z', endDate: '2026-04-01T00:00:00.000Z' }],
+      sessions: [], sets: [], exercises: [], liftAccessories: [], settings: [],
+    })
+    const cycles = await db.cycles.toArray()
+    expect(cycles[0].startDate).toBeInstanceOf(Date)
+    expect(cycles[0].endDate).toBeInstanceOf(Date)
+    expect((cycles[0].endDate as Date).getFullYear()).toBe(2026)
   })
 })
 
@@ -147,6 +162,7 @@ describe('exportJson', () => {
     await seedBase()
     await exportJson(db)
     expect(capturedBlob).not.toBeNull()
+    expect(capturedBlob!.type).toBe('application/json')
     const text = await capturedBlob!.text()
     const parsed = JSON.parse(text)
     expect(parsed.version).toBe(1)
@@ -279,12 +295,18 @@ describe('importFromRawData — full payload', () => {
     })
 
     expect(await db.lifts.count()).toBe(1)
+    expect(await db.trainingMaxes.count()).toBe(1)
+    expect(await db.cycles.count()).toBe(1)
+    expect(await db.sessions.count()).toBe(1)
     expect(await db.sets.count()).toBe(1)
     expect(await db.exercises.count()).toBe(1)
     expect(await db.liftAccessories.count()).toBe(1)
     expect(await db.settings.count()).toBe(1)
     expect(await db.accessoryTrainingMaxes.count()).toBe(1)
     expect(await db.accessorySets.count()).toBe(1)
+
+    const cycles = await db.cycles.toArray()
+    expect(cycles[0].startDate).toBeInstanceOf(Date)
 
     const atm = await db.accessoryTrainingMaxes.toArray()
     expect(atm[0].setAt).toBeInstanceOf(Date)
