@@ -42,7 +42,17 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
     return `${x.toFixed(1)},${y.toFixed(1)}`
   }
 
-  const primaryPts = () => props.primary.length >= 2 ? props.primary.map(toXY).join(' ') : ''
+  const extendedPrimary = () => {
+    const pts = props.primary
+    if (pts.length < 1) return pts
+    const last = pts[pts.length - 1]
+    if (last.date.getTime() < maxDate()) {
+      return [...pts, { date: new Date(maxDate()), weight: last.weight }]
+    }
+    return pts
+  }
+
+  const primaryPts = () => extendedPrimary().length >= 2 ? extendedPrimary().map(toXY).join(' ') : ''
   const secondaryPts = () => (props.secondary?.length ?? 0) >= 2 ? props.secondary!.map(toXY).join(' ') : ''
 
   return (
