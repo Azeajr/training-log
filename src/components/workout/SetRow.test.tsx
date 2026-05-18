@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, fireEvent } from '@solidjs/testing-library'
 import SetRow from './SetRow'
 
-const baseSet = { type: 'main' as const, setNumber: 1, weight: 100, reps: 5 }
+const baseSet = { type: 'main' as const, setNumber: 1, weight: 100, reps: 5, isAmrap: false }
 const completedProps = {
   set: baseSet,
   isActive: false,
