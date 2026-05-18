@@ -115,7 +115,10 @@ export class TrainingDB extends Dexie {
       liftAccessories: '++id, liftId, exerciseId',
       accessoryTrainingMaxes: '++id, exerciseId, setAt',
       accessorySets: '++id, sessionId, exerciseId',
-      settings: '++id'
+      settings: '++id',
+    })
+    this.version(2).stores({
+      lifts: '++id, name, order',
     })
   }
 }

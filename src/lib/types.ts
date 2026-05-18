@@ -17,13 +17,13 @@ export interface TableLike<T> {
       toArray(): Promise<T[]>
       first(): Promise<T | undefined>
       sortBy(field: string): Promise<T[]>
-      delete(): Promise<void>
+      delete(): Promise<any>
       filter(fn: (row: T) => boolean): {
         first(): Promise<T | undefined>
         toArray(): Promise<T[]>
       }
       and(fn: (row: T) => boolean): {
-        delete(): Promise<void>
+        delete(): Promise<any>
         toArray(): Promise<T[]>
       }
     }
