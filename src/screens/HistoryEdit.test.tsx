@@ -456,6 +456,45 @@ describe('HistoryEdit — accessory exercise types', () => {
     await waitFor(() => expect(document.body.textContent).toContain('Sled Push'))
   })
 
+  it('clicking + on accessory set Stepper calls updateAccSet without crash', async () => {
+    const { sessionId } = await seedSessionWithAccessorySets()
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+
+    // No main sets exist → all + buttons belong to accessory set Steppers
+    const plusBtns = await waitFor(() => {
+      const btns = screen.getAllByText('+')
+      expect(btns.length).toBeGreaterThan(0)
+      return btns
+    })
+    fireEvent.click(plusBtns[0]) // triggers updateAccSet(0, 0, 'weight', newValue)
+
+    await waitFor(() => expect(document.body.textContent).toContain('Chinup'))
+  })
+
+  it('swapping reps exercise for timed exercise resets sets (typeChanged=true)', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const exId2 = await db.exercises.add({ name: 'Plank', type: 'timed' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 0 })
+    await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 1 })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date('2026-03-15'), notes: null, status: 'completed' })
+    await db.accessorySets.add({ sessionId, exerciseId: exId1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+
+    fireEvent.click(screen.getByText('swap'))
+    await waitFor(() => expect(document.body.textContent).toContain('SELECT EXERCISE'))
+
+    await screen.findByText('Plank')
+    fireEvent.click(screen.getByText('Plank'))
+
+    await waitFor(() => expect(document.body.textContent).not.toContain('SELECT EXERCISE'))
+    await waitFor(() => expect(document.body.textContent).toContain('Plank'))
+  })
+
   it('already-added exercise is disabled in the add-accessory picker', async () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })

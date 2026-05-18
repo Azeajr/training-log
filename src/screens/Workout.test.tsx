@@ -443,6 +443,24 @@ describe('Workout screen — joker sets', () => {
     })
   })
 
+  it('clicking + ADD FSL SET appends an extra FSL set row', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(11) // complete all standard sets
+
+    const addFslBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.includes('ADD FSL SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(addFslBtn)
+
+    // New FSL set added at index 11 (currentSetIndex=11) → LOG button reappears
+    await screen.findByText('LOG')
+  })
+
   it('clicking JOKER SET button adds a joker set row', async () => {
     startSession(BENCH)
     renderWorkout()
