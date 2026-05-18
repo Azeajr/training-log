@@ -45,6 +45,22 @@ Warmup follows Wendler's 40/50/60% TM prescription: three sets at 5/5/3 reps cal
 
 Add new exercises (name + type: reps/timed/distance) from Settings and assign them to lifts. Create, rename, and archive exercises; archived exercises are hidden from the picker but history is preserved.
 
+### Accessory TM Progression Rate
+
+`incrementLb` exposed in the Settings exercise edit form (and in the AccessoryPicker TM setup screen) via a Stepper. Persisted on the latest `accessoryTrainingMaxes` row per exercise. Controls how fast each accessory exercise progresses after each cycle.
+
+### Accessory Data Cleanup
+
+CLEANUP ORPHANS button in Settings → DATA. Deletes `liftAccessories` / `accessoryTrainingMaxes` rows with missing `exerciseId`, deletes `accessorySets` rows with missing `sessionId`, and archives exercises with no assignments and no set history. Gated behind confirm dialog. Detection logic extracted to `buildCleanupPlan` (pure function) with unit and RTL screen test coverage.
+
+### Manual Week Override
+
+CYCLE section in Settings shows the current week (1–4) with skip-forward buttons. Clicking a future week marks all remaining sessions in skipped weeks as `skipped` (creating missing lift sessions as needed) and advances program state. Gated behind confirm dialog.
+
+### Estimated 1RM History Chart
+
+`TmChart` in the History By Lift view refactored to dual-series SVG with shared date-based X axis. TM plotted in accent colour; estimated 1RM (Epley: `weight × (1 + reps / 30)`) from each AMRAP set plotted in dashed warn colour. Legend shows each series only when it has 2+ data points.
+
 ---
 
 ## Planned
@@ -92,15 +108,6 @@ Add an informational section to the setup wizard explaining 5/3/1 basics before 
 - **Training Max (TM)** — the weight the program calculates sets from; typically 85–90% of true 1RM
 - **AMRAP (Plus sets)** — the final main set each week: lift as many reps as possible; performance drives joker sets and TM recommendations
 - **Cycle structure** — 4 weeks: week 1 (5s), week 2 (3s), week 3 (5/3/1), week 4 (deload); TM increments after each deload
-
----
-
-### Estimated 1RM History Chart
-
-The History screen already shows TM over time. An estimated 1RM chart from AMRAP performance would be more meaningful — it reflects actual strength rather than programmed TM.
-
-- Derive est. 1RM from each AMRAP set using the Epley formula (already in `calc.ts`)
-- Plot alongside or instead of TM in the By Lift chart
 
 ---
 
@@ -176,31 +183,9 @@ Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Tra
 
 ---
 
-### Accessory Data Cleanup
-
-Settings button to purge stale accessory data accumulated from old imports or schema changes:
-
-1. Delete `liftAccessories` rows where `exerciseId` no longer exists in `exercises`
-2. Delete `accessoryTrainingMaxes` rows where `exerciseId` no longer exists
-3. Delete `accessorySets` rows where `sessionId` no longer exists in `sessions`
-4. Archive exercises that have no `liftAccessories` and no `accessorySets` history
-
-Requires confirmation dialog. Irreversible without a JSON backup.
-
----
-
-### Accessory TM Progression Rate
-
-`incrementLb` is stored per exercise on `accessoryTrainingMaxes` but there is no UI to set it — the picker hardcodes a default. Expose a per-exercise increment field in Settings or the AccessoryPicker TM setup screen so users can control how fast each exercise progresses.
-
----
-
 ### Session Notes Indicator in History
 
 `sessions.notes` is stored and editable in HistoryEdit but invisible in the History list view. Surface a visual indicator (dot or truncated preview) on session rows that have notes, so users can find annotated sessions without expanding each one.
 
 ---
 
-### Manual Week Override
-
-No way to correct program state without resetting all history. A week override in Settings would let users set the current week directly — useful when a deload was done informally outside the app, or after illness/travel breaks the normal progression.
