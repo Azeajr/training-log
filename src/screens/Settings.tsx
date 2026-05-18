@@ -29,6 +29,8 @@ export default function Settings() {
   const [editExName, setEditExName] = createSignal('')
   const [editExIncrement, setEditExIncrement] = createSignal(5)
   const [accessoryIncrements, setAccessoryIncrements] = createSignal<Record<number, { tmId: number; incrementLb: number }>>({})
+  const [currentCycleWeek, setCurrentCycleWeek] = createSignal<1 | 2 | 3 | 4 | null>(null)
+  const [currentCycleId, setCurrentCycleId] = createSignal<number | null>(null)
 
   const [addToLift, setAddToLift] = createSignal<number | null>(null)
   const [addToLiftExId, setAddToLiftExId] = createSignal<number | null>(null)
@@ -55,6 +57,19 @@ export default function Settings() {
       increments[atm.exerciseId] = { tmId: atm.id!, incrementLb: atm.incrementLb }
     }
     setAccessoryIncrements(increments)
+
+    const latestCycle = await db.cycles.orderBy('number').last()
+    if (latestCycle?.id) {
+      const cycleSessions = await db.sessions.where('cycleId').equals(latestCycle.id).toArray()
+      const weekCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
+      cycleSessions.forEach(s => { if (s.status !== 'pending') weekCounts[s.week]++ })
+      let week: 1 | 2 | 3 | 4 = 1
+      for (const w of [1, 2, 3, 4] as const) {
+        if (weekCounts[w] < 4) { week = w; break }
+      }
+      setCurrentCycleWeek(week)
+      setCurrentCycleId(latestCycle.id)
+    }
   }
 
   const handleSaveTm = async (liftId: number) => {
@@ -145,6 +160,32 @@ export default function Settings() {
     )
   }
 
+  const handleSkipToWeek = async (targetWeek: 1 | 2 | 3 | 4) => {
+    const week = currentCycleWeek()
+    const cycleId = currentCycleId()
+    if (!week || !cycleId || targetWeek <= week) return
+    if (!await confirm(
+      `Skip to week ${targetWeek}? Lifts in week${targetWeek - week > 1 ? `s ${week}–${targetWeek - 1}` : ` ${week}`} will be marked skipped.`,
+      { destructive: true, confirmLabel: 'SKIP' }
+    )) return
+
+    const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+    for (let w = week; w < targetWeek; w++) {
+      const wk = w as 1 | 2 | 3 | 4
+      const weekSessions = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === wk).toArray()
+      for (const lift of allLifts) {
+        const existing = weekSessions.find(s => s.liftId === lift.id)
+        if (existing) {
+          if (existing.status === 'pending') await db.sessions.update(existing.id!, { status: 'skipped' })
+        } else {
+          await db.sessions.add({ cycleId, liftId: lift.id!, week: wk, date: new Date(), notes: null, status: 'skipped' })
+        }
+      }
+    }
+    await load()
+    showToast(`Advanced to week ${targetWeek}`)
+  }
+
   const handleDeload = async () => {
     if (!await confirm('Drop all TMs by 10%?', { destructive: true, confirmLabel: 'DELOAD' })) return
     await deloadTms(db)
@@ -227,6 +268,33 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      <Show when={currentCycleWeek() !== null}>
+        <div class="mb-6">
+          <Rule label="CYCLE" class="text-muted mb-2" />
+          <div class="flex items-center gap-4 py-1">
+            <span class="text-muted text-xs uppercase tracking-widest w-20">Week</span>
+            <div class="flex gap-2">
+              <For each={[1, 2, 3, 4] as Array<1 | 2 | 3 | 4>}>{(w) => (
+                <button
+                  aria-label={`Week ${w}`}
+                  onClick={() => void handleSkipToWeek(w)}
+                  disabled={w <= (currentCycleWeek() ?? 5)}
+                  class={`w-8 h-8 border font-mono text-sm ${
+                    w === currentCycleWeek()
+                      ? 'border-accent text-accent'
+                      : w < (currentCycleWeek() ?? 5)
+                        ? 'border-border-dim text-faint'
+                        : 'border-border text-muted hover:border-warn hover:text-warn'
+                  }`}
+                >
+                  {w}
+                </button>
+              )}</For>
+            </div>
+          </div>
+        </div>
+      </Show>
 
       <div class="mb-6">
         <Rule label="REST TIMERS" class="text-muted mb-2" />
