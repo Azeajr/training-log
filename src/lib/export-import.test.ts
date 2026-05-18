@@ -220,6 +220,45 @@ describe('exportCsv', () => {
     expect(lines).toHaveLength(2) // header + 1 row
     expect(lines[1]).toContain('rest day')
   })
+
+  it('zero-sets session with null notes writes empty notes field', async () => {
+    const cycleId = await seedBase()
+    await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed',
+    })
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    expect(lines).toHaveLength(2)
+    expect(lines[1].split(',')[8]).toBe('""') // notes ?? '' → empty
+  })
+
+  it('liftId not in liftMap uses numeric fallback; isAmrap=true writes "true"; null notes uses empty fallback', async () => {
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 999, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 130, reps: 8, isAmrap: true })
+    await exportCsv(db)
+    const text = await capturedBlob!.text()
+    expect(text).toContain('"999"')   // liftMap[999] ?? '999'
+    expect(text).toContain('"true"')  // isAmrap=true
+    expect(text.trim().split('\n')[1].split(',')[8]).toBe('""') // notes ?? ''
+  })
+
+  it('accessory set with null weight, null reps, and unknown exerciseId uses fallbacks', async () => {
+    const cycleId = await seedBase()
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed',
+    })
+    await db.accessorySets.add({
+      sessionId, exerciseId: 999, setNumber: 1, weight: null, reps: null, duration: 60, distance: null,
+    })
+    await exportCsv(db)
+    const cols = (await capturedBlob!.text()).trim().split('\n')[1].split(',')
+    expect(cols[5]).toBe('""')    // weight null → ''
+    expect(cols[6]).toBe('""')    // reps null → ''
+    expect(cols[9]).toBe('"999"') // exerciseMap[999] ?? '999'
+  })
 })
 
 // ─── importFromRawData — full payload (covers all bulkAdd branches) ───────────
