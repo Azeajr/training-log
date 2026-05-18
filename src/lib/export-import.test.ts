@@ -222,6 +222,36 @@ describe('exportCsv', () => {
   })
 })
 
+// ─── importFromRawData — full payload (covers all bulkAdd branches) ───────────
+
+describe('importFromRawData — full payload', () => {
+  it('imports all table types including sets, exercises, liftAccessories, settings, accessoryTrainingMaxes, accessorySets', async () => {
+    await importFromRawData(db, {
+      lifts: [{ id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
+      trainingMaxes: [{ id: 1, liftId: 1, weight: 100, setAt: '2026-01-01T00:00:00.000Z' }],
+      cycles: [{ id: 1, number: 1, startDate: '2026-01-01T00:00:00.000Z', endDate: null }],
+      sessions: [{ id: 1, cycleId: 1, liftId: 1, week: 1, date: '2026-01-06T00:00:00.000Z', notes: null, status: 'completed' }],
+      sets: [{ id: 1, sessionId: 1, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false }],
+      exercises: [{ id: 1, name: 'Chinup', type: 'reps' }],
+      liftAccessories: [{ id: 1, liftId: 1, exerciseId: 1, order: 0 }],
+      settings: [{ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, theme: 'dark', barWeight: 45, plates: [] }],
+      accessoryTrainingMaxes: [{ id: 1, exerciseId: 1, weight: 50, incrementLb: 5, setAt: '2026-01-01T00:00:00.000Z' }],
+      accessorySets: [{ id: 1, sessionId: 1, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null }],
+    })
+
+    expect(await db.lifts.count()).toBe(1)
+    expect(await db.sets.count()).toBe(1)
+    expect(await db.exercises.count()).toBe(1)
+    expect(await db.liftAccessories.count()).toBe(1)
+    expect(await db.settings.count()).toBe(1)
+    expect(await db.accessoryTrainingMaxes.count()).toBe(1)
+    expect(await db.accessorySets.count()).toBe(1)
+
+    const atm = await db.accessoryTrainingMaxes.toArray()
+    expect(atm[0].setAt).toBeInstanceOf(Date)
+  })
+})
+
 // ─── importJson ───────────────────────────────────────────────────────────────
 
 describe('importJson', () => {

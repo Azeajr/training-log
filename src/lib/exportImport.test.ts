@@ -99,6 +99,46 @@ describe('importFromRawData', () => {
 
     expect(await db.trainingMaxes.count()).toBe(0)
   })
+
+  it('imports non-empty exercises and liftAccessories', async () => {
+    await importFromRawData({
+      lifts: [{ id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
+      trainingMaxes: [], cycles: [], sessions: [], sets: [],
+      exercises: [{ id: 1, name: 'Chinup', type: 'reps' }],
+      liftAccessories: [{ id: 1, liftId: 1, exerciseId: 1, order: 0 }],
+      accessoryTrainingMaxes: [], accessorySets: [], settings: [],
+    })
+    expect(await db.exercises.count()).toBe(1)
+    expect(await db.liftAccessories.count()).toBe(1)
+  })
+
+  it('imports old-format data without accessory keys (no clear for missing keys)', async () => {
+    // Old backups lack accessoryTrainingMaxes and accessorySets keys.
+    // The import should NOT clear those tables when the key is absent.
+    await db.accessoryTrainingMaxes.add({ exerciseId: 1, weight: 50, incrementLb: 2.5, setAt: new Date() })
+    const before = await db.accessoryTrainingMaxes.count()
+
+    await importFromRawData({
+      lifts: [], trainingMaxes: [], cycles: [], sessions: [], sets: [],
+      exercises: [], liftAccessories: [], settings: [],
+      // Note: no accessoryTrainingMaxes or accessorySets keys → old format
+    } as Parameters<typeof importFromRawData>[0])
+
+    // Table was NOT cleared (old format = preserve existing accessory data)
+    expect(await db.accessoryTrainingMaxes.count()).toBe(before)
+  })
+
+  it('imports non-empty accessoryTrainingMaxes and accessorySets', async () => {
+    await importFromRawData({
+      lifts: [], trainingMaxes: [], cycles: [],
+      sessions: [{ id: 1, cycleId: 0, liftId: 1, week: 1, date: '2026-01-01T00:00:00.000Z', notes: null, status: 'completed' }],
+      sets: [], exercises: [], liftAccessories: [], settings: [],
+      accessoryTrainingMaxes: [{ id: 1, exerciseId: 1, weight: 50, incrementLb: 2.5, setAt: '2026-01-01T00:00:00.000Z' }],
+      accessorySets: [{ id: 1, sessionId: 1, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null }],
+    })
+    expect(await db.accessoryTrainingMaxes.count()).toBe(1)
+    expect(await db.accessorySets.count()).toBe(1)
+  })
 })
 
 describe('exportJson', () => {
@@ -257,6 +297,73 @@ describe('exportCsv', () => {
     const csv = await capturedBlob!.text()
     const lines = csv.split('\n').filter(Boolean)
     expect(lines).toHaveLength(1)
+  })
+
+  it('P9: AMRAP set exports is_amrap=true', async () => {
+    const { sessionId } = await seedLiftAndSession()
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 130, reps: 8, isAmrap: true })
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('"true"') // isAmrap=true branch covered
+  })
+
+  it('P10: liftId without matching lift uses numeric fallback', async () => {
+    // Add a session whose liftId has no corresponding lift in the lifts table
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 999, week: 1,
+      date: new Date('2026-03-15T00:00:00.000Z'),
+      notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('"999"') // liftMap fallback: String(session.liftId)
+  })
+
+  it('P11: accessory set with weight/reps and exercise name in CSV', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1,
+      date: new Date('2026-03-15T00:00:00.000Z'),
+      notes: 'great', status: 'completed',
+    })
+    await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('"Chinup"')   // exerciseMap lookup
+    expect(csv).toContain('"50"')        // weight != null → String
+    expect(csv).toContain('"8"')         // reps != null → String
+    expect(csv).toContain('"great"')     // session.notes present
+  })
+
+  it('P12: accessory set with null weight/reps and unknown exerciseId fallback', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1,
+      date: new Date('2026-03-15T00:00:00.000Z'),
+      notes: null, status: 'completed',
+    })
+    // exerciseId 999 has no exercise in DB → exerciseMap[999] is undefined → String(999)
+    await db.accessorySets.add({ sessionId, exerciseId: 999, setNumber: 1, weight: null, reps: null, duration: 60, distance: null })
+
+    await exportCsv()
+
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('"999"') // exerciseMap fallback
+    // weight and reps are null → empty strings
+    const lines = csv.split('\n').filter(Boolean)
+    const accessoryRow = lines[1]
+    expect(accessoryRow).toContain('""') // empty weight and reps fields
   })
 })
 

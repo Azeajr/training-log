@@ -4,6 +4,7 @@ import Settings from './Settings'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import { db } from '../db/index'
+import { DEFAULT_PLATES, loadSettings } from '../store/settings-store'
 
 function renderSettings() {
   const api = createConfirmation()
@@ -213,5 +214,456 @@ describe('Settings — skip to week', () => {
       expect(week2).toHaveLength(4)
       expect(sessions.every(s => s.status === 'skipped')).toBe(true)
     })
+  })
+})
+
+// ─── Settings — deload ────────────────────────────────────────────────────────
+
+describe('Settings — deload', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  it('DELOAD confirmed drops all TMs by 10% (new TM records added)', async () => {
+    const liftId1 = await db.lifts.add({ name: 'OHP',   order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const liftId2 = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId: liftId1, weight: 200, setAt: new Date('2026-01-01') })
+    await db.trainingMaxes.add({ liftId: liftId2, weight: 300, setAt: new Date('2026-01-01') })
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByText(/DELOAD ALL/))
+    fireEvent.click(await screen.findByText('DELOAD'))
+
+    await waitFor(async () => {
+      const tms = await db.trainingMaxes.orderBy('setAt').toArray()
+      const ohpLatest  = tms.filter(t => t.liftId === liftId1).at(-1)
+      const benchLatest = tms.filter(t => t.liftId === liftId2).at(-1)
+      expect(ohpLatest?.weight).toBe(180)  // 200 × 0.9
+      expect(benchLatest?.weight).toBe(270) // 300 × 0.9
+    })
+  })
+
+  it('DELOAD cancelled does not change TMs', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') })
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByText(/DELOAD ALL/))
+    fireEvent.click(await screen.findByText('CANCEL'))
+
+    await waitFor(async () => {
+      const tms = await db.trainingMaxes.toArray()
+      expect(tms).toHaveLength(1)
+      expect(tms[0].weight).toBe(200)
+    })
+  })
+})
+
+// ─── Settings — training max editing ─────────────────────────────────────────
+
+describe('Settings — TM editing', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  it('clicking edit shows Stepper for TM input', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+
+    renderSettings()
+    // Wait for TM to load — "200 lb" only appears after tms() is populated
+    await waitFor(() => expect(document.body.textContent).toContain('200 lb'))
+
+    fireEvent.click(screen.getByText('edit'))
+
+    // Stepper appears showing 200 (current TM)
+    await waitFor(() => expect(screen.getByText('200')).toBeInTheDocument())
+    expect(screen.getByText('cancel')).toBeInTheDocument()
+  })
+
+  it('TM edit + Stepper + SAVE creates new TM record in DB', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') })
+
+    renderSettings()
+    await waitFor(() => expect(document.body.textContent).toContain('200 lb'))
+
+    fireEvent.click(screen.getByText('edit'))
+
+    // Click + on the TM stepper (step=5, value=200 → 205)
+    await waitFor(() => screen.getByText('200'))
+    const plusBtns = screen.getAllByText('+')
+    fireEvent.click(plusBtns[0])
+
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
+      expect(tms.at(-1)?.weight).toBe(205)
+    })
+  })
+
+  it('TM edit cancel hides Stepper without DB change', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+
+    renderSettings()
+    await waitFor(() => expect(document.body.textContent).toContain('200 lb'))
+    fireEvent.click(screen.getByText('edit'))
+    await screen.findByText('cancel')
+
+    fireEvent.click(screen.getByText('cancel'))
+
+    await waitFor(() => {
+      expect(screen.queryByText('cancel')).not.toBeInTheDocument()
+    })
+    const tms = await db.trainingMaxes.toArray()
+    expect(tms).toHaveLength(1)
+  })
+})
+
+// ─── Settings — exercises ─────────────────────────────────────────────────────
+
+describe('Settings — exercises', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  it('+ ADD EXERCISE shows form with name input', async () => {
+    renderSettings()
+    fireEvent.click(await screen.findByText('+ ADD EXERCISE'))
+
+    expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
+    expect(screen.getByText('ADD')).toBeInTheDocument()
+  })
+
+  it('adding a named exercise creates it in DB', async () => {
+    renderSettings()
+    fireEvent.click(await screen.findByText('+ ADD EXERCISE'))
+
+    const nameInput = screen.getByPlaceholderText('Exercise name') as HTMLInputElement
+    nameInput.value = 'Pull-up'
+    fireEvent.input(nameInput, { target: { value: 'Pull-up' } })
+
+    fireEvent.click(screen.getByText('ADD'))
+
+    await waitFor(async () => {
+      const exercises = await db.exercises.toArray()
+      expect(exercises.some(e => e.name === 'Pull-up')).toBe(true)
+    })
+  })
+
+  it('add exercise with empty name does nothing', async () => {
+    renderSettings()
+    fireEvent.click(await screen.findByText('+ ADD EXERCISE'))
+
+    // Click ADD without filling name
+    fireEvent.click(screen.getByText('ADD'))
+
+    await waitFor(async () => {
+      const exercises = await db.exercises.toArray()
+      expect(exercises).toHaveLength(0)
+    })
+  })
+
+  it('archive exercise (confirmed) marks it archived in DB', async () => {
+    const exId = await db.exercises.add({ name: 'Dip', type: 'reps' })
+    renderSettings()
+
+    await screen.findByText('Dip')
+    fireEvent.click(screen.getByText('archive'))
+
+    await screen.findByText('Archive this exercise?')
+    fireEvent.click(screen.getByText('ARCHIVE'))
+
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.archived).toBe(true)
+    })
+  })
+
+  it('archive exercise cancelled does not archive', async () => {
+    const exId = await db.exercises.add({ name: 'Dip', type: 'reps' })
+    renderSettings()
+
+    await screen.findByText('Dip')
+    fireEvent.click(screen.getByText('archive'))
+
+    await screen.findByText('Archive this exercise?')
+    fireEvent.click(screen.getByText('CANCEL'))
+
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.archived).toBeFalsy()
+    })
+  })
+
+  it('unarchive exercise marks it active again', async () => {
+    const exId = await db.exercises.add({ name: 'Dip', type: 'reps', archived: true })
+    renderSettings()
+
+    await waitFor(() => expect(document.body.textContent).toContain('ARCHIVED'))
+    fireEvent.click(await screen.findByText('unarchive'))
+
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.archived).toBe(false)
+    })
+  })
+
+  it('renaming an exercise updates name in DB', async () => {
+    const exId = await db.exercises.add({ name: 'Old Name', type: 'reps' })
+    renderSettings()
+
+    await screen.findByText('Old Name')
+    fireEvent.click(screen.getByText('edit'))
+
+    // Input appears with current name as value
+    await waitFor(() => screen.getByDisplayValue('Old Name'))
+    const input = screen.getByDisplayValue('Old Name') as HTMLInputElement
+    input.value = 'New Name'
+    fireEvent.input(input, { target: { value: 'New Name' } })
+
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.name).toBe('New Name')
+    })
+  })
+
+  it('+ assign shows dropdown and cancel hides it', async () => {
+    await seedLifts()
+    await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    renderSettings()
+
+    // Multiple lifts each show a + assign button (one per lift with available exercises)
+    const assignBtns = await screen.findAllByText('+ assign')
+    fireEvent.click(assignBtns[0]) // click first lift's + assign
+
+    // Dropdown appears
+    await waitFor(() => expect(screen.getByText('pick exercise')).toBeInTheDocument())
+
+    // Cancel hides it
+    fireEvent.click(screen.getByText('cancel'))
+    await waitFor(() => expect(screen.queryByText('pick exercise')).not.toBeInTheDocument())
+  })
+
+  it('+ assign → select exercise → ADD assigns exercise to lift', async () => {
+    const [_liftId] = await seedLifts()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    renderSettings()
+
+    const assignBtns = await screen.findAllByText('+ assign')
+    fireEvent.click(assignBtns[0])
+    await waitFor(() => expect(screen.getByText('pick exercise')).toBeInTheDocument())
+
+    // Select Chinup from dropdown
+    const select = screen.getByRole('combobox')
+    fireEvent.change(select, { target: { value: String(exId) } })
+
+    // Click ADD (enabled after selection)
+    const addBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.trim() === 'ADD' && !b.hasAttribute('disabled'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(addBtn)
+
+    await waitFor(async () => {
+      const las = await db.liftAccessories.toArray()
+      expect(las.some(la => la.exerciseId === exId)).toBe(true)
+    })
+  })
+
+  it('del button removes exercise from lift', async () => {
+    const [liftId] = await seedLifts()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const laId = await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
+    renderSettings()
+
+    // Wait for 'del' button to appear in the per-lift assignment section
+    await screen.findByText('del')
+    fireEvent.click(screen.getByText('del'))
+
+    await waitFor(async () => {
+      const la = await db.liftAccessories.get(laId)
+      expect(la).toBeUndefined()
+    })
+  })
+})
+
+// ─── Settings — rest timers ───────────────────────────────────────────────────
+
+describe('Settings — rest timers', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+    ])
+    // Seed a settings row so updateSettings can write to DB
+    await db.settings.clear()
+    await db.settings.add({
+      restTimer1: 90, restTimer2: 180, restTimerFail: 300,
+      theme: 'dark', barWeight: 45, plates: DEFAULT_PLATES,
+    })
+    // Sync the reactive store with the seeded DB values
+    await loadSettings()
+  })
+
+  afterEach(drain)
+
+  it('timer + button increases restTimer1 by 30 s', async () => {
+    renderSettings()
+
+    // Wait for timer display "1:30" (90 s)
+    await screen.findByText('1:30')
+
+    // Find the + button in the First timer row
+    const timeEl = screen.getByText('1:30')
+    const row = timeEl.closest('div')!
+    const buttons = Array.from(row.querySelectorAll('button'))
+    const plusBtn = buttons.find(b => b.textContent?.trim() === '+')!
+    fireEvent.click(plusBtn)
+
+    await waitFor(async () => {
+      const s = await db.settings.toCollection().first()
+      expect(s?.restTimer1).toBe(120) // 90 + 30
+    })
+  })
+
+  it('timer - button decreases restTimer1 by 30 s', async () => {
+    renderSettings()
+    await screen.findByText('1:30')
+
+    const timeEl = screen.getByText('1:30')
+    const row = timeEl.closest('div')!
+    const buttons = Array.from(row.querySelectorAll('button'))
+    const minusBtn = buttons.find(b => b.textContent?.trim() === '-')!
+    fireEvent.click(minusBtn)
+
+    await waitFor(async () => {
+      const s = await db.settings.toCollection().first()
+      expect(s?.restTimer1).toBe(60) // 90 - 30
+    })
+  })
+
+  it('timer - button clamps at 30 s minimum', async () => {
+    // Set timer to 30 (minimum)
+    await db.settings.clear()
+    await db.settings.add({
+      restTimer1: 30, restTimer2: 180, restTimerFail: 300,
+      theme: 'dark', barWeight: 45, plates: DEFAULT_PLATES,
+    })
+    await loadSettings()
+
+    renderSettings()
+    await screen.findByText('0:30')
+
+    const timeEl = screen.getByText('0:30')
+    const row = timeEl.closest('div')!
+    const buttons = Array.from(row.querySelectorAll('button'))
+    const minusBtn = buttons.find(b => b.textContent?.trim() === '-')!
+    fireEvent.click(minusBtn)
+
+    await waitFor(async () => {
+      const s = await db.settings.toCollection().first()
+      expect(s?.restTimer1).toBe(30) // clamped
+    })
+  })
+})
+
+// ─── Settings — plates ────────────────────────────────────────────────────────
+
+describe('Settings — plates', () => {
+  afterEach(drain)
+
+  it('incrementing a plate weight absent from settings adds it to plates array', async () => {
+    await db.settings.clear()
+    await db.settings.add({
+      restTimer1: 90, restTimer2: 180, restTimerFail: 300,
+      theme: 'dark', barWeight: 45, plates: [],
+    })
+    await loadSettings()
+
+    renderSettings()
+    await screen.findByText('45 lb')
+
+    const plateSpan = screen.getByText('45 lb')
+    const row = plateSpan.closest('div')!
+    const plusBtn = Array.from(row.querySelectorAll('button')).find(b => b.textContent?.trim() === '+')!
+    fireEvent.click(plusBtn)
+
+    await waitFor(async () => {
+      const s = await db.settings.toCollection().first()
+      expect(s?.plates?.some(p => p.weight === 45 && p.count > 0)).toBe(true)
+    })
+  })
+
+})
+
+// ─── Settings — exercise with increment ──────────────────────────────────────
+
+describe('Settings — exercise increment stepper', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  it('editing exercise with an accessory TM shows Increment stepper (ALL EXERCISES section)', async () => {
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    await db.accessoryTrainingMaxes.add({ exerciseId: exId, weight: 50, incrementLb: 2.5, setAt: new Date() })
+
+    renderSettings()
+    await screen.findByText('Chinup')
+
+    const editBtns = await screen.findAllByText('edit')
+    fireEvent.click(editBtns[0])
+
+    await waitFor(() => expect(document.body.textContent).toContain('Increment'))
+  })
+
+  it('editing per-lift exercise with an accessory TM shows Increment stepper', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
+    await db.accessoryTrainingMaxes.add({ exerciseId: exId, weight: 50, incrementLb: 2.5, setAt: new Date() })
+
+    renderSettings()
+    // Wait for OHP section and Chinup to appear in per-lift section
+    await screen.findByText('Chinup')
+
+    // DOM order: [0] = TM section OHP edit, [1] = per-lift OHP section edit, [2] = ALL EXERCISES edit
+    const editBtns = await screen.findAllByText('edit')
+    fireEvent.click(editBtns[1]) // per-lift section edit
+
+    await waitFor(() => expect(document.body.textContent).toContain('Increment'))
   })
 })

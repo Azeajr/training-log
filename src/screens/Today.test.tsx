@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import { Router, Route } from '@solidjs/router'
 import Today from './Today'
 import { db } from '../db/index'
-import { clearSession, startSession } from '../store/workout-store'
+import { clearSession, startSession, workout } from '../store/workout-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import type { Session } from '../types/domain'
@@ -121,5 +121,81 @@ describe('Today screen', () => {
     }
     renderToday()
     await screen.findByText(/DELOAD/)
+  })
+
+  it('shows no-TM warning when selected lift has no training max', async () => {
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    // Deadlift (id 2) has no TM in beforeEach
+    const allBtns = screen.getAllByRole('button')
+    const deadliftBtn = allBtns.find(b => b.textContent?.includes('Deadlift'))!
+    fireEvent.click(deadliftBtn)
+
+    await waitFor(() => expect(document.body.textContent).toContain('No training max set'))
+  })
+
+  it('shows "done" label for completed session', async () => {
+    const cycleId = (await db.cycles.toArray())[0].id!
+    await db.sessions.add({ cycleId, liftId: 2, week: 1, date: new Date(), notes: null, status: 'completed' })
+    renderToday()
+    await waitFor(() => expect(document.body.textContent).toContain('done'))
+  })
+
+  it('shows "skip" label for skipped session', async () => {
+    const cycleId = (await db.cycles.toArray())[0].id!
+    await db.sessions.add({ cycleId, liftId: 3, week: 1, date: new Date(), notes: null, status: 'skipped' })
+    renderToday()
+    await waitFor(() => expect(document.body.textContent).toContain('skip'))
+  })
+
+  it('START WORKOUT with a different active session shows confirm dialog', async () => {
+    const session: Session = {
+      id: 10, cycleId: 1, liftId: 1, week: 1,
+      date: new Date(), notes: null, status: 'pending',
+    }
+    startSession(session)
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    // Select Deadlift (liftId 2, no active session for that lift)
+    const allBtns = screen.getAllByRole('button')
+    const deadliftBtn = allBtns.find(b => b.textContent?.includes('Deadlift'))!
+    fireEvent.click(deadliftBtn)
+
+    // Click START WORKOUT — active session is OHP (liftId 1), selected is Deadlift (liftId 2)
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+
+    await screen.findByText(/Abandon OHP session\?/)
+    clearSession()
+  })
+
+  it('reuses existing pending session instead of creating a new one', async () => {
+    const cycleId = (await db.cycles.toArray())[0].id!
+    const existingId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending',
+    })
+    renderToday()
+    const btn = await screen.findByText('START WORKOUT')
+    fireEvent.click(btn)
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
+    expect(workout.activeSession?.id).toBe(existingId)
+  })
+
+  it('confirming YES abandons active session and starts new workout', async () => {
+    startSession({ id: 10, cycleId: 1, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending' })
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    const allBtns = screen.getAllByRole('button')
+    const deadliftBtn = allBtns.find(b => b.textContent?.includes('Deadlift'))!
+    fireEvent.click(deadliftBtn)
+
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+    await screen.findByText(/Abandon OHP session\?/)
+
+    fireEvent.click(screen.getByText('YES'))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
+    clearSession()
   })
 })
