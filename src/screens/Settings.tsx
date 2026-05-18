@@ -26,6 +26,9 @@ export default function Settings() {
   const [showAddEx, setShowAddEx] = createSignal(false)
   const [editingEx, setEditingEx] = createSignal<number | null>(null)
   const [editExName, setEditExName] = createSignal('')
+  const [editExIncrement, setEditExIncrement] = createSignal(5)
+  const [accessoryIncrements, setAccessoryIncrements] = createSignal<Record<number, { tmId: number; incrementLb: number }>>({})
+
   const [addToLift, setAddToLift] = createSignal<number | null>(null)
   const [addToLiftExId, setAddToLiftExId] = createSignal<number | null>(null)
   const [importError, setImportError] = createSignal<string | null>(null)
@@ -45,6 +48,12 @@ export default function Settings() {
     setTms(tmMap)
     setExercises(await db.exercises.toArray())
     setLiftAccessories(await db.liftAccessories.toArray())
+    const allAtms = await db.accessoryTrainingMaxes.toArray()
+    const increments: Record<number, { tmId: number; incrementLb: number }> = {}
+    for (const atm of allAtms.sort((a, b) => a.setAt.getTime() - b.setAt.getTime())) {
+      increments[atm.exerciseId] = { tmId: atm.id!, incrementLb: atm.incrementLb }
+    }
+    setAccessoryIncrements(increments)
   }
 
   const handleSaveTm = async (liftId: number) => {
@@ -66,6 +75,10 @@ export default function Settings() {
   const handleRenameExercise = async (id: number) => {
     if (!editExName().trim()) return
     await renameExercise(db, id, editExName().trim())
+    const tmEntry = accessoryIncrements()[id]
+    if (tmEntry && editExIncrement() !== tmEntry.incrementLb) {
+      await db.accessoryTrainingMaxes.update(tmEntry.tmId, { incrementLb: editExIncrement() })
+    }
     setEditingEx(null)
     setEditExName('')
     load()
@@ -244,7 +257,7 @@ export default function Settings() {
                         <>
                           <span class="text-text text-xs">{ex()!.name}</span>
                           <div class="flex items-center gap-4">
-                            <button onClick={() => { setEditingEx(ex()!.id!); setEditExName(ex()!.name) }} class="text-muted text-xs hover:text-accent">edit</button>
+                            <button onClick={() => { setEditingEx(ex()!.id!); setEditExName(ex()!.name); setEditExIncrement(accessoryIncrements()[ex()!.id!]?.incrementLb ?? 5) }} class="text-muted text-xs hover:text-accent">edit</button>
                             <button onClick={() => handleRemoveFromLift(la.id!)} class="text-muted text-xs hover:text-danger">del</button>
                           </div>
                         </>
@@ -258,6 +271,13 @@ export default function Settings() {
                             class="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
                             autofocus
                           />
+                          <Show when={accessoryIncrements()[ex()!.id!]}>
+                            <div class="flex items-center gap-2">
+                              <span class="text-muted text-xs uppercase tracking-widest w-20">Increment</span>
+                              <Stepper value={editExIncrement()} onChange={setEditExIncrement} step={2.5} min={0} />
+                              <span class="text-muted text-xs">lb</span>
+                            </div>
+                          </Show>
                           <div class="flex gap-3">
                             <button onClick={() => handleRenameExercise(ex()!.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
                             <button onClick={() => setEditingEx(null)} class="text-muted text-lg sm:text-xl">cancel</button>
@@ -312,7 +332,7 @@ export default function Settings() {
               <div class="flex items-center justify-between">
                 <span class="text-text">{ex.name}</span>
                 <div class="flex items-center gap-4">
-                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name) }} class="text-muted text-xs hover:text-accent">edit</button>
+                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? 5) }} class="text-muted text-xs hover:text-accent">edit</button>
                   <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
                 </div>
               </div>
@@ -326,6 +346,13 @@ export default function Settings() {
                   class="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
                   autofocus
                 />
+                <Show when={accessoryIncrements()[ex.id!]}>
+                  <div class="flex items-center gap-2">
+                    <span class="text-muted text-xs uppercase tracking-widest w-20">Increment</span>
+                    <Stepper value={editExIncrement()} onChange={setEditExIncrement} step={2.5} min={0} />
+                    <span class="text-muted text-xs">lb</span>
+                  </div>
+                </Show>
                 <div class="flex gap-3">
                   <button onClick={() => handleRenameExercise(ex.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
                   <button onClick={() => setEditingEx(null)} class="text-muted text-lg sm:text-xl">cancel</button>
