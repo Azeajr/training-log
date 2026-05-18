@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show } from 'solid-js'
+import { createSignal, createMemo, createEffect, For, Show } from 'solid-js'
 import { useNavigate, useSearchParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Session, Lift } from '../types/domain'
@@ -23,23 +23,36 @@ interface Detail {
   notes: string | null
 }
 
-function TmChart(props: { data: { date: string; weight: number }[] }) {
+interface ChartPoint { date: Date; weight: number }
+
+function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
   const W = 400, H = 80, PAD = 20
-  const points = () => {
-    const data = props.data
-    if (data.length < 2) return ''
-    const minW = Math.min(...data.map(d => d.weight))
-    const maxW = Math.max(...data.map(d => d.weight))
-    const range = maxW - minW || 1
-    return data.map((d, i) => {
-      const x = PAD + (i / (data.length - 1)) * (W - PAD * 2)
-      const y = H - PAD - ((d.weight - minW) / range) * (H - PAD * 2)
-      return `${x.toFixed(1)},${y.toFixed(1)}`
-    }).join(' ')
+
+  const all = () => [...props.primary, ...(props.secondary ?? [])]
+  const minDate = () => Math.min(...all().map(d => d.date.getTime()))
+  const maxDate = () => Math.max(...all().map(d => d.date.getTime()))
+  const minW = () => Math.min(...all().map(d => d.weight))
+  const maxW = () => Math.max(...all().map(d => d.weight))
+
+  const toXY = (d: ChartPoint) => {
+    const dateSpan = maxDate() - minDate() || 1
+    const range = maxW() - minW() || 1
+    const x = PAD + ((d.date.getTime() - minDate()) / dateSpan) * (W - PAD * 2)
+    const y = H - PAD - ((d.weight - minW()) / range) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
   }
+
+  const primaryPts = () => props.primary.length >= 2 ? props.primary.map(toXY).join(' ') : ''
+  const secondaryPts = () => (props.secondary?.length ?? 0) >= 2 ? props.secondary!.map(toXY).join(' ') : ''
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} class="w-full h-32">
-      <polyline points={points()} fill="none" stroke="var(--color-accent)" stroke-width="1.5" />
+      <Show when={primaryPts()}>
+        <polyline points={primaryPts()} fill="none" stroke="var(--color-accent)" stroke-width="1.5" />
+      </Show>
+      <Show when={secondaryPts()}>
+        <polyline points={secondaryPts()} fill="none" stroke="var(--color-warn)" stroke-width="1.5" stroke-dasharray="4 3" />
+      </Show>
     </svg>
   )
 }
@@ -127,9 +140,19 @@ export default function History() {
       : storedLiftId ? parseInt(storedLiftId, 10) : null
   )
   const [sessions, setSessions] = createSignal<SessionRow[]>([])
-  const [tmHistory, setTmHistory] = createSignal<{ date: string; weight: number }[]>([])
+  const [tmHistory, setTmHistory] = createSignal<ChartPoint[]>([])
   const [expanded, setExpanded] = createSignal<number | null>(null)
   const [detail, setDetail] = createSignal<Detail | null>(null)
+
+  const e1rmHistory = createMemo<ChartPoint[]>(() =>
+    [...sessions()]
+      .reverse()
+      .filter(r => r.amrapWeight != null && r.amrapReps != null)
+      .map(r => ({
+        date: new Date(r.session.date),
+        weight: Math.round(estimated1RM(r.amrapWeight!, r.amrapReps!) * 10) / 10,
+      }))
+  )
 
   createEffect(() => { void load() })
 
@@ -144,10 +167,7 @@ export default function History() {
     if (m === 'lift' && (selId ?? allLifts[0]?.id)) {
       const liftId = selId ?? allLifts[0].id!
       const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
-      setTmHistory(tms.map(t => ({
-        date: new Date(t.setAt).toLocaleDateString(),
-        weight: t.weight,
-      })))
+      setTmHistory(tms.map(t => ({ date: new Date(t.setAt), weight: t.weight })))
       const liftSessions = await db.sessions
         .where('liftId').equals(liftId)
         .filter(s => s.status === 'completed')
@@ -223,9 +243,13 @@ export default function History() {
             )}
           </For>
         </div>
-        <Show when={tmHistory().length > 1}>
-          <div class="mb-4 h-32">
-            <TmChart data={tmHistory()} />
+        <Show when={tmHistory().length > 1 || e1rmHistory().length > 1}>
+          <div class="mb-4">
+            <div class="flex gap-4 text-xs font-mono mb-1">
+              <Show when={tmHistory().length > 1}><span class="text-accent">— TM</span></Show>
+              <Show when={e1rmHistory().length > 1}><span class="text-warn">- - est. 1RM</span></Show>
+            </div>
+            <TmChart primary={tmHistory()} secondary={e1rmHistory()} />
           </div>
         </Show>
       </Show>
