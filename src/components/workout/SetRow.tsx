@@ -5,6 +5,7 @@ import type { AmrapTarget } from '../../lib/calc'
 import { estimated1RM } from '../../lib/calc'
 import Stepper from '../forms/Stepper'
 import PlateDisplay from '../forms/PlateDisplay'
+import InlineConfirm from '../ui/InlineConfirm'
 
 interface Props {
   set: Omit<Set, 'id' | 'sessionId'> & { isAmrap?: boolean }
@@ -26,7 +27,6 @@ export default function SetRow(props: Props) {
   const [editing, setEditing] = createSignal(false)
   const [editReps, setEditReps] = createSignal(props.loggedReps ?? props.set.reps)
   const [editWeight, setEditWeight] = createSignal(props.loggedWeight ?? props.set.weight)
-  const [deleteConfirm, setDeleteConfirm] = createSignal(false)
   let rowEl!: HTMLDivElement
 
   const isAmrap = () => props.set.isAmrap ?? false
@@ -50,11 +50,9 @@ export default function SetRow(props: Props) {
             <div
               class="flex items-center gap-3 py-3 pl-3 text-sm text-muted border-l-4 border-transparent"
               onClick={() => {
-                if (!deleteConfirm()) {
-                  setEditing(true)
-                  setEditReps(props.loggedReps ?? props.set.reps)
-                  setEditWeight(props.loggedWeight ?? props.set.weight)
-                }
+                setEditing(true)
+                setEditReps(props.loggedReps ?? props.set.reps)
+                setEditWeight(props.loggedWeight ?? props.set.weight)
               }}
             >
               <span class="w-16 text-right font-mono cursor-pointer hover:text-text-dim">{props.loggedWeight ?? props.set.weight}lb</span>
@@ -68,30 +66,14 @@ export default function SetRow(props: Props) {
                   {estimated1RM(props.loggedWeight ?? props.set.weight, props.loggedReps!).toFixed(0)}lb e1RM
                 </span>
               </Show>
-              <Show when={props.onDelete && !deleteConfirm()}>
-                <button
-                  onClick={e => { e.stopPropagation(); setDeleteConfirm(true) }}
-                  class="ml-auto text-faint text-xs hover:text-danger font-mono"
-                >
-                  undo
-                </button>
-              </Show>
-              <Show when={props.onDelete && deleteConfirm()}>
-                <div class="ml-auto flex items-center gap-2">
-                  <span class="text-danger text-xs">undo set?</span>
-                  <button
-                    onClick={e => { e.stopPropagation(); props.onDelete!() }}
-                    class="text-danger text-xs font-mono border border-danger px-1"
-                  >
-                    yes
-                  </button>
-                  <button
-                    onClick={e => { e.stopPropagation(); setDeleteConfirm(false) }}
-                    class="text-muted text-xs font-mono"
-                  >
-                    no
-                  </button>
-                </div>
+              <Show when={!!props.onDelete}>
+                <InlineConfirm
+                  label="undo"
+                  confirmText="undo set?"
+                  onConfirm={() => props.onDelete!()}
+                  class="ml-auto"
+                  stopPropagation
+                />
               </Show>
             </div>
           }

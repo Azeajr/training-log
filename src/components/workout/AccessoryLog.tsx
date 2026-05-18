@@ -5,6 +5,7 @@ import { db } from '../../db/index'
 import { ACCESSORY_PERCENTAGE, roundToNearest5 } from '../../lib/calc'
 import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
+import InlineConfirm from '../ui/InlineConfirm'
 
 interface ActiveAccessory {
   exerciseId: number
@@ -40,8 +41,6 @@ export default function AccessoryLog(props: Props) {
   const [editReps, setEditReps] = createSignal(0)
   const [editDuration, setEditDuration] = createSignal<number | null>(null)
   const [editDistance, setEditDistance] = createSignal(0)
-  const [undoConfirm, setUndoConfirm] = createSignal(false)
-  const [removeConfirm, setRemoveConfirm] = createSignal(false)
   let tmWritten = false
 
   const startEditSet = (i: number) => {
@@ -107,18 +106,13 @@ export default function AccessoryLog(props: Props) {
             {weight()}lb
           </button>
         </span>
-        <Show
-          when={!removeConfirm()}
-          fallback={
-            <div class="flex items-center gap-2 ml-2">
-              <span class="text-danger text-xs">remove?</span>
-              <button onClick={() => removeAccessory(props.accessory.exerciseId)} class="text-danger text-xs font-mono border border-danger px-1">yes</button>
-              <button onClick={() => setRemoveConfirm(false)} class="text-muted text-xs font-mono">no</button>
-            </div>
-          }
-        >
-          <button onClick={() => setRemoveConfirm(true)} class="text-faint text-xs font-mono hover:text-danger ml-2">✕</button>
-        </Show>
+        <InlineConfirm
+          label="✕"
+          confirmText="remove?"
+          onConfirm={() => removeAccessory(props.accessory.exerciseId)}
+          class="ml-2"
+          strong
+        />
       </div>
       <Show when={weightEditing()}>
         <div class="flex items-center gap-2 pl-2 mb-2">
@@ -142,15 +136,13 @@ export default function AccessoryLog(props: Props) {
                     <Show when={s.distance != null}> {s.distance}ft</Show>
                   </span>
                   <span class="text-accent ml-1">done</span>
-                  <Show when={isLast() && !undoConfirm()}>
-                    <button onClick={() => setUndoConfirm(true)} class="ml-auto text-faint text-xs hover:text-danger font-mono">undo</button>
-                  </Show>
-                  <Show when={isLast() && undoConfirm()}>
-                    <div class="ml-auto flex items-center gap-2">
-                      <span class="text-danger text-xs">undo set?</span>
-                      <button onClick={() => { deleteLastAccessorySet(props.accessory.exerciseId); setUndoConfirm(false) }} class="text-danger text-xs font-mono border border-danger px-1">yes</button>
-                      <button onClick={() => setUndoConfirm(false)} class="text-muted text-xs font-mono">no</button>
-                    </div>
+                  <Show when={isLast()}>
+                    <InlineConfirm
+                      label="undo"
+                      confirmText="undo set?"
+                      onConfirm={() => deleteLastAccessorySet(props.accessory.exerciseId)}
+                      class="ml-auto"
+                    />
                   </Show>
                 </div>
               }
