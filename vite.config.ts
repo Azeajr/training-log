@@ -13,7 +13,7 @@ export default defineConfig(() => {
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', 'src-solid/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', 'src-solid/**', '.stryker-tmp/**'],
     alias: [
       // In tests, redirect db/index (SQLite) to Dexie db so existing tests keep working
       { find: /.*\/db\/index$/, replacement: path.resolve(__dirname, 'src/db/db.ts') },
