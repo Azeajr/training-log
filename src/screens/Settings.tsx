@@ -310,6 +310,30 @@ export default function Settings() {
             <button onClick={() => timerStep(field, 30)} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
           </div>
         )}</For>
+        <button
+          onClick={async () => {
+            try {
+              const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+              const ctx = new AC()
+              await ctx.resume()
+              const osc = ctx.createOscillator()
+              const gain = ctx.createGain()
+              osc.connect(gain)
+              gain.connect(ctx.destination)
+              osc.type = 'sine'
+              osc.frequency.value = 880
+              gain.gain.setValueAtTime(0.25, ctx.currentTime)
+              gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+              osc.start(ctx.currentTime)
+              osc.stop(ctx.currentTime + 0.35)
+            } catch (e) {
+              console.error('audio test failed', e)
+            }
+          }}
+          class="mt-3 border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent"
+        >
+          TEST AUDIO
+        </button>
       </div>
 
       <div class="mb-6">
