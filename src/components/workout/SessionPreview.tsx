@@ -5,6 +5,7 @@ interface Props {
   warmup: WarmupSet[]
   main: MainSet[]
   fsl: FslSet[]
+  supplementalLabel?: string | null
 }
 
 export default function SessionPreview(props: Props) {
@@ -35,15 +36,15 @@ export default function SessionPreview(props: Props) {
           )}
         </For>
       </div>
-      <div>
-        <div class="text-muted uppercase text-xs tracking-widest mb-1">FSL  5 x 10</div>
-        <Show when={props.fsl.length > 0}>
+      <Show when={props.supplementalLabel !== null && props.fsl.length > 0}>
+        <div>
+          <div class="text-muted uppercase text-xs tracking-widest mb-1">{props.supplementalLabel}</div>
           <div class="flex gap-4 text-text-dim pl-2">
             <span class="w-16 text-right">{props.fsl[0].weight}lb</span>
             <span>x {props.fsl[0].reps}</span>
           </div>
-        </Show>
-      </div>
+        </div>
+      </Show>
     </div>
   )
 }
