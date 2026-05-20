@@ -59,6 +59,17 @@ describe('Workout screen — no active session', () => {
     renderWorkout()
     expect(screen.getByText(/No active session/)).toBeTruthy()
   })
+
+  it('clearing session while mounted triggers loadData with null session (covers !session guard)', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText(/Bench/)
+
+    clearSession()
+    await drain()
+
+    expect(screen.getByText(/No active session/)).toBeTruthy()
+  })
 })
 
 describe('Workout screen — with active session', () => {
@@ -280,6 +291,42 @@ describe('Workout screen — with active session', () => {
       expect(document.body.textContent).toBeTruthy()
     })
   })
+
+  it('loadData returns early when liftId not in DB (covers !l guard)', async () => {
+    // Session liftId 999 has no matching lift in DB
+    startSession({ ...BENCH, liftId: 999 })
+    renderWorkout()
+
+    // Component still renders (activeSession is set), but lift name is fallback
+    await waitFor(() => expect(document.body.textContent).toContain('...'))
+  })
+
+  it('loadData uses tmWeight=0 when no training maxes exist (covers ?? 0 branch)', async () => {
+    await db.trainingMaxes.clear()
+    startSession(BENCH)
+    renderWorkout()
+
+    // Screen renders without crashing — sets calculated from 0 TM
+    await screen.findByText(/Bench/)
+  })
+
+  it('COMPLETE SESSION with null accessory weight/reps and missing setNumber (covers ?? null and setNumber guard)', async () => {
+    startSession(BENCH)
+    await db.exercises.add({ id: 20, name: 'Plank', type: 'timed' })
+    addAccessory({ exerciseId: 20, exerciseName: 'Plank', tm: 0, calculatedWeight: 0, loggedSets: [] })
+    logAccessorySet(20, { setNumber: 1, weight: null, reps: null, duration: 60, distance: null })
+    logAccessorySet(20, { duration: 30 }) // no setNumber → s.setNumber != null is false
+
+    renderWorkout()
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+
+    await waitFor(async () => {
+      const accSets = await db.accessorySets.toArray()
+      expect(accSets).toHaveLength(1)
+      expect(accSets[0].weight).toBeNull()
+      expect(accSets[0].reps).toBeNull()
+    })
+  })
 })
 
 // ─── shared helpers ───────────────────────────────────────────────────────────
@@ -443,6 +490,22 @@ describe('Workout screen — joker sets', () => {
     })
   })
 
+  it('clicking completed warmup row enters edit mode; SAVE triggers handleEdit', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(1))
+    await waitFor(() => expect(workout.loggedSets[0]?.id).toBeDefined())
+
+    // Completed warmup set at index 0 shows "done" — click to enter edit mode
+    fireEvent.click(screen.getAllByText('done')[0])
+    await screen.findByText('SAVE')
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(() => expect(workout.loggedSets).toHaveLength(1))
+  })
+
   it('clicking + ADD FSL SET appends an extra FSL set row', async () => {
     startSession(BENCH)
     renderWorkout()
@@ -476,6 +539,94 @@ describe('Workout screen — joker sets', () => {
     fireEvent.click(jokerBtn)
 
     await waitFor(() => expect(document.body.textContent).toContain('JOKER SETS'))
+  })
+
+  it('clicking completed main set enters edit mode; SAVE triggers handleEdit', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    // Log 3 warmup + 1 main = 4 sets; the main set is now completed
+    await logNSets(4)
+
+    // All 4 completed rows show "done"; the last is the main set
+    const doneSigns = screen.getAllByText('done')
+    fireEvent.click(doneSigns[doneSigns.length - 1])
+
+    // Edit mode shows SAVE button
+    await screen.findByText('SAVE')
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(() => expect(workout.loggedSets).toHaveLength(4))
+  })
+
+  it('logging and editing a joker set covers joker onLog and onEdit', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    // Log warmup (3) + main (3) to unlock JOKER button
+    await logNSets(6)
+
+    const jokerBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(jokerBtn)
+
+    // Log the joker set (covers joker onLog)
+    const logBtn = await screen.findByText('LOG')
+    fireEvent.click(logBtn)
+    await waitFor(() => expect(workout.currentSetIndex).toBe(7))
+
+    // Click "done" on the completed joker set to enter edit mode (last "done")
+    const doneSigns = screen.getAllByText('done')
+    fireEvent.click(doneSigns[doneSigns.length - 1])
+
+    // SAVE triggers joker onEdit
+    await screen.findByText('SAVE')
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(() => expect(workout.loggedSets).toHaveLength(7))
+  })
+
+  it('undo last joker triggers joker delete branch and reloads with remaining joker', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(6) // 3 warmup + 3 main
+
+    // Add joker 1 and log it
+    const jokerBtn1 = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(jokerBtn1)
+    fireEvent.click(await screen.findByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(7))
+
+    // Add joker 2 and log it
+    const jokerBtn2 = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(jokerBtn2)
+    fireEvent.click(await screen.findByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(8))
+
+    // Undo joker 2 — triggers handleDeleteSet's joker branch (lines 101-107)
+    fireEvent.click(screen.getByText('undo'))
+    await screen.findByText('undo set?')
+    fireEvent.click(screen.getByText('yes'))
+
+    await waitFor(() => expect(workout.currentSetIndex).toBe(7))
+    await waitFor(() => expect(document.body.textContent).toContain('JOKER SETS'))
+    // drain allows the async loadData() re-run to complete (covers restoredJokers lines 63-64)
+    await drain()
   })
 })
 
@@ -560,6 +711,7 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
 
     startSession(BENCH)
     renderWorkout()
+    await drain() // ensure loadData (including getAmrapTargets) fully completes
 
     await logNSets(5) // reach AMRAP set
 
@@ -576,6 +728,98 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
     fireEvent.click(screen.getAllByText('+')[0]) // triggers calcAmrapTargets path
 
     await waitFor(() => expect(workout.currentSetIndex).toBe(5))
+  })
+
+  it('logging FSL set with changed weight propagates to subsequent FSL sets', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    // 3 warmup + 3 main to reach first FSL set (index 6)
+    await logNSets(6)
+
+    await screen.findByText('LOG')
+    const weightBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      // Weight button text is exactly "<digits>lb"; joker button is "+ JOKER SET <n>lb"
+      const btn = btns.find(b => /^\d+lb$/.test((b.textContent ?? '').replace(/\s+/g, '')))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(weightBtn) // enable weight editing — weight Stepper appears
+
+    // After weightEditing() is true, both weight and reps Steppers are visible → 2 '+' buttons
+    await waitFor(() => expect(screen.getAllByText('+').length).toBeGreaterThanOrEqual(2))
+    fireEvent.click(screen.getAllByText('+')[0])
+
+    // LOG — s.type === 'fsl' && weight !== s.weight → propagation fires
+    fireEvent.click(screen.getByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(7))
+  })
+
+  it('clicking completed FSL row enters edit mode; SAVE triggers handleEdit and updates DB', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    // 3 warmup + 3 main + 5 FSL = 11 standard sets
+    await logNSets(11)
+    // wait for fire-and-forget db.sets.add to propagate id into loggedSets
+    await waitFor(() => { expect(workout.loggedSets[6]?.id).toBeDefined() })
+
+    // FSL sets start at globalIdx 6 (3 warmup + 3 main); click first FSL "done"
+    const doneSigns = screen.getAllByText('done')
+    fireEvent.click(doneSigns[6])
+
+    await screen.findByText('SAVE')
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const dbId = workout.loggedSets[6]?.id
+      expect(dbId).toBeDefined()
+      const dbSet = await db.sets.get(dbId!)
+      expect(dbSet?.reps).toBe(workout.loggedSets[6].reps)
+    })
+  })
+
+  it('handleAmrapWeightChange does nothing when tmWeight=0 (covers else-if false branch)', async () => {
+    // With no TMs: tmWeight=0, calcMainSets uses 45lb minimum, 0 warmup sets
+    // AMRAP set (main set 3) is at index 2 after logging 2 main sets
+    await db.trainingMaxes.clear()
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(2) // 0 warmup + 2 main → AMRAP (index 2) is active
+
+    await screen.findByText('LOG')
+    const weightBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => /\d+/.test(b.textContent ?? '') && (b.textContent ?? '').includes('lb'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(weightBtn) // enable weight editing
+
+    await waitFor(() => expect(screen.getAllByText('+').length).toBeGreaterThanOrEqual(2))
+    fireEvent.click(screen.getAllByText('+')[0]) // handleAmrapWeightChange → else-if (tmWeight > 0) false
+
+    await waitFor(() => expect(workout.currentSetIndex).toBe(2))
+  })
+
+  it('undo FSL set triggers fslOverride in loadData (covers lines 57-59)', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    // Log 3 warmup + 3 main + 2 FSL = 8 sets
+    await logNSets(8)
+
+    // After logging 8 sets, currentSetIndex=8; last completed is index 7 (2nd FSL)
+    // undo button shows for index 7 (globalIdx === currentSetIndex-1)
+    fireEvent.click(screen.getByText('undo'))
+    await screen.findByText('undo set?')
+    fireEvent.click(screen.getByText('yes'))
+
+    await waitFor(() => expect(workout.currentSetIndex).toBe(7))
+    // loadData now runs with 1 FSL set still in loggedSets → fslOverride is set
+    await drain()
   })
 
   it('AccessoryPicker ← BACK calls onClose without crashing', async () => {

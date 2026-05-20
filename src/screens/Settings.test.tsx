@@ -5,6 +5,7 @@ import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmati
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import { db } from '../db/index'
 import { DEFAULT_PLATES, loadSettings } from '../store/settings-store'
+import { toast } from '../store/toast-store'
 
 function renderSettings() {
   const api = createConfirmation()
@@ -86,6 +87,28 @@ describe('Settings — CLEANUP ORPHANS', () => {
     })
     const active = await db.exercises.get(activeId)
     expect(active?.archived).toBeFalsy()
+  })
+
+  it('removes orphan accessoryTrainingMax rows during cleanup', async () => {
+    await db.accessoryTrainingMaxes.add({ exerciseId: 9999, weight: 50, incrementLb: 5, setAt: new Date() })
+
+    renderSettings()
+    fireEvent.click(await screen.findByText('CLEANUP ORPHANS'))
+    fireEvent.click(await screen.findByText('CLEANUP'))
+
+    await waitFor(async () => {
+      const atms = await db.accessoryTrainingMaxes.toArray()
+      expect(atms).toHaveLength(0)
+    })
+  })
+
+  it('shows "No orphan data found" toast when DB is already clean', async () => {
+    renderSettings()
+    fireEvent.click(await screen.findByText('CLEANUP ORPHANS'))
+    fireEvent.click(await screen.findByText('CLEANUP'))
+    await waitFor(() => {
+      expect(toast()).toBe('No orphan data found')
+    })
   })
 
   it('does not archive exercise that has set history', async () => {
@@ -334,6 +357,25 @@ describe('Settings — TM editing', () => {
     const tms = await db.trainingMaxes.toArray()
     expect(tms).toHaveLength(1)
   })
+
+  it('SAVE TM with value 0 does nothing (guard branch)', async () => {
+    await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    // No TM seeded → tmInput defaults to 0 via ?. ?? 0
+
+    renderSettings()
+    await waitFor(() => expect(document.body.textContent).toContain('OHP'))
+
+    // click edit; tmInput = tms()[id] ?? 0 = undefined ?? 0 = 0
+    fireEvent.click(screen.getAllByText('edit')[0])
+    await screen.findByText('cancel')
+
+    fireEvent.click(screen.getByText('SAVE')) // hits if (tmInput() <= 0) return
+
+    // edit mode still open (setEditingTm(null) was NOT called)
+    expect(screen.queryByText('cancel')).toBeInTheDocument()
+    const tms = await db.trainingMaxes.toArray()
+    expect(tms).toHaveLength(0)
+  })
 })
 
 // ─── Settings — exercises ─────────────────────────────────────────────────────
@@ -452,6 +494,26 @@ describe('Settings — exercises', () => {
     })
   })
 
+  it('clicking SAVE with empty exercise name does nothing', async () => {
+    const exId = await db.exercises.add({ name: 'Dip', type: 'reps' })
+    renderSettings()
+
+    await screen.findByText('Dip')
+    const editBtns = await screen.findAllByText('edit')
+    fireEvent.click(editBtns[0])
+
+    await waitFor(() => screen.getByDisplayValue('Dip'))
+    const input = screen.getByDisplayValue('Dip') as HTMLInputElement
+    fireEvent.input(input, { target: { value: '' } })
+
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.name).toBe('Dip')
+    })
+  })
+
   it('+ assign shows dropdown and cancel hides it', async () => {
     await seedLifts()
     await db.exercises.add({ name: 'Chinup', type: 'reps' })
@@ -495,6 +557,162 @@ describe('Settings — exercises', () => {
       const las = await db.liftAccessories.toArray()
       expect(las.some(la => la.exerciseId === exId)).toBe(true)
     })
+  })
+
+  it('renaming exercise with changed increment updates ATM increment in DB', async () => {
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const tmId = await db.accessoryTrainingMaxes.add({ exerciseId: exId, weight: 50, incrementLb: 2.5, setAt: new Date() })
+
+    renderSettings()
+    await screen.findByText('Chinup')
+
+    const editBtns = await screen.findAllByText('edit')
+    fireEvent.click(editBtns[0]) // "ALL EXERCISES" edit button
+
+    await waitFor(() => expect(document.body.textContent).toContain('Increment'))
+
+    // Click + in the Increment stepper row to change 2.5 → 5
+    const incLabel = screen.getByText('Increment')
+    const incRow = incLabel.closest('div')!
+    const plusBtn = Array.from(incRow.querySelectorAll('button')).find(b => b.textContent?.trim() === '+')!
+    fireEvent.click(plusBtn)
+
+    fireEvent.click(screen.getByText('SAVE'))
+
+    // editExIncrement starts at 5 (default, set before accessoryIncrements loads)
+    // after one + click (step=2.5): 7.5 ≠ 2.5 → line 96 fires
+    await waitFor(async () => {
+      const atm = await db.accessoryTrainingMaxes.get(tmId)
+      expect(atm?.incrementLb).toBe(7.5)
+    })
+  })
+
+  it('lift with 2+ accessories triggers sort comparator', async () => {
+    const [liftId] = await seedLifts()
+    const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const exId2 = await db.exercises.add({ name: 'Dip',    type: 'reps' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 1 })
+    await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 0 })
+
+    renderSettings()
+
+    // Both exercises render — sort callback was invoked
+    await waitFor(() => {
+      const text = document.body.textContent ?? ''
+      expect(text).toContain('Chinup')
+      expect(text).toContain('Dip')
+    })
+  })
+
+  it('pressing Enter in ALL EXERCISES rename input saves the exercise name', async () => {
+    const exId = await db.exercises.add({ name: 'OldName', type: 'reps' })
+    renderSettings()
+    await screen.findByText('OldName')
+
+    fireEvent.click(screen.getByText('edit'))
+    const input = await waitFor(() => screen.getByDisplayValue('OldName'))
+    fireEvent.input(input, { target: { value: 'NewName' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.name).toBe('NewName')
+    })
+  })
+
+  it('pressing Escape in ALL EXERCISES rename input cancels editing', async () => {
+    const exId = await db.exercises.add({ name: 'OldName', type: 'reps' })
+    renderSettings()
+    await screen.findByText('OldName')
+
+    fireEvent.click(screen.getByText('edit'))
+    const input = await waitFor(() => screen.getByDisplayValue('OldName'))
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByText('SAVE')).not.toBeInTheDocument())
+    const ex = await db.exercises.get(exId)
+    expect(ex?.name).toBe('OldName')
+  })
+
+  it('pressing Enter in per-lift rename input saves the exercise name', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
+    renderSettings()
+
+    // wait for per-lift section (del button only appears there)
+    await screen.findByText('del')
+    const editBtns = screen.getAllByText('edit')
+    // [0] = TM edit, [1] = per-lift edit, [2] = ALL EXERCISES edit
+    fireEvent.click(editBtns[1])
+
+    // both per-lift and ALL EXERCISES sections show the same input (shared editExName())
+    const inputs = await waitFor(() => screen.getAllByDisplayValue('Chinup'))
+    fireEvent.input(inputs[0], { target: { value: 'Pull-up' } })
+    fireEvent.keyDown(inputs[0], { key: 'Enter' })
+
+    await waitFor(async () => {
+      const ex = await db.exercises.get(exId)
+      expect(ex?.name).toBe('Pull-up')
+    })
+  })
+
+  it('pressing Escape in per-lift rename input cancels editing', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
+    renderSettings()
+
+    await screen.findByText('del')
+    const editBtns = screen.getAllByText('edit')
+    fireEvent.click(editBtns[1]) // per-lift edit
+
+    const inputs = await waitFor(() => screen.getAllByDisplayValue('Chinup'))
+    fireEvent.keyDown(inputs[0], { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByText('SAVE')).not.toBeInTheDocument())
+    const ex = await db.exercises.get(exId)
+    expect(ex?.name).toBe('Chinup')
+  })
+
+  it('ADD button without exercise selection does nothing', async () => {
+    await seedLifts()
+    await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    renderSettings()
+
+    const assignBtns = await screen.findAllByText('+ assign')
+    fireEvent.click(assignBtns[0])
+    await waitFor(() => expect(screen.getByText('pick exercise')).toBeInTheDocument())
+
+    // Click ADD without selecting — addToLiftExId() is null → if (id) false
+    const addBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      return btns.find(b => b.textContent?.trim() === 'ADD')!
+    })
+    // SolidJS checks node.disabled before calling onClick; clear it to force handler execution
+    ;(addBtn as HTMLButtonElement).disabled = false
+    fireEvent.click(addBtn)
+
+    const las = await db.liftAccessories.toArray()
+    expect(las).toHaveLength(0)
+  })
+
+  it('selecting empty option in assign dropdown sets addToLiftExId to null', async () => {
+    await seedLifts()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    renderSettings()
+
+    const assignBtns = await screen.findAllByText('+ assign')
+    fireEvent.click(assignBtns[0])
+
+    const select = await waitFor(() => screen.getByRole('combobox'))
+    // Select a real exercise first
+    fireEvent.change(select, { target: { value: String(exId) } })
+    // Then revert to empty → Number('') || null = null → branch 1
+    fireEvent.change(select, { target: { value: '' } })
+
+    // ADD button still disabled (no selection), no crash
+    await waitFor(() => expect(screen.getByText('pick exercise')).toBeInTheDocument())
   })
 
   it('del button removes exercise from lift', async () => {
@@ -622,6 +840,32 @@ describe('Settings — plates', () => {
     })
   })
 
+  it('incrementing a plate weight already in settings updates its count', async () => {
+    await db.settings.clear()
+    await db.settings.add({
+      restTimer1: 90, restTimer2: 180, restTimerFail: 300,
+      theme: 'dark', barWeight: 45,
+      // Single plate so the map callback only produces plain objects (no Proxy returned unchanged)
+      plates: [{ weight: 45, count: 4 }],
+    })
+    await loadSettings()
+
+    renderSettings()
+    await screen.findByText('45 lb')
+
+    const plateSpan = screen.getByText('45 lb')
+    const row = plateSpan.closest('div')!
+    const plusBtn = Array.from(row.querySelectorAll('button')).find(b => b.textContent?.trim() === '+')!
+    fireEvent.click(plusBtn)
+
+    await waitFor(async () => {
+      const s = await db.settings.toCollection().first()
+      const plate = s?.plates?.find(p => p.weight === 45)
+      expect(plate?.count).toBe(5)
+    })
+  })
+
+
 })
 
 // ─── Settings — exercise with increment ──────────────────────────────────────
@@ -665,5 +909,81 @@ describe('Settings — exercise increment stepper', () => {
     fireEvent.click(editBtns[1]) // per-lift section edit
 
     await waitFor(() => expect(document.body.textContent).toContain('Increment'))
+  })
+})
+
+// ─── Settings — import ────────────────────────────────────────────────────────
+
+describe('Settings — import error', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  it('successful import shows "Import complete" toast', async () => {
+    renderSettings()
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    const validData = JSON.stringify({
+      exportedAt: new Date().toISOString(), version: 1,
+      lifts: [], trainingMaxes: [], accessoryTrainingMaxes: [],
+      cycles: [], sessions: [], sets: [], exercises: [],
+      liftAccessories: [], accessorySets: [], settings: [],
+    })
+    const goodFile = new File([validData], 'export.json', { type: 'application/json' })
+    Object.defineProperty(fileInput, 'files', { value: [goodFile], configurable: true })
+    fireEvent.change(fileInput)
+
+    await screen.findByText(/Overwrite all data with export\.json/)
+    fireEvent.click(screen.getByText('IMPORT'))
+
+    await waitFor(() => expect(toast()).toBe('Import complete'))
+  })
+
+  it('cancelling import confirmation dialog closes dialog without running import', async () => {
+    // Seed a lift so we can verify it's not cleared by an import
+    await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    renderSettings()
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    const validData = JSON.stringify({
+      exportedAt: new Date().toISOString(), version: 1,
+      lifts: [], trainingMaxes: [], accessoryTrainingMaxes: [],
+      cycles: [], sessions: [], sets: [], exercises: [],
+      liftAccessories: [], accessorySets: [], settings: [],
+    })
+    const goodFile = new File([validData], 'export.json', { type: 'application/json' })
+    Object.defineProperty(fileInput, 'files', { value: [goodFile], configurable: true })
+    fireEvent.change(fileInput)
+
+    await screen.findByText(/Overwrite all data with export\.json/)
+    fireEvent.click(screen.getByText('CANCEL'))
+
+    // Dialog closes; the seeded lift was NOT wiped by import
+    await waitFor(() => expect(screen.queryByText(/Overwrite all data/)).not.toBeInTheDocument())
+    const lifts = await db.lifts.toArray()
+    expect(lifts).toHaveLength(1) // not cleared → import did not run
+  })
+
+  it('shows error message when imported file contains invalid JSON', async () => {
+    renderSettings()
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    const badFile = new File(['{not valid json{{'], 'bad.json', { type: 'application/json' })
+    Object.defineProperty(fileInput, 'files', { value: [badFile], configurable: true })
+    fireEvent.change(fileInput)
+
+    await screen.findByText(/Overwrite all data with bad\.json/)
+    fireEvent.click(screen.getByText('IMPORT'))
+
+    await waitFor(() => {
+      const dangerEl = document.querySelector('.text-danger')
+      expect(dangerEl?.textContent?.length).toBeGreaterThan(0)
+    })
   })
 })

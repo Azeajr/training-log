@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, it, expect } from 'vitest'
+import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import {
   workout, startSession, logSet, editSet, advanceSet, deleteLastSet,
   startRest, stopRest,
@@ -253,5 +253,37 @@ describe('setNotes', () => {
     setNotes('first')
     setNotes('second')
     expect(workout.notes).toBe('second')
+  })
+})
+
+// ─── loadFromStorage ──────────────────────────────────────────────────────────
+
+describe('loadFromStorage', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+    vi.resetModules()
+  })
+
+  it('restores state from valid localStorage entry', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({ state: { notes: 'recovered' } }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.notes).toBe('recovered')
+  })
+
+  it('returns defaults when JSON has no state key', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({ version: 1 }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.activeSession).toBeNull()
+  })
+
+  it('returns defaults when localStorage contains malformed JSON', async () => {
+    localStorage.setItem('workout-store', '{not valid json{{')
+    const { workout: w } = await import('./workout-store')
+    expect(w.activeSession).toBeNull()
   })
 })

@@ -96,6 +96,20 @@ describe('getNextSession', () => {
     expect(result.cycleId).toBe(cycleId)
     expect(await db.cycles.count()).toBe(1)
   })
+
+  it('auto-advances to new cycle and returns week 1 first lift when all 4 weeks complete', async () => {
+    const lifts = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await addSessions(cycleId, 1, lifts)
+    await addSessions(cycleId, 2, lifts)
+    await addSessions(cycleId, 3, lifts)
+    await addSessions(cycleId, 4, lifts)
+    const result = await getNextSession(db)
+    expect(result.liftId).toBe(lifts[0].id)
+    expect(result.week).toBe(1)
+    expect(result.cycleId).not.toBe(cycleId)
+    expect(await db.cycles.count()).toBe(2)
+  })
 })
 
 // ─── advanceCycleIfComplete ───────────────────────────────────────────────────
@@ -170,6 +184,23 @@ describe('advanceCycleIfComplete', () => {
     await addSessions(cycleId, 4, lifts, 'skipped')
     const { advanced } = await advanceCycleIfComplete(db)
     expect(advanced).toBe(true)
+  })
+
+  it('omits lifts with no training max from newTms', async () => {
+    const lifts = await seedLifts()
+    // Only first lift has a TM; others have none
+    await db.trainingMaxes.add({ liftId: lifts[0].id!, weight: 200, setAt: new Date('2026-01-01') })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await addSessions(cycleId, 1, lifts)
+    await addSessions(cycleId, 2, lifts)
+    await addSessions(cycleId, 3, lifts)
+    await addSessions(cycleId, 4, lifts)
+    const result = await advanceCycleIfComplete(db)
+    expect(result.advanced).toBe(true)
+    // applyTmProgression only adds TM for lifts that already have one
+    // so only lifts[0] appears in newTms
+    expect(result.newTms).toHaveLength(1)
+    expect(result.newTms[0].liftName).toBe(lifts[0].name)
   })
 })
 
