@@ -156,11 +156,13 @@ Alternative main set style: always 5 reps across all three working sets regardle
 
 ### Supplemental Template Selection
 
-Let the user choose a supplemental template per lift instead of FSL being fixed:
-- **FSL** — 5×10 at the first working set weight (current default)
+Let the user choose a supplemental template per lift instead of the current fixed default:
+- **FSL** — 5×5 at the first working set weight
 - **SSL** — 5×5 at the second working set weight; higher intensity
 - **BBB** — 5×10 at 40–60% of TM; classic hypertrophy volume
 - **BBS** — 10×5 at a moderate percentage; high rep count at better bar speed
+
+Current default is FSL + BBB combined (5×5 FSL followed by 5×10 BBB).
 
 ---
 
