@@ -4,7 +4,7 @@
 
 ### Test Infrastructure — Coverage + Mutation
 
-378 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
+440 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds; current branch coverage is 91.86% (632/688). Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
 
 Coverage approach: lib functions tested with `fake-indexeddb`; screens tested end-to-end from DOM event through store to DB render with `@solidjs/testing-library` + jsdom. No mocking of the DB layer.
 
