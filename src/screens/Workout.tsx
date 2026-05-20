@@ -4,11 +4,13 @@ import { db } from '../db/index'
 import type { Lift, Exercise } from '../types/domain'
 import { workout, logSet, editSet, advanceSet, deleteLastSet, startRest, clearSession, setNotes } from '../store/workout-store'
 import {
-  calcMainSets, calcFslSets, calcJokerSet, calcJokerIncrement,
-  calcNextJokerWeight, shouldShowJokerButton, targetReps, JOKER_MIN_REPS,
+  calcMainSets, calcFslSets, calcSslSets, calcBbbSets, calcFslBbbSets, calcSslBbbSets, calcBbsSets,
+  calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
+  targetReps, JOKER_MIN_REPS, BBB_PCT, BBS_PERCENTAGES,
 } from '../lib/calc'
 import { useCalcWorker } from '../hooks/use-calc-worker'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
+import type { SupplementalTemplate, SupplementalSetType } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getAmrapTargets, deloadTms } from '../lib/cycle'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -26,6 +28,7 @@ export default function Workout() {
   const { confirm } = useConfirmation()
 
   const [lift, setLift] = createSignal<Lift | null>(null)
+  const [supplementalTemplate, setSupplementalTemplate] = createSignal<SupplementalTemplate>('fsl')
   const [allSets, setAllSets] = createSignal<(WarmupSet | MainSet | FslSet | JokerSet)[]>([])
   const [jokerSets, setJokerSets] = createSignal<JokerSet[]>([])
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
@@ -52,10 +55,23 @@ export default function Workout() {
     tmWeight = tms[tms.length - 1]?.weight ?? 0
 
     const main = calcMainSets(tmWeight, session.week)
+    const template = l.supplementalTemplate ?? 'fsl'
+    setSupplementalTemplate(template)
     const freshLoggedSets = workout.loggedSets
     const loggedFsl = freshLoggedSets.filter(s => s.type === 'fsl')
     const fslOverride = loggedFsl.length > 0 ? loggedFsl[loggedFsl.length - 1].weight : null
-    const fsl = calcFslSets(main[0].weight).map((s, i) =>
+    const fslRaw: FslSet[] = (() => {
+      switch (template) {
+        case 'ssl':     return calcSslSets(main[1].weight)
+        case 'bbb':     return calcBbbSets(tmWeight)
+        case 'fsl+bbb': return calcFslBbbSets(main[0].weight)
+        case 'ssl+bbb': return calcSslBbbSets(main[1].weight)
+        case 'bbs':     return calcBbsSets(tmWeight, session.week)
+        case 'none':    return []
+        default:        return calcFslSets(main[0].weight)
+      }
+    })()
+    const fsl = fslRaw.map((s, i) =>
       fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
     )
     const warmup = await calcWorker.calcWarmup(tmWeight, main[0].weight)
@@ -103,7 +119,7 @@ export default function Workout() {
       setAllSets(prev => {
         const w = prev.filter(s => s.type === 'warmup') as WarmupSet[]
         const m = prev.filter(s => s.type === 'main') as MainSet[]
-        const f = prev.filter(s => s.type === 'fsl') as FslSet[]
+        const f = prev.filter(s => isSupplemental(s.type)) as FslSet[]
         return [...w, ...m, ...updatedJokers, ...f]
       })
     }
@@ -125,13 +141,15 @@ export default function Workout() {
     advanceSet()
     db.sets.add(setData).then(dbId => editSet(setIndex, { id: dbId }))
 
-    if (s.type === 'fsl' && weight !== s.weight) {
+    if (isSupplemental(s.type) && weight !== s.weight) {
       setAllSets(prev => prev.map((ps, idx) =>
-        ps.type === 'fsl' && idx > setIndex ? { ...ps, weight } : ps
+        ps.type === s.type && idx > setIndex ? { ...ps, weight } : ps
       ))
     }
-    if (s.type === 'main' && s.setNumber === 1 && weight !== s.weight) {
-      setAllSets(prev => prev.map(ps => ps.type === 'fsl' ? { ...ps, weight } : ps))
+    if (s.type === 'main' && s.setNumber === 1 && weight !== s.weight &&
+        (supplementalTemplate() === 'fsl' || supplementalTemplate() === 'fsl+bbb')) {
+      const supplType = supplementalTemplate() as SupplementalSetType
+      setAllSets(prev => prev.map(ps => ps.type === supplType ? { ...ps, weight } : ps))
     }
 
     const nextS = allSets()[setIndex + 1]
@@ -168,7 +186,7 @@ export default function Workout() {
     setAllSets(prev => {
       const w = prev.filter(s => s.type === 'warmup') as WarmupSet[]
       const m = prev.filter(s => s.type === 'main') as MainSet[]
-      const f = prev.filter(s => s.type === 'fsl') as FslSet[]
+      const f = prev.filter(s => isSupplemental(s.type)) as FslSet[]
       return [...w, ...m, ...updatedJokers, ...f]
     })
   }
@@ -239,7 +257,8 @@ export default function Workout() {
   const warmupSets = () => allSets().filter(s => s.type === 'warmup') as WarmupSet[]
   const mainSets = () => allSets().filter(s => s.type === 'main') as MainSet[]
   const jokerSetsRendered = () => allSets().filter(s => s.type === 'joker') as JokerSet[]
-  const fslSets = () => allSets().filter(s => s.type === 'fsl') as FslSet[]
+  const isSupplemental = (t: string) => t !== 'warmup' && t !== 'main' && t !== 'joker'
+  const fslSets = () => allSets().filter(s => isSupplemental(s.type)) as FslSet[]
   const warmupCount = () => warmupSets().length
   const mainCount = () => mainSets().length
   const jokerCount = () => jokerSetsRendered().length
@@ -259,6 +278,25 @@ export default function Workout() {
   const lastJokerWeight = () => jokerCount() > 0 ? jokerSetsRendered()[jokerCount() - 1].weight : (amrapSet()?.weight ?? 0)
   const nextJokerWeight = () => calcNextJokerWeight(lastJokerWeight(), jokerIncrement())
   const liftName = () => lift()?.name ?? '...'
+
+  const supplementalLabel = () => {
+    const sets = fslSets()
+    if (sets.length === 0) return null
+    const t = supplementalTemplate()
+    const count = `${sets.length} × ${sets[0]?.reps ?? 0}`
+    switch (t) {
+      case 'ssl':     return `SSL  ${count}`
+      case 'bbb':     return `BBB  ${count}  ${Math.round(BBB_PCT * 100)}% TM`
+      case 'fsl+bbb': return `FSL+BBB  ${count}`
+      case 'ssl+bbb': return `SSL+BBB  ${count}`
+      case 'bbs': {
+        const week = workout.activeSession?.week ?? 1
+        const pct = BBS_PERCENTAGES[week as 1 | 2 | 3 | 4]
+        return pct !== null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
+      }
+      default: return `FSL  ${count}`
+    }
+  }
 
   return (
     <Show
@@ -347,40 +385,42 @@ export default function Workout() {
             </Show>
           </div>
 
-          <div class="mb-6 md:mb-0">
-            <div class="text-muted uppercase text-xs tracking-widest mb-2">FSL  5 x 10</div>
-            <For each={fslSets()}>
-              {(s, i) => {
-                const globalIdx = () => warmupCount() + mainCount() + jokerCount() + i()
-                return (
-                  <SetRow
-                    set={{ ...s, isAmrap: false }}
-                    isActive={workout.currentSetIndex === globalIdx()}
-                    isCompleted={globalIdx() < workout.currentSetIndex}
-                    loggedReps={workout.loggedSets[globalIdx()]?.reps}
-                    loggedWeight={workout.loggedSets[globalIdx()]?.weight}
-                    onLog={(reps, weight) => handleLog(globalIdx(), reps, weight)}
-                    onEdit={(reps, weight) => handleEdit(globalIdx(), reps, weight)}
-                    onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
-                  />
-                )
-              }}
-            </For>
-            <Show when={fslSets().length > 0 && workout.loggedSets.filter(s => s.type === 'fsl').length >= fslSets().length}>
-              <button
-                onClick={() => {
-                  const last = fslSets()[fslSets().length - 1]
-                  setAllSets(prev => [
-                    ...prev,
-                    { type: 'fsl' as const, setNumber: fslSets().length + 1, weight: last.weight, reps: last.reps },
-                  ])
+          <Show when={supplementalLabel() !== null}>
+            <div class="mb-6 md:mb-0">
+              <div class="text-muted uppercase text-xs tracking-widest mb-2">{supplementalLabel()}</div>
+              <For each={fslSets()}>
+                {(s, i) => {
+                  const globalIdx = () => warmupCount() + mainCount() + jokerCount() + i()
+                  return (
+                    <SetRow
+                      set={{ ...s, isAmrap: false }}
+                      isActive={workout.currentSetIndex === globalIdx()}
+                      isCompleted={globalIdx() < workout.currentSetIndex}
+                      loggedReps={workout.loggedSets[globalIdx()]?.reps}
+                      loggedWeight={workout.loggedSets[globalIdx()]?.weight}
+                      onLog={(reps, weight) => handleLog(globalIdx(), reps, weight)}
+                      onEdit={(reps, weight) => handleEdit(globalIdx(), reps, weight)}
+                      onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
+                    />
+                  )
                 }}
-                class="w-full border border-border text-muted py-2 font-mono text-xs tracking-widest hover:border-accent hover:text-accent mt-2"
-              >
-                + ADD FSL SET
-              </button>
-            </Show>
-          </div>
+              </For>
+              <Show when={workout.loggedSets.filter(s => s.type === 'fsl').length >= fslSets().length}>
+                <button
+                  onClick={() => {
+                    const last = fslSets()[fslSets().length - 1]
+                    setAllSets(prev => [
+                      ...prev,
+                      { type: 'fsl' as const, setNumber: fslSets().length + 1, weight: last.weight, reps: last.reps },
+                    ])
+                  }}
+                  class="w-full border border-border text-muted py-2 font-mono text-xs tracking-widest hover:border-accent hover:text-accent mt-2"
+                >
+                  + ADD SET
+                </button>
+              </Show>
+            </div>
+          </Show>
         </div>
 
         <Show when={workout.activeAccessories.length > 0}>

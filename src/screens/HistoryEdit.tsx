@@ -8,7 +8,7 @@ import Stepper from '../components/forms/Stepper'
 
 interface EditSet {
   id: number
-  type: 'warmup' | 'main' | 'fsl' | 'joker'
+  type: string
   setNumber: number
   weight: number
   reps: number
@@ -69,9 +69,9 @@ export default function HistoryEdit() {
     setNotes(session.notes ?? '')
 
     const dbSets = await db.sets.where('sessionId').equals(sid).toArray()
-    const typeOrder = { warmup: 0, main: 1, fsl: 2, joker: 3 }
+    const typeOrder: Record<string, number> = { warmup: 0, main: 1, fsl: 2, ssl: 3, bbb: 4, 'fsl+bbb': 5, 'ssl+bbb': 6, bbs: 7, joker: 8 }
     dbSets.sort((a, b) => {
-      const td = typeOrder[a.type] - typeOrder[b.type]
+      const td = (typeOrder[a.type] ?? 9) - (typeOrder[b.type] ?? 9)
       return td !== 0 ? td : a.setNumber - b.setNumber
     })
     setEditSets(dbSets.map(s => ({
@@ -264,7 +264,7 @@ export default function HistoryEdit() {
             </button>
           </div>
 
-          <For each={(['warmup', 'main', 'fsl', 'joker'] as const)}>
+          <For each={(['warmup', 'main', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'joker'] as const)}>
             {type => {
               const rows = () => editSets()
                 .map((s, i) => ({ s, i }))
@@ -273,7 +273,7 @@ export default function HistoryEdit() {
                 <Show when={rows().length > 0}>
                   <div class="mb-6">
                     <div class="text-muted uppercase text-xs tracking-widest mb-2">
-                      {type === 'fsl' ? 'FSL' : type === 'joker' ? 'JOKER' : type}
+                      {type.toUpperCase()}
                     </div>
                     <For each={rows()}>
                       {({ s, i }) => (

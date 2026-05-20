@@ -1,6 +1,6 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../db/index'
-import type { Lift, Exercise, LiftAccessory } from '../types/domain'
+import type { Lift, Exercise, LiftAccessory, SupplementalTemplate } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms } from '../lib/cycle'
@@ -160,6 +160,11 @@ export default function Settings() {
     )
   }
 
+  const handleSaveTemplate = async (liftId: number, template: SupplementalTemplate) => {
+    await db.lifts.update(liftId, { supplementalTemplate: template })
+    await load()
+  }
+
   const handleSkipToWeek = async (targetWeek: 1 | 2 | 3 | 4) => {
     const week = currentCycleWeek()
     const cycleId = currentCycleId()
@@ -267,6 +272,29 @@ export default function Settings() {
             DELOAD ALL  −10%
           </button>
         </div>
+      </div>
+
+      <div class="mb-6">
+        <Rule label="SUPPLEMENTAL" class="text-muted mb-2" />
+        <For each={lifts()}>{(l) => (
+          <div class="py-2 border-b border-border-dim flex items-center gap-3">
+            <span class="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
+            <div class="flex gap-1">
+              <For each={(['fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'none'] as const)}>{(t) => (
+                <button
+                  class={`px-2 py-1 text-xs font-mono tracking-widest border ${
+                    (l.supplementalTemplate ?? 'fsl') === t
+                      ? 'border-accent text-accent'
+                      : 'border-border text-muted hover:border-accent hover:text-accent'
+                  }`}
+                  onClick={() => void handleSaveTemplate(l.id!, t)}
+                >
+                  {t.toUpperCase()}
+                </button>
+              )}</For>
+            </div>
+          </div>
+        )}</For>
       </div>
 
       <Show when={currentCycleWeek() !== null}>

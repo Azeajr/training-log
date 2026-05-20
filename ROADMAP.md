@@ -63,6 +63,17 @@ CLEANUP ORPHANS button in Settings → DATA. Deletes `liftAccessories` / `access
 
 CYCLE section in Settings shows the current week (1–4) with skip-forward buttons. Clicking a future week marks all remaining sessions in skipped weeks as `skipped` (creating missing lift sessions as needed) and advances program state. Gated behind confirm dialog.
 
+### Supplemental Template Selection
+
+Per-lift supplemental template selector in Settings. Templates:
+- **FSL** (default) — 5×5 at the first working set weight
+- **SSL** — 5×5 at the second working set weight
+- **BBB** — 5×10 at 50% TM
+- **BBS** — 10×5 at 60%/70%/80% TM across weeks 1–3; hidden on deload week
+- **None** — no supplemental block
+
+FSL corrected from 5×10 to 5×5. Header in Workout screen is dynamic and shows sets × reps and % TM where applicable.
+
 ### Estimated 1RM History Chart
 
 `TmChart` in the History By Lift view refactored to dual-series SVG with shared date-based X axis. TM plotted in accent colour; estimated 1RM (Epley: `weight × (1 + reps / 30)`) from each AMRAP set plotted in dashed warn colour. Legend shows each series only when it has 2+ data points.
@@ -154,26 +165,6 @@ Alternative main set style: always 5 reps across all three working sets regardle
 
 ---
 
-### Supplemental Template Selection
-
-Let the user choose a supplemental template per lift instead of the current fixed default:
-- **FSL** — 5×5 at the first working set weight
-- **SSL** — 5×5 at the second working set weight; higher intensity
-- **BBB** — 5×10 at 40–60% of TM; classic hypertrophy volume
-- **BBS** (Boring But Strong) — 10×5 per session; percentage and rest escalate across a 13-week block:
-  | Phase | Weeks | % TM | Rest |
-  |---|---|---|---|
-  | 1 | 1–3  | 75% | 1:00–1:30 |
-  | 2 | 4–6  | 80% | 1:30–2:00 |
-  | 3 | 7–9  | 85% | 2:00 |
-  | 4 | 10–12 | 90% | 2:00–2:30 |
-  | 5 | 13   | deload — revert to standard 5/3/1 | — |
-
-  Percentages are off the TM (90% of true 1RM). Goal is 50 quality reps per session at the prescribed weight, not failure.
-
-Current default is FSL + BBB combined (5×5 FSL followed by 5×10 BBB).
-
----
 
 ### Leader / Anchor Cycle Structure
 

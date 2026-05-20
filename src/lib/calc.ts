@@ -1,4 +1,4 @@
-import type { PlateConfig } from '../types/domain'
+import type { PlateConfig, SupplementalSetType } from '../types/domain'
 
 export const MAIN_PERCENTAGES = {
   1: [0.65, 0.75, 0.85],
@@ -15,7 +15,10 @@ export const MAIN_REPS = {
 } as const
 
 export const FSL_SETS = 5
-export const FSL_REPS = 10
+export const FSL_REPS = 5
+
+export const BBB_PCT = 0.50
+export const BBS_PERCENTAGES = { 1: 0.60, 2: 0.70, 3: 0.80, 4: null } as const
 
 export const ACCESSORY_PERCENTAGE = 0.75
 export const ACCESSORY_SETS = 5
@@ -92,7 +95,7 @@ export interface FslSet {
   setNumber: number
   weight: number
   reps: number
-  type: 'fsl'
+  type: SupplementalSetType
 }
 
 export const calcFslSets = (firstSetWeight: number): FslSet[] =>
@@ -102,6 +105,49 @@ export const calcFslSets = (firstSetWeight: number): FslSet[] =>
     reps: FSL_REPS,
     type: 'fsl',
   }))
+
+export const calcSslSets = (secondSetWeight: number): FslSet[] =>
+  Array.from({ length: FSL_SETS }, (_, i) => ({
+    setNumber: i + 1,
+    weight: secondSetWeight,
+    reps: 5,
+    type: 'ssl' as const,
+  }))
+
+export const calcBbbSets = (tm: number): FslSet[] =>
+  Array.from({ length: FSL_SETS }, (_, i) => ({
+    setNumber: i + 1,
+    weight: Math.max(BAR_WEIGHT, roundToNearest5(tm * BBB_PCT)),
+    reps: 10,
+    type: 'bbb' as const,
+  }))
+
+export const calcFslBbbSets = (firstSetWeight: number): FslSet[] =>
+  Array.from({ length: FSL_SETS }, (_, i) => ({
+    setNumber: i + 1,
+    weight: firstSetWeight,
+    reps: 10,
+    type: 'fsl+bbb' as const,
+  }))
+
+export const calcSslBbbSets = (secondSetWeight: number): FslSet[] =>
+  Array.from({ length: FSL_SETS }, (_, i) => ({
+    setNumber: i + 1,
+    weight: secondSetWeight,
+    reps: 10,
+    type: 'ssl+bbb' as const,
+  }))
+
+export const calcBbsSets = (tm: number, week: 1 | 2 | 3 | 4): FslSet[] => {
+  const pct = BBS_PERCENTAGES[week]
+  if (pct === null) return []
+  return Array.from({ length: 10 }, (_, i) => ({
+    setNumber: i + 1,
+    weight: Math.max(BAR_WEIGHT, roundToNearest5(tm * pct)),
+    reps: 5,
+    type: 'bbs' as const,
+  }))
+}
 
 export interface AccessorySetCalc {
   setNumber: number
