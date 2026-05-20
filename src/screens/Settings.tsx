@@ -16,7 +16,6 @@ import Stepper from '../components/forms/Stepper'
 export default function Settings() {
   const { confirm } = useConfirmation()
 
-  const [audioTestPlaying, setAudioTestPlaying] = createSignal(false)
   const [lifts, setLifts] = createSignal<Lift[]>([])
   const [tms, setTms] = createSignal<Record<number, number>>({})
   const [editingTm, setEditingTm] = createSignal<number | null>(null)
@@ -311,32 +310,6 @@ export default function Settings() {
             <button onClick={() => timerStep(field, 30)} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
           </div>
         )}</For>
-        <button
-          onClick={async () => {
-            setAudioTestPlaying(true)
-            try {
-              const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-              const ctx = new AC()
-              await ctx.resume()
-              const osc = ctx.createOscillator()
-              const gain = ctx.createGain()
-              osc.connect(gain)
-              gain.connect(ctx.destination)
-              osc.type = 'sine'
-              osc.frequency.value = 880
-              gain.gain.setValueAtTime(0.25, ctx.currentTime)
-              gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
-              osc.start(ctx.currentTime)
-              osc.stop(ctx.currentTime + 0.35)
-            } catch (e) {
-              console.error('audio test failed', e)
-            }
-            setTimeout(() => setAudioTestPlaying(false), 500)
-          }}
-          class={`mt-3 border px-4 py-2 text-xs uppercase tracking-widest transition-colors ${audioTestPlaying() ? 'border-accent text-accent' : 'border-border text-muted hover:border-accent hover:text-accent'}`}
-        >
-          {audioTestPlaying() ? 'PLAYING…' : 'TEST AUDIO'}
-        </button>
       </div>
 
       <div class="mb-6">
