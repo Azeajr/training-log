@@ -64,6 +64,24 @@ function getTimerWorker(): Worker {
   return timerWorker
 }
 
+let wakeLock: WakeLockSentinel | null = null
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return
+  try {
+    wakeLock = await navigator.wakeLock.request('screen')
+  } catch {
+    // denied or not supported
+  }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock !== null) {
+    await wakeLock.release()
+    wakeLock = null
+  }
+}
+
 export default function RestTimer() {
   const [elapsed, setElapsed] = createSignal(0)
   let prevElapsed = -1
@@ -84,12 +102,17 @@ export default function RestTimer() {
     const worker = getTimerWorker()
     worker.onmessage = (e: MessageEvent<{ elapsed: number }>) => setElapsed(e.data.elapsed)
     worker.postMessage({ type: 'start', restStartedAt })
-    onCleanup(() => { worker.postMessage({ type: 'stop' }) })
+    void requestWakeLock()
+    onCleanup(() => {
+      worker.postMessage({ type: 'stop' })
+      void releaseWakeLock()
+    })
   })
 
   createEffect(() => {
     if (!workout.isResting) return
     getTimerWorker().postMessage({ type: isVisible() ? 'resume' : 'pause' })
+    if (isVisible()) void requestWakeLock()
   })
 
   createEffect(() => {
