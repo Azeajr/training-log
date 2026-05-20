@@ -286,6 +286,12 @@ describe('shouldShowJokerButton', () => {
     const sets = [logged(10, 'warmup'), logged(5), logged(5), logged(5), logged(10, 'fsl')]
     expect(shouldShowJokerButton({ week: 1, loggedSets: sets, jokerCount: 0, ...base })).toBe(false)
   })
+
+  it('falls back to 1 rep minimum when week value is not in JOKER_MIN_REPS', () => {
+    // week 0 is not in JOKER_MIN_REPS {1,2,3}; ?? 1 fallback applies → min 1 rep
+    const sets = [logged(1)]
+    expect(shouldShowJokerButton({ week: 0 as unknown as 1, loggedSets: sets, jokerCount: 0, warmupCount: 0, mainCount: 1 })).toBe(true)
+  })
 })
 
 describe('calcPlatesPerSide', () => {

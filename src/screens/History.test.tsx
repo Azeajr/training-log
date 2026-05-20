@@ -90,6 +90,29 @@ describe('History — estimated 1RM chart', () => {
     await waitFor(() => expect(screen.getByText('— TM')).toBeInTheDocument())
   })
 
+  it('TmChart handles identical dates and weights without crashing (covers || 1 guards)', async () => {
+    const liftId = await seedLift()
+    const sameDate = new Date(Date.now() - 1_000_000)
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: sameDate })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: sameDate })
+
+    renderHistory()
+
+    await waitFor(() => expect(screen.getByText('— TM')).toBeInTheDocument())
+  })
+
+  it('TmChart renders with empty primary when no TMs but 2+ e1rm sessions (covers pts.length < 1 guard)', async () => {
+    const liftId = await seedLift()
+    // No TMs → tmHistory = [] (primary is empty)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await seedSession(liftId, cycleId, 2_000_000, { weight: 185, reps: 5 })
+    await seedSession(liftId, cycleId, 1_000_000, { weight: 190, reps: 6 })
+
+    renderHistory()
+
+    await waitFor(() => expect(screen.getByText('- - est. 1RM')).toBeInTheDocument())
+  })
+
   it('hides TM legend when lift has fewer than 2 training maxes', async () => {
     const liftId = await seedLift()
     await seedTm(liftId, 200, 1_000_000)
@@ -184,6 +207,46 @@ describe('History — session expansion', () => {
     await waitFor(() => expect(screen.queryByText('EDIT →')).not.toBeInTheDocument())
   })
 
+  it('expanded detail shows joker section when session has joker sets', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1,
+      date: new Date(Date.now() - 1_000_000),
+      notes: null, status: 'completed',
+    })
+    await db.sets.bulkAdd([
+      { sessionId, type: 'main',  setNumber: 1, weight: 130, reps: 5, isAmrap: false },
+      { sessionId, type: 'joker', setNumber: 1, weight: 150, reps: 5, isAmrap: false },
+    ])
+    renderHistory()
+
+    const rowBtn = await findSessionRowBtn()
+    fireEvent.click(rowBtn)
+
+    await waitFor(() => expect(document.body.textContent?.toLowerCase()).toContain('joker'))
+  })
+
+  it('e1rm returns null when amrapWeight is 0 (covers && falsy branch)', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(Date.now() - 1_000_000), notes: null, status: 'completed' })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 0, reps: 5, isAmrap: true })
+
+    renderHistory()
+
+    const rowBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const row = btns.find(b => b.textContent?.includes('W1') && b.textContent?.includes('Bench'))
+      expect(row).toBeTruthy()
+      return row!
+    })
+    fireEvent.click(rowBtn)
+
+    // Expanded detail renders isAmrap set → e1rm() called → amrapWeight=0 → null
+    await screen.findByText('EDIT →')
+  })
+
   it('EDIT button in expanded row navigates to /history/:id/edit', async () => {
     const { sessionId } = await seedCompletedSession()
     renderHistory()
@@ -263,6 +326,55 @@ describe('History — view modes', () => {
     await waitFor(() => {
       const text = document.body.textContent ?? ''
       expect(text).toContain('W1')
+    })
+  })
+
+  it('initializes selected lift from URL liftId param (covers rawLiftId branches)', async () => {
+    const liftId1 = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.lifts.add({ name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await db.sessions.add({ cycleId, liftId: liftId1, week: 1, date: new Date(Date.now() - 1_000_000), notes: null, status: 'completed' })
+
+    window.history.pushState({}, '', `/history?liftId=${liftId1}`)
+    renderHistory()
+
+    await waitFor(() => expect(document.body.textContent).toContain('W1'))
+    window.history.pushState({}, '', '/history')
+  })
+
+  it('expanding one of two session rows renders the other with detail=null (covers detail ternary)', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(Date.now() - 2_000_000), notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId, week: 2, date: new Date(Date.now() - 1_000_000), notes: null, status: 'completed' })
+
+    renderHistory()
+
+    const rowBtns = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const rows = btns.filter(b => b.textContent?.includes('W') && b.textContent?.includes('Bench'))
+      expect(rows.length).toBeGreaterThanOrEqual(2)
+      return rows
+    })
+    fireEvent.click(rowBtns[0])
+
+    // EDIT → appears for expanded row; other row renders with detail=null
+    await screen.findByText('EDIT →')
+  })
+
+  it('session for a deleted lift shows "?" as the lift name', async () => {
+    // Add a session pointing to liftId 999 (no matching lift in DB)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.sessions.add({ cycleId, liftId: 999, week: 1, date: new Date(Date.now() - 1_000_000), notes: null, status: 'completed' })
+
+    renderHistory()
+    // Switch to "By date" to see all sessions regardless of selected lift
+    await screen.findByText('Bench')
+    fireEvent.click(screen.getByText('By date'))
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('?')
     })
   })
 

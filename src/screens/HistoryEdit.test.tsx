@@ -282,6 +282,27 @@ describe('HistoryEdit — accessory picker', () => {
     })
   })
 
+  it('deleting a newly-added (not yet saved) accessory does not add to deletedIds', async () => {
+    const { sessionId } = await seedSessionWithExercise()
+    renderHistoryEdit(sessionId)
+    await screen.findByText(/Bench/)
+
+    // Add via picker → originalExerciseId = -1
+    fireEvent.click(await screen.findByText('+ ADD ACCESSORY'))
+    await screen.findByText('Chinup')
+    fireEvent.click(screen.getByText('Chinup'))
+    await waitFor(() => expect(screen.queryByText('SELECT EXERCISE')).not.toBeInTheDocument())
+    await waitFor(() => expect(document.body.textContent).toContain('ACCESSORIES'))
+
+    // Delete the newly-added accessory — originalExerciseId = -1 → branch
+    fireEvent.click(screen.getByText('✕'))
+    await waitFor(() => expect(screen.queryByText('Chinup')).not.toBeInTheDocument())
+
+    // Save — no accessory sets written (originalExerciseId=-1 was deleted before save)
+    fireEvent.click(screen.getByText('SAVE'))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
+  })
+
   it('adding a new accessory via picker and saving writes sets to DB', async () => {
     const { sessionId, exId } = await seedSessionWithExercise()
     renderHistoryEdit(sessionId)
@@ -304,6 +325,68 @@ describe('HistoryEdit — accessory picker', () => {
         .toArray()
       expect(sets.length).toBeGreaterThan(0)
     })
+  })
+
+  it('updateAccSet with 2 accessories covers the non-matching accessory return path', async () => {
+    // Seed session with 2 exercises each having an accessory set
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const exId2 = await db.exercises.add({ name: 'Dips',   type: 'reps' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 0 })
+    await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 1 })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.accessorySets.bulkAdd([
+      { sessionId, exerciseId: exId1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null },
+      { sessionId, exerciseId: exId2, setNumber: 1, weight: 30, reps: 10, duration: null, distance: null },
+    ])
+
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+    await screen.findByText('Dips')
+
+    // Click + on second accessory's Stepper — updateAccSet(1, 0, ...) runs map over [acc0, acc1]
+    // For acc0 (i=0): ai !== accIdx (0 !== 1) → return acc  (covers line 135 branch)
+    // For acc1 (i=1): i === accIdx → update
+    const plusBtns = await waitFor(() => {
+      const btns = screen.getAllByText('+')
+      expect(btns.length).toBeGreaterThanOrEqual(2)
+      return btns
+    })
+    fireEvent.click(plusBtns[plusBtns.length - 1]) // last + = second accessory
+
+    await waitFor(() => expect(document.body.textContent).toContain('Dips'))
+  })
+
+  it('swapping exercise with 2 existing accessory sets covers non-matching entry in map', async () => {
+    // Need 2 accessories WITH sets in the session so editAccessories has 2 entries
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const exId2 = await db.exercises.add({ name: 'Dips',   type: 'reps' })
+    const exId3 = await db.exercises.add({ name: 'Row',    type: 'reps' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 0 })
+    await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 1 })
+    await db.liftAccessories.add({ liftId, exerciseId: exId3, order: 2 })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.accessorySets.bulkAdd([
+      { sessionId, exerciseId: exId1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null },
+      { sessionId, exerciseId: exId2, setNumber: 1, weight: 30, reps: 10, duration: null, distance: null },
+    ])
+
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+    await screen.findByText('Dips')
+
+    // Swap first accessory (picker = 0) — map iterates 2 items, i=1 hits the i !== 0 branch (line 167)
+    const swapBtns = screen.getAllByText('swap')
+    fireEvent.click(swapBtns[0])
+    await waitFor(() => expect(document.body.textContent).toContain('SELECT EXERCISE'))
+
+    await screen.findByText('Row')
+    fireEvent.click(screen.getByText('Row'))
+    await waitFor(() => expect(document.body.textContent).not.toContain('SELECT EXERCISE'))
+    await waitFor(() => expect(document.body.textContent).toContain('Row'))
   })
 
   it('saving existing accessory without swapping updates sets in DB', async () => {
@@ -472,6 +555,27 @@ describe('HistoryEdit — accessory exercise types', () => {
     await waitFor(() => expect(document.body.textContent).toContain('Chinup'))
   })
 
+  it('clicking + on distance accessory Stepper calls updateAccSet for weight and distance fields', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId = await db.exercises.add({ name: 'Sled Push', type: 'distance' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 50, reps: null, duration: null, distance: 100 })
+
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Sled Push')
+
+    const plusBtns = await waitFor(() => {
+      const btns = screen.getAllByText('+')
+      expect(btns.length).toBeGreaterThan(0)
+      return btns
+    })
+    fireEvent.click(plusBtns[0]) // triggers updateAccSet for weight field
+
+    await waitFor(() => expect(document.body.textContent).toContain('Sled Push'))
+  })
+
   it('swapping reps exercise for timed exercise resets sets (typeChanged=true)', async () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
@@ -493,6 +597,20 @@ describe('HistoryEdit — accessory exercise types', () => {
 
     await waitFor(() => expect(document.body.textContent).not.toContain('SELECT EXERCISE'))
     await waitFor(() => expect(document.body.textContent).toContain('Plank'))
+  })
+
+  it('renders distance accessory with null weight and distance (covers ?? 0 fallbacks)', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId = await db.exercises.add({ name: 'Sled Push', type: 'distance' })
+    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: null, reps: null, duration: null, distance: null })
+
+    renderHistoryEdit(sessionId)
+
+    await screen.findByText('Sled Push')
+    await waitFor(() => expect(document.body.textContent).toContain('Sled Push'))
   })
 
   it('already-added exercise is disabled in the add-accessory picker', async () => {

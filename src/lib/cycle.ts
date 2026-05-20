@@ -116,6 +116,11 @@ export async function getNextSession(db: TrainingDB): Promise<{
     if (s.status !== 'pending') weekCounts[s.week]++
   })
 
+  if (([1, 2, 3, 4] as const).every(w => weekCounts[w] >= 4)) {
+    await advanceCycleIfComplete(db)
+    return getNextSession(db)
+  }
+
   let currentWeek: 1 | 2 | 3 | 4 = 1
   for (const w of [1, 2, 3, 4] as const) {
     if (weekCounts[w] < 4) { currentWeek = w; break }

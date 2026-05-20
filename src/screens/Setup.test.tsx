@@ -105,4 +105,39 @@ describe('Setup screen', () => {
     renderSetup()
     await screen.findByText('IMPORT INSTEAD')
   })
+
+  it('clicking + on TM Stepper updates the value (setTmVal)', async () => {
+    renderSetup()
+    await screen.findByText('OHP')
+
+    const plusBtns = await waitFor(() => {
+      const btns = screen.getAllByText('+')
+      expect(btns.length).toBeGreaterThan(0)
+      return btns
+    })
+    fireEvent.click(plusBtns[0]) // OHP baseWeight=95, step=5 → 100
+
+    await waitFor(() => expect(document.body.textContent).toContain('100'))
+  })
+
+  it('START TRAINING uses custom TM when Stepper was changed (covers vals[id] ?? baseWeight left-side)', async () => {
+    renderSetup()
+    await screen.findByText('OHP')
+
+    const plusBtns = await waitFor(() => screen.getAllByText('+'))
+    fireEvent.click(plusBtns[0]) // OHP: 95 → 100
+
+    fireEvent.click(screen.getByText('NEXT'))
+    await screen.findByText('STEP 2 OF 2 — CONFIRM')
+    // Review shows 100 (custom) for OHP and 135 (baseWeight) for others
+    expect(document.body.textContent).toContain('100')
+
+    fireEvent.click(screen.getByText('START TRAINING'))
+
+    await waitFor(async () => {
+      const tms = await db.trainingMaxes.toArray()
+      const ohpTm = tms.find(t => t.liftId === 1)
+      expect(ohpTm?.weight).toBe(100)
+    })
+  })
 })

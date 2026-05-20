@@ -149,6 +149,26 @@ describe('Today screen', () => {
     await waitFor(() => expect(document.body.textContent).toContain('skip'))
   })
 
+  it("shows '->' label for the selected lift", async () => {
+    renderToday()
+    await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      expect(btns.some(b => b.textContent?.includes('OHP') && b.textContent?.includes('->'))).toBe(true)
+    })
+  })
+
+  it('SessionPreview hidden when selected lift has no training max', async () => {
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    const allBtns = screen.getAllByRole('button')
+    const deadliftBtn = allBtns.find(b => b.textContent?.includes('Deadlift'))!
+    fireEvent.click(deadliftBtn)
+
+    await waitFor(() => expect(document.body.textContent).toContain('No training max'))
+    expect(screen.queryByText('WARM UP')).not.toBeInTheDocument()
+  })
+
   it('START WORKOUT with a different active session shows confirm dialog', async () => {
     const session: Session = {
       id: 10, cycleId: 1, liftId: 1, week: 1,
@@ -170,6 +190,19 @@ describe('Today screen', () => {
     clearSession()
   })
 
+  it('abandon confirm shows even when active session liftId not found in lifts', async () => {
+    // liftId 999 does not exist → activeLiftName falls back to ''
+    startSession({ id: 10, cycleId: 1, liftId: 999, week: 1, date: new Date(), notes: null, status: 'pending' })
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    // OHP (liftId 1) is selected; active session is liftId 999 (not matching → abandons)
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+
+    await screen.findByText(/Abandon.*session\?/)
+    clearSession()
+  })
+
   it('reuses existing pending session instead of creating a new one', async () => {
     const cycleId = (await db.cycles.toArray())[0].id!
     const existingId = await db.sessions.add({
@@ -180,6 +213,25 @@ describe('Today screen', () => {
     fireEvent.click(btn)
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
     expect(workout.activeSession?.id).toBe(existingId)
+  })
+
+  it('confirming NO in abandon dialog does not navigate', async () => {
+    startSession({ id: 10, cycleId: 1, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending' })
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    const allBtns = screen.getAllByRole('button')
+    const deadliftBtn = allBtns.find(b => b.textContent?.includes('Deadlift'))!
+    fireEvent.click(deadliftBtn)
+
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+    await screen.findByText(/Abandon OHP session\?/)
+    fireEvent.click(screen.getByText('CANCEL'))
+
+    // confirm resolved false → handleStart returns early → no navigate
+    await drain()
+    expect(mockNavigate).not.toHaveBeenCalled()
+    clearSession()
   })
 
   it('confirming YES abandons active session and starts new workout', async () => {
