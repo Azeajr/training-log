@@ -13,13 +13,13 @@ function getAudioCtx(): AudioContext {
   if (!audioCtx || audioCtx.state === 'closed') {
     audioCtx = new AudioContext()
   }
-  if (audioCtx.state === 'suspended') audioCtx.resume()
   return audioCtx
 }
 
-function playTone(freq: number, duration: number, startDelay = 0) {
+async function playTone(freq: number, duration: number, startDelay = 0) {
   try {
     const ctx = getAudioCtx()
+    if (ctx.state === 'suspended') await ctx.resume()
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.connect(gain)
@@ -103,6 +103,7 @@ export default function RestTimer() {
     worker.onmessage = (e: MessageEvent<{ elapsed: number }>) => setElapsed(e.data.elapsed)
     worker.postMessage({ type: 'start', restStartedAt })
     void requestWakeLock()
+    try { getAudioCtx() } catch { /* ignore if browser blocks before gesture */ }
     onCleanup(() => {
       worker.postMessage({ type: 'stop' })
       void releaseWakeLock()
