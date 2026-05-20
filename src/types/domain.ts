@@ -1,3 +1,6 @@
+export type SupplementalTemplate = 'fsl' | 'ssl' | 'bbb' | 'fsl+bbb' | 'ssl+bbb' | 'bbs' | 'none'
+export type SupplementalSetType = Exclude<SupplementalTemplate, 'none'>
+
 export interface Lift {
   id?: number
   name: 'OHP' | 'Bench' | 'Squat' | 'Deadlift'
@@ -5,6 +8,7 @@ export interface Lift {
   progressionIncrement: number
   baseWeight: number
   liftType: 'upper' | 'lower'
+  supplementalTemplate?: SupplementalTemplate
 }
 
 export interface TrainingMax {
@@ -34,7 +38,7 @@ export interface Session {
 export interface Set {
   id?: number
   sessionId: number
-  type: 'warmup' | 'main' | 'fsl' | 'joker'
+  type: 'warmup' | 'main' | 'joker' | SupplementalSetType
   setNumber: number
   weight: number
   reps: number

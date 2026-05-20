@@ -3,6 +3,11 @@ import {
   roundToNearest5,
   calcMainSets,
   calcFslSets,
+  calcSslSets,
+  calcBbbSets,
+  calcFslBbbSets,
+  calcSslBbbSets,
+  calcBbsSets,
   calcAccessorySets,
   calcWarmup,
   estimated1RM,
@@ -54,12 +59,12 @@ describe('calcMainSets', () => {
 })
 
 describe('calcFslSets', () => {
-  it('returns 5 sets at the given first-set weight x 10 reps', () => {
+  it('returns 5 sets at the given first-set weight x 5 reps', () => {
     const sets = calcFslSets(130)
     expect(sets).toHaveLength(5)
     sets.forEach(s => {
       expect(s.weight).toBe(130)
-      expect(s.reps).toBe(10)
+      expect(s.reps).toBe(5)
       expect(s.type).toBe('fsl')
     })
   })
@@ -68,6 +73,115 @@ describe('calcFslSets', () => {
     const main = calcMainSets(200, week)
     const fsl = calcFslSets(main[0].weight)
     fsl.forEach(s => expect(s.weight).toBe(main[0].weight))
+  })
+})
+
+describe('calcSslSets', () => {
+  it('returns 5 sets at second set weight x 5 reps', () => {
+    const sets = calcSslSets(200)
+    expect(sets).toHaveLength(5)
+    sets.forEach(s => {
+      expect(s.weight).toBe(200)
+      expect(s.reps).toBe(5)
+      expect(s.type).toBe('ssl')
+    })
+  })
+
+  it('weight matches second main set weight', () => {
+    const main = calcMainSets(200, 1)
+    const ssl = calcSslSets(main[1].weight)
+    ssl.forEach(s => expect(s.weight).toBe(main[1].weight))
+  })
+})
+
+describe('calcBbbSets', () => {
+  it('returns 5 sets x 10 reps at 50% TM', () => {
+    const sets = calcBbbSets(300)
+    expect(sets).toHaveLength(5)
+    sets.forEach(s => {
+      expect(s.weight).toBe(150)
+      expect(s.reps).toBe(10)
+      expect(s.type).toBe('bbb')
+    })
+  })
+
+  it('rounds weight to nearest 5', () => {
+    const sets = calcBbbSets(303)
+    sets.forEach(s => expect(s.weight % 5).toBe(0))
+  })
+
+  it('floors to bar weight (45) for very low TMs', () => {
+    const sets = calcBbbSets(50)
+    sets.forEach(s => expect(s.weight).toBeGreaterThanOrEqual(45))
+  })
+})
+
+describe('calcFslBbbSets', () => {
+  it('returns 5 sets x 10 reps at first set weight', () => {
+    const sets = calcFslBbbSets(170)
+    expect(sets).toHaveLength(5)
+    sets.forEach(s => {
+      expect(s.weight).toBe(170)
+      expect(s.reps).toBe(10)
+      expect(s.type).toBe('fsl+bbb')
+    })
+  })
+
+  it('weight matches first main set weight', () => {
+    const main = calcMainSets(200, 1)
+    const sets = calcFslBbbSets(main[0].weight)
+    sets.forEach(s => expect(s.weight).toBe(main[0].weight))
+  })
+})
+
+describe('calcSslBbbSets', () => {
+  it('returns 5 sets x 10 reps at second set weight', () => {
+    const sets = calcSslBbbSets(185)
+    expect(sets).toHaveLength(5)
+    sets.forEach(s => {
+      expect(s.weight).toBe(185)
+      expect(s.reps).toBe(10)
+      expect(s.type).toBe('ssl+bbb')
+    })
+  })
+
+  it('weight matches second main set weight', () => {
+    const main = calcMainSets(200, 1)
+    const sets = calcSslBbbSets(main[1].weight)
+    sets.forEach(s => expect(s.weight).toBe(main[1].weight))
+  })
+})
+
+describe('calcBbsSets', () => {
+  it('week 1: 10 sets x 5 reps at 60% TM', () => {
+    const sets = calcBbsSets(300, 1)
+    expect(sets).toHaveLength(10)
+    sets.forEach(s => {
+      expect(s.weight).toBe(180)
+      expect(s.reps).toBe(5)
+      expect(s.type).toBe('bbs')
+    })
+  })
+
+  it('week 2: 70% TM', () => {
+    const sets = calcBbsSets(300, 2)
+    expect(sets).toHaveLength(10)
+    sets.forEach(s => expect(s.weight).toBe(210))
+  })
+
+  it('week 3: 80% TM', () => {
+    const sets = calcBbsSets(300, 3)
+    expect(sets).toHaveLength(10)
+    sets.forEach(s => expect(s.weight).toBe(240))
+  })
+
+  it('week 4 (deload): returns empty array', () => {
+    expect(calcBbsSets(300, 4)).toHaveLength(0)
+  })
+
+  it('rounds weight to nearest 5', () => {
+    const sets = calcBbsSets(303, 1)
+    sets.forEach(s => expect(s.weight % 5).toBe(0))
   })
 })
 

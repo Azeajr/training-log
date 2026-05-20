@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS lifts (
   "order" INTEGER NOT NULL,
   progressionIncrement REAL NOT NULL,
   baseWeight REAL NOT NULL,
-  liftType TEXT NOT NULL
+  liftType TEXT NOT NULL,
+  supplementalTemplate TEXT NOT NULL DEFAULT 'fsl+bbb'
 );
 CREATE TABLE IF NOT EXISTS trainingMaxes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,6 +90,9 @@ CREATE TABLE IF NOT EXISTS settings (
   barWeight REAL,
   plates TEXT
 );
+CREATE TABLE IF NOT EXISTS migrations (
+  id TEXT PRIMARY KEY
+);
 CREATE INDEX IF NOT EXISTS idx_trainingMaxes_liftId ON trainingMaxes(liftId);
 CREATE INDEX IF NOT EXISTS idx_sessions_cycleId ON sessions(cycleId);
 CREATE INDEX IF NOT EXISTS idx_sessions_liftId ON sessions(liftId);
@@ -96,6 +100,17 @@ CREATE INDEX IF NOT EXISTS idx_sets_sessionId ON sets(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessorySets_sessionId ON accessorySets(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTrainingMaxes(exerciseId);
 `
+
+function runMigrations() {
+  // One-time: lift supplementalTemplate default 'fsl' → 'fsl+bbb'
+  const liftMigRan = db.selectValue("SELECT COUNT(*) FROM migrations WHERE id = 'lift_default_fsl_bbb'") as number
+  if (!liftMigRan) {
+    db.exec("UPDATE lifts SET supplementalTemplate = 'fsl+bbb' WHERE supplementalTemplate = 'fsl'")
+    db.exec("INSERT OR IGNORE INTO migrations (id) VALUES ('lift_default_fsl_bbb')")
+  }
+  // Idempotent: old 'fsl' sets with reps=10 were FSL+BBB
+  db.exec("UPDATE sets SET type = 'fsl+bbb' WHERE type = 'fsl' AND reps = 10")
+}
 
 async function init(): Promise<{ persistent: boolean }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,6 +123,8 @@ async function init(): Promise<{ persistent: boolean }> {
         const poolUtil = await (sqlite3 as any).installOpfsSAHPoolVfs({})
         db = new poolUtil.OpfsSAHPoolDb('/training-log.db')
         db.exec(SCHEMA)
+        try { db.exec("ALTER TABLE lifts ADD COLUMN supplementalTemplate TEXT NOT NULL DEFAULT 'fsl'") } catch { /* column exists */ }
+        runMigrations()
         return { persistent: true }
       } catch {
         if (attempt < 9) await new Promise(r => setTimeout(r, 150))
@@ -117,6 +134,8 @@ async function init(): Promise<{ persistent: boolean }> {
   }
   db = new sqlite3.oo1.DB()
   db.exec(SCHEMA)
+  try { db.exec("ALTER TABLE lifts ADD COLUMN supplementalTemplate TEXT NOT NULL DEFAULT 'fsl'") } catch { /* column exists */ }
+  runMigrations()
   return { persistent: false }
 }
 

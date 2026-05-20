@@ -20,6 +20,7 @@ interface Detail {
   sets: any[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   accessorySets: any[]
+  exerciseNames: Map<number, string>
   notes: string | null
 }
 
@@ -103,7 +104,7 @@ function HistorySessionRow(props: {
                 EDIT →
               </button>
             </div>
-            <For each={['warmup', 'main', 'joker', 'fsl'] as const}>
+            <For each={(['warmup', 'main', 'joker', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs'] as const).filter(t => detail().sets.some((s: any) => s.type === t))}>
               {type => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const typeSets = detail().sets.filter((s: any) => s.type === type)
@@ -125,6 +126,32 @@ function HistorySessionRow(props: {
                 )
               }}
             </For>
+            <Show when={detail().accessorySets.length > 0}>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              <For each={[...new Set(detail().accessorySets.map((s: any) => s.exerciseId as number))]}>
+                {exId => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const exSets = detail().accessorySets.filter((s: any) => s.exerciseId === exId)
+                  const exName = detail().exerciseNames.get(exId) ?? `Exercise ${exId}`
+                  return (
+                    <div>
+                      <div class="text-muted uppercase tracking-widest mb-0.5">{exName}</div>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      <For each={exSets}>{(s: any) => (
+                        <div class="pl-2">
+                          <Show when={s.weight != null && s.weight > 0}>{s.weight}lb × </Show>
+                          <Show when={s.reps != null}>{s.reps} reps</Show>
+                          <Show when={s.duration != null}>
+                            {Math.floor(s.duration / 60)}:{String(s.duration % 60).padStart(2, '0')}
+                          </Show>
+                          <Show when={s.distance != null}>{s.distance} ft</Show>
+                        </div>
+                      )}</For>
+                    </div>
+                  )
+                }}
+              </For>
+            </Show>
             <Show when={detail().notes}>
               <div>
                 <div class="text-muted uppercase tracking-widest mb-0.5">NOTES</div>
@@ -216,7 +243,13 @@ export default function History() {
     const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
     const accSets = await db.accessorySets.where('sessionId').equals(sessionId).toArray()
     const session = await db.sessions.get(sessionId)
-    setDetail({ sets, accessorySets: accSets, notes: session?.notes ?? null })
+    let exerciseNames = new Map<number, string>()
+    if (accSets.length > 0) {
+      const exIds = [...new Set(accSets.map((s: any) => s.exerciseId))]
+      const exercises = await db.exercises.where('id').anyOf(exIds).toArray()
+      exerciseNames = new Map(exercises.map(e => [e.id!, e.name]))
+    }
+    setDetail({ sets, accessorySets: accSets, exerciseNames, notes: session?.notes ?? null })
   }
 
   return (
