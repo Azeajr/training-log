@@ -160,7 +160,16 @@ Let the user choose a supplemental template per lift instead of the current fixe
 - **FSL** — 5×5 at the first working set weight
 - **SSL** — 5×5 at the second working set weight; higher intensity
 - **BBB** — 5×10 at 40–60% of TM; classic hypertrophy volume
-- **BBS** — 10×5 at a moderate percentage; high rep count at better bar speed
+- **BBS** (Boring But Strong) — 10×5 per session; percentage and rest escalate across a 13-week block:
+  | Phase | Weeks | % TM | Rest |
+  |---|---|---|---|
+  | 1 | 1–3  | 75% | 1:00–1:30 |
+  | 2 | 4–6  | 80% | 1:30–2:00 |
+  | 3 | 7–9  | 85% | 2:00 |
+  | 4 | 10–12 | 90% | 2:00–2:30 |
+  | 5 | 13   | deload — revert to standard 5/3/1 | — |
+
+  Percentages are off the TM (90% of true 1RM). Goal is 50 quality reps per session at the prescribed weight, not failure.
 
 Current default is FSL + BBB combined (5×5 FSL followed by 5×10 BBB).
 
