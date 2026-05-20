@@ -53,7 +53,7 @@ class SqliteClient {
 }
 
 export const sqliteClient = new SqliteClient()
-addEventListener('pagehide', () => sqliteClient.terminate())
+addEventListener('pagehide', (e) => { if (!(e as PageTransitionEvent).persisted) sqliteClient.terminate() })
 export const dbReady = sqliteClient.ready
 
 // Serialization helpers
