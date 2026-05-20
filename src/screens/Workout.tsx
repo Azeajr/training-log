@@ -405,13 +405,13 @@ export default function Workout() {
                   )
                 }}
               </For>
-              <Show when={workout.loggedSets.filter(s => s.type === 'fsl').length >= fslSets().length}>
+              <Show when={workout.loggedSets.filter(s => isSupplemental(s.type)).length >= fslSets().length}>
                 <button
                   onClick={() => {
                     const last = fslSets()[fslSets().length - 1]
                     setAllSets(prev => [
                       ...prev,
-                      { type: 'fsl' as const, setNumber: fslSets().length + 1, weight: last.weight, reps: last.reps },
+                      { type: supplementalTemplate() as Exclude<SupplementalTemplate, 'none'>, setNumber: fslSets().length + 1, weight: last.weight, reps: last.reps },
                     ])
                   }}
                   class="w-full border border-border text-muted py-2 font-mono text-xs tracking-widest hover:border-accent hover:text-accent mt-2"

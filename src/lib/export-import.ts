@@ -68,7 +68,9 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any[]>
       await db.settings.clear()
 
       if (d.lifts?.length)
-        await db.lifts.bulkAdd(d.lifts as Lift[])
+        await db.lifts.bulkAdd(d.lifts.map((l: any) =>
+          'supplementalTemplate' in l ? l : { ...l, supplementalTemplate: 'fsl+bbb' }
+        ) as Lift[])
       if (d.trainingMaxes?.length)
         await db.trainingMaxes.bulkAdd(parseDates<TrainingMax>(d.trainingMaxes, ['setAt']))
       if (d.cycles?.length)
@@ -76,7 +78,9 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any[]>
       if (d.sessions?.length)
         await db.sessions.bulkAdd(parseDates<Session>(d.sessions, ['date']))
       if (d.sets?.length)
-        await db.sets.bulkAdd(d.sets as Set[])
+        await db.sets.bulkAdd(d.sets.map((s: any) =>
+          s.type === 'fsl' && s.reps === 10 ? { ...s, type: 'fsl+bbb' } : s
+        ) as Set[])
       if (d.exercises?.length)
         await db.exercises.bulkAdd(d.exercises as Exercise[])
       if (d.liftAccessories?.length)
