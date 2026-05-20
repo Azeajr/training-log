@@ -86,6 +86,15 @@ export default function RestTimer() {
   const [elapsed, setElapsed] = createSignal(0)
   let prevElapsed = -1
 
+  // iOS requires AudioContext.resume() inside a direct synchronous touch handler.
+  // Attach here (not module-level) so cleanup happens on unmount.
+  const touchUnlock = () => {
+    if (audioCtx?.state === 'running') return
+    try { void getAudioCtx().resume() } catch { /* ignore */ }
+  }
+  document.addEventListener('touchstart', touchUnlock, { passive: true })
+  onCleanup(() => document.removeEventListener('touchstart', touchUnlock))
+
   const [isVisible, setIsVisible] = createSignal(!document.hidden)
   const visibilityHandler = () => setIsVisible(!document.hidden)
   document.addEventListener('visibilitychange', visibilityHandler)
