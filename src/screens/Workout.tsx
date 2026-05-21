@@ -25,6 +25,39 @@ import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
 import Rule from '../components/layout/Rule'
 
+function SetSection(props: {
+  sets: () => (WarmupSet | MainSet | JokerSet | FslSet)[]
+  offset: () => number
+  forceAmrapFalse?: boolean
+  amrapTargets?: () => AmrapTarget[]
+  onWeightChange?: (weight: number) => void
+  onLog: (idx: number, reps: number, weight: number) => void
+  onEdit: (idx: number, reps: number, weight: number) => void
+  onDelete: () => void
+}) {
+  return (
+    <For each={props.sets()}>
+      {(s, i) => {
+        const globalIdx = () => props.offset() + i()
+        return (
+          <SetRow
+            set={{ ...s, isAmrap: props.forceAmrapFalse ? false : !!(s as MainSet).isAmrap }}
+            isActive={workout.currentSetIndex === globalIdx()}
+            isCompleted={globalIdx() < workout.currentSetIndex}
+            loggedReps={workout.loggedSets[globalIdx()]?.reps}
+            loggedWeight={workout.loggedSets[globalIdx()]?.weight}
+            amrapTargets={(s as MainSet).isAmrap && props.amrapTargets ? props.amrapTargets() : undefined}
+            onLog={(reps, weight) => props.onLog(globalIdx(), reps, weight)}
+            onEdit={(reps, weight) => props.onEdit(globalIdx(), reps, weight)}
+            onWeightChange={(s as MainSet).isAmrap ? props.onWeightChange : undefined}
+            onDelete={globalIdx() === workout.currentSetIndex - 1 ? props.onDelete : undefined}
+          />
+        )
+      }}
+    </For>
+  )
+}
+
 export default function Workout() {
   const navigate = useNavigate()
   const { confirm } = useConfirmation()
@@ -85,6 +118,23 @@ export default function Workout() {
     setExercises(await db.exercises.toArray())
   }
 
+  const rebuildAllSets = () => {
+    const session = workout.activeSession
+    if (!session) return
+    const tm = tmWeight()
+    if (!tm) return
+    const main = calcMainSets(tm, session.week, settings.barWeight)
+    const template = supplementalTemplate()
+    const loggedSets = workout.loggedSets
+    const fslRaw = calcSupplementalSets(template, main, tm, session.week, settings.barWeight)
+    const fsl = applySupplementalOverride(fslRaw, loggedSets, template)
+    const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
+    const restoredJokers: JokerSet[] = loggedSets
+      .filter(s => s.type === 'joker')
+      .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
+    setAllSets([...warmup, ...main, ...restoredJokers, ...fsl])
+  }
+
   const handleAmrapWeightChange = (weight: number) => {
     const prev = prevAmrapSets()
     const tm = tmWeight()
@@ -102,7 +152,7 @@ export default function Workout() {
     if (!lastSet) return
     if (lastSet.id) await db.sets.delete(lastSet.id)
     deleteLastSet()
-    void loadData()
+    rebuildAllSets()
   }
 
   const handleLog = async (setIndex: number, reps: number, weight: number) => {
@@ -293,63 +343,37 @@ export default function Workout() {
         <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start mb-6">
           <div class="mb-6 md:mb-0">
             <div class="text-muted uppercase text-xs tracking-widest mb-2">WARM UP</div>
-            <For each={warmupSets()}>
-              {(s, i) => (
-                <SetRow
-                  set={{ ...s, isAmrap: false }}
-                  isActive={workout.currentSetIndex === i()}
-                  isCompleted={i() < workout.currentSetIndex}
-                  loggedReps={workout.loggedSets[i()]?.reps}
-                  loggedWeight={workout.loggedSets[i()]?.weight}
-                  onLog={(reps, weight) => void handleLog(i(), reps, weight)}
-                  onEdit={(reps, weight) => void handleEdit(i(), reps, weight)}
-                  onDelete={i() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
-                />
-              )}
-            </For>
+            <SetSection
+              sets={warmupSets}
+              offset={() => 0}
+              forceAmrapFalse
+              onLog={handleLog}
+              onEdit={handleEdit}
+              onDelete={handleDeleteSet}
+            />
           </div>
 
           <div class="mb-6 md:mb-0">
             <div class="text-muted uppercase text-xs tracking-widest mb-2">MAIN</div>
-            <For each={mainSets()}>
-              {(s, i) => {
-                const globalIdx = () => setOffset('main') + i()
-                return (
-                  <SetRow
-                    set={s}
-                    isActive={workout.currentSetIndex === globalIdx()}
-                    isCompleted={globalIdx() < workout.currentSetIndex}
-                    loggedReps={workout.loggedSets[globalIdx()]?.reps}
-                    loggedWeight={workout.loggedSets[globalIdx()]?.weight}
-                    amrapTargets={s.isAmrap ? amrapTargets() : undefined}
-                    onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
-                    onEdit={(reps, weight) => void handleEdit(globalIdx(), reps, weight)}
-                    onWeightChange={s.isAmrap ? handleAmrapWeightChange : undefined}
-                    onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
-                  />
-                )
-              }}
-            </For>
+            <SetSection
+              sets={mainSets}
+              offset={() => setOffset('main')}
+              amrapTargets={amrapTargets}
+              onWeightChange={handleAmrapWeightChange}
+              onLog={handleLog}
+              onEdit={handleEdit}
+              onDelete={handleDeleteSet}
+            />
             <Show when={jokerSetsRendered().length > 0}>
               <div class="mt-4">
                 <div class="text-muted uppercase text-xs tracking-widest mb-2">JOKER SETS</div>
-                <For each={jokerSetsRendered()}>
-                  {(s, i) => {
-                    const globalIdx = () => setOffset('joker') + i()
-                    return (
-                      <SetRow
-                        set={s}
-                        isActive={workout.currentSetIndex === globalIdx()}
-                        isCompleted={globalIdx() < workout.currentSetIndex}
-                        loggedReps={workout.loggedSets[globalIdx()]?.reps}
-                        loggedWeight={workout.loggedSets[globalIdx()]?.weight}
-                        onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
-                        onEdit={(reps, weight) => void handleEdit(globalIdx(), reps, weight)}
-                        onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
-                      />
-                    )
-                  }}
-                </For>
+                <SetSection
+                  sets={jokerSetsRendered}
+                  offset={() => setOffset('joker')}
+                  onLog={handleLog}
+                  onEdit={handleEdit}
+                  onDelete={handleDeleteSet}
+                />
               </div>
             </Show>
             <Show when={showJokerButton()}>
@@ -365,23 +389,14 @@ export default function Workout() {
           <Show when={supplementalLabel() !== null}>
             <div class="mb-6 md:mb-0">
               <div class="text-muted uppercase text-xs tracking-widest mb-2">{supplementalLabel()}</div>
-              <For each={fslSets()}>
-                {(s, i) => {
-                  const globalIdx = () => setOffset('fsl') + i()
-                  return (
-                    <SetRow
-                      set={{ ...s, isAmrap: false }}
-                      isActive={workout.currentSetIndex === globalIdx()}
-                      isCompleted={globalIdx() < workout.currentSetIndex}
-                      loggedReps={workout.loggedSets[globalIdx()]?.reps}
-                      loggedWeight={workout.loggedSets[globalIdx()]?.weight}
-                      onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
-                      onEdit={(reps, weight) => void handleEdit(globalIdx(), reps, weight)}
-                      onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
-                    />
-                  )
-                }}
-              </For>
+              <SetSection
+                sets={fslSets}
+                offset={() => setOffset('fsl')}
+                forceAmrapFalse
+                onLog={handleLog}
+                onEdit={handleEdit}
+                onDelete={handleDeleteSet}
+              />
               <Show when={workout.loggedSets.filter(s => isSupplementalType(s.type)).length >= fslSets().length}>
                 <button
                   onClick={() => {

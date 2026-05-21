@@ -164,11 +164,8 @@ export default function History() {
   const [mode, setMode] = createSignal<ViewMode>('lift')
   const [lifts, setLifts] = createSignal<Lift[]>([])
   const rawLiftId = searchParams.liftId
-  const storedLiftId = localStorage.getItem(HISTORY_LIFT_KEY)
   const [selectedLiftId, setSelectedLiftId] = createSignal<number | null>(
-    rawLiftId
-      ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId, 10)
-      : storedLiftId ? parseInt(storedLiftId, 10) : null
+    rawLiftId ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId, 10) : null
   )
   const [sessions, setSessions] = createSignal<SessionRow[]>([])
   const [tmHistory, setTmHistory] = createSignal<ChartPoint[]>([])
@@ -191,7 +188,8 @@ export default function History() {
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
     if (!selId && allLifts.length > 0) {
-      setSelectedLiftId(allLifts[0].id!)
+      const stored = localStorage.getItem(HISTORY_LIFT_KEY)
+      setSelectedLiftId(stored ? parseInt(stored, 10) : allLifts[0].id!)
       return
     }
 
