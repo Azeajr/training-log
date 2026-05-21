@@ -6,7 +6,7 @@ import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
-import { setTm } from '../lib/training-max'
+import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
 import { calcMainSets } from '../lib/calc'
@@ -43,11 +43,10 @@ export default function Settings() {
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
     const tmMap: Record<number, number> = {}
-    for (const l of allLifts) {
-      const tmsArr = await db.trainingMaxes.where('liftId').equals(l.id!).sortBy('setAt')
-      const latest = tmsArr[tmsArr.length - 1]
-      if (latest) tmMap[l.id!] = latest.weight
-    }
+    await Promise.all(allLifts.map(async l => {
+      const weight = await getCurrentTm(db, l.id!)
+      if (weight > 0) tmMap[l.id!] = weight
+    }))
     setTms(tmMap)
     setExercises(await db.exercises.toArray())
     setLiftAccessories(await db.liftAccessories.toArray())
@@ -258,7 +257,7 @@ export default function Settings() {
             </div>
             <Show when={editingTm() === l.id && tmInput() > 0}>
               <div class="text-faint text-xs font-mono mt-1 ml-24">
-                {'W1: ' + calcMainSets(tmInput(), 1).map(s => s.weight).join(' · ') + ' lb'}
+                {'W1: ' + calcMainSets(tmInput(), 1, settings.barWeight).map(s => s.weight).join(' · ') + ' lb'}
               </div>
             </Show>
           </div>

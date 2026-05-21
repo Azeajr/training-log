@@ -148,7 +148,6 @@ export async function loadSettings() {
   const row = await db.settings.toCollection().first()
   if (row) {
     const theme = row.theme ?? DEFAULT_THEME
-    applyTheme(theme)
     setSettings({
       restTimer1: row.restTimer1,
       restTimer2: row.restTimer2,

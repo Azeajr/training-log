@@ -6,6 +6,7 @@ import { workout, startSession, clearSession } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSession } from '../lib/cycle'
+import { getCurrentTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import SessionPreview from '../components/workout/SessionPreview'
@@ -45,18 +46,14 @@ export default function Today() {
     })
     setWeekStatuses(statuses)
 
-    const currentTms = await db.trainingMaxes.where('liftId').equals(next.liftId).sortBy('setAt')
-    const latestTm = currentTms[currentTms.length - 1]
-    if (latestTm) setTm(latestTm.weight)
+    setTm(await getCurrentTm(db, next.liftId))
 
     setLoading(false)
   }
 
   const handleSelectLift = async (liftId: number) => {
     setSelectedLiftId(liftId)
-    const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
-    const latest = tms[tms.length - 1]
-    setTm(latest?.weight ?? 0)
+    setTm(await getCurrentTm(db, liftId))
   }
 
   const launchSession = async () => {
@@ -101,11 +98,11 @@ export default function Today() {
   }
 
   const selectedLift = () => lifts().find(l => l.id === selectedLiftId())
-  const main = () => selectedLift() ? calcMainSets(tm(), currentWeek()) : []
-  const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm()) : []
+  const main = () => selectedLift() ? calcMainSets(tm(), currentWeek(), settings.barWeight) : []
+  const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm(), settings.barWeight) : []
 
   const supplementalSets = (): FslSet[] =>
-    calcSupplementalSets(settings.supplementalTemplate ?? 'fsl+bbb', main(), tm(), currentWeek())
+    calcSupplementalSets(settings.supplementalTemplate ?? 'fsl+bbb', main(), tm(), currentWeek(), settings.barWeight)
 
   const supplementalLabel = (): string | null =>
     getSupplementalLabel(settings.supplementalTemplate ?? 'fsl+bbb', supplementalSets(), currentWeek())

@@ -17,19 +17,25 @@ export interface TableLike<T> {
       toArray(): Promise<T[]>
       first(): Promise<T | undefined>
       sortBy(field: string): Promise<T[]>
-      delete(): Promise<any>
+      delete(): Promise<void>
       filter(fn: (row: T) => boolean): {
         first(): Promise<T | undefined>
         toArray(): Promise<T[]>
       }
       and(fn: (row: T) => boolean): {
-        delete(): Promise<any>
+        delete(): Promise<void>
         toArray(): Promise<T[]>
       }
     }
     anyOf(values: unknown[]): {
       toArray(): Promise<T[]>
-      filter(fn: (row: T) => boolean): { toArray(): Promise<T[]> }
+      first(): Promise<T | undefined>
+      sortBy(field: string): Promise<T[]>
+      delete(): Promise<void>
+      filter(fn: (row: T) => boolean): {
+        first(): Promise<T | undefined>
+        toArray(): Promise<T[]>
+      }
     }
   }
   orderBy(field: string): { last(): Promise<T | undefined>; toArray(): Promise<T[]> }

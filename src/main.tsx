@@ -3,13 +3,19 @@ import './index.css'
 import App from './App'
 import { dbReady } from './db/index'
 import { seedDatabase } from './db/seed'
-import { loadSettings } from './store/settings-store'
+import { loadSettings, applyTheme } from './store/settings-store'
+import { settings } from './store/settings-store'
+import { persistWorkoutToStorage } from './store/workout-store'
 
 dbReady
   .then(seedDatabase)
   .then(loadSettings)
   .then(() => {
+    applyTheme(settings.theme)
     const root = document.getElementById('root')!
     root.innerHTML = ''
-    render(() => <App />, root)
+    render(() => {
+      persistWorkoutToStorage()
+      return <App />
+    }, root)
   })

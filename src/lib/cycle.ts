@@ -15,13 +15,15 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
 
   if (weekCounts[4] < 4) return { advanced: false, newTms: [] }
 
-  await db.cycles.add({
-    number: cycle.number + 1,
-    startDate: new Date(),
-    endDate: null,
+  const cycleId = cycle.id!
+  await db.transaction('rw', [
+    db.cycles, db.lifts, db.trainingMaxes,
+    db.sessions, db.accessorySets, db.accessoryTrainingMaxes,
+  ], async () => {
+    await db.cycles.add({ number: cycle.number + 1, startDate: new Date(), endDate: null })
+    await applyTmProgression(db)
+    await applyAccessoryTmProgression(db, cycleId)
   })
-  await applyTmProgression(db)
-  await applyAccessoryTmProgression(db, cycle.id)
 
   const lifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
   const newTms: Array<{ liftName: string; weight: number }> = []
