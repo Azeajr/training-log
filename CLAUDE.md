@@ -8,7 +8,7 @@
 
 5/3/1 strength training log — offline-first PWA. Tracks cycles, sessions, sets, accessories, and training maxes.
 
-**Tech Stack**: React 19, TypeScript 6, Vite 8, Tailwind CSS 4, Zustand 5, Dexie 4 (IndexedDB), Recharts 3, Vitest 4, Playwright 1, React Router 7
+**Tech Stack**: Solid.js 1, TypeScript 6, Vite 8, Tailwind CSS 4, SQLite (WASM), Dexie 4 (test layer only), Vitest 4, Playwright 1, @solidjs/router
 
 **Deployment**: GitHub Pages (static, no server)
 
@@ -42,4 +42,4 @@ npm run lint         # ESLint
 
 ---
 
-**Last Updated**: 2026-05-12
+**Last Updated**: 2026-05-20
