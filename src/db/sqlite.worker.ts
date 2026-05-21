@@ -19,8 +19,7 @@ CREATE TABLE IF NOT EXISTS lifts (
   "order" INTEGER NOT NULL,
   progressionIncrement REAL NOT NULL,
   baseWeight REAL NOT NULL,
-  liftType TEXT NOT NULL,
-  supplementalTemplate TEXT NOT NULL DEFAULT 'fsl+bbb'
+  liftType TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS trainingMaxes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,9 +90,6 @@ CREATE TABLE IF NOT EXISTS settings (
   plates TEXT,
   supplementalTemplate TEXT
 );
-CREATE TABLE IF NOT EXISTS migrations (
-  id TEXT PRIMARY KEY
-);
 CREATE INDEX IF NOT EXISTS idx_trainingMaxes_liftId ON trainingMaxes(liftId);
 CREATE INDEX IF NOT EXISTS idx_sessions_cycleId ON sessions(cycleId);
 CREATE INDEX IF NOT EXISTS idx_sessions_liftId ON sessions(liftId);
@@ -101,29 +97,6 @@ CREATE INDEX IF NOT EXISTS idx_sets_sessionId ON sets(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessorySets_sessionId ON accessorySets(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTrainingMaxes(exerciseId);
 `
-
-function runMigrations() {
-  // One-time: lift supplementalTemplate default 'fsl' → 'fsl+bbb'
-  const liftMigRan = db.selectValue("SELECT COUNT(*) FROM migrations WHERE id = 'lift_default_fsl_bbb'") as number
-  if (!liftMigRan) {
-    db.exec("UPDATE lifts SET supplementalTemplate = 'fsl+bbb' WHERE supplementalTemplate = 'fsl'")
-    db.exec("INSERT OR IGNORE INTO migrations (id) VALUES ('lift_default_fsl_bbb')")
-  }
-  // Idempotent: old 'fsl' sets with reps=10 were FSL+BBB
-  db.exec("UPDATE sets SET type = 'fsl+bbb' WHERE type = 'fsl' AND reps = 10")
-  // One-time: move supplementalTemplate from per-lift to global settings
-  const globalMigRan = db.selectValue("SELECT COUNT(*) FROM migrations WHERE id = 'global_supplemental_template'") as number
-  if (!globalMigRan) {
-    db.exec("UPDATE settings SET supplementalTemplate = (SELECT supplementalTemplate FROM lifts ORDER BY rowid LIMIT 1) WHERE supplementalTemplate IS NULL")
-    db.exec("INSERT OR IGNORE INTO migrations (id) VALUES ('global_supplemental_template')")
-  }
-  // One-time: all remaining type='fsl' sets are from before the template era — map to fsl+bbb
-  const fslSetsMigRan = db.selectValue("SELECT COUNT(*) FROM migrations WHERE id = 'fsl_sets_to_fslbbb'") as number
-  if (!fslSetsMigRan) {
-    db.exec("UPDATE sets SET type = 'fsl+bbb' WHERE type = 'fsl'")
-    db.exec("INSERT OR IGNORE INTO migrations (id) VALUES ('fsl_sets_to_fslbbb')")
-  }
-}
 
 async function init(): Promise<{ persistent: boolean }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -136,9 +109,7 @@ async function init(): Promise<{ persistent: boolean }> {
         const poolUtil = await (sqlite3 as any).installOpfsSAHPoolVfs({})
         db = new poolUtil.OpfsSAHPoolDb('/training-log.db')
         db.exec(SCHEMA)
-        try { db.exec("ALTER TABLE lifts ADD COLUMN supplementalTemplate TEXT NOT NULL DEFAULT 'fsl'") } catch { /* column exists */ }
         try { db.exec("ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT") } catch { /* column exists */ }
-        runMigrations()
         return { persistent: true }
       } catch {
         if (attempt < 9) await new Promise(r => setTimeout(r, 150))
@@ -148,9 +119,7 @@ async function init(): Promise<{ persistent: boolean }> {
   }
   db = new sqlite3.oo1.DB()
   db.exec(SCHEMA)
-  try { db.exec("ALTER TABLE lifts ADD COLUMN supplementalTemplate TEXT NOT NULL DEFAULT 'fsl'") } catch { /* column exists */ }
   try { db.exec("ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT") } catch { /* column exists */ }
-  runMigrations()
   return { persistent: false }
 }
 
