@@ -9,7 +9,7 @@ import { createExercise, renameExercise, archiveExercise, unarchiveExercise, add
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
-import { calcMainSets } from '../lib/calc'
+import { calcMainSets, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
 import Rule from '../components/layout/Rule'
 import Stepper from '../components/forms/Stepper'
 
@@ -52,8 +52,10 @@ export default function Settings() {
     setLiftAccessories(await db.liftAccessories.toArray())
     const allAtms = await db.accessoryTrainingMaxes.toArray()
     const increments: Record<number, { tmId: number; incrementLb: number }> = {}
-    for (const atm of allAtms.sort((a, b) => a.setAt.getTime() - b.setAt.getTime())) {
-      increments[atm.exerciseId] = { tmId: atm.id!, incrementLb: atm.incrementLb }
+    for (const atm of allAtms.sort((a, b) => b.setAt.getTime() - a.setAt.getTime())) {
+      if (!(atm.exerciseId in increments)) {
+        increments[atm.exerciseId] = { tmId: atm.id!, incrementLb: atm.incrementLb }
+      }
     }
     setAccessoryIncrements(increments)
 
@@ -76,7 +78,7 @@ export default function Settings() {
     await setTm(db, liftId, tmInput())
     setEditingTm(null)
     setTmInput(0)
-    load()
+    await load()
   }
 
   const handleAddExercise = async () => {
@@ -84,7 +86,7 @@ export default function Settings() {
     await createExercise(db, newExName().trim(), newExType())
     setNewExName('')
     setShowAddEx(false)
-    load()
+    await load()
   }
 
   const handleRenameExercise = async (id: number) => {
@@ -96,18 +98,18 @@ export default function Settings() {
     }
     setEditingEx(null)
     setEditExName('')
-    load()
+    await load()
   }
 
   const handleArchiveExercise = async (id: number) => {
     if (!await confirm('Archive this exercise?', { destructive: true, confirmLabel: 'ARCHIVE' })) return
     await archiveExercise(db, id)
-    load()
+    await load()
   }
 
   const handleUnarchiveExercise = async (id: number) => {
     await unarchiveExercise(db, id)
-    load()
+    await load()
   }
 
   const handleAddToLift = async (liftId: number, exerciseId: number) => {
@@ -115,12 +117,12 @@ export default function Settings() {
     await addExerciseToLift(db, liftId, exerciseId, count)
     setAddToLift(null)
     setAddToLiftExId(null)
-    load()
+    await load()
   }
 
   const handleRemoveFromLift = async (laId: number) => {
     await removeExerciseFromLift(db, laId)
-    load()
+    await load()
   }
 
   const handleCleanupAccessoryData = async () => {
@@ -145,10 +147,12 @@ export default function Settings() {
       allSessions.map(s => ({ id: s.id! })),
     )
 
-    for (const id of plan.orphanLaIds) await db.liftAccessories.delete(id)
-    for (const id of plan.orphanAtmIds) await db.accessoryTrainingMaxes.delete(id)
-    for (const id of plan.orphanSetIds) await db.accessorySets.delete(id)
-    for (const id of plan.exercisesToArchive) await archiveExercise(db, id)
+    await db.transaction(async () => {
+      if (plan.orphanLaIds.length > 0) await db.liftAccessories.where('id').anyOf(plan.orphanLaIds).delete()
+      if (plan.orphanAtmIds.length > 0) await db.accessoryTrainingMaxes.where('id').anyOf(plan.orphanAtmIds).delete()
+      if (plan.orphanSetIds.length > 0) await db.accessorySets.where('id').anyOf(plan.orphanSetIds).delete()
+      for (const id of plan.exercisesToArchive) await archiveExercise(db, id)
+    })
 
     const orphanCount = plan.orphanLaIds.length + plan.orphanAtmIds.length + plan.orphanSetIds.length
     await load()
@@ -173,7 +177,7 @@ export default function Settings() {
     )) return
 
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
-    await db.transaction('rw', [db.sessions], async () => {
+    await db.transaction(async () => {
       for (let w = week; w < targetWeek; w++) {
         const wk = w as 1 | 2 | 3 | 4
         const weekSessions = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === wk).toArray()
@@ -211,7 +215,7 @@ export default function Settings() {
     try {
       await importJson(db, file)
       await loadSettings()
-      load()
+      await load()
       showToast('Import complete')
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed')
@@ -223,7 +227,6 @@ export default function Settings() {
     updateSettings({ [field]: next })
   }
 
-  const fmtTimer = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
   return (
     <div class="p-4 font-mono text-sm">
@@ -329,7 +332,7 @@ export default function Settings() {
           <div class="flex items-center gap-3 py-1 border-b border-border-dim">
             <span class="text-muted w-16 text-xs uppercase tracking-widest">{label}</span>
             <button onClick={() => timerStep(field, -30)} class="border border-border px-2 py-0.5 text-muted hover:text-text">-</button>
-            <span class="text-text w-12 text-center">{fmtTimer(value)}</span>
+            <span class="text-text w-12 text-center">{formatDuration(value)}</span>
             <button onClick={() => timerStep(field, 30)} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
           </div>
         )}</For>
@@ -385,7 +388,7 @@ export default function Settings() {
                         <>
                           <span class="text-text text-xs">{ex()!.name}</span>
                           <div class="flex items-center gap-4">
-                            <button onClick={() => { setEditingEx(ex()!.id!); setEditExName(ex()!.name); setEditExIncrement(accessoryIncrements()[ex()!.id!]?.incrementLb ?? 5) }} class="text-muted text-xs hover:text-accent">edit</button>
+                            <button onClick={() => { setEditingEx(ex()!.id!); setEditExName(ex()!.name); setEditExIncrement(accessoryIncrements()[ex()!.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
                             <button onClick={() => handleRemoveFromLift(la.id!)} class="text-muted text-xs hover:text-danger">del</button>
                           </div>
                         </>
@@ -460,7 +463,7 @@ export default function Settings() {
               <div class="flex items-center justify-between">
                 <span class="text-text">{ex.name}</span>
                 <div class="flex items-center gap-4">
-                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? 5) }} class="text-muted text-xs hover:text-accent">edit</button>
+                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
                   <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
                 </div>
               </div>

@@ -54,5 +54,5 @@ export interface TrainingDB {
   accessoryTrainingMaxes: TableLike<AccessoryTrainingMax>
   accessorySets: TableLike<AccessorySet>
   settings: TableLike<Settings>
-  transaction(mode: 'rw', tables: TableLike<unknown>[], fn: () => Promise<void>): Promise<void>
+  transaction(fn: () => Promise<void>): Promise<void>
 }

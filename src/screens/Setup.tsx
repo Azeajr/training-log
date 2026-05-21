@@ -1,6 +1,7 @@
 import { createSignal, createResource, createEffect, For, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
+import { BAR_WEIGHT } from '../lib/calc'
 import Rule from '../components/layout/Rule'
 import Stepper from '../components/forms/Stepper'
 
@@ -26,16 +27,19 @@ export default function Setup() {
 
   async function handleStart() {
     setSaving(true)
-    const ls = lifts()!
-    const vals = tmValues()
-    for (const lift of ls) {
-      await db.trainingMaxes.add({
+    try {
+      const ls = lifts()!
+      const vals = tmValues()
+      const rows = ls.map(lift => ({
         liftId: lift.id!,
         weight: vals[lift.id!] ?? lift.baseWeight,
         setAt: new Date(),
-      })
+      }))
+      await db.trainingMaxes.bulkAdd(rows)
+      navigate('/today', { replace: true })
+    } finally {
+      setSaving(false)
     }
-    navigate('/today', { replace: true })
   }
 
   return (
@@ -66,7 +70,7 @@ export default function Setup() {
                 value={tmValues()[lift.id!] ?? lift.baseWeight}
                 onChange={v => setTmVal(lift.id!, v)}
                 step={5}
-                min={45}
+                min={BAR_WEIGHT}
                 max={1000}
               />
               <span class="text-muted text-xs">lb</span>

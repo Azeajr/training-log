@@ -2,7 +2,7 @@ import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../../db/index'
 import type { Exercise, LiftAccessory } from '../../types/domain'
 import { workout, addAccessory } from '../../store/workout-store'
-import { roundToNearest5 } from '../../lib/calc'
+import { roundToNearest5, ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
 
@@ -23,7 +23,7 @@ export default function AccessoryPicker(props: Props) {
   const [rows, setRows] = createSignal<PickerRow[]>([])
   const [settingTm, setSettingTm] = createSignal<Exercise | null>(null)
   const [tmWeight, setTmWeight] = createSignal(0)
-  const [tmIncrement, setTmIncrement] = createSignal(5)
+  const [tmIncrement, setTmIncrement] = createSignal(DEFAULT_ACCESSORY_INCREMENT_LB)
 
   onMount(() => { void load() })
 
@@ -46,7 +46,7 @@ export default function AccessoryPicker(props: Props) {
         exercise: ex,
         liftAccessory: la,
         tm: tmWeight,
-        calculatedWeight: tmWeight != null ? roundToNearest5(tmWeight * 0.75) : null,
+        calculatedWeight: tmWeight != null ? roundToNearest5(tmWeight * ACCESSORY_PERCENTAGE) : null,
         alreadyAdded: workout.activeAccessories.some(a => a.exerciseId === ex.id),
       })
     }
@@ -82,7 +82,7 @@ export default function AccessoryPicker(props: Props) {
       exerciseId: ex.id!,
       exerciseName: ex.name,
       tm: tmWeight(),
-      calculatedWeight: roundToNearest5(tmWeight() * 0.75),
+      calculatedWeight: roundToNearest5(tmWeight() * ACCESSORY_PERCENTAGE),
       loggedSets: [],
     })
     props.onClose()
@@ -112,7 +112,7 @@ export default function AccessoryPicker(props: Props) {
                 >
                   <span>{row.exercise.name}{row.alreadyAdded ? ' ✓' : ''}</span>
                   <span class="text-muted">
-                    {row.calculatedWeight != null ? `5x10 @ ${row.calculatedWeight}lb` : 'NOT SET'}
+                    {row.calculatedWeight != null ? `${ACCESSORY_SETS}x${ACCESSORY_REPS} @ ${row.calculatedWeight}lb` : 'NOT SET'}
                   </span>
                 </button>
               )}
@@ -133,8 +133,8 @@ export default function AccessoryPicker(props: Props) {
             </div>
             <Show when={tmWeight() >= 0}>
               <div class="flex items-center gap-4">
-                <span class="text-muted text-sm uppercase tracking-widest w-32">5×10 weight</span>
-                <span class="text-accent font-mono text-lg">{roundToNearest5(tmWeight() * 0.75)} lb</span>
+                <span class="text-muted text-sm uppercase tracking-widest w-32">{ACCESSORY_SETS}×{ACCESSORY_REPS} weight</span>
+                <span class="text-accent font-mono text-lg">{roundToNearest5(tmWeight() * ACCESSORY_PERCENTAGE)} lb</span>
               </div>
             </Show>
             <div class="flex items-center gap-4">

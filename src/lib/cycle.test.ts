@@ -7,7 +7,7 @@ import {
   applyTmProgression,
   applyAccessoryTmProgression,
   deloadTms,
-  getNextSession,
+  getNextSessionAdvancingIfDone,
   getAmrapTargets,
 } from './cycle'
 
@@ -49,7 +49,7 @@ async function addSessions(
 describe('getNextSession', () => {
   it('creates cycle 1 and returns first lift at week 1 when empty', async () => {
     const lifts = await seedLifts()
-    const result = await getNextSession(db)
+    const result = await getNextSessionAdvancingIfDone(db)
     expect(result.week).toBe(1)
     expect(result.liftId).toBe(lifts[0].id)
     const cycles = await db.cycles.toArray()
@@ -62,7 +62,7 @@ describe('getNextSession', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await db.sessions.add({ cycleId, liftId: lifts[0].id!, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.sessions.add({ cycleId, liftId: lifts[1].id!, week: 1, date: new Date(), notes: null, status: 'completed' })
-    const result = await getNextSession(db)
+    const result = await getNextSessionAdvancingIfDone(db)
     expect(result.week).toBe(1)
     expect(result.liftId).toBe(lifts[2].id)
   })
@@ -71,7 +71,7 @@ describe('getNextSession', () => {
     const lifts = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await addSessions(cycleId, 1, lifts)
-    const result = await getNextSession(db)
+    const result = await getNextSessionAdvancingIfDone(db)
     expect(result.week).toBe(2)
     expect(result.liftId).toBe(lifts[0].id)
   })
@@ -80,7 +80,7 @@ describe('getNextSession', () => {
     const lifts = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await addSessions(cycleId, 1, lifts, 'skipped')
-    const result = await getNextSession(db)
+    const result = await getNextSessionAdvancingIfDone(db)
     expect(result.week).toBe(2)
   })
 
@@ -91,7 +91,7 @@ describe('getNextSession', () => {
     await addSessions(cycleId, 2, lifts)
     await addSessions(cycleId, 3, lifts)
     await db.sessions.add({ cycleId, liftId: lifts[0].id!, week: 4, date: new Date(), notes: null, status: 'completed' })
-    const result = await getNextSession(db)
+    const result = await getNextSessionAdvancingIfDone(db)
     expect(result.week).toBe(4)
     expect(result.cycleId).toBe(cycleId)
     expect(await db.cycles.count()).toBe(1)
@@ -104,7 +104,7 @@ describe('getNextSession', () => {
     await addSessions(cycleId, 2, lifts)
     await addSessions(cycleId, 3, lifts)
     await addSessions(cycleId, 4, lifts)
-    const result = await getNextSession(db)
+    const result = await getNextSessionAdvancingIfDone(db)
     expect(result.liftId).toBe(lifts[0].id)
     expect(result.week).toBe(1)
     expect(result.cycleId).not.toBe(cycleId)
@@ -116,7 +116,7 @@ describe('getNextSession', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await addSessions(cycleId, 1, lifts.slice(0, 3))
     await db.sessions.add({ cycleId, liftId: lifts[3].id!, week: 1, date: new Date(), notes: null, status: 'pending' })
-    const result = await getNextSession(db)
+    const result = await getNextSessionAdvancingIfDone(db)
     expect(result.week).toBe(1)
     expect(result.liftId).toBe(lifts[3].id)
   })
@@ -127,7 +127,7 @@ describe('getNextSession', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await db.sessions.add({ cycleId, liftId: lift1Id, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.sessions.add({ cycleId, liftId: lift2Id, week: 1, date: new Date(), notes: null, status: 'completed' })
-    const result = await getNextSession(db)
+    const result = await getNextSessionAdvancingIfDone(db)
     expect(result.week).toBe(1)
     expect(result.liftId).toBe(lift1Id)
   })

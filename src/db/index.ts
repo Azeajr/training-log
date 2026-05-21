@@ -28,8 +28,7 @@ class TrainingSQLiteDB {
   accessorySets = new SQLiteTable<AccessorySet>('accessorySets')
   settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'] })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  transaction(_mode: 'rw', _tables: SQLiteTable<any>[], fn: () => Promise<void>): Promise<void> {
+  transaction(fn: () => Promise<void>): Promise<void> {
     return sqliteClient.transaction(fn)
   }
 }

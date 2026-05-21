@@ -19,9 +19,11 @@ export default function Stepper(props: Props) {
   const [editing, setEditing] = createSignal(false)
   const [raw, setRaw] = createSignal('')
 
+  const LONG_PRESS_MS = 400
+  const REPEAT_MS = 80
   let pressTimer: ReturnType<typeof setTimeout> | null = null
   let pressInterval: ReturnType<typeof setInterval> | null = null
-  let longPressActive = false
+  let pressStart = 0
 
   const clearPress = () => {
     if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
@@ -31,14 +33,23 @@ export default function Stepper(props: Props) {
   onCleanup(clearPress)
 
   const startPress = (delta: number) => {
-    longPressActive = false
+    pressStart = Date.now()
     pressTimer = setTimeout(() => {
-      longPressActive = true
       pressInterval = setInterval(() => {
         const next = Math.min(max(), Math.max(min(), safeAdd(props.value, delta)))
         props.onChange(next)
-      }, 80)
-    }, 400)
+      }, REPEAT_MS)
+    }, LONG_PRESS_MS)
+  }
+
+  const wasLongPress = () => pressStart > 0 && Date.now() - pressStart >= LONG_PRESS_MS
+
+  const applyStep = (delta: number) => {
+    if (wasLongPress()) { pressStart = 0; return }
+    pressStart = 0
+    const v = Math.min(max(), Math.max(min(), safeAdd(props.value, delta)))
+    props.onChange(v)
+    if (editing()) setRaw(fmt(v))
   }
 
   const commit = () => {
@@ -51,7 +62,7 @@ export default function Stepper(props: Props) {
     <div class="flex items-center font-mono">
       <button
         type="button"
-        onClick={() => { if (longPressActive) { longPressActive = false; return } const v = Math.max(min(), safeAdd(props.value, -step())); props.onChange(v); if (editing()) setRaw(fmt(v)) }}
+        onClick={() => applyStep(-step())}
         onPointerDown={() => startPress(-step())}
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
@@ -84,7 +95,7 @@ export default function Stepper(props: Props) {
       </Show>
       <button
         type="button"
-        onClick={() => { if (longPressActive) { longPressActive = false; return } const v = Math.min(max(), safeAdd(props.value, step())); props.onChange(v); if (editing()) setRaw(fmt(v)) }}
+        onClick={() => applyStep(step())}
         onPointerDown={() => startPress(step())}
         onPointerUp={clearPress}
         onPointerLeave={clearPress}

@@ -2,9 +2,13 @@ import { createSignal, onMount, For, Show } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Exercise, LiftAccessory } from '../types/domain'
+import { SET_TYPE_EDIT_ORDER } from '../lib/calc'
+import { formatDateLong } from '../lib/format'
 import DurationInput from '../components/forms/DurationInput'
 import Rule from '../components/layout/Rule'
 import Stepper from '../components/forms/Stepper'
+
+type PickerMode = { kind: 'add' } | { kind: 'swap'; accIdx: number } | null
 
 interface EditSet {
   id: number
@@ -49,7 +53,7 @@ export default function HistoryEdit() {
   const [deletedAccessoryIds, setDeletedAccessoryIds] = createSignal<number[]>([])
   const [notes, setNotes] = createSignal('')
   const [liftExercises, setLiftExercises] = createSignal<LiftExercise[]>([])
-  const [showPicker, setShowPicker] = createSignal<number | null>(null)
+  const [picker, setPicker] = createSignal<PickerMode>(null)
   const [isSaving, setIsSaving] = createSignal(false)
 
   onMount(() => { void load() })
@@ -64,14 +68,14 @@ export default function HistoryEdit() {
     setSessionInfo({
       liftName: lift.name,
       week: session.week,
-      date: new Date(session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      date: formatDateLong(session.date),
     })
     setNotes(session.notes ?? '')
 
     const dbSets = await db.sets.where('sessionId').equals(sid).toArray()
-    const typeOrder: Record<string, number> = { warmup: 0, main: 1, fsl: 2, ssl: 3, bbb: 4, 'fsl+bbb': 5, 'ssl+bbb': 6, bbs: 7, joker: 8 }
+    const typeOrder = Object.fromEntries(SET_TYPE_EDIT_ORDER.map((t, i) => [t, i])) as Record<string, number>
     dbSets.sort((a, b) => {
-      const td = (typeOrder[a.type] ?? 9) - (typeOrder[b.type] ?? 9)
+      const td = (typeOrder[a.type] ?? 99) - (typeOrder[b.type] ?? 99)
       return td !== 0 ? td : a.setNumber - b.setNumber
     })
     setEditSets(dbSets.map(s => ({
@@ -146,9 +150,9 @@ export default function HistoryEdit() {
   }
 
   const handlePickExercise = (ex: Exercise) => {
-    const picker = showPicker()
-    if (picker === null) return
-    if (picker === -1) {
+    const p = picker()
+    if (p === null) return
+    if (p.kind === 'add') {
       setEditAccessories(prev => [...prev, {
         originalExerciseId: null,
         exerciseId: ex.id!,
@@ -164,7 +168,7 @@ export default function HistoryEdit() {
       }])
     } else {
       setEditAccessories(prev => prev.map((acc, i) => {
-        if (i !== picker) return acc
+        if (i !== p.accIdx) return acc
         const typeChanged = acc.exerciseType !== ex.type
         return {
           ...acc,
@@ -177,16 +181,16 @@ export default function HistoryEdit() {
         }
       }))
     }
-    setShowPicker(null)
+    setPicker(null)
   }
 
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      await db.transaction('rw', [db.sets, db.accessorySets, db.sessions], async () => {
-        for (const s of editSets()) {
-          await db.sets.update(s.id, { weight: s.weight, reps: s.reps })
-        }
+      await db.transaction(async () => {
+        await Promise.all(editSets().map(s =>
+          db.sets.update(s.id, { weight: s.weight, reps: s.reps })
+        ))
         for (const exId of deletedAccessoryIds()) {
           await db.accessorySets
             .where('sessionId').equals(sid)
@@ -194,21 +198,50 @@ export default function HistoryEdit() {
             .delete()
         }
         for (const acc of editAccessories()) {
-          if (acc.originalExerciseId !== null) {
+          if (acc.originalExerciseId !== null && acc.originalExerciseId !== acc.exerciseId) {
             await db.accessorySets
               .where('sessionId').equals(sid)
               .and(s => s.exerciseId === acc.originalExerciseId)
               .delete()
           }
-          await db.accessorySets.bulkAdd(acc.sets.map(s => ({
-            sessionId: sid,
-            exerciseId: acc.exerciseId,
-            setNumber: s.setNumber,
-            weight: s.weight,
-            reps: s.reps,
-            duration: s.duration,
-            distance: s.distance,
-          })))
+          const existing = acc.originalExerciseId === acc.exerciseId
+            ? await db.accessorySets
+                .where('sessionId').equals(sid)
+                .and(s => s.exerciseId === acc.exerciseId)
+                .toArray()
+            : []
+          const existingByNum = new Map(existing.map(s => [s.setNumber, s]))
+          const wantedNums = new Set(acc.sets.map(s => s.setNumber))
+          const toInsert: typeof acc.sets[number][] = []
+          for (const s of acc.sets) {
+            const old = existingByNum.get(s.setNumber)
+            if (old?.id != null) {
+              await db.accessorySets.update(old.id, {
+                weight: s.weight,
+                reps: s.reps,
+                duration: s.duration,
+                distance: s.distance,
+              })
+            } else {
+              toInsert.push(s)
+            }
+          }
+          for (const old of existing) {
+            if (!wantedNums.has(old.setNumber) && old.id != null) {
+              await db.accessorySets.delete(old.id)
+            }
+          }
+          if (toInsert.length > 0) {
+            await db.accessorySets.bulkAdd(toInsert.map(s => ({
+              sessionId: sid,
+              exerciseId: acc.exerciseId,
+              setNumber: s.setNumber,
+              weight: s.weight,
+              reps: s.reps,
+              duration: s.duration,
+              distance: s.distance,
+            })))
+          }
         }
         await db.sessions.update(sid, { notes: notes() })
       })
@@ -245,7 +278,7 @@ export default function HistoryEdit() {
             </button>
           </div>
 
-          <For each={(['warmup', 'main', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'joker'] as const)}>
+          <For each={SET_TYPE_EDIT_ORDER}>
             {type => {
               const rows = () => editSets()
                 .map((s, i) => ({ s, i }))
@@ -283,7 +316,7 @@ export default function HistoryEdit() {
                     <div class="flex items-center gap-2">
                       <span class="text-text text-sm uppercase tracking-widest">{acc.exerciseName}</span>
                       <button
-                        onClick={() => setShowPicker(ai())}
+                        onClick={() => setPicker({ kind: 'swap', accIdx: ai() })}
                         class="text-muted text-xs hover:text-accent"
                       >
                         swap
@@ -331,7 +364,7 @@ export default function HistoryEdit() {
               )}
             </For>
             <button
-              onClick={() => setShowPicker(-1)}
+              onClick={() => setPicker({ kind: 'add' })}
               class="w-full border border-border py-2 text-muted text-xs tracking-widest hover:border-accent hover:text-accent"
             >
               + ADD ACCESSORY
@@ -357,17 +390,17 @@ export default function HistoryEdit() {
             {isSaving() ? 'SAVING...' : 'SAVE CHANGES'}
           </button>
 
-          <Show when={showPicker() !== null}>
+          <Show when={picker() !== null}>
             <div class="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
               <div class="flex items-center justify-between mb-4">
-                <button onClick={() => setShowPicker(null)} class="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
+                <button onClick={() => setPicker(null)} class="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
                 <Rule label="SELECT EXERCISE" class="text-muted" />
                 <div class="w-14" />
               </div>
               <div class="space-y-1">
                 <For each={liftExercises()}>
                   {({ exercise }) => {
-                    const alreadyAdded = showPicker() === -1
+                    const alreadyAdded = picker()?.kind === 'add'
                       && editAccessories().some(a => a.exerciseId === exercise.id)
                     return (
                       <button
