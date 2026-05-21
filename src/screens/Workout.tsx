@@ -6,15 +6,16 @@ import { workout, logSet, editSet, advanceSet, deleteLastSet, startRest, clearSe
 import {
   calcMainSets, calcWarmup, calcAmrapTargets, calcSupplementalSets, getSupplementalLabel,
   calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
-  targetReps, JOKER_MIN_REPS,
+  targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType, applyMainCascadeToSupplemental,
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
-import type { SupplementalTemplate, SupplementalSetType } from '../types/domain'
+import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getAmrapTargets, deloadTms } from '../lib/cycle'
 import { getCurrentTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
+import { showToast } from '../store/toast-store'
 import SetRow from '../components/workout/SetRow'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
 import AccessoryLog from '../components/workout/AccessoryLog'
@@ -35,8 +36,8 @@ export default function Workout() {
   const [exercises, setExercises] = createSignal<Exercise[]>([])
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
 
-  let prevAmrapSets: Array<{ weight: number; reps: number; label: string }> = []
-  let tmWeight = 0
+  const [prevAmrapSets, setPrevAmrapSets] = createSignal<Array<{ weight: number; reps: number; label: string }>>([])
+  const [tmWeight, setTmWeight] = createSignal(0)
 
   createEffect(on(() => workout.activeSession, (session) => {
     if (!session) return
@@ -50,19 +51,20 @@ export default function Workout() {
     if (!l) return
     setLift(l)
 
-    tmWeight = await getCurrentTm(db, l.id!)
+    const tm = await getCurrentTm(db, l.id!)
+    setTmWeight(tm)
 
-    const main = calcMainSets(tmWeight, session.week, settings.barWeight)
+    const main = calcMainSets(tm, session.week, settings.barWeight)
     const template = settings.supplementalTemplate ?? 'fsl+bbb'
     setSupplementalTemplate(template)
     const freshLoggedSets = workout.loggedSets
     const loggedFsl = freshLoggedSets.filter(s => s.type === 'fsl')
     const fslOverride = loggedFsl.length > 0 ? loggedFsl[loggedFsl.length - 1].weight : null
-    const fslRaw = calcSupplementalSets(template, main, tmWeight, session.week, settings.barWeight)
+    const fslRaw = calcSupplementalSets(template, main, tm, session.week, settings.barWeight)
     const fsl = fslRaw.map((s, i) =>
       fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
     )
-    const warmup = calcWarmup(tmWeight, main[0].weight, settings.barWeight)
+    const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
     const restoredJokers: JokerSet[] = freshLoggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
@@ -73,11 +75,11 @@ export default function Workout() {
       if (amrapSet) {
         const prevSets = await getAmrapTargets(db, session.liftId, session.week, session.cycleId)
         if (prevSets.length > 0) {
-          prevAmrapSets = prevSets
+          setPrevAmrapSets(prevSets)
           setAmrapTargets(calcAmrapTargets(prevSets, amrapSet.weight))
         } else {
-          prevAmrapSets = []
-          const est1RM = tmWeight / 0.9
+          setPrevAmrapSets([])
+          const est1RM = est1RMFromTm(tm)
           setAmrapTargets([{ label: 'goal', reps: targetReps(est1RM, amrapSet.weight), est1RM: Math.round(est1RM) }])
         }
       }
@@ -87,10 +89,12 @@ export default function Workout() {
   }
 
   const handleAmrapWeightChange = (weight: number) => {
-    if (prevAmrapSets.length > 0) {
-      setAmrapTargets(calcAmrapTargets(prevAmrapSets, weight))
-    } else if (tmWeight > 0) {
-      const est1RM = tmWeight / 0.9
+    const prev = prevAmrapSets()
+    const tm = tmWeight()
+    if (prev.length > 0) {
+      setAmrapTargets(calcAmrapTargets(prev, weight))
+    } else if (tm > 0) {
+      const est1RM = est1RMFromTm(tm)
       setAmrapTargets([{ label: 'goal', reps: targetReps(est1RM, weight), est1RM: Math.round(est1RM) }])
     }
   }
@@ -117,19 +121,23 @@ export default function Workout() {
     logSet(setData)
     advanceSet()
 
-    if (isSupplemental(s.type) && weight !== s.weight) {
+    if (isSupplementalType(s.type) && weight !== s.weight) {
       setAllSets(prev => prev.map((ps, idx) =>
         ps.type === s.type && idx > setIndex ? { ...ps, weight } : ps
       ))
     }
-    if (s.type === 'main' && s.setNumber === 1 && weight !== s.weight &&
-        (supplementalTemplate() === 'fsl' || supplementalTemplate() === 'fsl+bbb')) {
-      const supplType = supplementalTemplate() as SupplementalSetType
-      setAllSets(prev => prev.map(ps => ps.type === supplType ? { ...ps, weight } : ps))
+    if (s.type === 'main' && s.setNumber === 1 && weight !== s.weight) {
+      setAllSets(prev => applyMainCascadeToSupplemental(prev, supplementalTemplate(), weight))
     }
 
-    const dbId = await db.sets.add(setData)
-    editSet(setIndex, { id: dbId })
+    try {
+      const dbId = await db.sets.add(setData)
+      editSet(setIndex, { id: dbId })
+    } catch (err) {
+      deleteLastSet()
+      showToast(`Failed to save set: ${err instanceof Error ? err.message : 'unknown error'}`)
+      return
+    }
 
     const nextS = allSets()[setIndex + 1]
     let restType: RestType
@@ -143,10 +151,17 @@ export default function Workout() {
     startRest(restType)
   }
 
-  const handleEdit = (setIndex: number, reps: number, weight: number) => {
+  const handleEdit = async (setIndex: number, reps: number, weight: number) => {
+    const prev = workout.loggedSets[setIndex]
+    if (!prev) return
     editSet(setIndex, { reps, weight })
-    const dbId = workout.loggedSets[setIndex]?.id
-    if (dbId) db.sets.update(dbId, { reps, weight })
+    if (!prev.id) return
+    try {
+      await db.sets.update(prev.id, { reps, weight })
+    } catch (err) {
+      editSet(setIndex, { reps: prev.reps, weight: prev.weight })
+      showToast(`Failed to save edit: ${err instanceof Error ? err.message : 'unknown error'}`)
+    }
   }
 
   const handleAddJoker = () => {
@@ -158,13 +173,13 @@ export default function Workout() {
     const increment = calcJokerIncrement(loggedAmrapReps, weekGoalReps)
     const jk = sets.filter(s => s.type === 'joker') as JokerSet[]
     const lastWeight = jk.length > 0 ? jk[jk.length - 1].weight : (amrapSet?.weight ?? 0)
-    const jokerReps = ({ 1: 5, 2: 3, 3: 1 } as Record<number, number>)[workout.activeSession!.week] ?? 5
+    const jokerReps = JOKER_MIN_REPS[workout.activeSession!.week] ?? 5
     const newJoker = calcJokerSet(lastWeight, jk.length + 1, jokerReps, increment)
     const updatedJokers = [...jk, newJoker]
     setAllSets(prev => {
       const w = prev.filter(s => s.type === 'warmup') as WarmupSet[]
       const m = prev.filter(s => s.type === 'main') as MainSet[]
-      const f = prev.filter(s => isSupplemental(s.type)) as FslSet[]
+      const f = prev.filter(s => isSupplementalType(s.type)) as FslSet[]
       return [...w, ...m, ...updatedJokers, ...f]
     })
   }
@@ -228,8 +243,7 @@ export default function Workout() {
   const warmupSets = () => allSets().filter(s => s.type === 'warmup') as WarmupSet[]
   const mainSets = () => allSets().filter(s => s.type === 'main') as MainSet[]
   const jokerSetsRendered = () => allSets().filter(s => s.type === 'joker') as JokerSet[]
-  const isSupplemental = (t: string) => t !== 'warmup' && t !== 'main' && t !== 'joker'
-  const fslSets = () => allSets().filter(s => isSupplemental(s.type)) as FslSet[]
+  const fslSets = () => allSets().filter(s => isSupplementalType(s.type)) as FslSet[]
   const warmupCount = () => warmupSets().length
   const mainCount = () => mainSets().length
   const jokerCount = () => jokerSetsRendered().length
@@ -285,7 +299,7 @@ export default function Workout() {
                   loggedReps={workout.loggedSets[i()]?.reps}
                   loggedWeight={workout.loggedSets[i()]?.weight}
                   onLog={(reps, weight) => void handleLog(i(), reps, weight)}
-                  onEdit={(reps, weight) => handleEdit(i(), reps, weight)}
+                  onEdit={(reps, weight) => void handleEdit(i(), reps, weight)}
                   onDelete={i() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
                 />
               )}
@@ -306,7 +320,7 @@ export default function Workout() {
                     loggedWeight={workout.loggedSets[globalIdx()]?.weight}
                     amrapTargets={s.isAmrap ? amrapTargets() : undefined}
                     onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
-                    onEdit={(reps, weight) => handleEdit(globalIdx(), reps, weight)}
+                    onEdit={(reps, weight) => void handleEdit(globalIdx(), reps, weight)}
                     onWeightChange={s.isAmrap ? handleAmrapWeightChange : undefined}
                     onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
                   />
@@ -327,7 +341,7 @@ export default function Workout() {
                         loggedReps={workout.loggedSets[globalIdx()]?.reps}
                         loggedWeight={workout.loggedSets[globalIdx()]?.weight}
                         onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
-                        onEdit={(reps, weight) => handleEdit(globalIdx(), reps, weight)}
+                        onEdit={(reps, weight) => void handleEdit(globalIdx(), reps, weight)}
                         onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
                       />
                     )
@@ -359,13 +373,13 @@ export default function Workout() {
                       loggedReps={workout.loggedSets[globalIdx()]?.reps}
                       loggedWeight={workout.loggedSets[globalIdx()]?.weight}
                       onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
-                      onEdit={(reps, weight) => handleEdit(globalIdx(), reps, weight)}
+                      onEdit={(reps, weight) => void handleEdit(globalIdx(), reps, weight)}
                       onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
                     />
                   )
                 }}
               </For>
-              <Show when={workout.loggedSets.filter(s => isSupplemental(s.type)).length >= fslSets().length}>
+              <Show when={workout.loggedSets.filter(s => isSupplementalType(s.type)).length >= fslSets().length}>
                 <button
                   onClick={() => {
                     const last = fslSets()[fslSets().length - 1]

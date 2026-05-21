@@ -320,8 +320,7 @@ export class SQLiteTable<T> {
     return rows.map((r) => fromSqlRow<T>(r, this.schema))
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  transaction(_mode: 'rw', _tables: SQLiteTable<any>[], fn: () => Promise<void>): Promise<void> {
+  transaction(fn: () => Promise<void>): Promise<void> {
     return sqliteClient.transaction(fn)
   }
 }

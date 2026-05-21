@@ -1,12 +1,9 @@
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js'
 import { workout, stopRest } from '../../store/workout-store'
-import { formatDuration } from '../../lib/calc'
+import { formatDuration, restStatus, type RestPhase } from '../../lib/calc'
 
-const NORMAL_THRESHOLD = 90
-const TRANSITION_THRESHOLD = 60
-const FAIL_NUDGE = 180
-const FAIL_MAX = 300
-
+// audioCtx and timerWorker are intentionally module-scoped: AudioContext can only be unlocked by a
+// user gesture, so we keep one instance across mounts. The rest-timer worker is cheap to keep alive.
 let audioCtx: AudioContext | null = null
 
 function getAudioCtx(): AudioContext {
@@ -64,27 +61,26 @@ function getTimerWorker(): Worker {
   return timerWorker
 }
 
-let wakeLock: WakeLockSentinel | null = null
-
-async function requestWakeLock() {
-  if (!('wakeLock' in navigator)) return
-  try {
-    wakeLock = await navigator.wakeLock.request('screen')
-  } catch {
-    // denied or not supported
-  }
-}
-
-async function releaseWakeLock() {
-  if (wakeLock !== null) {
-    await wakeLock.release()
-    wakeLock = null
-  }
-}
-
 export default function RestTimer() {
   const [elapsed, setElapsed] = createSignal(0)
   let prevElapsed = -1
+  let wakeLock: WakeLockSentinel | null = null
+
+  const requestWakeLock = async () => {
+    if (!('wakeLock' in navigator)) return
+    try {
+      wakeLock = await navigator.wakeLock.request('screen')
+    } catch {
+      // denied or not supported
+    }
+  }
+
+  const releaseWakeLock = async () => {
+    if (wakeLock !== null) {
+      await wakeLock.release()
+      wakeLock = null
+    }
+  }
 
   // iOS requires AudioContext.resume() inside a direct synchronous touch handler.
   // Attach here (not module-level) so cleanup happens on unmount.
@@ -125,36 +121,26 @@ export default function RestTimer() {
     if (isVisible()) void requestWakeLock()
   })
 
+  const phaseToCue: Record<RestPhase, 'nudge' | 'warning' | 'critical' | null> = {
+    idle: null, nudge: 'nudge', warning: 'warning', critical: 'critical',
+  }
+
   createEffect(() => {
     const e = elapsed()
     const type = workout.restType
     if (!workout.isResting || e === 0) return
     const prev = prevElapsed
     prevElapsed = e
-
-    if (type === 'fail') {
-      if (prev < FAIL_MAX && e >= FAIL_MAX) playCue('critical')
-      else if (prev < FAIL_NUDGE && e >= FAIL_NUDGE) playCue('warning')
-    } else if (type === 'transition') {
-      if (prev < TRANSITION_THRESHOLD && e >= TRANSITION_THRESHOLD) playCue('nudge')
-    } else {
-      if (prev < NORMAL_THRESHOLD && e >= NORMAL_THRESHOLD) playCue('nudge')
+    if (prev < 0) return
+    const prevPhase = restStatus(prev, type).phase
+    const currPhase = restStatus(e, type).phase
+    if (prevPhase !== currPhase) {
+      const cue = phaseToCue[currPhase]
+      if (cue) playCue(cue)
     }
   })
 
-  const message = () => {
-    const e = elapsed()
-    const type = workout.restType
-    if (type === 'fail') {
-      if (e >= FAIL_MAX) return 'REST UP — SET FAILED'
-      if (e >= FAIL_NUDGE) return 'TIME FOR YOUR NEXT SET'
-    } else if (type === 'transition') {
-      if (e >= TRANSITION_THRESHOLD) return 'TIME FOR YOUR NEXT SET'
-    } else {
-      if (e >= NORMAL_THRESHOLD) return 'TIME FOR YOUR NEXT SET'
-    }
-    return ''
-  }
+  const status = () => restStatus(elapsed(), workout.restType)
 
   return (
     <Show when={workout.isResting}>
@@ -163,8 +149,8 @@ export default function RestTimer() {
           <div>
             <div class="text-muted text-xs uppercase tracking-widest mb-1">REST</div>
             <div class="text-warn font-mono text-4xl leading-none">{formatDuration(elapsed())}</div>
-            <Show when={message()}>
-              <div class="text-warn text-xs uppercase tracking-widest mt-2">{message()}</div>
+            <Show when={status().message}>
+              <div class="text-warn text-xs uppercase tracking-widest mt-2">{status().message}</div>
             </Show>
           </div>
           <button

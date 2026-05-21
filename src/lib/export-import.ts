@@ -3,6 +3,7 @@ import type {
   Lift, TrainingMax, AccessoryTrainingMax, Cycle, Session,
   Set, Exercise, LiftAccessory, AccessorySet, Settings,
 } from '../types/domain'
+import { formatDateIso } from './format'
 
 const PENDING_EXPORT_KEY = 'pending-export'
 
@@ -34,7 +35,7 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     settings: await db.settings.toArray(),
   }
   const content = JSON.stringify(data, null, 2)
-  const filename = `training-log-${new Date().toISOString().split('T')[0]}.json`
+  const filename = `training-log-${formatDateIso(new Date())}.json`
   try {
     triggerDownload(content, filename, 'application/json')
   } catch {
@@ -45,19 +46,12 @@ export async function exportJson(db: TrainingDB): Promise<void> {
 export async function importJson(db: TrainingDB, file: File): Promise<void> {
   const text = await file.text()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await importFromRawData(db, JSON.parse(text) as Record<string, any>)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function importFromRawData(db: TrainingDB, d: Record<string, any>): Promise<void> {
   await db.transaction(
-    'rw',
-    [
-      db.lifts, db.trainingMaxes, db.accessoryTrainingMaxes,
-      db.cycles, db.sessions, db.sets,
-      db.exercises, db.liftAccessories, db.accessorySets, db.settings,
-    ],
     async () => {
       await db.lifts.clear()
       await db.trainingMaxes.clear()
@@ -111,7 +105,7 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
     if (session.status !== 'completed') continue
     const sessionSets = sets.filter(s => s.sessionId === session.id)
     const sessionAccessorySets = accessorySets.filter(a => a.sessionId === session.id)
-    const dateStr = new Date(session.date).toISOString().split('T')[0]
+    const dateStr = formatDateIso(session.date)
     const liftName = liftMap[session.liftId] ?? String(session.liftId)
 
     if (sessionSets.length === 0 && sessionAccessorySets.length === 0) {
@@ -136,7 +130,7 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
   const csv = rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n')
   triggerDownload(
     csv,
-    `training-log-history-${new Date().toISOString().split('T')[0]}.csv`,
+    `training-log-history-${formatDateIso(new Date())}.csv`,
     'text/csv'
   )
 }

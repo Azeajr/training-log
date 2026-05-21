@@ -2,7 +2,8 @@ import { createSignal, createMemo, createEffect, For, Show } from 'solid-js'
 import { useNavigate, useSearchParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Session, Lift, Set as TrainingSet, AccessorySet } from '../types/domain'
-import { estimated1RM } from '../lib/calc'
+import { estimated1RM, formatDuration, SET_TYPE_DISPLAY_ORDER } from '../lib/calc'
+import { formatDateShort } from '../lib/format'
 
 type ViewMode = 'lift' | 'date'
 
@@ -74,7 +75,7 @@ function HistorySessionRow(props: {
 }) {
   const navigate = useNavigate()
   const sid = () => props.row.session.id!
-  const dateStr = () => new Date(props.row.session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const dateStr = () => formatDateShort(props.row.session.date)
   const e1rm = () => props.row.amrapWeight && props.row.amrapReps
     ? estimated1RM(props.row.amrapWeight, props.row.amrapReps).toFixed(1)
     : null
@@ -102,7 +103,7 @@ function HistorySessionRow(props: {
                 EDIT →
               </button>
             </div>
-            <For each={(['warmup', 'main', 'joker', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs'] as const).filter(t => detail().sets.some(s => s.type === t))}>
+            <For each={SET_TYPE_DISPLAY_ORDER.filter(t => detail().sets.some(s => s.type === t))}>
               {type => {
                 const typeSets = detail().sets.filter(s => s.type === type)
                 return (
@@ -135,7 +136,7 @@ function HistorySessionRow(props: {
                           <Show when={s.weight != null && s.weight > 0}>{s.weight}lb × </Show>
                           <Show when={s.reps != null}>{s.reps} reps</Show>
                           <Show when={s.duration != null}>
-                            {Math.floor(s.duration! / 60)}:{String(s.duration! % 60).padStart(2, '0')}
+                            {formatDuration(s.duration!)}
                           </Show>
                           <Show when={s.distance != null}>{s.distance} ft</Show>
                         </div>
@@ -166,7 +167,7 @@ export default function History() {
   const storedLiftId = localStorage.getItem(HISTORY_LIFT_KEY)
   const [selectedLiftId, setSelectedLiftId] = createSignal<number | null>(
     rawLiftId
-      ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId)
+      ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId, 10)
       : storedLiftId ? parseInt(storedLiftId, 10) : null
   )
   const [sessions, setSessions] = createSignal<SessionRow[]>([])
@@ -189,14 +190,16 @@ export default function History() {
   const load = async (m: ViewMode, selId: number | null) => {
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
-    if (!selId && allLifts.length > 0) setSelectedLiftId(allLifts[0].id!)
+    if (!selId && allLifts.length > 0) {
+      setSelectedLiftId(allLifts[0].id!)
+      return
+    }
 
-    if (m === 'lift' && (selId ?? allLifts[0]?.id)) {
-      const liftId = selId ?? allLifts[0].id!
-      const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
+    if (m === 'lift' && selId) {
+      const tms = await db.trainingMaxes.where('liftId').equals(selId).sortBy('setAt')
       setTmHistory(tms.map(t => ({ date: new Date(t.setAt), weight: t.weight })))
       const liftSessions = await db.sessions
-        .where('liftId').equals(liftId)
+        .where('liftId').equals(selId)
         .filter(s => s.status === 'completed')
         .toArray()
       liftSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -230,9 +233,11 @@ export default function History() {
   const handleExpand = async (sessionId: number) => {
     if (expanded() === sessionId) { setExpanded(null); setDetail(null); return }
     setExpanded(sessionId)
-    const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
-    const accSets = await db.accessorySets.where('sessionId').equals(sessionId).toArray()
-    const session = await db.sessions.get(sessionId)
+    const [sets, accSets, session] = await Promise.all([
+      db.sets.where('sessionId').equals(sessionId).toArray(),
+      db.accessorySets.where('sessionId').equals(sessionId).toArray(),
+      db.sessions.get(sessionId),
+    ])
     let exerciseNames = new Map<number, string>()
     if (accSets.length > 0) {
       const exIds = [...new Set(accSets.map(s => s.exerciseId))]

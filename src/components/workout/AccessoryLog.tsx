@@ -2,7 +2,7 @@ import { createSignal, createMemo, For, Show } from 'solid-js'
 import { logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory, startRest } from '../../store/workout-store'
 import type { AccessorySet, Exercise } from '../../types/domain'
 import { db } from '../../db/index'
-import { ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, roundToNearest5 } from '../../lib/calc'
+import { ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB, roundToNearest5 } from '../../lib/calc'
 import { showToast } from '../../store/toast-store'
 import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
@@ -72,9 +72,10 @@ export default function AccessoryLog(props: Props) {
         await db.accessoryTrainingMaxes.add({
           exerciseId: props.accessory.exerciseId,
           weight: newTm,
-          incrementLb: currentTm?.incrementLb ?? 5,
+          incrementLb: currentTm?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB,
           setAt: new Date(),
         })
+        showToast(`${props.accessory.exerciseName} TM updated → ${newTm}lb`)
       } catch {
         showToast('Failed to save training max')
         return
@@ -101,7 +102,7 @@ export default function AccessoryLog(props: Props) {
       <div class="text-text text-sm mb-1 uppercase tracking-widest flex items-center">
         <span class="flex-1">
           {props.accessory.exerciseName}
-          <span class="text-muted ml-2 text-xs">5x10 @</span>
+          <span class="text-muted ml-2 text-xs">{ACCESSORY_SETS}x{ACCESSORY_REPS} @</span>
           <button
             onClick={() => setWeightEditing(w => !w)}
             class={`text-xs font-mono ml-1 border-b ${weightEditing() ? 'text-accent border-accent' : 'text-muted border-muted border-dashed'}`}

@@ -5,7 +5,7 @@ import type { Lift, Session } from '../types/domain'
 import { workout, startSession, clearSession } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
-import { getNextSession } from '../lib/cycle'
+import { getNextSessionAdvancingIfDone } from '../lib/cycle'
 import { getCurrentTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -32,7 +32,7 @@ export default function Today() {
 
   const load = async () => {
     setLoading(true)
-    const next = await getNextSession(db)
+    const next = await getNextSessionAdvancingIfDone(db)
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
     setCurrentWeek(next.week)
@@ -92,6 +92,12 @@ export default function Today() {
     if (workout.activeSession) {
       const activeLiftName = lifts().find(l => l.id === workout.activeSession?.liftId)?.name ?? ''
       if (!await confirm(`Abandon ${activeLiftName} session?`, { destructive: true, confirmLabel: 'YES' })) return
+      const abandonedId = workout.activeSession.id
+      if (abandonedId) {
+        await db.sets.where('sessionId').equals(abandonedId).delete()
+        await db.accessorySets.where('sessionId').equals(abandonedId).delete()
+        await db.sessions.delete(abandonedId)
+      }
       clearSession()
     }
     void launchSession()

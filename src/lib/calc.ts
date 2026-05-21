@@ -26,6 +26,48 @@ export const ACCESSORY_REPS = 10
 
 export const BAR_WEIGHT = 45
 
+export const TM_PCT_OF_1RM = 0.9
+export const est1RMFromTm = (tm: number): number => tm / TM_PCT_OF_1RM
+
+export const DEFAULT_ACCESSORY_INCREMENT_LB = 5
+
+export const SET_TYPE_DISPLAY_ORDER = ['warmup', 'main', 'joker', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs'] as const
+export const SET_TYPE_EDIT_ORDER = ['warmup', 'main', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'joker'] as const
+
+export const isSupplementalType = (t: string): boolean =>
+  t === 'fsl' || t === 'ssl' || t === 'bbb' || t === 'fsl+bbb' || t === 'ssl+bbb' || t === 'bbs'
+
+export function applyMainCascadeToSupplemental<T extends { type: string; weight: number }>(
+  sets: T[],
+  template: SupplementalTemplate,
+  mainSet1Weight: number,
+): T[] {
+  if (template !== 'fsl' && template !== 'fsl+bbb') return sets
+  return sets.map(s => s.type === template ? { ...s, weight: mainSet1Weight } : s)
+}
+
+export type RestPhase = 'idle' | 'nudge' | 'warning' | 'critical'
+export interface RestStatus { phase: RestPhase; message: string }
+
+export const REST_NORMAL_THRESHOLD = 90
+export const REST_TRANSITION_THRESHOLD = 60
+export const REST_FAIL_NUDGE = 180
+export const REST_FAIL_MAX = 300
+
+export function restStatus(elapsed: number, type: 'normal' | 'transition' | 'fail'): RestStatus {
+  if (type === 'fail') {
+    if (elapsed >= REST_FAIL_MAX) return { phase: 'critical', message: 'REST UP — SET FAILED' }
+    if (elapsed >= REST_FAIL_NUDGE) return { phase: 'warning', message: 'TIME FOR YOUR NEXT SET' }
+    return { phase: 'idle', message: '' }
+  }
+  if (type === 'transition') {
+    if (elapsed >= REST_TRANSITION_THRESHOLD) return { phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' }
+    return { phase: 'idle', message: '' }
+  }
+  if (elapsed >= REST_NORMAL_THRESHOLD) return { phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' }
+  return { phase: 'idle', message: '' }
+}
+
 export const roundToNearest5 = (weight: number): number =>
   Math.round(weight / 5) * 5
 
