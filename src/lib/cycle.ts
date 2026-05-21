@@ -96,7 +96,7 @@ export async function getNextSession(db: TrainingDB): Promise<{
   week: 1 | 2 | 3 | 4
   cycleId: number
 }> {
-  const cycle = await db.cycles.orderBy('number').last()
+  let cycle = await db.cycles.orderBy('number').last()
   if (!cycle?.id) {
     const cycleId = await db.cycles.add({
       number: 1,
@@ -107,7 +107,7 @@ export async function getNextSession(db: TrainingDB): Promise<{
     return { liftId: lifts[0].id!, week: 1, cycleId }
   }
 
-  const sessions = await db.sessions
+  let sessions = await db.sessions
     .where('cycleId').equals(cycle.id)
     .toArray()
 
@@ -118,7 +118,10 @@ export async function getNextSession(db: TrainingDB): Promise<{
 
   if (([1, 2, 3, 4] as const).every(w => weekCounts[w] >= 4)) {
     await advanceCycleIfComplete(db)
-    return getNextSession(db)
+    cycle = await db.cycles.orderBy('number').last()
+    if (!cycle?.id) throw new Error('Cycle advance failed')
+    sessions = []
+    Object.keys(weekCounts).forEach(k => { weekCounts[Number(k)] = 0 })
   }
 
   let currentWeek: 1 | 2 | 3 | 4 = 1
