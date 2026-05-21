@@ -114,6 +114,16 @@ export const DEFAULT_PLATES: PlateConfig[] = [
   { weight: 2.5, count: 4 },
 ]
 
+export const SETTINGS_DEFAULTS = {
+  restTimer1: 90,
+  restTimer2: 180,
+  restTimerFail: 300,
+  theme: DEFAULT_THEME as string,
+  barWeight: DEFAULT_BAR_WEIGHT,
+  plates: DEFAULT_PLATES,
+  supplementalTemplate: 'fsl+bbb' as SupplementalTemplate,
+}
+
 export function applyTheme(key: string) {
   const theme = THEMES[key as ThemeKey] ?? THEMES[DEFAULT_THEME]
   for (const [prop, value] of Object.entries(theme.vars)) {
@@ -134,13 +144,7 @@ interface SettingsState {
 }
 
 export const [settings, setSettings] = createStore<SettingsState>({
-  restTimer1: 90,
-  restTimer2: 180,
-  restTimerFail: 300,
-  theme: DEFAULT_THEME,
-  barWeight: DEFAULT_BAR_WEIGHT,
-  plates: DEFAULT_PLATES,
-  supplementalTemplate: 'fsl+bbb',
+  ...SETTINGS_DEFAULTS,
   loaded: false,
 })
 
@@ -169,7 +173,9 @@ export async function updateSettings(
   const row = await db.settings.toCollection().first()
   if (row?.id) {
     await db.settings.update(row.id, updates)
-    if (updates.theme) applyTheme(updates.theme)
-    setSettings(updates)
+  } else {
+    await db.settings.add({ ...SETTINGS_DEFAULTS, ...updates })
   }
+  if (updates.theme) applyTheme(updates.theme)
+  setSettings(updates)
 }

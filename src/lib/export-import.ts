@@ -66,6 +66,8 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       await db.sets.clear()
       await db.exercises.clear()
       await db.liftAccessories.clear()
+      await db.accessoryTrainingMaxes.clear()
+      await db.accessorySets.clear()
       await db.settings.clear()
 
       if (d.lifts?.length)
@@ -84,17 +86,10 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
         await db.liftAccessories.bulkAdd(d.liftAccessories as LiftAccessory[])
       if (d.settings?.length)
         await db.settings.bulkAdd(d.settings as Settings[])
-
-      if ('accessoryTrainingMaxes' in d) {
-        await db.accessoryTrainingMaxes.clear()
-        if (d.accessoryTrainingMaxes?.length)
-          await db.accessoryTrainingMaxes.bulkAdd(parseDates<AccessoryTrainingMax>(d.accessoryTrainingMaxes, ['setAt']))
-      }
-      if ('accessorySets' in d) {
-        await db.accessorySets.clear()
-        if (d.accessorySets?.length)
-          await db.accessorySets.bulkAdd(d.accessorySets as AccessorySet[])
-      }
+      if (d.accessoryTrainingMaxes?.length)
+        await db.accessoryTrainingMaxes.bulkAdd(parseDates<AccessoryTrainingMax>(d.accessoryTrainingMaxes, ['setAt']))
+      if (d.accessorySets?.length)
+        await db.accessorySets.bulkAdd(d.accessorySets as AccessorySet[])
     }
   )
 }

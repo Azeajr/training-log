@@ -173,18 +173,20 @@ export default function Settings() {
     )) return
 
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
-    for (let w = week; w < targetWeek; w++) {
-      const wk = w as 1 | 2 | 3 | 4
-      const weekSessions = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === wk).toArray()
-      for (const lift of allLifts) {
-        const existing = weekSessions.find(s => s.liftId === lift.id)
-        if (existing) {
-          if (existing.status === 'pending') await db.sessions.update(existing.id!, { status: 'skipped' })
-        } else {
-          await db.sessions.add({ cycleId, liftId: lift.id!, week: wk, date: new Date(), notes: null, status: 'skipped' })
+    await db.transaction('rw', [db.sessions], async () => {
+      for (let w = week; w < targetWeek; w++) {
+        const wk = w as 1 | 2 | 3 | 4
+        const weekSessions = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === wk).toArray()
+        for (const lift of allLifts) {
+          const existing = weekSessions.find(s => s.liftId === lift.id)
+          if (existing) {
+            if (existing.status === 'pending') await db.sessions.update(existing.id!, { status: 'skipped' })
+          } else {
+            await db.sessions.add({ cycleId, liftId: lift.id!, week: wk, date: new Date(), notes: null, status: 'skipped' })
+          }
         }
       }
-    }
+    })
     await load()
     showToast(`Advanced to week ${targetWeek}`)
   }
