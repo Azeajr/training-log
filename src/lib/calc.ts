@@ -37,12 +37,12 @@ export interface MainSet {
   type: 'main'
 }
 
-export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4): MainSet[] => {
+export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): MainSet[] => {
   const percentages = MAIN_PERCENTAGES[week]
   const reps = MAIN_REPS[week]
   return percentages.map((pct, i) => ({
     setNumber: i + 1,
-    weight: Math.max(BAR_WEIGHT, roundToNearest5(tm * pct)),
+    weight: Math.max(barWeight, roundToNearest5(tm * pct)),
     reps: reps[i],
     isAmrap: week !== 4 && i === 2,
     type: 'main',
@@ -114,10 +114,10 @@ export const calcSslSets = (secondSetWeight: number): FslSet[] =>
     type: 'ssl' as const,
   }))
 
-export const calcBbbSets = (tm: number): FslSet[] =>
+export const calcBbbSets = (tm: number, barWeight = BAR_WEIGHT): FslSet[] =>
   Array.from({ length: FSL_SETS }, (_, i) => ({
     setNumber: i + 1,
-    weight: Math.max(BAR_WEIGHT, roundToNearest5(tm * BBB_PCT)),
+    weight: Math.max(barWeight, roundToNearest5(tm * BBB_PCT)),
     reps: 10,
     type: 'bbb' as const,
   }))
@@ -138,12 +138,12 @@ export const calcSslBbbSets = (secondSetWeight: number): FslSet[] =>
     type: 'ssl+bbb' as const,
   }))
 
-export const calcBbsSets = (tm: number, week: 1 | 2 | 3 | 4): FslSet[] => {
+export const calcBbsSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): FslSet[] => {
   const pct = BBS_PERCENTAGES[week]
   if (pct === null) return []
   return Array.from({ length: 10 }, (_, i) => ({
     setNumber: i + 1,
-    weight: Math.max(BAR_WEIGHT, roundToNearest5(tm * pct)),
+    weight: Math.max(barWeight, roundToNearest5(tm * pct)),
     reps: 5,
     type: 'bbs' as const,
   }))
@@ -180,10 +180,11 @@ const WARMUP_PERCENTAGES: { pct: number; reps: number }[] = [
 export const calcWarmup = (
   tm: number,
   workingWeight: number,
+  barWeight = BAR_WEIGHT,
 ): WarmupSet[] => {
   const sets: WarmupSet[] = []
   for (const { pct, reps } of WARMUP_PERCENTAGES) {
-    const weight = Math.max(BAR_WEIGHT, roundToNearest5(tm * pct))
+    const weight = Math.max(barWeight, roundToNearest5(tm * pct))
     if (weight >= workingWeight) break
     if (sets.length > 0 && weight === sets[sets.length - 1].weight) continue
     sets.push({ setNumber: sets.length + 1, weight, reps, type: 'warmup' })
@@ -236,14 +237,15 @@ export function calcSupplementalSets(
   main: MainSet[],
   tm: number,
   week: 1 | 2 | 3 | 4,
+  barWeight = BAR_WEIGHT,
 ): FslSet[] {
   if (main.length === 0) return []
   switch (template) {
     case 'ssl':     return calcSslSets(main[1].weight)
-    case 'bbb':     return calcBbbSets(tm)
+    case 'bbb':     return calcBbbSets(tm, barWeight)
     case 'fsl+bbb': return calcFslBbbSets(main[0].weight)
     case 'ssl+bbb': return calcSslBbbSets(main[1].weight)
-    case 'bbs':     return calcBbsSets(tm, week)
+    case 'bbs':     return calcBbsSets(tm, week, barWeight)
     case 'none':    return []
     default:        return calcFslSets(main[0].weight)
   }

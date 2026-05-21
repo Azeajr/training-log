@@ -109,7 +109,7 @@ async function init(): Promise<{ persistent: boolean }> {
         const poolUtil = await (sqlite3 as any).installOpfsSAHPoolVfs({})
         db = new poolUtil.OpfsSAHPoolDb('/training-log.db')
         db.exec(SCHEMA)
-        try { db.exec("ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT") } catch { /* column exists */ }
+        if (!db.selectValue("SELECT COUNT(*) FROM pragma_table_info('settings') WHERE name='supplementalTemplate'")) db.exec("ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT")
         return { persistent: true }
       } catch {
         if (attempt < 9) await new Promise(r => setTimeout(r, 150))

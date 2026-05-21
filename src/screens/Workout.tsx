@@ -12,6 +12,7 @@ import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/c
 import type { SupplementalTemplate, SupplementalSetType } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getAmrapTargets, deloadTms } from '../lib/cycle'
+import { getCurrentTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import SetRow from '../components/workout/SetRow'
@@ -49,20 +50,19 @@ export default function Workout() {
     if (!l) return
     setLift(l)
 
-    const tms = await db.trainingMaxes.where('liftId').equals(l.id!).sortBy('setAt')
-    tmWeight = tms[tms.length - 1]?.weight ?? 0
+    tmWeight = await getCurrentTm(db, l.id!)
 
-    const main = calcMainSets(tmWeight, session.week)
+    const main = calcMainSets(tmWeight, session.week, settings.barWeight)
     const template = settings.supplementalTemplate ?? 'fsl+bbb'
     setSupplementalTemplate(template)
     const freshLoggedSets = workout.loggedSets
     const loggedFsl = freshLoggedSets.filter(s => s.type === 'fsl')
     const fslOverride = loggedFsl.length > 0 ? loggedFsl[loggedFsl.length - 1].weight : null
-    const fslRaw = calcSupplementalSets(template, main, tmWeight, session.week)
+    const fslRaw = calcSupplementalSets(template, main, tmWeight, session.week, settings.barWeight)
     const fsl = fslRaw.map((s, i) =>
       fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
     )
-    const warmup = calcWarmup(tmWeight, main[0].weight)
+    const warmup = calcWarmup(tmWeight, main[0].weight, settings.barWeight)
     const restoredJokers: JokerSet[] = freshLoggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
@@ -104,7 +104,7 @@ export default function Workout() {
     void loadData()
   }
 
-  const handleLog = (setIndex: number, reps: number, weight: number) => {
+  const handleLog = async (setIndex: number, reps: number, weight: number) => {
     const s = allSets()[setIndex]
     const setData = {
       sessionId: workout.activeSession!.id!,
@@ -116,7 +116,6 @@ export default function Workout() {
     }
     logSet(setData)
     advanceSet()
-    db.sets.add(setData).then(dbId => editSet(setIndex, { id: dbId }))
 
     if (isSupplemental(s.type) && weight !== s.weight) {
       setAllSets(prev => prev.map((ps, idx) =>
@@ -128,6 +127,9 @@ export default function Workout() {
       const supplType = supplementalTemplate() as SupplementalSetType
       setAllSets(prev => prev.map(ps => ps.type === supplType ? { ...ps, weight } : ps))
     }
+
+    const dbId = await db.sets.add(setData)
+    editSet(setIndex, { id: dbId })
 
     const nextS = allSets()[setIndex + 1]
     let restType: RestType
@@ -282,7 +284,7 @@ export default function Workout() {
                   isCompleted={i() < workout.currentSetIndex}
                   loggedReps={workout.loggedSets[i()]?.reps}
                   loggedWeight={workout.loggedSets[i()]?.weight}
-                  onLog={(reps, weight) => handleLog(i(), reps, weight)}
+                  onLog={(reps, weight) => void handleLog(i(), reps, weight)}
                   onEdit={(reps, weight) => handleEdit(i(), reps, weight)}
                   onDelete={i() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
                 />
@@ -303,7 +305,7 @@ export default function Workout() {
                     loggedReps={workout.loggedSets[globalIdx()]?.reps}
                     loggedWeight={workout.loggedSets[globalIdx()]?.weight}
                     amrapTargets={s.isAmrap ? amrapTargets() : undefined}
-                    onLog={(reps, weight) => handleLog(globalIdx(), reps, weight)}
+                    onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
                     onEdit={(reps, weight) => handleEdit(globalIdx(), reps, weight)}
                     onWeightChange={s.isAmrap ? handleAmrapWeightChange : undefined}
                     onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
@@ -324,7 +326,7 @@ export default function Workout() {
                         isCompleted={globalIdx() < workout.currentSetIndex}
                         loggedReps={workout.loggedSets[globalIdx()]?.reps}
                         loggedWeight={workout.loggedSets[globalIdx()]?.weight}
-                        onLog={(reps, weight) => handleLog(globalIdx(), reps, weight)}
+                        onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
                         onEdit={(reps, weight) => handleEdit(globalIdx(), reps, weight)}
                         onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
                       />
@@ -356,7 +358,7 @@ export default function Workout() {
                       isCompleted={globalIdx() < workout.currentSetIndex}
                       loggedReps={workout.loggedSets[globalIdx()]?.reps}
                       loggedWeight={workout.loggedSets[globalIdx()]?.weight}
-                      onLog={(reps, weight) => handleLog(globalIdx(), reps, weight)}
+                      onLog={(reps, weight) => void handleLog(globalIdx(), reps, weight)}
                       onEdit={(reps, weight) => handleEdit(globalIdx(), reps, weight)}
                       onDelete={globalIdx() === workout.currentSetIndex - 1 ? handleDeleteSet : undefined}
                     />

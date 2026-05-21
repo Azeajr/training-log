@@ -1,12 +1,8 @@
 import { createStore, produce } from 'solid-js/store'
-import { createRoot, createEffect } from 'solid-js'
+import { createEffect } from 'solid-js'
 import type { Session, Set, AccessorySet } from '../types/domain'
 
 export type RestType = 'normal' | 'transition' | 'fail'
-
-interface LoggedSet extends Set {
-  id?: number
-}
 
 interface ActiveAccessory {
   exerciseId: number
@@ -18,7 +14,7 @@ interface ActiveAccessory {
 
 interface WorkoutState {
   activeSession: Session | null
-  loggedSets: LoggedSet[]
+  loggedSets: Set[]
   currentSetIndex: number
   isResting: boolean
   restStartedAt: number | null
@@ -54,7 +50,7 @@ export const [workout, setWorkout] = createStore<WorkoutState>({
   ...loadFromStorage(),
 })
 
-createRoot(() => {
+export function persistWorkoutToStorage() {
   createEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       v: STORAGE_VERSION,
@@ -70,7 +66,7 @@ createRoot(() => {
       },
     }))
   })
-})
+}
 
 export function startSession(session: Session) {
   setWorkout({
@@ -85,11 +81,11 @@ export function startSession(session: Session) {
   })
 }
 
-export function logSet(set: LoggedSet) {
+export function logSet(set: Set) {
   setWorkout('loggedSets', (prev) => [...prev, set])
 }
 
-export function editSet(index: number, updates: Partial<LoggedSet>) {
+export function editSet(index: number, updates: Partial<Set>) {
   setWorkout('loggedSets', index, updates)
 }
 

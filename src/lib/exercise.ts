@@ -13,8 +13,10 @@ export async function renameExercise(db: TrainingDB, id: number, name: string): 
 }
 
 export async function archiveExercise(db: TrainingDB, id: number): Promise<void> {
-  await db.exercises.update(id, { archived: true })
-  await db.liftAccessories.where('exerciseId').equals(id).delete()
+  await db.transaction('rw', [db.exercises, db.liftAccessories], async () => {
+    await db.exercises.update(id, { archived: true })
+    await db.liftAccessories.where('exerciseId').equals(id).delete()
+  })
 }
 
 export async function unarchiveExercise(db: TrainingDB, id: number): Promise<void> {
