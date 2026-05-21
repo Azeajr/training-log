@@ -117,6 +117,12 @@ function runMigrations() {
     db.exec("UPDATE settings SET supplementalTemplate = (SELECT supplementalTemplate FROM lifts ORDER BY rowid LIMIT 1) WHERE supplementalTemplate IS NULL")
     db.exec("INSERT OR IGNORE INTO migrations (id) VALUES ('global_supplemental_template')")
   }
+  // One-time: all remaining type='fsl' sets are from before the template era — map to fsl+bbb
+  const fslSetsMigRan = db.selectValue("SELECT COUNT(*) FROM migrations WHERE id = 'fsl_sets_to_fslbbb'") as number
+  if (!fslSetsMigRan) {
+    db.exec("UPDATE sets SET type = 'fsl+bbb' WHERE type = 'fsl'")
+    db.exec("INSERT OR IGNORE INTO migrations (id) VALUES ('fsl_sets_to_fslbbb')")
+  }
 }
 
 async function init(): Promise<{ persistent: boolean }> {
