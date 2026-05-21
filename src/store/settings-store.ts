@@ -55,7 +55,7 @@ export const THEMES = {
       '--color-muted':        '#6e6a86',
       '--color-faint':        '#524f67',
       '--color-on-accent':    '#191724',
-      '--color-accent':       '#ebbcba',
+      '--color-accent':       '#9ccfd8',
       '--color-warn':         '#f6c177',
       '--color-danger':       '#eb6f92',
     },
