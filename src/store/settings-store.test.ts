@@ -46,10 +46,10 @@ describe('applyTheme', () => {
 // ─── loadSettings ─────────────────────────────────────────────────────────────
 
 describe('loadSettings', () => {
-  it('does nothing when no settings row exists', async () => {
+  it('marks loaded when no settings row exists', async () => {
     await loadSettings()
-    // settings store should still have defaults
-    expect(settings.loaded).toBe(false)
+    expect(settings.loaded).toBe(true)
+    expect(settings.restTimer1).toBe(90)  // defaults preserved
   })
 
   it('updates the store and applies theme when a row exists', async () => {

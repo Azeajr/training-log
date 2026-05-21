@@ -3,7 +3,7 @@ import { useNavigate, A } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, Session } from '../types/domain'
 import { workout, startSession, clearSession } from '../store/workout-store'
-import { calcMainSets, calcFslSets, calcSslSets, calcBbbSets, calcFslBbbSets, calcSslBbbSets, calcBbsSets, calcWarmup, BBB_PCT, BBS_PERCENTAGES } from '../lib/calc'
+import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSession } from '../lib/cycle'
 import { settings } from '../store/settings-store'
@@ -104,38 +104,11 @@ export default function Today() {
   const main = () => selectedLift() ? calcMainSets(tm(), currentWeek()) : []
   const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm()) : []
 
-  const supplementalSets = (): FslSet[] => {
-    const m = main()
-    if (m.length === 0) return []
-    const template = settings.supplementalTemplate ?? 'fsl+bbb'
-    switch (template) {
-      case 'ssl':     return calcSslSets(m[1].weight)
-      case 'bbb':     return calcBbbSets(tm())
-      case 'fsl+bbb': return calcFslBbbSets(m[0].weight)
-      case 'ssl+bbb': return calcSslBbbSets(m[1].weight)
-      case 'bbs':     return calcBbsSets(tm(), currentWeek())
-      case 'none':    return []
-      default:        return calcFslSets(m[0].weight)
-    }
-  }
+  const supplementalSets = (): FslSet[] =>
+    calcSupplementalSets(settings.supplementalTemplate ?? 'fsl+bbb', main(), tm(), currentWeek())
 
-  const supplementalLabel = (): string | null => {
-    const sets = supplementalSets()
-    if (sets.length === 0) return null
-    const template = settings.supplementalTemplate ?? 'fsl+bbb'
-    const count = `${sets.length} × ${sets[0]?.reps ?? 0}`
-    switch (template) {
-      case 'ssl':     return `SSL  ${count}`
-      case 'bbb':     return `BBB  ${count}  ${Math.round(BBB_PCT * 100)}% TM`
-      case 'fsl+bbb': return `FSL+BBB  ${count}`
-      case 'ssl+bbb': return `SSL+BBB  ${count}`
-      case 'bbs': {
-        const pct = BBS_PERCENTAGES[currentWeek() as 1 | 2 | 3 | 4]
-        return pct !== null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
-      }
-      default: return `FSL  ${count}`
-    }
-  }
+  const supplementalLabel = (): string | null =>
+    getSupplementalLabel(settings.supplementalTemplate ?? 'fsl+bbb', supplementalSets(), currentWeek())
 
   const statusLabel = (ws: WeekStatus) => {
     if (ws.liftId === selectedLiftId()) return '->'

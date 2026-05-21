@@ -1,4 +1,4 @@
-import type { PlateConfig, SupplementalSetType } from '../types/domain'
+import type { PlateConfig, SupplementalTemplate, SupplementalSetType } from '../types/domain'
 
 export const MAIN_PERCENTAGES = {
   1: [0.65, 0.75, 0.85],
@@ -229,6 +229,44 @@ export const fromSeconds = (total: number): { mm: number; ss: number } => ({
 export const formatDuration = (seconds: number): string => {
   const { mm, ss } = fromSeconds(seconds)
   return `${mm}:${ss.toString().padStart(2, '0')}`
+}
+
+export function calcSupplementalSets(
+  template: SupplementalTemplate,
+  main: MainSet[],
+  tm: number,
+  week: 1 | 2 | 3 | 4,
+): FslSet[] {
+  if (main.length === 0) return []
+  switch (template) {
+    case 'ssl':     return calcSslSets(main[1].weight)
+    case 'bbb':     return calcBbbSets(tm)
+    case 'fsl+bbb': return calcFslBbbSets(main[0].weight)
+    case 'ssl+bbb': return calcSslBbbSets(main[1].weight)
+    case 'bbs':     return calcBbsSets(tm, week)
+    case 'none':    return []
+    default:        return calcFslSets(main[0].weight)
+  }
+}
+
+export function getSupplementalLabel(
+  template: SupplementalTemplate,
+  sets: FslSet[],
+  week: 1 | 2 | 3 | 4,
+): string | null {
+  if (sets.length === 0) return null
+  const count = `${sets.length} × ${sets[0]?.reps ?? 0}`
+  switch (template) {
+    case 'ssl':     return `SSL  ${count}`
+    case 'bbb':     return `BBB  ${count}  ${Math.round(BBB_PCT * 100)}% TM`
+    case 'fsl+bbb': return `FSL+BBB  ${count}`
+    case 'ssl+bbb': return `SSL+BBB  ${count}`
+    case 'bbs': {
+      const pct = BBS_PERCENTAGES[week]
+      return pct !== null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
+    }
+    default: return `FSL  ${count}`
+  }
 }
 
 export const calcPlatesPerSide = (

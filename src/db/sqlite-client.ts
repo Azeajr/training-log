@@ -67,8 +67,7 @@ interface TableSchema {
 function toSqlRow(obj: Record<string, unknown>, schema: TableSchema): Record<string, unknown> {
   const row = { ...obj }
   for (const f of schema.dateFields ?? []) {
-    if (row[f] instanceof Date) row[f] = (row[f] as Date).toISOString()
-    else if (row[f] == null && f in row) row[f] = null
+    row[f] = row[f] instanceof Date ? (row[f] as Date).toISOString() : (row[f] ?? null)
   }
   for (const f of schema.boolFields ?? []) {
     if (f in row && row[f] != null) row[f] = row[f] ? 1 : 0
@@ -307,9 +306,7 @@ export class SQLiteTable<T> {
   }
 
   async bulkAdd(items: T[]): Promise<void> {
-    for (const item of items) {
-      await this.add(item)
-    }
+    await Promise.all(items.map(item => this.add(item)))
   }
 
   async clear(): Promise<void> {

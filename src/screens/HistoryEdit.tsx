@@ -25,7 +25,7 @@ interface EditAccSet {
 }
 
 interface EditAccessory {
-  originalExerciseId: number
+  originalExerciseId: number | null
   exerciseId: number
   exerciseName: string
   exerciseType: 'reps' | 'timed' | 'distance'
@@ -139,8 +139,8 @@ export default function HistoryEdit() {
 
   const deleteAccessory = (accIdx: number) => {
     const acc = editAccessories()[accIdx]
-    if (acc.originalExerciseId !== -1) {
-      setDeletedAccessoryIds(prev => [...prev, acc.originalExerciseId])
+    if (acc.originalExerciseId !== null) {
+      setDeletedAccessoryIds(prev => [...prev, acc.originalExerciseId!])
     }
     setEditAccessories(prev => prev.filter((_, i) => i !== accIdx))
   }
@@ -150,7 +150,7 @@ export default function HistoryEdit() {
     if (picker === null) return
     if (picker === -1) {
       setEditAccessories(prev => [...prev, {
-        originalExerciseId: -1,
+        originalExerciseId: null,
         exerciseId: ex.id!,
         exerciseName: ex.name,
         exerciseType: ex.type,
@@ -193,7 +193,7 @@ export default function HistoryEdit() {
           .delete()
       }
       for (const acc of editAccessories()) {
-        if (acc.originalExerciseId === -1) {
+        if (acc.originalExerciseId === null) {
           await db.accessorySets.bulkAdd(acc.sets.map(s => ({
             sessionId: sid,
             exerciseId: acc.exerciseId,

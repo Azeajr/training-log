@@ -4,11 +4,10 @@ import { db } from '../db/index'
 import type { Lift, Exercise } from '../types/domain'
 import { workout, logSet, editSet, advanceSet, deleteLastSet, startRest, clearSession, setNotes } from '../store/workout-store'
 import {
-  calcMainSets, calcFslSets, calcSslSets, calcBbbSets, calcFslBbbSets, calcSslBbbSets, calcBbsSets,
+  calcMainSets, calcWarmup, calcAmrapTargets, calcSupplementalSets, getSupplementalLabel,
   calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
-  targetReps, JOKER_MIN_REPS, BBB_PCT, BBS_PERCENTAGES,
+  targetReps, JOKER_MIN_REPS,
 } from '../lib/calc'
-import { useCalcWorker } from '../hooks/use-calc-worker'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
 import type { SupplementalTemplate, SupplementalSetType } from '../types/domain'
 import type { RestType } from '../store/workout-store'
@@ -25,7 +24,6 @@ import Rule from '../components/layout/Rule'
 
 export default function Workout() {
   const navigate = useNavigate()
-  const calcWorker = useCalcWorker()
   const { confirm } = useConfirmation()
 
   const [lift, setLift] = createSignal<Lift | null>(null)
@@ -60,21 +58,11 @@ export default function Workout() {
     const freshLoggedSets = workout.loggedSets
     const loggedFsl = freshLoggedSets.filter(s => s.type === 'fsl')
     const fslOverride = loggedFsl.length > 0 ? loggedFsl[loggedFsl.length - 1].weight : null
-    const fslRaw: FslSet[] = (() => {
-      switch (template) {
-        case 'ssl':     return calcSslSets(main[1].weight)
-        case 'bbb':     return calcBbbSets(tmWeight)
-        case 'fsl+bbb': return calcFslBbbSets(main[0].weight)
-        case 'ssl+bbb': return calcSslBbbSets(main[1].weight)
-        case 'bbs':     return calcBbsSets(tmWeight, session.week)
-        case 'none':    return []
-        default:        return calcFslSets(main[0].weight)
-      }
-    })()
+    const fslRaw = calcSupplementalSets(template, main, tmWeight, session.week)
     const fsl = fslRaw.map((s, i) =>
       fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
     )
-    const warmup = await calcWorker.calcWarmup(tmWeight, main[0].weight)
+    const warmup = calcWarmup(tmWeight, main[0].weight)
     const restoredJokers: JokerSet[] = freshLoggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
@@ -86,7 +74,7 @@ export default function Workout() {
         const prevSets = await getAmrapTargets(db, session.liftId, session.week, session.cycleId)
         if (prevSets.length > 0) {
           prevAmrapSets = prevSets
-          setAmrapTargets(await calcWorker.calcAmrapTargets(prevSets, amrapSet.weight))
+          setAmrapTargets(calcAmrapTargets(prevSets, amrapSet.weight))
         } else {
           prevAmrapSets = []
           const est1RM = tmWeight / 0.9
@@ -98,9 +86,9 @@ export default function Workout() {
     setExercises(await db.exercises.toArray())
   }
 
-  const handleAmrapWeightChange = async (weight: number) => {
+  const handleAmrapWeightChange = (weight: number) => {
     if (prevAmrapSets.length > 0) {
-      setAmrapTargets(await calcWorker.calcAmrapTargets(prevAmrapSets, weight))
+      setAmrapTargets(calcAmrapTargets(prevAmrapSets, weight))
     } else if (tmWeight > 0) {
       const est1RM = tmWeight / 0.9
       setAmrapTargets([{ label: 'goal', reps: targetReps(est1RM, weight), est1RM: Math.round(est1RM) }])
@@ -179,6 +167,12 @@ export default function Workout() {
     })
   }
 
+  const finishSession = async () => {
+    const { advanced, newTms } = await advanceCycleIfComplete(db)
+    if (advanced) setCycleCompleteData({ newTms })
+    else { clearSession(); navigate('/today') }
+  }
+
   const handleComplete = async () => {
     const session = workout.activeSession
     if (!session?.id) return
@@ -197,13 +191,7 @@ export default function Workout() {
         }))
     )
     if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
-    const { advanced, newTms } = await advanceCycleIfComplete(db)
-    if (advanced) {
-      setCycleCompleteData({ newTms })
-    } else {
-      clearSession()
-      navigate('/today')
-    }
+    await finishSession()
   }
 
   const handleExit = async () => {
@@ -221,13 +209,7 @@ export default function Workout() {
     const session = workout.activeSession
     if (!session?.id) return
     await db.sessions.update(session.id, { status: 'skipped' })
-    const { advanced, newTms } = await advanceCycleIfComplete(db)
-    if (advanced) {
-      setCycleCompleteData({ newTms })
-    } else {
-      clearSession()
-      navigate('/today')
-    }
+    await finishSession()
   }
 
   const handleCycleCompleteDismiss = () => {
@@ -271,24 +253,8 @@ export default function Workout() {
   const nextJokerWeight = () => calcNextJokerWeight(lastJokerWeight(), jokerIncrement())
   const liftName = () => lift()?.name ?? '...'
 
-  const supplementalLabel = () => {
-    const sets = fslSets()
-    if (sets.length === 0) return null
-    const t = supplementalTemplate()
-    const count = `${sets.length} × ${sets[0]?.reps ?? 0}`
-    switch (t) {
-      case 'ssl':     return `SSL  ${count}`
-      case 'bbb':     return `BBB  ${count}  ${Math.round(BBB_PCT * 100)}% TM`
-      case 'fsl+bbb': return `FSL+BBB  ${count}`
-      case 'ssl+bbb': return `SSL+BBB  ${count}`
-      case 'bbs': {
-        const week = workout.activeSession?.week ?? 1
-        const pct = BBS_PERCENTAGES[week as 1 | 2 | 3 | 4]
-        return pct !== null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
-      }
-      default: return `FSL  ${count}`
-    }
-  }
+  const supplementalLabel = () =>
+    getSupplementalLabel(supplementalTemplate(), fslSets(), workout.activeSession?.week ?? 1)
 
   return (
     <Show

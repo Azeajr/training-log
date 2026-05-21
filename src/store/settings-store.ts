@@ -159,6 +159,8 @@ export async function loadSettings() {
       supplementalTemplate: row.supplementalTemplate ?? 'fsl+bbb',
       loaded: true,
     })
+  } else {
+    setSettings({ loaded: true })
   }
 }
 
