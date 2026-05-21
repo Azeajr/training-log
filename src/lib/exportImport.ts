@@ -51,8 +51,6 @@ export async function importJson(file: File): Promise<void> {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function importFromRawData(d: Record<string, any>): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const version: number = typeof (d as any).version === 'number' ? (d as any).version : 1
   await db.transaction(
     'rw',
     [
@@ -79,9 +77,7 @@ export async function importFromRawData(d: Record<string, any>): Promise<void> {
       if (d.sessions?.length)
         await db.sessions.bulkAdd(parseDates<Session>(d.sessions, ['date']))
       if (d.sets?.length)
-        await db.sets.bulkAdd(d.sets.map((s: any) =>
-          s.type === 'fsl' && version < 2 ? { ...s, type: 'fsl+bbb' } : s
-        ) as Set[])
+        await db.sets.bulkAdd(d.sets as Set[])
       if (d.exercises?.length)
         await db.exercises.bulkAdd(d.exercises as Exercise[])
       if (d.liftAccessories?.length)

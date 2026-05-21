@@ -112,45 +112,6 @@ describe('importFromRawData', () => {
     expect(await db.liftAccessories.count()).toBe(1)
   })
 
-  it('v1 import: converts all type=fsl sets to fsl+bbb including failed (reps<10)', async () => {
-    await importFromRawData({
-      version: 1,
-      lifts: [], trainingMaxes: [], cycles: [], sessions: [], exercises: [],
-      liftAccessories: [], accessoryTrainingMaxes: [], accessorySets: [], settings: [],
-      sets: [
-        { id: 1, sessionId: 1, type: 'fsl', setNumber: 1, weight: 130, reps: 10, isAmrap: false },
-        { id: 2, sessionId: 1, type: 'fsl', setNumber: 2, weight: 130, reps: 7,  isAmrap: false },
-        { id: 3, sessionId: 1, type: 'fsl', setNumber: 3, weight: 130, reps: 4,  isAmrap: false },
-      ],
-    })
-    const sets = await db.sets.toArray()
-    expect(sets.every((s: { type: string }) => s.type === 'fsl+bbb')).toBe(true)
-  })
-
-  it('v2 import: preserves type=fsl sets unchanged', async () => {
-    await importFromRawData({
-      version: 2,
-      lifts: [], trainingMaxes: [], cycles: [], sessions: [], exercises: [],
-      liftAccessories: [], accessoryTrainingMaxes: [], accessorySets: [], settings: [],
-      sets: [
-        { id: 1, sessionId: 1, type: 'fsl', setNumber: 1, weight: 130, reps: 5, isAmrap: false },
-      ],
-    })
-    const sets = await db.sets.toArray()
-    expect(sets[0].type).toBe('fsl')
-  })
-
-  it('no version field: converts fsl sets to fsl+bbb', async () => {
-    await importFromRawData({
-      lifts: [], trainingMaxes: [], cycles: [], sessions: [], exercises: [],
-      liftAccessories: [], accessoryTrainingMaxes: [], accessorySets: [], settings: [],
-      sets: [
-        { id: 1, sessionId: 1, type: 'fsl', setNumber: 1, weight: 130, reps: 6, isAmrap: false },
-      ],
-    })
-    const sets = await db.sets.toArray()
-    expect(sets[0].type).toBe('fsl+bbb')
-  })
 
   it('imports old-format data without accessory keys (no clear for missing keys)', async () => {
     // Old backups lack accessoryTrainingMaxes and accessorySets keys.
