@@ -13,6 +13,7 @@ import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/c
 import type { SupplementalTemplate, SupplementalSetType } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getAmrapTargets, deloadTms } from '../lib/cycle'
+import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import SetRow from '../components/workout/SetRow'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
@@ -55,7 +56,7 @@ export default function Workout() {
     tmWeight = tms[tms.length - 1]?.weight ?? 0
 
     const main = calcMainSets(tmWeight, session.week)
-    const template = l.supplementalTemplate ?? 'fsl'
+    const template = settings.supplementalTemplate ?? 'fsl+bbb'
     setSupplementalTemplate(template)
     const freshLoggedSets = workout.loggedSets
     const loggedFsl = freshLoggedSets.filter(s => s.type === 'fsl')

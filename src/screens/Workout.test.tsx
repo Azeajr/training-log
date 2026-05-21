@@ -6,6 +6,7 @@ import { db } from '../db/index'
 import {
   clearSession, startSession, addAccessory, logAccessorySet, workout,
 } from '../store/workout-store'
+import { loadSettings, updateSettings } from '../store/settings-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import type { Session } from '../types/domain'
@@ -41,12 +42,15 @@ beforeEach(async () => {
     db.lifts.clear(), db.trainingMaxes.clear(),
     db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
     db.exercises.clear(), db.liftAccessories.clear(), db.accessorySets.clear(),
+    db.settings.clear(),
   ])
   mockNavigate.mockClear()
-  await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', supplementalTemplate: 'fsl' })
+  await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
   await db.cycles.add({ id: 1, number: 1, startDate: new Date(), endDate: null })
   await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
   await db.sessions.add(BENCH)
+  await db.settings.add({ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, supplementalTemplate: 'fsl+bbb' })
+  await loadSettings()
 })
 
 afterEach(async () => {
@@ -364,7 +368,7 @@ describe('Workout screen — rest types', () => {
       db.exercises.clear(), db.liftAccessories.clear(), db.accessorySets.clear(),
     ])
     mockNavigate.mockClear()
-    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', supplementalTemplate: 'fsl' })
+    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     await db.cycles.add({ id: 1, number: 1, startDate: new Date(), endDate: null })
     await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
     await db.sessions.add(BENCH)
@@ -413,7 +417,7 @@ describe('Workout screen — undo last set', () => {
       db.exercises.clear(), db.liftAccessories.clear(), db.accessorySets.clear(),
     ])
     mockNavigate.mockClear()
-    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', supplementalTemplate: 'fsl' })
+    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     await db.cycles.add({ id: 1, number: 1, startDate: new Date(), endDate: null })
     await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
     await db.sessions.add(BENCH)
@@ -453,7 +457,7 @@ describe('Workout screen — joker sets', () => {
       db.exercises.clear(), db.liftAccessories.clear(), db.accessorySets.clear(),
     ])
     mockNavigate.mockClear()
-    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', supplementalTemplate: 'fsl' })
+    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     await db.cycles.add({ id: 1, number: 1, startDate: new Date(), endDate: null })
     await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
     await db.sessions.add(BENCH)
@@ -641,7 +645,7 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
       db.exercises.clear(), db.liftAccessories.clear(), db.accessorySets.clear(),
     ])
     mockNavigate.mockClear()
-    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', supplementalTemplate: 'fsl' })
+    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     await db.cycles.add({ id: 1, number: 1, startDate: new Date(), endDate: null })
     await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
     await db.sessions.add(BENCH)
@@ -842,43 +846,42 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
 // ─── supplemental templates ───────────────────────────────────────────────────
 
 describe('Workout screen — supplemental templates', () => {
-  it('FSL template (default) renders FSL header', async () => {
+  it('FSL+BBB template (default) renders FSL header', async () => {
     startSession(BENCH)
     renderWorkout()
     await waitFor(() => expect(document.body.textContent).toMatch(/FSL/))
   })
 
   it('BBB template renders BBB header', async () => {
-    await db.lifts.update(1, { supplementalTemplate: 'bbb' })
+    await updateSettings({ supplementalTemplate: 'bbb' })
     startSession(BENCH)
     renderWorkout()
     await waitFor(() => expect(document.body.textContent).toMatch(/BBB/))
   })
 
   it('BBB template renders 5 set rows in supplemental section', async () => {
-    await db.lifts.update(1, { supplementalTemplate: 'bbb' })
+    await updateSettings({ supplementalTemplate: 'bbb' })
     startSession(BENCH)
     renderWorkout()
-    // 3 warmup + 3 main + 5 BBB = 11 sets → LOG appears for each
     await waitFor(() => expect(document.body.textContent).toMatch(/BBB.*50%/s))
   })
 
   it('SSL template renders SSL header', async () => {
-    await db.lifts.update(1, { supplementalTemplate: 'ssl' })
+    await updateSettings({ supplementalTemplate: 'ssl' })
     startSession(BENCH)
     renderWorkout()
     await waitFor(() => expect(document.body.textContent).toMatch(/SSL/))
   })
 
   it('BBS template week 1 renders BBS header with 60% TM', async () => {
-    await db.lifts.update(1, { supplementalTemplate: 'bbs' })
+    await updateSettings({ supplementalTemplate: 'bbs' })
     startSession(BENCH) // week 1
     renderWorkout()
     await waitFor(() => expect(document.body.textContent).toMatch(/BBS.*60%/))
   })
 
   it('BBS template week 4 hides supplemental section entirely', async () => {
-    await db.lifts.update(1, { supplementalTemplate: 'bbs' })
+    await updateSettings({ supplementalTemplate: 'bbs' })
     await db.sessions.update(1, { week: 4 })
     startSession({ ...BENCH, week: 4 })
     renderWorkout()
@@ -887,7 +890,7 @@ describe('Workout screen — supplemental templates', () => {
   })
 
   it('none template hides supplemental section entirely', async () => {
-    await db.lifts.update(1, { supplementalTemplate: 'none' })
+    await updateSettings({ supplementalTemplate: 'none' })
     startSession(BENCH)
     renderWorkout()
     await screen.findByText('WARM UP')
@@ -906,7 +909,7 @@ describe('Workout screen — cycle complete', () => {
       db.exercises.clear(), db.liftAccessories.clear(), db.accessorySets.clear(),
     ])
     mockNavigate.mockClear()
-    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', supplementalTemplate: 'fsl' })
+    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     await db.cycles.add({ id: 1, number: 1, startDate: new Date(), endDate: null })
     await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
     await db.sessions.add(BENCH)

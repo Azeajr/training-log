@@ -8,7 +8,6 @@ export interface Lift {
   progressionIncrement: number
   baseWeight: number
   liftType: 'upper' | 'lower'
-  supplementalTemplate?: SupplementalTemplate
 }
 
 export interface TrainingMax {
@@ -91,4 +90,5 @@ export interface Settings {
   theme?: string
   barWeight?: number
   plates?: PlateConfig[]
+  supplementalTemplate?: SupplementalTemplate
 }

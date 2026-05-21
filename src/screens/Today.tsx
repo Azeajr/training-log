@@ -6,6 +6,7 @@ import { workout, startSession, clearSession } from '../store/workout-store'
 import { calcMainSets, calcFslSets, calcSslSets, calcBbbSets, calcFslBbbSets, calcSslBbbSets, calcBbsSets, calcWarmup, BBB_PCT, BBS_PERCENTAGES } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSession } from '../lib/cycle'
+import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import SessionPreview from '../components/workout/SessionPreview'
 import Rule from '../components/layout/Rule'
@@ -106,7 +107,7 @@ export default function Today() {
   const supplementalSets = (): FslSet[] => {
     const m = main()
     if (m.length === 0) return []
-    const template = selectedLift()?.supplementalTemplate ?? 'fsl'
+    const template = settings.supplementalTemplate ?? 'fsl+bbb'
     switch (template) {
       case 'ssl':     return calcSslSets(m[1].weight)
       case 'bbb':     return calcBbbSets(tm())
@@ -121,7 +122,7 @@ export default function Today() {
   const supplementalLabel = (): string | null => {
     const sets = supplementalSets()
     if (sets.length === 0) return null
-    const template = selectedLift()?.supplementalTemplate ?? 'fsl'
+    const template = settings.supplementalTemplate ?? 'fsl+bbb'
     const count = `${sets.length} × ${sets[0]?.reps ?? 0}`
     switch (template) {
       case 'ssl':     return `SSL  ${count}`

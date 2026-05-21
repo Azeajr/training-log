@@ -4,7 +4,7 @@
 
 ### Test Infrastructure — Coverage + Mutation
 
-440 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds; current branch coverage is 91.86% (632/688). Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
+466 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds; current branch coverage is 88.07% (665/755). Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
 
 Coverage approach: lib functions tested with `fake-indexeddb`; screens tested end-to-end from DOM event through store to DB render with `@solidjs/testing-library` + jsdom. No mocking of the DB layer.
 
@@ -63,16 +63,23 @@ CLEANUP ORPHANS button in Settings → DATA. Deletes `liftAccessories` / `access
 
 CYCLE section in Settings shows the current week (1–4) with skip-forward buttons. Clicking a future week marks all remaining sessions in skipped weeks as `skipped` (creating missing lift sessions as needed) and advances program state. Gated behind confirm dialog.
 
+### Screen Wake Lock
+
+`WakeLockSentinel` acquired at rest timer start, released on stop or session exit. Prevents the display from sleeping mid-rest on mobile. Falls back silently on unsupported browsers (Firefox, older iOS). Lock is re-acquired automatically after a page visibility change releases it.
+
+---
+
 ### Supplemental Template Selection
 
-Per-lift supplemental template selector in Settings. Templates:
-- **FSL** (default) — 5×5 at the first working set weight
+Global supplemental template selector in Settings (single choice applies to all lifts). Templates:
+- **FSL+BBB** (default) — 5×5 FSL then 5×10 BBB
+- **FSL** — 5×5 at the first working set weight
 - **SSL** — 5×5 at the second working set weight
 - **BBB** — 5×10 at 50% TM
 - **BBS** — 10×5 at 60%/70%/80% TM across weeks 1–3; hidden on deload week
 - **None** — no supplemental block
 
-FSL corrected from 5×10 to 5×5. Header in Workout screen is dynamic and shows sets × reps and % TM where applicable.
+Stored in `settings.supplementalTemplate`; migrated from per-lift column on first run. Header in Workout screen is dynamic and shows sets × reps and % TM where applicable.
 
 ### Estimated 1RM History Chart
 
