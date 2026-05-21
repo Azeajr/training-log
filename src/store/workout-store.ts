@@ -50,7 +50,9 @@ export const [workout, setWorkout] = createStore<WorkoutState>({
   ...loadFromStorage(),
 })
 
-export function persistWorkoutToStorage() {
+// Must be called inside a reactive root (e.g. `render(() => { setupWorkoutPersistence(); ... })`).
+// Registers a createEffect that mirrors workout state into localStorage on every change.
+export function setupWorkoutPersistence() {
   createEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       v: STORAGE_VERSION,
@@ -141,12 +143,6 @@ export function deleteLastAccessorySet(exerciseId: number) {
 
 export function removeAccessory(exerciseId: number) {
   setWorkout('activeAccessories', (prev) => prev.filter((a) => a.exerciseId !== exerciseId))
-}
-
-export function completeSession() {
-  if (workout.activeSession) {
-    setWorkout('activeSession', 'status', 'completed')
-  }
 }
 
 export function clearSession() {

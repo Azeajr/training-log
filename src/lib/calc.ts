@@ -46,6 +46,18 @@ export function applyMainCascadeToSupplemental<T extends { type: string; weight:
   return sets.map(s => s.type === template ? { ...s, weight: mainSet1Weight } : s)
 }
 
+export function applySupplementalOverride<T extends { type: string; weight: number }>(
+  computed: T[],
+  loggedSets: ReadonlyArray<{ type: string; weight: number }>,
+  template: SupplementalTemplate,
+): T[] {
+  if (template === 'none') return computed
+  const logged = loggedSets.filter(s => s.type === template)
+  if (logged.length === 0) return computed
+  const override = logged[logged.length - 1].weight
+  return computed.map((s, i) => i >= logged.length ? { ...s, weight: override } : s)
+}
+
 export type RestPhase = 'idle' | 'nudge' | 'warning' | 'critical'
 export interface RestStatus { phase: RestPhase; message: string }
 
@@ -140,55 +152,21 @@ export interface FslSet {
   type: SupplementalSetType
 }
 
-export const calcFslSets = (firstSetWeight: number): FslSet[] =>
-  Array.from({ length: FSL_SETS }, (_, i) => ({
-    setNumber: i + 1,
-    weight: firstSetWeight,
-    reps: FSL_REPS,
-    type: 'fsl',
-  }))
+const buildFixedSets = (weight: number, reps: number, type: SupplementalSetType, count = FSL_SETS): FslSet[] =>
+  Array.from({ length: count }, (_, i) => ({ setNumber: i + 1, weight, reps, type }))
 
-export const calcSslSets = (secondSetWeight: number): FslSet[] =>
-  Array.from({ length: FSL_SETS }, (_, i) => ({
-    setNumber: i + 1,
-    weight: secondSetWeight,
-    reps: 5,
-    type: 'ssl' as const,
-  }))
+export const calcFslSets    = (firstSetWeight: number)  => buildFixedSets(firstSetWeight,  FSL_REPS, 'fsl')
+export const calcSslSets    = (secondSetWeight: number) => buildFixedSets(secondSetWeight, FSL_REPS, 'ssl')
+export const calcFslBbbSets = (firstSetWeight: number)  => buildFixedSets(firstSetWeight,  10,       'fsl+bbb')
+export const calcSslBbbSets = (secondSetWeight: number) => buildFixedSets(secondSetWeight, 10,       'ssl+bbb')
 
 export const calcBbbSets = (tm: number, barWeight = BAR_WEIGHT): FslSet[] =>
-  Array.from({ length: FSL_SETS }, (_, i) => ({
-    setNumber: i + 1,
-    weight: Math.max(barWeight, roundToNearest5(tm * BBB_PCT)),
-    reps: 10,
-    type: 'bbb' as const,
-  }))
-
-export const calcFslBbbSets = (firstSetWeight: number): FslSet[] =>
-  Array.from({ length: FSL_SETS }, (_, i) => ({
-    setNumber: i + 1,
-    weight: firstSetWeight,
-    reps: 10,
-    type: 'fsl+bbb' as const,
-  }))
-
-export const calcSslBbbSets = (secondSetWeight: number): FslSet[] =>
-  Array.from({ length: FSL_SETS }, (_, i) => ({
-    setNumber: i + 1,
-    weight: secondSetWeight,
-    reps: 10,
-    type: 'ssl+bbb' as const,
-  }))
+  buildFixedSets(Math.max(barWeight, roundToNearest5(tm * BBB_PCT)), 10, 'bbb')
 
 export const calcBbsSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): FslSet[] => {
   const pct = BBS_PERCENTAGES[week]
   if (pct === null) return []
-  return Array.from({ length: 10 }, (_, i) => ({
-    setNumber: i + 1,
-    weight: Math.max(barWeight, roundToNearest5(tm * pct)),
-    reps: 5,
-    type: 'bbs' as const,
-  }))
+  return buildFixedSets(Math.max(barWeight, roundToNearest5(tm * pct)), 5, 'bbs', 10)
 }
 
 export interface AccessorySetCalc {

@@ -4,7 +4,7 @@ import {
   workout, startSession, logSet, editSet, advanceSet, deleteLastSet,
   startRest, stopRest,
   addAccessory, logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory,
-  completeSession, clearSession, setNotes,
+  clearSession, setNotes,
 } from './workout-store'
 import type { Session } from '../types/domain'
 
@@ -206,21 +206,7 @@ describe('removeAccessory', () => {
   })
 })
 
-// ─── completeSession / clearSession / setNotes ───────────────────────────────
-
-describe('completeSession', () => {
-  it('marks activeSession status as completed', () => {
-    startSession(SESSION)
-    completeSession()
-    expect(workout.activeSession?.status).toBe('completed')
-  })
-
-  it('does nothing when no active session', () => {
-    clearSession()
-    completeSession() // should not throw
-    expect(workout.activeSession).toBeNull()
-  })
-})
+// ─── clearSession / setNotes ───────────────────────────────
 
 describe('clearSession', () => {
   it('resets all workout state to defaults', () => {

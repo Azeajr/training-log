@@ -308,7 +308,7 @@ export class SQLiteTable<T> {
   }
 
   async bulkAdd(items: T[]): Promise<void> {
-    await Promise.all(items.map(item => this.add(item)))
+    for (const item of items) await this.add(item)
   }
 
   async clear(): Promise<void> {

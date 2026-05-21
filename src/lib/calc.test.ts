@@ -22,6 +22,7 @@ import {
   calcJokerSet,
   calcJokerIncrement,
   shouldShowJokerButton,
+  applySupplementalOverride,
 } from './calc'
 import { DEFAULT_PLATES } from '../store/settings-store'
 
@@ -472,5 +473,58 @@ describe('calcPlatesPerSide', () => {
     expect(calcPlatesPerSide(95, BAR, plates)).toEqual([
       { weight: 25, count: 1 },
     ])
+  })
+})
+
+describe('applySupplementalOverride', () => {
+  const computed = [
+    { type: 'fsl+bbb', setNumber: 1, weight: 130, reps: 10 },
+    { type: 'fsl+bbb', setNumber: 2, weight: 130, reps: 10 },
+    { type: 'fsl+bbb', setNumber: 3, weight: 130, reps: 10 },
+  ]
+
+  it('returns computed unchanged when template is none', () => {
+    expect(applySupplementalOverride(computed, [], 'none')).toEqual(computed)
+  })
+
+  it('returns computed unchanged when no matching logged sets', () => {
+    const logged = [{ type: 'main', weight: 200 }]
+    expect(applySupplementalOverride(computed, logged, 'fsl+bbb')).toEqual(computed)
+  })
+
+  it('overrides unlogged tail with last logged weight (fsl+bbb)', () => {
+    const logged = [
+      { type: 'fsl+bbb', weight: 125 },
+    ]
+    const out = applySupplementalOverride(computed, logged, 'fsl+bbb')
+    expect(out[0].weight).toBe(130) // already logged, leave computed in place
+    expect(out[1].weight).toBe(125) // overridden
+    expect(out[2].weight).toBe(125)
+  })
+
+  it('uses last logged weight when multiple logs differ', () => {
+    const logged = [
+      { type: 'fsl', weight: 125 },
+      { type: 'fsl', weight: 120 },
+    ]
+    const fsl = [
+      { type: 'fsl', setNumber: 1, weight: 130, reps: 5 },
+      { type: 'fsl', setNumber: 2, weight: 130, reps: 5 },
+      { type: 'fsl', setNumber: 3, weight: 130, reps: 5 },
+    ]
+    const out = applySupplementalOverride(fsl, logged, 'fsl')
+    expect(out[0].weight).toBe(130)
+    expect(out[1].weight).toBe(130)
+    expect(out[2].weight).toBe(120)
+  })
+
+  it('filters logged sets by template, not by literal "fsl"', () => {
+    const logged = [{ type: 'bbb', weight: 100 }]
+    const bbb = [
+      { type: 'bbb', setNumber: 1, weight: 90, reps: 10 },
+      { type: 'bbb', setNumber: 2, weight: 90, reps: 10 },
+    ]
+    const out = applySupplementalOverride(bbb, logged, 'bbb')
+    expect(out[1].weight).toBe(100)
   })
 })

@@ -5,7 +5,7 @@ import { dbReady } from './db/index'
 import { seedDatabase } from './db/seed'
 import { loadSettings, applyTheme } from './store/settings-store'
 import { settings } from './store/settings-store'
-import { persistWorkoutToStorage } from './store/workout-store'
+import { setupWorkoutPersistence } from './store/workout-store'
 
 dbReady
   .then(seedDatabase)
@@ -15,7 +15,7 @@ dbReady
     const root = document.getElementById('root')!
     root.innerHTML = ''
     render(() => {
-      persistWorkoutToStorage()
+      setupWorkoutPersistence()
       return <App />
     }, root)
   })

@@ -6,7 +6,8 @@ import { workout, logSet, editSet, advanceSet, deleteLastSet, startRest, clearSe
 import {
   calcMainSets, calcWarmup, calcAmrapTargets, calcSupplementalSets, getSupplementalLabel,
   calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
-  targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType, applyMainCascadeToSupplemental,
+  targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType,
+  applyMainCascadeToSupplemental, applySupplementalOverride,
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
@@ -57,15 +58,11 @@ export default function Workout() {
     const main = calcMainSets(tm, session.week, settings.barWeight)
     const template = settings.supplementalTemplate ?? 'fsl+bbb'
     setSupplementalTemplate(template)
-    const freshLoggedSets = workout.loggedSets
-    const loggedFsl = freshLoggedSets.filter(s => s.type === 'fsl')
-    const fslOverride = loggedFsl.length > 0 ? loggedFsl[loggedFsl.length - 1].weight : null
+    const loggedSets = workout.loggedSets
     const fslRaw = calcSupplementalSets(template, main, tm, session.week, settings.barWeight)
-    const fsl = fslRaw.map((s, i) =>
-      fslOverride !== null && i >= loggedFsl.length ? { ...s, weight: fslOverride } : s
-    )
+    const fsl = applySupplementalOverride(fslRaw, loggedSets, template)
     const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
-    const restoredJokers: JokerSet[] = freshLoggedSets
+    const restoredJokers: JokerSet[] = loggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
     setAllSets([...warmup, ...main, ...restoredJokers, ...fsl])
@@ -193,12 +190,12 @@ export default function Workout() {
   const handleComplete = async () => {
     const session = workout.activeSession
     if (!session?.id) return
-    await db.sessions.update(session.id, { status: 'completed', notes: workout.notes, date: new Date() })
+    const sessionId = session.id
     const toSave = workout.activeAccessories.flatMap(acc =>
       acc.loggedSets
         .filter(s => s.setNumber != null)
         .map(s => ({
-          sessionId: session.id!,
+          sessionId,
           exerciseId: acc.exerciseId,
           setNumber: s.setNumber!,
           weight: s.weight ?? null,
@@ -207,7 +204,10 @@ export default function Workout() {
           distance: s.distance ?? null,
         }))
     )
-    if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
+    await db.transaction(async () => {
+      await db.sessions.update(sessionId, { status: 'completed', notes: workout.notes, date: new Date() })
+      if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
+    })
     await finishSession()
   }
 
@@ -215,8 +215,11 @@ export default function Workout() {
     if (!await confirm('Discard this attempt?', { destructive: true, confirmLabel: 'EXIT' })) return
     const session = workout.activeSession
     if (!session?.id) return
-    await db.sets.where('sessionId').equals(session.id).delete()
-    await db.accessorySets.where('sessionId').equals(session.id).delete()
+    const sessionId = session.id
+    await db.transaction(async () => {
+      await db.sets.where('sessionId').equals(sessionId).delete()
+      await db.accessorySets.where('sessionId').equals(sessionId).delete()
+    })
     clearSession()
     navigate('/today')
   }
