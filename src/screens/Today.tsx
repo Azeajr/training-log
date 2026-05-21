@@ -68,15 +68,16 @@ export default function Today() {
     if (existing) {
       session = existing
     } else {
-      const id = await db.sessions.add({
+      const draft: Omit<Session, 'id'> = {
         cycleId: currentCycleId(),
         liftId: selId,
         week: currentWeek(),
         date: new Date(),
         notes: null,
         status: 'pending',
-      })
-      session = await db.sessions.get(id) as Session
+      }
+      const id = await db.sessions.add(draft)
+      session = { ...draft, id }
     }
     startSession(session)
     navigate('/workout')
@@ -94,9 +95,11 @@ export default function Today() {
       if (!await confirm(`Abandon ${activeLiftName} session?`, { destructive: true, confirmLabel: 'YES' })) return
       const abandonedId = workout.activeSession.id
       if (abandonedId) {
-        await db.sets.where('sessionId').equals(abandonedId).delete()
-        await db.accessorySets.where('sessionId').equals(abandonedId).delete()
-        await db.sessions.delete(abandonedId)
+        await db.transaction(async () => {
+          await db.sets.where('sessionId').equals(abandonedId).delete()
+          await db.accessorySets.where('sessionId').equals(abandonedId).delete()
+          await db.sessions.delete(abandonedId)
+        })
       }
       clearSession()
     }

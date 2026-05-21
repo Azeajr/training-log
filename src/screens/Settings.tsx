@@ -12,6 +12,7 @@ import { showToast } from '../store/toast-store'
 import { calcMainSets, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
 import Rule from '../components/layout/Rule'
 import Stepper from '../components/forms/Stepper'
+import ExerciseEditor from '../components/forms/ExerciseEditor'
 
 export default function Settings() {
   const { confirm } = useConfirmation()
@@ -393,27 +394,15 @@ export default function Settings() {
                           </div>
                         </>
                       }>
-                        <div class="flex flex-col gap-2 flex-1">
-                          <input
-                            type="text"
-                            value={editExName()}
-                            onInput={e => setEditExName(e.currentTarget.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') handleRenameExercise(ex()!.id!); if (e.key === 'Escape') setEditingEx(null) }}
-                            class="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
-                            autofocus
-                          />
-                          <Show when={accessoryIncrements()[ex()!.id!]}>
-                            <div class="flex items-center gap-2">
-                              <span class="text-muted text-xs uppercase tracking-widest w-20">Increment</span>
-                              <Stepper value={editExIncrement()} onChange={setEditExIncrement} step={2.5} min={0} />
-                              <span class="text-muted text-xs">lb</span>
-                            </div>
-                          </Show>
-                          <div class="flex gap-3">
-                            <button onClick={() => handleRenameExercise(ex()!.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
-                            <button onClick={() => setEditingEx(null)} class="text-muted text-lg sm:text-xl">cancel</button>
-                          </div>
-                        </div>
+                        <ExerciseEditor
+                          fullWidth
+                          name={editExName()}
+                          onNameChange={setEditExName}
+                          increment={accessoryIncrements()[ex()!.id!] ? editExIncrement() : null}
+                          onIncrementChange={setEditExIncrement}
+                          onSave={() => handleRenameExercise(ex()!.id!)}
+                          onCancel={() => setEditingEx(null)}
+                        />
                       </Show>
                     </div>
                   </Show>
@@ -468,27 +457,14 @@ export default function Settings() {
                 </div>
               </div>
             }>
-              <div class="flex flex-col gap-2">
-                <input
-                  type="text"
-                  value={editExName()}
-                  onInput={e => setEditExName(e.currentTarget.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleRenameExercise(ex.id!); if (e.key === 'Escape') setEditingEx(null) }}
-                  class="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
-                  autofocus
-                />
-                <Show when={accessoryIncrements()[ex.id!]}>
-                  <div class="flex items-center gap-2">
-                    <span class="text-muted text-xs uppercase tracking-widest w-20">Increment</span>
-                    <Stepper value={editExIncrement()} onChange={setEditExIncrement} step={2.5} min={0} />
-                    <span class="text-muted text-xs">lb</span>
-                  </div>
-                </Show>
-                <div class="flex gap-3">
-                  <button onClick={() => handleRenameExercise(ex.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono">SAVE</button>
-                  <button onClick={() => setEditingEx(null)} class="text-muted text-lg sm:text-xl">cancel</button>
-                </div>
-              </div>
+              <ExerciseEditor
+                name={editExName()}
+                onNameChange={setEditExName}
+                increment={accessoryIncrements()[ex.id!] ? editExIncrement() : null}
+                onIncrementChange={setEditExIncrement}
+                onSave={() => handleRenameExercise(ex.id!)}
+                onCancel={() => setEditingEx(null)}
+              />
             </Show>
           </div>
         )}</For>
