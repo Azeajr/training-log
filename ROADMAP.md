@@ -220,21 +220,21 @@ Options to flatten this:
 
 Either path lets us delete the `TableLike` interface and the Dexie override.
 
-### Set-Section Duplication in Workout.tsx (medium)
+### ~~Set-Section Duplication in Workout.tsx~~ ✅ resolved 2026-05-21
 
-`src/screens/Workout.tsx` renders four near-identical `SetRow` loops (warmup, main, joker, fsl) — each ~17 LOC with the same `isActive` / `isCompleted` / `loggedReps` / `loggedWeight` / `onLog` / `onEdit` / `onDelete` bindings. Extract a `<SetSection>` component (or drive from a `{ label, sets, offset }` config array). Defer until the Joker insert flow stabilises — the offset arithmetic in `setOffset()` is the trickiest part.
+`SetSection` component extracted; all 4 For loops replaced. Offset arithmetic centralised in component props.
 
 ### Module-Singleton Side Effects in RestTimer (low)
 
 `audioCtx` and `timerWorker` in `src/components/workout/RestTimer.tsx` are module-scoped to survive remounts (iOS audio unlock requires a single context per user gesture). Comments document the constraint. Acceptable but worth noting if the timer ever moves into a store or a dedicated hook.
 
-### `deleteLastSet` Triggers Full `loadData` Reload (low)
+### ~~`deleteLastSet` Triggers Full `loadData` Reload~~ ✅ resolved 2026-05-21
 
-`Workout.handleDeleteSet` calls `void loadData()` after `deleteLastSet()`, which re-fetches the lift, TM, AMRAP targets, and exercise list just to recompute `allSets`. The store update would be enough on its own. Worth tightening if the screen ever becomes slow.
+`handleDeleteSet` now calls `rebuildAllSets()` — recomputes `allSets` from existing signals with no DB round-trips.
 
-### `History.tsx` `localStorage` Read at Signal Init (low)
+### ~~`History.tsx` `localStorage` Read at Signal Init~~ ✅ resolved 2026-05-21
 
-`HISTORY_LIFT_KEY` is read directly inside `createSignal` initialisation. Hidden persistence dependency at module-load time. Move into the loader (`createEffect`) for clarity if other screens grow similar state.
+`HISTORY_LIFT_KEY` read moved into `load()`; no longer a hidden side-effect at component construction time.
 
 ---
 
