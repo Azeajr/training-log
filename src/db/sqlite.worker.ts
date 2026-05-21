@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS settings (
   restTimerFail INTEGER NOT NULL,
   theme TEXT,
   barWeight REAL,
-  plates TEXT
+  plates TEXT,
+  supplementalTemplate TEXT
 );
 CREATE TABLE IF NOT EXISTS migrations (
   id TEXT PRIMARY KEY
@@ -110,6 +111,12 @@ function runMigrations() {
   }
   // Idempotent: old 'fsl' sets with reps=10 were FSL+BBB
   db.exec("UPDATE sets SET type = 'fsl+bbb' WHERE type = 'fsl' AND reps = 10")
+  // One-time: move supplementalTemplate from per-lift to global settings
+  const globalMigRan = db.selectValue("SELECT COUNT(*) FROM migrations WHERE id = 'global_supplemental_template'") as number
+  if (!globalMigRan) {
+    db.exec("UPDATE settings SET supplementalTemplate = (SELECT supplementalTemplate FROM lifts ORDER BY rowid LIMIT 1) WHERE supplementalTemplate IS NULL")
+    db.exec("INSERT OR IGNORE INTO migrations (id) VALUES ('global_supplemental_template')")
+  }
 }
 
 async function init(): Promise<{ persistent: boolean }> {
@@ -124,6 +131,7 @@ async function init(): Promise<{ persistent: boolean }> {
         db = new poolUtil.OpfsSAHPoolDb('/training-log.db')
         db.exec(SCHEMA)
         try { db.exec("ALTER TABLE lifts ADD COLUMN supplementalTemplate TEXT NOT NULL DEFAULT 'fsl'") } catch { /* column exists */ }
+        try { db.exec("ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT") } catch { /* column exists */ }
         runMigrations()
         return { persistent: true }
       } catch {
@@ -135,6 +143,7 @@ async function init(): Promise<{ persistent: boolean }> {
   db = new sqlite3.oo1.DB()
   db.exec(SCHEMA)
   try { db.exec("ALTER TABLE lifts ADD COLUMN supplementalTemplate TEXT NOT NULL DEFAULT 'fsl'") } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT") } catch { /* column exists */ }
   runMigrations()
   return { persistent: false }
 }

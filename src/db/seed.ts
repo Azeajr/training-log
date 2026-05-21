@@ -84,6 +84,7 @@ async function _seedDatabase() {
       restTimer2: 180,
       restTimerFail: 300,
       barWeight: 45,
+      supplementalTemplate: 'fsl+bbb',
       plates: [
         { weight: 45,  count: 4 },
         { weight: 35,  count: 2 },

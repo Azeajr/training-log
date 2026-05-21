@@ -994,55 +994,53 @@ describe('Settings — SUPPLEMENTAL', () => {
       db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
       db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+      db.settings.clear(),
     ])
     await seedLifts()
+    await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, supplementalTemplate: 'fsl+bbb' })
+    await loadSettings()
   })
 
   afterEach(drain)
 
-  it('renders SUPPLEMENTAL section with template buttons for each lift', async () => {
+  it('renders SUPPLEMENTAL section with a single set of template buttons', async () => {
     renderSettings()
-    // Each lift gets FSL/SSL/BBB/BBS/NONE buttons — 4 lifts × 5 buttons
     const fslBtns = await screen.findAllByText('FSL')
-    expect(fslBtns.length).toBe(4)
+    expect(fslBtns.length).toBe(1)
   })
 
-  it('FSL+BBB button is highlighted by default (new lift default is fsl+bbb)', async () => {
+  it('FSL+BBB button is highlighted by default', async () => {
     renderSettings()
-    const fslBbbBtns = await screen.findAllByText('FSL+BBB')
-    expect(fslBbbBtns[0].className).toContain('border-accent')
+    const btn = await screen.findByText('FSL+BBB')
+    expect(btn.className).toContain('border-accent')
   })
 
-  it('clicking BBS for a lift persists supplementalTemplate in DB', async () => {
+  it('clicking BBS persists supplementalTemplate to settings in DB', async () => {
     renderSettings()
-    const bbsBtns = await screen.findAllByText('BBS')
-    fireEvent.click(bbsBtns[0]) // click BBS for first lift (Squat)
+    fireEvent.click(await screen.findByText('BBS'))
 
     await waitFor(async () => {
-      const lifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
-      expect(lifts[0].supplementalTemplate).toBe('bbs')
+      const row = await db.settings.toCollection().first()
+      expect(row?.supplementalTemplate).toBe('bbs')
     })
   })
 
-  it('clicking NONE for a lift persists supplementalTemplate in DB', async () => {
+  it('clicking NONE persists supplementalTemplate to settings in DB', async () => {
     renderSettings()
-    const noneBtns = await screen.findAllByText('NONE')
-    fireEvent.click(noneBtns[0])
+    fireEvent.click(await screen.findByText('NONE'))
 
     await waitFor(async () => {
-      const lifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
-      expect(lifts[0].supplementalTemplate).toBe('none')
+      const row = await db.settings.toCollection().first()
+      expect(row?.supplementalTemplate).toBe('none')
     })
   })
 
   it('selected template button shows accent styling after click', async () => {
     renderSettings()
-    const sslBtns = await screen.findAllByText('SSL')
-    fireEvent.click(sslBtns[0])
+    fireEvent.click(await screen.findByText('SSL'))
 
     await waitFor(() => {
-      const updatedSslBtns = screen.getAllByText('SSL')
-      expect(updatedSslBtns[0].className).toContain('border-accent')
+      expect(screen.getByText('SSL').className).toContain('border-accent')
     })
   })
 })
