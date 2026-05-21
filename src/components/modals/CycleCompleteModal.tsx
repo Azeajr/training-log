@@ -1,19 +1,18 @@
 import { Show, For } from 'solid-js'
-import type { Accessor } from 'solid-js'
 
 export interface CycleCompleteData {
   newTms: Array<{ liftName: string; weight: number }>
 }
 
 interface Props {
-  data: Accessor<CycleCompleteData | null>
+  data: CycleCompleteData | null
   onDismiss: () => void
   onDeload: () => void
 }
 
 export default function CycleCompleteModal(props: Props) {
   return (
-    <Show when={props.data()}>
+    <Show when={props.data}>
       {data => (
         <div class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div class="bg-surface border border-accent p-6 font-mono max-w-sm w-full">

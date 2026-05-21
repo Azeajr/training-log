@@ -2,7 +2,8 @@ import { createSignal, createMemo, For, Show } from 'solid-js'
 import { logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory, startRest } from '../../store/workout-store'
 import type { AccessorySet, Exercise } from '../../types/domain'
 import { db } from '../../db/index'
-import { ACCESSORY_PERCENTAGE, roundToNearest5 } from '../../lib/calc'
+import { ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, roundToNearest5 } from '../../lib/calc'
+import { showToast } from '../../store/toast-store'
 import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
 import InlineConfirm from '../ui/InlineConfirm'
@@ -24,7 +25,7 @@ export default function AccessoryLog(props: Props) {
   const type = () => props.exercise?.type ?? 'reps'
   const nextSet = createMemo(() => props.accessory.loggedSets.length + 1)
   const [addingExtra, setAddingExtra] = createSignal(false)
-  const done = createMemo(() => props.accessory.loggedSets.length >= 5 && !addingExtra())
+  const done = createMemo(() => props.accessory.loggedSets.length >= ACCESSORY_SETS && !addingExtra())
 
   const initWeight = () => {
     const last = props.accessory.loggedSets[props.accessory.loggedSets.length - 1]
@@ -33,7 +34,7 @@ export default function AccessoryLog(props: Props) {
 
   const [weight, setWeight] = createSignal(initWeight())
   const [weightEditing, setWeightEditing] = createSignal(false)
-  const [reps, setReps] = createSignal(10)
+  const [reps, setReps] = createSignal(ACCESSORY_REPS)
   const [duration, setDuration] = createSignal<number | null>(null)
   const [distance, setDistance] = createSignal(0)
   const [editingSetIdx, setEditingSetIdx] = createSignal<number | null>(null)
@@ -67,12 +68,17 @@ export default function AccessoryLog(props: Props) {
         .where('exerciseId').equals(props.accessory.exerciseId)
         .sortBy('setAt')
       const currentTm = tms[tms.length - 1]
-      await db.accessoryTrainingMaxes.add({
-        exerciseId: props.accessory.exerciseId,
-        weight: newTm,
-        incrementLb: currentTm?.incrementLb ?? 5,
-        setAt: new Date(),
-      })
+      try {
+        await db.accessoryTrainingMaxes.add({
+          exerciseId: props.accessory.exerciseId,
+          weight: newTm,
+          incrementLb: currentTm?.incrementLb ?? 5,
+          setAt: new Date(),
+        })
+      } catch {
+        showToast('Failed to save training max')
+        return
+      }
     }
     const set: Partial<AccessorySet> = {
       exerciseId: props.accessory.exerciseId,
@@ -83,8 +89,8 @@ export default function AccessoryLog(props: Props) {
       distance: type() === 'distance' ? distance() : null,
     }
     logAccessorySet(props.accessory.exerciseId, set)
-    startRest(nextSet() >= 5 ? 'transition' : 'normal')
-    setReps(10)
+    startRest(nextSet() >= ACCESSORY_SETS ? 'transition' : 'normal')
+    setReps(ACCESSORY_REPS)
     setDuration(null)
     setDistance(0)
     setWeightEditing(false)
@@ -182,7 +188,7 @@ export default function AccessoryLog(props: Props) {
           </button>
         </div>
       </Show>
-      <Show when={props.accessory.loggedSets.length >= 5 && !addingExtra()}>
+      <Show when={props.accessory.loggedSets.length >= ACCESSORY_SETS && !addingExtra()}>
         <button
           onClick={() => setAddingExtra(true)}
           class="w-full text-left pl-2 mt-1 text-faint text-xs font-mono hover:text-accent tracking-widest"

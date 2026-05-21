@@ -241,13 +241,13 @@ export function calcSupplementalSets(
 ): FslSet[] {
   if (main.length === 0) return []
   switch (template) {
+    case 'fsl':     return calcFslSets(main[0].weight)
     case 'ssl':     return calcSslSets(main[1].weight)
     case 'bbb':     return calcBbbSets(tm, barWeight)
     case 'fsl+bbb': return calcFslBbbSets(main[0].weight)
     case 'ssl+bbb': return calcSslBbbSets(main[1].weight)
     case 'bbs':     return calcBbsSets(tm, week, barWeight)
     case 'none':    return []
-    default:        return calcFslSets(main[0].weight)
   }
 }
 

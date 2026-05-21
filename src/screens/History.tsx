@@ -27,11 +27,11 @@ interface ChartPoint { date: Date; weight: number }
 function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
   const W = 400, H = 80, PAD = 20
 
-  const all = () => [...props.primary, ...(props.secondary ?? [])]
-  const minDate = () => Math.min(...all().map(d => d.date.getTime()))
-  const maxDate = () => Math.max(...all().map(d => d.date.getTime()))
-  const minW = () => Math.min(...all().map(d => d.weight))
-  const maxW = () => Math.max(...all().map(d => d.weight))
+  const all = createMemo(() => [...props.primary, ...(props.secondary ?? [])])
+  const minDate = createMemo(() => Math.min(...all().map(d => d.date.getTime())))
+  const maxDate = createMemo(() => Math.max(...all().map(d => d.date.getTime())))
+  const minW = createMemo(() => Math.min(...all().map(d => d.weight)))
+  const maxW = createMemo(() => Math.max(...all().map(d => d.weight)))
 
   const toXY = (d: ChartPoint) => {
     const dateSpan = maxDate() - minDate() || 1
@@ -41,7 +41,7 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
     return `${x.toFixed(1)},${y.toFixed(1)}`
   }
 
-  const extendedPrimary = () => {
+  const extendedPrimary = createMemo(() => {
     const pts = props.primary
     if (pts.length < 1) return pts
     const last = pts[pts.length - 1]
@@ -49,10 +49,10 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
       return [...pts, { date: new Date(maxDate()), weight: last.weight }]
     }
     return pts
-  }
+  })
 
-  const primaryPts = () => extendedPrimary().length >= 2 ? extendedPrimary().map(toXY).join(' ') : ''
-  const secondaryPts = () => (props.secondary?.length ?? 0) >= 2 ? props.secondary!.map(toXY).join(' ') : ''
+  const primaryPts = createMemo(() => extendedPrimary().length >= 2 ? extendedPrimary().map(toXY).join(' ') : '')
+  const secondaryPts = createMemo(() => (props.secondary?.length ?? 0) >= 2 ? props.secondary!.map(toXY).join(' ') : '')
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} class="w-full h-32">
@@ -184,12 +184,9 @@ export default function History() {
       }))
   )
 
-  createEffect(() => { void load() })
+  createEffect(() => { void load(mode(), selectedLiftId()) })
 
-  const load = async () => {
-    const m = mode()
-    const selId = selectedLiftId()
-
+  const load = async (m: ViewMode, selId: number | null) => {
     const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
     setLifts(allLifts)
     if (!selId && allLifts.length > 0) setSelectedLiftId(allLifts[0].id!)

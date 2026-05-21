@@ -32,17 +32,21 @@ export default function AccessoryPicker(props: Props) {
     const exerciseIds = accessories.map(a => a.exerciseId)
     const exercises = await db.exercises.where('id').anyOf(exerciseIds).toArray()
 
+    const activeExerciseIds = exercises.filter(e => !e.archived).map(e => e.id!)
+    const allAtms = await db.accessoryTrainingMaxes.where('exerciseId').anyOf(activeExerciseIds).sortBy('setAt')
+    const latestAtmByExercise = new Map<number, number>()
+    for (const atm of allAtms) latestAtmByExercise.set(atm.exerciseId, atm.weight)
+
     const result: PickerRow[] = []
     for (const la of accessories.sort((a, b) => a.order - b.order)) {
       const ex = exercises.find(e => e.id === la.exerciseId)
       if (!ex || ex.archived) continue
-      const tms = await db.accessoryTrainingMaxes.where('exerciseId').equals(ex.id!).sortBy('setAt')
-      const latest = tms[tms.length - 1] ?? null
+      const tmWeight = latestAtmByExercise.get(ex.id!) ?? null
       result.push({
         exercise: ex,
         liftAccessory: la,
-        tm: latest?.weight ?? null,
-        calculatedWeight: latest ? roundToNearest5(latest.weight * 0.75) : null,
+        tm: tmWeight,
+        calculatedWeight: tmWeight != null ? roundToNearest5(tmWeight * 0.75) : null,
         alreadyAdded: workout.activeAccessories.some(a => a.exerciseId === ex.id),
       })
     }

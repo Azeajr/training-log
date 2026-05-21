@@ -183,31 +183,23 @@ export default function HistoryEdit() {
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      for (const s of editSets()) {
-        await db.sets.update(s.id, { weight: s.weight, reps: s.reps })
-      }
-      for (const exId of deletedAccessoryIds()) {
-        await db.accessorySets
-          .where('sessionId').equals(sid)
-          .and(s => s.exerciseId === exId)
-          .delete()
-      }
-      for (const acc of editAccessories()) {
-        if (acc.originalExerciseId === null) {
-          await db.accessorySets.bulkAdd(acc.sets.map(s => ({
-            sessionId: sid,
-            exerciseId: acc.exerciseId,
-            setNumber: s.setNumber,
-            weight: s.weight,
-            reps: s.reps,
-            duration: s.duration,
-            distance: s.distance,
-          })))
-        } else if (acc.exerciseId !== acc.originalExerciseId) {
+      await db.transaction('rw', [db.sets, db.accessorySets, db.sessions], async () => {
+        for (const s of editSets()) {
+          await db.sets.update(s.id, { weight: s.weight, reps: s.reps })
+        }
+        for (const exId of deletedAccessoryIds()) {
           await db.accessorySets
             .where('sessionId').equals(sid)
-            .and(s => s.exerciseId === acc.originalExerciseId)
+            .and(s => s.exerciseId === exId)
             .delete()
+        }
+        for (const acc of editAccessories()) {
+          if (acc.originalExerciseId !== null) {
+            await db.accessorySets
+              .where('sessionId').equals(sid)
+              .and(s => s.exerciseId === acc.originalExerciseId)
+              .delete()
+          }
           await db.accessorySets.bulkAdd(acc.sets.map(s => ({
             sessionId: sid,
             exerciseId: acc.exerciseId,
@@ -217,20 +209,9 @@ export default function HistoryEdit() {
             duration: s.duration,
             distance: s.distance,
           })))
-        } else {
-          for (const s of acc.sets) {
-            if (s.id != null) {
-              await db.accessorySets.update(s.id, {
-                weight: s.weight,
-                reps: s.reps,
-                duration: s.duration,
-                distance: s.distance,
-              })
-            }
-          }
         }
-      }
-      await db.sessions.update(sid, { notes: notes() })
+        await db.sessions.update(sid, { notes: notes() })
+      })
       navigate(liftId() != null ? `/history?liftId=${liftId()}` : '/history')
     } finally {
       setIsSaving(false)

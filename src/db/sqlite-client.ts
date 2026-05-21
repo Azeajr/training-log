@@ -140,8 +140,10 @@ class WhereQuery<T> {
   async delete(): Promise<void> {
     if (this.filterFn) {
       const rows = await this.toArray()
-      for (const row of rows) {
-        await this.table.delete((row as Record<string, unknown>).id as number)
+      const ids = rows.map(r => (r as Record<string, unknown>).id as number)
+      if (ids.length > 0) {
+        const ph = ids.map(() => '?').join(',')
+        await sqliteClient.run(`DELETE FROM "${this.table.tableName}" WHERE id IN (${ph})`, ids)
       }
     } else {
       await sqliteClient.run(

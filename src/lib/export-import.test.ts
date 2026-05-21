@@ -117,14 +117,14 @@ describe('importFromRawData', () => {
     expect(await db.accessorySets.count()).toBe(0)
   })
 
-  it('leaves accessoryTrainingMaxes untouched when key absent from payload', async () => {
+  it('clears accessoryTrainingMaxes even when key absent from payload', async () => {
     const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
     await db.accessoryTrainingMaxes.add({ exerciseId: exId, weight: 50, incrementLb: 5, setAt: new Date() })
     await importFromRawData(db, {
       lifts: [], trainingMaxes: [], cycles: [], sessions: [], sets: [],
       exercises: [], liftAccessories: [], settings: [],
     })
-    expect(await db.accessoryTrainingMaxes.count()).toBe(1)
+    expect(await db.accessoryTrainingMaxes.count()).toBe(0)
   })
 
   it('imports sessions with parsed date', async () => {

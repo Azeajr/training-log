@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, afterEach, describe, it, expect } from 'vitest'
 import { db } from '../db/index'
-import { applyTheme, loadSettings, updateSettings, settings, THEMES, DEFAULT_BAR_WEIGHT, DEFAULT_PLATES } from './settings-store'
+import { applyTheme, loadSettings, updateSettings, settings, THEMES, DEFAULT_BAR_WEIGHT, DEFAULT_PLATES, SETTINGS_DEFAULTS } from './settings-store'
 
 const drain = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)) }
 
@@ -111,7 +111,12 @@ describe('updateSettings', () => {
     expect(document.documentElement.style.getPropertyValue('--color-accent')).toBe(THEMES.light.vars['--color-accent'])
   })
 
-  it('does nothing when no settings row exists in DB', async () => {
-    await updateSettings({ restTimer1: 60 }) // should not throw
+  it('inserts defaults when no settings row exists in DB', async () => {
+    await updateSettings({ restTimer1: 60 })
+    const row = await db.settings.toCollection().first()
+    expect(row).toBeDefined()
+    expect(row!.restTimer1).toBe(60)
+    expect(row!.restTimer2).toBe(SETTINGS_DEFAULTS.restTimer2)
+    expect(row!.supplementalTemplate).toBe(SETTINGS_DEFAULTS.supplementalTemplate)
   })
 })

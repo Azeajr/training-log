@@ -447,7 +447,7 @@ export default function Workout() {
         </Show>
 
         <CycleCompleteModal
-          data={cycleCompleteData}
+          data={cycleCompleteData()}
           onDismiss={handleCycleCompleteDismiss}
           onDeload={handleCycleDeload}
         />
