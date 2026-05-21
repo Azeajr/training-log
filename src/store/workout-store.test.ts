@@ -270,13 +270,13 @@ describe('loadFromStorage', () => {
   })
 
   it('restores state from valid localStorage entry', async () => {
-    localStorage.setItem('workout-store', JSON.stringify({ state: { notes: 'recovered' } }))
+    localStorage.setItem('workout-store', JSON.stringify({ v: 1, state: { notes: 'recovered' } }))
     const { workout: w } = await import('./workout-store')
     expect(w.notes).toBe('recovered')
   })
 
   it('returns defaults when JSON has no state key', async () => {
-    localStorage.setItem('workout-store', JSON.stringify({ version: 1 }))
+    localStorage.setItem('workout-store', JSON.stringify({ v: 1 }))
     const { workout: w } = await import('./workout-store')
     expect(w.activeSession).toBeNull()
   })

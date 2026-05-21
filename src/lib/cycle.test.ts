@@ -110,6 +110,27 @@ describe('getNextSession', () => {
     expect(result.cycleId).not.toBe(cycleId)
     expect(await db.cycles.count()).toBe(2)
   })
+
+  it('does not count pending sessions toward week progress', async () => {
+    const lifts = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await addSessions(cycleId, 1, lifts.slice(0, 3))
+    await db.sessions.add({ cycleId, liftId: lifts[3].id!, week: 1, date: new Date(), notes: null, status: 'pending' })
+    const result = await getNextSession(db)
+    expect(result.week).toBe(1)
+    expect(result.liftId).toBe(lifts[3].id)
+  })
+
+  it('falls back to first lift when all current-week lifts done but fewer than 4 lifts exist', async () => {
+    const lift1Id = await db.lifts.add({ name: 'OHP' as const,   order: 1, progressionIncrement: 5, baseWeight: 95,  liftType: 'upper' as const })
+    const lift2Id = await db.lifts.add({ name: 'Bench' as const, order: 2, progressionIncrement: 5, baseWeight: 95,  liftType: 'upper' as const })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await db.sessions.add({ cycleId, liftId: lift1Id, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId: lift2Id, week: 1, date: new Date(), notes: null, status: 'completed' })
+    const result = await getNextSession(db)
+    expect(result.week).toBe(1)
+    expect(result.liftId).toBe(lift1Id)
+  })
 })
 
 // ─── advanceCycleIfComplete ───────────────────────────────────────────────────
@@ -184,6 +205,17 @@ describe('advanceCycleIfComplete', () => {
     await addSessions(cycleId, 4, lifts, 'skipped')
     const { advanced } = await advanceCycleIfComplete(db)
     expect(advanced).toBe(true)
+  })
+
+  it('does not advance when week 4 has pending sessions mixed in', async () => {
+    const lifts = await seedLifts()
+    await seedTms(lifts)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (let w = 1; w <= 3; w++) await addSessions(cycleId, w as 1 | 2 | 3 | 4, lifts)
+    await addSessions(cycleId, 4, lifts.slice(0, 3))
+    await db.sessions.add({ cycleId, liftId: lifts[3].id!, week: 4, date: new Date(), notes: null, status: 'pending' })
+    const result = await advanceCycleIfComplete(db)
+    expect(result.advanced).toBe(false)
   })
 
   it('omits lifts with no training max from newTms', async () => {
