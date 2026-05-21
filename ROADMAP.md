@@ -4,7 +4,7 @@
 
 ### Test Infrastructure — Coverage + Mutation
 
-466 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds; current branch coverage is 88.07% (665/755). Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
+412 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
 
 Coverage approach: lib functions tested with `fake-indexeddb`; screens tested end-to-end from DOM event through store to DB render with `@solidjs/testing-library` + jsdom. No mocking of the DB layer.
 
@@ -201,6 +201,40 @@ Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Tra
 ### Session Notes Indicator in History
 
 `sessions.notes` is stored and editable in HistoryEdit but invisible in the History list view. Surface a visual indicator (dot or truncated preview) on session rows that have notes, so users can find annotated sessions without expanding each one.
+
+---
+
+## Tech Debt
+
+Findings from the 2026-05-21 code review that are out of scope for a single-PR cleanup. Listed here so future work can target them with a dedicated branch.
+
+### Dexie-Shaped Query Builder Reimplemented in SQL (high)
+
+`src/db/sqlite-client.ts` ships ~230 LOC of `WhereClause` / `WhereQuery` / `OrderByQuery` / `CollectionQuery` / `FilterQuery` classes that mirror Dexie's chainable query API in SQL. `src/lib/types.ts` (`TableLike<T>`, ~58 LOC) declares the same surface as a shared interface so `src/lib/*` can target both backends. Root cause: tests run against Dexie + `fake-indexeddb` while production runs against SQLite Wasm.
+
+The cost is rigid coupling: every new query shape needs SQL, Dexie, and the `TableLike` interface kept in lockstep, plus the `db.ts` `transaction(fn)` override that bypasses Dexie's overloads with `any`.
+
+Options to flatten this:
+- Drop Dexie entirely and back tests with the same SQLite Wasm worker (initialised in-memory under jsdom). One backend, no shim layer.
+- Replace the chained API in `lib/*` with direct SQL helpers (`db.query(sql, params)`) and a few typed wrappers per entity.
+
+Either path lets us delete the `TableLike` interface and the Dexie override.
+
+### Set-Section Duplication in Workout.tsx (medium)
+
+`src/screens/Workout.tsx` renders four near-identical `SetRow` loops (warmup, main, joker, fsl) — each ~17 LOC with the same `isActive` / `isCompleted` / `loggedReps` / `loggedWeight` / `onLog` / `onEdit` / `onDelete` bindings. Extract a `<SetSection>` component (or drive from a `{ label, sets, offset }` config array). Defer until the Joker insert flow stabilises — the offset arithmetic in `setOffset()` is the trickiest part.
+
+### Module-Singleton Side Effects in RestTimer (low)
+
+`audioCtx` and `timerWorker` in `src/components/workout/RestTimer.tsx` are module-scoped to survive remounts (iOS audio unlock requires a single context per user gesture). Comments document the constraint. Acceptable but worth noting if the timer ever moves into a store or a dedicated hook.
+
+### `deleteLastSet` Triggers Full `loadData` Reload (low)
+
+`Workout.handleDeleteSet` calls `void loadData()` after `deleteLastSet()`, which re-fetches the lift, TM, AMRAP targets, and exercise list just to recompute `allSets`. The store update would be enough on its own. Worth tightening if the screen ever becomes slow.
+
+### `History.tsx` `localStorage` Read at Signal Init (low)
+
+`HISTORY_LIFT_KEY` is read directly inside `createSignal` initialisation. Hidden persistence dependency at module-load time. Move into the loader (`createEffect`) for clarity if other screens grow similar state.
 
 ---
 
