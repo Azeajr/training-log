@@ -28,12 +28,14 @@ interface WorkoutState {
 }
 
 const STORAGE_KEY = 'workout-store'
+const STORAGE_VERSION = 1
 
 function loadFromStorage(): Partial<WorkoutState> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return {}
-    const parsed = JSON.parse(raw) as { state?: Partial<WorkoutState> }
+    const parsed = JSON.parse(raw) as { v?: number; state?: Partial<WorkoutState> }
+    if (parsed.v !== STORAGE_VERSION) return {}
     return parsed.state ?? {}
   } catch {
     return {}
@@ -55,6 +57,7 @@ export const [workout, setWorkout] = createStore<WorkoutState>({
 createRoot(() => {
   createEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      v: STORAGE_VERSION,
       state: {
         activeSession:    workout.activeSession,
         loggedSets:       workout.loggedSets,

@@ -31,7 +31,6 @@ export default function Workout() {
   const [lift, setLift] = createSignal<Lift | null>(null)
   const [supplementalTemplate, setSupplementalTemplate] = createSignal<SupplementalTemplate>('fsl')
   const [allSets, setAllSets] = createSignal<(WarmupSet | MainSet | FslSet | JokerSet)[]>([])
-  const [jokerSets, setJokerSets] = createSignal<JokerSet[]>([])
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
   const [showPicker, setShowPicker] = createSignal(false)
   const [exercises, setExercises] = createSignal<Exercise[]>([])
@@ -79,7 +78,6 @@ export default function Workout() {
     const restoredJokers: JokerSet[] = freshLoggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
-    setJokerSets(restoredJokers)
     setAllSets([...warmup, ...main, ...restoredJokers, ...fsl])
 
     if (session.week !== 4) {
@@ -114,16 +112,6 @@ export default function Workout() {
     const lastSet = sets[sets.length - 1]
     if (!lastSet) return
     if (lastSet.id) await db.sets.delete(lastSet.id)
-    if (lastSet.type === 'joker') {
-      const updatedJokers = jokerSets().slice(0, -1)
-      setJokerSets(updatedJokers)
-      setAllSets(prev => {
-        const w = prev.filter(s => s.type === 'warmup') as WarmupSet[]
-        const m = prev.filter(s => s.type === 'main') as MainSet[]
-        const f = prev.filter(s => isSupplemental(s.type)) as FslSet[]
-        return [...w, ...m, ...updatedJokers, ...f]
-      })
-    }
     deleteLastSet()
     void loadData()
   }
@@ -178,12 +166,11 @@ export default function Workout() {
     const loggedAmrapReps = amrapIdx >= 0 ? (workout.loggedSets[amrapIdx]?.reps ?? 0) : 0
     const weekGoalReps = JOKER_MIN_REPS[workout.activeSession!.week] ?? 1
     const increment = calcJokerIncrement(loggedAmrapReps, weekGoalReps)
-    const jk = jokerSets()
+    const jk = sets.filter(s => s.type === 'joker') as JokerSet[]
     const lastWeight = jk.length > 0 ? jk[jk.length - 1].weight : (amrapSet?.weight ?? 0)
     const jokerReps = ({ 1: 5, 2: 3, 3: 1 } as Record<number, number>)[workout.activeSession!.week] ?? 5
     const newJoker = calcJokerSet(lastWeight, jk.length + 1, jokerReps, increment)
     const updatedJokers = [...jk, newJoker]
-    setJokerSets(updatedJokers)
     setAllSets(prev => {
       const w = prev.filter(s => s.type === 'warmup') as WarmupSet[]
       const m = prev.filter(s => s.type === 'main') as MainSet[]
@@ -196,21 +183,20 @@ export default function Workout() {
     const session = workout.activeSession
     if (!session?.id) return
     await db.sessions.update(session.id, { status: 'completed', notes: workout.notes, date: new Date() })
-    for (const acc of workout.activeAccessories) {
-      for (const s of acc.loggedSets) {
-        if (s.setNumber != null) {
-          await db.accessorySets.add({
-            sessionId: session.id,
-            exerciseId: acc.exerciseId,
-            setNumber: s.setNumber,
-            weight: s.weight ?? null,
-            reps: s.reps ?? null,
-            duration: s.duration ?? null,
-            distance: s.distance ?? null,
-          })
-        }
-      }
-    }
+    const toSave = workout.activeAccessories.flatMap(acc =>
+      acc.loggedSets
+        .filter(s => s.setNumber != null)
+        .map(s => ({
+          sessionId: session.id!,
+          exerciseId: acc.exerciseId,
+          setNumber: s.setNumber!,
+          weight: s.weight ?? null,
+          reps: s.reps ?? null,
+          duration: s.duration ?? null,
+          distance: s.distance ?? null,
+        }))
+    )
+    if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
     const { advanced, newTms } = await advanceCycleIfComplete(db)
     if (advanced) {
       setCycleCompleteData({ newTms })
@@ -263,6 +249,11 @@ export default function Workout() {
   const warmupCount = () => warmupSets().length
   const mainCount = () => mainSets().length
   const jokerCount = () => jokerSetsRendered().length
+  const setOffset = (section: 'main' | 'joker' | 'fsl') => ({
+    main:  warmupCount(),
+    joker: warmupCount() + mainCount(),
+    fsl:   warmupCount() + mainCount() + jokerCount(),
+  }[section])
 
   const showJokerButton = () => workout.activeSession ? shouldShowJokerButton({
     week: workout.activeSession.week,
@@ -337,7 +328,7 @@ export default function Workout() {
             <div class="text-muted uppercase text-xs tracking-widest mb-2">MAIN</div>
             <For each={mainSets()}>
               {(s, i) => {
-                const globalIdx = () => warmupCount() + i()
+                const globalIdx = () => setOffset('main') + i()
                 return (
                   <SetRow
                     set={s}
@@ -359,7 +350,7 @@ export default function Workout() {
                 <div class="text-muted uppercase text-xs tracking-widest mb-2">JOKER SETS</div>
                 <For each={jokerSetsRendered()}>
                   {(s, i) => {
-                    const globalIdx = () => warmupCount() + mainCount() + i()
+                    const globalIdx = () => setOffset('joker') + i()
                     return (
                       <SetRow
                         set={s}
@@ -391,7 +382,7 @@ export default function Workout() {
               <div class="text-muted uppercase text-xs tracking-widest mb-2">{supplementalLabel()}</div>
               <For each={fslSets()}>
                 {(s, i) => {
-                  const globalIdx = () => warmupCount() + mainCount() + jokerCount() + i()
+                  const globalIdx = () => setOffset('fsl') + i()
                   return (
                     <SetRow
                       set={{ ...s, isAmrap: false }}

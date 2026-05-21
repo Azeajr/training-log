@@ -41,8 +41,6 @@ export default function AccessoryLog(props: Props) {
   const [editReps, setEditReps] = createSignal(0)
   const [editDuration, setEditDuration] = createSignal<number | null>(null)
   const [editDistance, setEditDistance] = createSignal(0)
-  let tmWritten = false
-
   const startEditSet = (i: number) => {
     const s = props.accessory.loggedSets[i]
     setEditWeight(s.weight ?? 0)
@@ -63,7 +61,7 @@ export default function AccessoryLog(props: Props) {
   }
 
   const handleLog = async () => {
-    if (weight() !== (props.accessory.calculatedWeight ?? 0) && !tmWritten) {
+    if (props.accessory.loggedSets.length === 0 && weight() !== (props.accessory.calculatedWeight ?? 0)) {
       const newTm = roundToNearest5(weight() / ACCESSORY_PERCENTAGE)
       const tms = await db.accessoryTrainingMaxes
         .where('exerciseId').equals(props.accessory.exerciseId)
@@ -75,7 +73,6 @@ export default function AccessoryLog(props: Props) {
         incrementLb: currentTm?.incrementLb ?? 5,
         setAt: new Date(),
       })
-      tmWritten = true
     }
     const set: Partial<AccessorySet> = {
       exerciseId: props.accessory.exerciseId,
