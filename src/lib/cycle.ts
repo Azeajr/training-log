@@ -1,5 +1,15 @@
 import type { TrainingDB } from '../db/index'
 
+const WEEKS = [1, 2, 3, 4] as const
+
+const countCompletedByWeek = (sessions: Array<{ week: number; status: string }>) => {
+  const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
+  for (const s of sessions) {
+    if (s.status !== 'pending') counts[s.week]++
+  }
+  return counts
+}
+
 export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   advanced: boolean
   newTms: Array<{ liftName: string; weight: number }>
@@ -8,10 +18,7 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   if (!cycle?.id) return { advanced: false, newTms: [] }
 
   const sessions = await db.sessions.where('cycleId').equals(cycle.id).toArray()
-  const weekCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
-  sessions.forEach(s => {
-    if (s.status !== 'pending') weekCounts[s.week]++
-  })
+  const weekCounts = countCompletedByWeek(sessions)
 
   if (weekCounts[4] < 4) return { advanced: false, newTms: [] }
 
@@ -110,21 +117,18 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
     .where('cycleId').equals(cycle.id)
     .toArray()
 
-  const weekCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
-  sessions.forEach(s => {
-    if (s.status !== 'pending') weekCounts[s.week]++
-  })
+  let weekCounts = countCompletedByWeek(sessions)
 
-  if (([1, 2, 3, 4] as const).every(w => weekCounts[w] >= 4)) {
+  if (WEEKS.every(w => weekCounts[w] >= 4)) {
     await advanceCycleIfComplete(db)
     cycle = await db.cycles.orderBy('number').last()
     if (!cycle?.id) throw new Error('Cycle advance failed')
     sessions = []
-    Object.keys(weekCounts).forEach(k => { weekCounts[Number(k)] = 0 })
+    weekCounts = countCompletedByWeek(sessions)
   }
 
   let currentWeek: 1 | 2 | 3 | 4 = 1
-  for (const w of [1, 2, 3, 4] as const) {
+  for (const w of WEEKS) {
     if (weekCounts[w] < 4) { currentWeek = w; break }
   }
 

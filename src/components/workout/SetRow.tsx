@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show } from 'solid-js'
+import { createSignal, createEffect, Show, Switch, Match } from 'solid-js'
 import type { Set } from '../../types/domain'
 import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../../lib/calc'
@@ -27,6 +27,7 @@ export default function SetRow(props: Props) {
   const [editing, setEditing] = createSignal(false)
   const [editReps, setEditReps] = createSignal(props.loggedReps ?? props.set.reps)
   const [editWeight, setEditWeight] = createSignal(props.loggedWeight ?? props.set.weight)
+  // eslint-disable-next-line no-unassigned-vars -- Solid `ref={rowEl}` reassigns at runtime
   let rowEl!: HTMLDivElement
 
   const isAmrap = () => props.set.isAmrap ?? false
@@ -40,78 +41,17 @@ export default function SetRow(props: Props) {
     if (!props.isCompleted && !weightEditing()) setWeight(newWeight)
   })
 
+  const startEdit = () => {
+    setEditing(true)
+    setEditReps(props.loggedReps ?? props.set.reps)
+    setEditWeight(props.loggedWeight ?? props.set.weight)
+  }
+
   return (
-    <Show
-      when={!props.isCompleted}
-      fallback={
-        <Show
-          when={editing()}
-          fallback={
-            <div
-              class="flex items-center gap-3 py-3 pl-3 text-sm text-muted border-l-4 border-transparent"
-              onClick={() => {
-                setEditing(true)
-                setEditReps(props.loggedReps ?? props.set.reps)
-                setEditWeight(props.loggedWeight ?? props.set.weight)
-              }}
-            >
-              <span class="w-16 text-right font-mono cursor-pointer hover:text-text-dim">{props.loggedWeight ?? props.set.weight}lb</span>
-              <span class="cursor-pointer hover:text-text-dim">x {props.loggedReps}</span>
-              <Show when={isAmrap()}>
-                <span class="text-xs tracking-widest">AMRAP</span>
-              </Show>
-              <span class="text-accent text-xs tracking-widest">done</span>
-              <Show when={props.loggedReps != null && props.loggedReps > 0}>
-                <span class="text-faint text-xs font-mono ml-auto">
-                  {estimated1RM(props.loggedWeight ?? props.set.weight, props.loggedReps!).toFixed(0)}lb e1RM
-                </span>
-              </Show>
-              <Show when={!!props.onDelete}>
-                <InlineConfirm
-                  label="undo"
-                  confirmText="undo set?"
-                  onConfirm={() => props.onDelete!()}
-                  class="ml-auto"
-                  stopPropagation
-                />
-              </Show>
-            </div>
-          }
-        >
-          <div class="flex items-center gap-3 py-3 pl-3 border-l-4 border-accent flex-wrap">
-            <Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} />
-            <span class="text-text-dim font-mono text-sm">×</span>
-            <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} />
-            <button
-              onClick={() => { props.onEdit(editReps(), editWeight()); setEditing(false) }}
-              class="border border-accent text-accent px-3 py-2 text-xs font-mono tracking-widest"
-            >
-              SAVE
-            </button>
-            <button onClick={() => setEditing(false)} class="text-muted text-xs font-mono">cancel</button>
-          </div>
-        </Show>
-      }
-    >
-      <Show
-        when={props.isActive}
-        fallback={
-          <div class="flex items-center gap-3 py-2.5 pl-3 text-sm text-muted border-l-4 border-transparent">
-            <span class="w-16 text-right font-mono">{props.set.weight}lb</span>
-            <span>x {props.set.reps}{isAmrap() ? '+' : ''}</span>
-            <Show when={isAmrap()}>
-              <span class="text-xs text-faint tracking-widest">AMRAP</span>
-            </Show>
-            <Show when={props.set.type === 'joker'}>
-              <span class="text-xs text-faint tracking-widest">JOKER</span>
-            </Show>
-            <span class="text-faint text-xs font-mono ml-auto">
-              {estimated1RM(props.set.weight, props.set.reps).toFixed(0)}lb e1RM
-            </span>
-          </div>
-        }
-      >
-        <div ref={el => (rowEl = el)} class="border-l-4 border-accent pl-3 py-3 mb-1">
+    <Switch>
+      {/* Active set — input form */}
+      <Match when={!props.isCompleted && props.isActive}>
+        <div ref={rowEl} class="border-l-4 border-accent pl-3 py-3 mb-1">
           <div class="flex items-baseline gap-3">
             <button
               onClick={() => setWeightEditing(w => !w)}
@@ -150,7 +90,69 @@ export default function SetRow(props: Props) {
             </button>
           </div>
         </div>
-      </Show>
-    </Show>
+      </Match>
+
+      {/* Upcoming set — read-only preview */}
+      <Match when={!props.isCompleted}>
+        <div class="flex items-center gap-3 py-2.5 pl-3 text-sm text-muted border-l-4 border-transparent">
+          <span class="w-16 text-right font-mono">{props.set.weight}lb</span>
+          <span>x {props.set.reps}{isAmrap() ? '+' : ''}</span>
+          <Show when={isAmrap()}>
+            <span class="text-xs text-faint tracking-widest">AMRAP</span>
+          </Show>
+          <Show when={props.set.type === 'joker'}>
+            <span class="text-xs text-faint tracking-widest">JOKER</span>
+          </Show>
+          <span class="text-faint text-xs font-mono ml-auto">
+            {estimated1RM(props.set.weight, props.set.reps).toFixed(0)}lb e1RM
+          </span>
+        </div>
+      </Match>
+
+      {/* Completed — inline edit form */}
+      <Match when={editing()}>
+        <div class="flex items-center gap-3 py-3 pl-3 border-l-4 border-accent flex-wrap">
+          <Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} />
+          <span class="text-text-dim font-mono text-sm">×</span>
+          <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} />
+          <button
+            onClick={() => { props.onEdit(editReps(), editWeight()); setEditing(false) }}
+            class="border border-accent text-accent px-3 py-2 text-xs font-mono tracking-widest"
+          >
+            SAVE
+          </button>
+          <button onClick={() => setEditing(false)} class="text-muted text-xs font-mono">cancel</button>
+        </div>
+      </Match>
+
+      {/* Completed — read-only view */}
+      <Match when={true}>
+        <div
+          class="flex items-center gap-3 py-3 pl-3 text-sm text-muted border-l-4 border-transparent"
+          onClick={startEdit}
+        >
+          <span class="w-16 text-right font-mono cursor-pointer hover:text-text-dim">{props.loggedWeight ?? props.set.weight}lb</span>
+          <span class="cursor-pointer hover:text-text-dim">x {props.loggedReps}</span>
+          <Show when={isAmrap()}>
+            <span class="text-xs tracking-widest">AMRAP</span>
+          </Show>
+          <span class="text-accent text-xs tracking-widest">done</span>
+          <Show when={props.loggedReps != null && props.loggedReps > 0}>
+            <span class="text-faint text-xs font-mono ml-auto">
+              {estimated1RM(props.loggedWeight ?? props.set.weight, props.loggedReps!).toFixed(0)}lb e1RM
+            </span>
+          </Show>
+          <Show when={!!props.onDelete}>
+            <InlineConfirm
+              label="undo"
+              confirmText="undo set?"
+              onConfirm={() => props.onDelete!()}
+              class="ml-auto"
+              stopPropagation
+            />
+          </Show>
+        </div>
+      </Match>
+    </Switch>
   )
 }
