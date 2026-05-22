@@ -27,12 +27,12 @@ describe('detectAmrapPRs', () => {
     expect(result.e1RmPr).toBe(false)
   })
 
-  it('returns no PR when prior sessions exist but no prior AMRAP sets', async () => {
+  it('returns e1RmPr when prior sessions exist but no prior AMRAP sets (first-ever AMRAP)', async () => {
     const sid = await addSession(1)
     await db.sets.add({ sessionId: sid, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
     const result = await detectAmrapPRs(db, 1, 200, 5)
     expect(result.repPr).toBe(false)
-    expect(result.e1RmPr).toBe(false)
+    expect(result.e1RmPr).toBe(true)
   })
 
   it('detects rep PR — more reps at same weight', async () => {
@@ -75,13 +75,13 @@ describe('detectAmrapPRs', () => {
     expect(result.e1RmPr).toBe(false)
   })
 
-  it('excludes the just-saved set when excludeSetId is given', async () => {
+  it('excludes the just-saved set when excludeSetId is given — first-ever AMRAP yields e1RmPr', async () => {
     const sid = await addSession(1)
     const savedId = await addAmrap(sid, 200, 5)
-    // Now detect with the same value but exclude the just-saved row.
+    // Excluding the only AMRAP means no prior data → treated as first-ever PR.
     const result = await detectAmrapPRs(db, 1, 200, 5, savedId)
     expect(result.repPr).toBe(false)
-    expect(result.e1RmPr).toBe(false)
+    expect(result.e1RmPr).toBe(true)
   })
 
   it('reports prevBestReps when prior sets exist at the exact weight', async () => {
