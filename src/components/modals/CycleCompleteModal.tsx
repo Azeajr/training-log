@@ -1,7 +1,7 @@
 import { Show, For } from 'solid-js'
 
 export interface CycleCompleteData {
-  newTms: Array<{ liftName: string; weight: number }>
+  newTms: Array<{ liftName: string; oldWeight: number; weight: number }>
 }
 
 interface Props {
@@ -20,10 +20,10 @@ export default function CycleCompleteModal(props: Props) {
             <div class="text-muted text-xs mb-4">New training maxes:</div>
             <div class="mb-6 space-y-2">
               <For each={data().newTms}>
-                {({ liftName, weight }) => (
+                {({ liftName, oldWeight, weight }) => (
                   <div class="flex justify-between text-sm">
                     <span class="text-text uppercase tracking-widest">{liftName}</span>
-                    <span class="text-accent">{weight} lbs</span>
+                    <span class="text-muted">{oldWeight} → <span class="text-accent">{weight} lbs</span></span>
                   </div>
                 )}
               </For>
