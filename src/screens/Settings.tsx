@@ -53,7 +53,7 @@ export default function Settings() {
     setLiftAccessories(await db.liftAccessories.toArray())
     const allAtms = await db.accessoryTrainingMaxes.toArray()
     const increments: Record<number, { tmId: number; incrementLb: number }> = {}
-    for (const atm of allAtms.sort((a, b) => b.setAt.getTime() - a.setAt.getTime())) {
+    for (const atm of [...allAtms].sort((a, b) => b.setAt.getTime() - a.setAt.getTime())) {
       if (!(atm.exerciseId in increments)) {
         increments[atm.exerciseId] = { tmId: atm.id!, incrementLb: atm.incrementLb }
       }

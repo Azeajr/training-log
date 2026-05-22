@@ -22,10 +22,9 @@ src/
 ├── components/
 │   ├── layout/                   # BottomNav, Toast, Rule
 │   ├── modals/                   # ConfirmationDialog (wired to use-confirmation), CycleCompleteModal
-│   ├── forms/                    # Stepper, DurationInput, PlateDisplay
+│   ├── forms/                    # Stepper, DurationInput, PlateDisplay, ExerciseEditor
 │   ├── ui/                       # InlineConfirm
-│   └── workout/                  # RestTimer, SetRow, AccessoryLog, AccessoryPicker,
-│                                 #   AmrapTargets, SessionPreview
+│   └── workout/                  # RestTimer, SetRow, AccessoryLog, AccessoryPicker, AmrapTargets
 │
 ├── store/                        # Solid stores — global reactive state, NOT Zustand
 │   ├── workout-store.ts          # active session, logged sets, rest timer, accessories, notes;
@@ -36,20 +35,24 @@ src/
 │
 ├── db/
 │   ├── index.ts                  # PRIMARY runtime DB — wraps SQLiteTable per table, exports `db`
-│   ├── sqlite-client.ts          # Worker RPC client + Dexie-shaped query builder
-│   │                             #   (WhereClause / WhereQuery / OrderByQuery / FilterQuery)
-│   │                             #   + toSqlRow/fromSqlRow date/bool/json serialization
-│   ├── sqlite.worker.ts          # @sqlite.org/sqlite-wasm worker — OPFS SAH pool, falls back
-│   │                             #   to in-memory; embeds CREATE TABLE schema + indexes
-│   ├── db.ts                     # Dexie schema — TEST-ONLY (vite.config aliases db/index → db.ts
-│   │                             #   under Vitest). Keep table set/version in sync with sqlite.worker.
+│   │                             #   (the `TrainingDB` instance) and `dbReady`
+│   ├── schema.ts                 # `SCHEMA` (CREATE TABLE), `ADDITIVE_MIGRATIONS`, `ALL_TABLES`
+│   │                             #   — single source of truth for both prod and test clients
+│   ├── sqlite-client.ts          # PROD client: Web Worker RPC, OPFS SAH pool, 10s per-request
+│   │                             #   timeout, reentrant transactions
+│   ├── sqlite-test-client.ts     # TEST client: in-process @sqlite.org/sqlite-wasm (no Worker,
+│   │                             #   no OPFS). vite alias `/sqlite-client$/` → this file under vitest.
+│   ├── sqlite-table.ts           # query layer: SQLiteTable<T> + chainable WhereClause / WhereQuery /
+│   │                             #   OrderByQuery / CollectionQuery / FilterQuery. Handles
+│   │                             #   toSqlRow/fromSqlRow date/bool/json serialization.
+│   ├── sqlite.worker.ts          # Web Worker — imports SCHEMA from db/schema.ts
 │   └── seed.ts                   # idempotent: lifts, exercises, lift-accessories, default settings
-│                                 #   (single in-flight promise via _seed cache)
+│                                 #   (single in-flight promise via _seed cache, cleared on failure)
 │
 ├── lib/                          # pure business logic — takes a TrainingDB or plain inputs
 │   ├── calc.ts                   # 5/3/1 math: main %s, warmups, jokers, FSL/SSL/BBB/BBS,
 │   │                             #   AMRAP targets, plate math, formatDuration
-│   ├── cycle.ts                  # getNextSession, advanceCycleIfComplete,
+│   ├── cycle.ts                  # getNextSessionAdvancingIfDone, advanceCycleIfComplete,
 │   │                             #   applyTmProgression, applyAccessoryTmProgression, deloadTms,
 │   │                             #   getAmrapTargets
 │   ├── training-max.ts           # getCurrentTm, setTm, getAllCurrentTms
@@ -57,8 +60,9 @@ src/
 │   ├── cleanup.ts                # pure buildCleanupPlan: orphan la/atm/sets + exercises-to-archive
 │   ├── export-import.ts          # JSON export+import (destructive replace), CSV export,
 │   │                             #   pending-export retry via localStorage
-│   └── types.ts                  # TableLike<T> + TrainingDB interface — the shared contract
-│                                 #   that both db/index.ts (SQLite) and db/db.ts (Dexie) satisfy
+│   ├── format.ts                 # formatDateShort/Long/Iso
+│   └── types.ts                  # `type TrainingDB = typeof db` — single source of truth
+│                                 #   (post-Dexie removal there is only one backend)
 │
 ├── hooks/
 │   └── use-confirmation.ts       # createConfirmation() API + ConfirmationContext + useConfirmation hook
@@ -76,13 +80,14 @@ src/
 ```
 public/
 ├── icon-192.png / icon-512.png   # PWA icons
+├── demo-seed.json                # static demo dataset; user imports via Settings → IMPORT JSON
 └── ...                           # static assets
 
 tests/e2e/                        # Playwright specs
 scripts/                          # debug-browser.js, migrate-history.py
 ```
 
-## SQLite Tables (src/db/sqlite.worker.ts)
+## SQLite Tables (src/db/schema.ts)
 
 | Table | Purpose | Notes |
 |-------|---------|-------|
@@ -100,21 +105,25 @@ scripts/                          # debug-browser.js, migrate-history.py
 Indexes: `trainingMaxes.liftId`, `sessions.cycleId`, `sessions.liftId`, `sets.sessionId`,
 `accessorySets.sessionId`, `accessoryTrainingMaxes.exerciseId`.
 
-Schema lives inline in `sqlite.worker.ts` as `SCHEMA` (CREATE TABLE IF NOT EXISTS …). Additive
-migrations done via `ALTER TABLE … ADD COLUMN` after the create block (e.g. `supplementalTemplate`).
+Schema and additive migrations both live in `src/db/schema.ts`. Both the production worker
+(`sqlite.worker.ts`) and the in-process test client (`sqlite-test-client.ts`) import from there,
+so there is exactly one place to edit when adding a column or table.
 
 ## Key Patterns
 
 - **Framework**: Solid.js 1 + `@solidjs/router` 0.16, Tailwind 4, Vite 8. No React. No Zustand.
 - **State**: Solid `createStore` for app state (`workout-store`, `settings-store`), `createSignal`
   for toast and confirmation. Workout state is persisted to `localStorage` via a `createEffect`
-  inside `persistWorkoutToStorage()` (called from `main.tsx` after render).
-- **Persistence**: SQLite WASM in a dedicated worker (`db/sqlite-client.ts` ↔ `db/sqlite.worker.ts`).
-  Storage backend is OPFS SAH pool when available, in-memory fallback otherwise (`ready` resolves
-  to `{ persistent: boolean }`).
-- **Test backend**: Vitest aliases `db/index` → `db/db.ts` (Dexie + fake-indexeddb). Business logic
-  in `lib/` depends only on the `TrainingDB` interface in `lib/types.ts`, so the same code runs
-  against either backend. **Both backends must keep the same table set and column shape.**
+  inside `setupWorkoutPersistence()` (called from `main.tsx` after render).
+- **Persistence (prod)**: SQLite WASM in a dedicated worker (`db/sqlite-client.ts` ↔ `db/sqlite.worker.ts`).
+  Storage backend is OPFS SAH pool when available, in-memory fallback otherwise (`dbReady` resolves
+  to `{ persistent: boolean }`). The client wraps each RPC in a 10s timeout (init exempted) and
+  rejects in-flight promises on `terminate()`.
+- **Persistence (test)**: Vitest aliases `/sqlite-client$/` → `db/sqlite-test-client.ts`. The test
+  client uses the same `@sqlite.org/sqlite-wasm` package but runs in-process (no Worker, no OPFS).
+  `SQLiteTable<T>` and the query layer in `sqlite-table.ts` are shared verbatim between prod and
+  test — only the underlying RPC target changes. Tests reset state via `__resetForTest()` from the
+  test client.
 - **Routing**: `@solidjs/router` — routes wired in `App.tsx`; screens are `lazy()` imports inside a
   `<Suspense>` boundary. AppShell redirects to `/setup` when `trainingMaxes` is empty.
 - **Theming**: `THEMES` map in `settings-store.ts` writes CSS variables on `<html>`; Tailwind reads
@@ -136,7 +145,7 @@ migrations done via `ALTER TABLE … ADD COLUMN` after the create block (e.g. `s
 2. `seedDatabase()` — idempotent seed of lifts / exercises / lift-accessories / default settings
 3. `loadSettings()` — read single settings row into the Solid store
 4. `applyTheme(settings.theme)` — write CSS variables
-5. `render(() => { persistWorkoutToStorage(); return <App /> }, root)` — first reactive read inside
+5. `render(() => { setupWorkoutPersistence(); return <App /> }, root)` — first reactive read inside
    the renderer sets up the localStorage effect
 
 If TM count is zero on first mount, AppShell navigates to `/setup`.

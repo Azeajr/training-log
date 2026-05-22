@@ -29,6 +29,32 @@ Targeted maintainability fixes flagged by deep code review.
 - **`addExerciseToLift` trusted caller-passed `currentCount`** — parameter dropped; the function now computes `max(order)+1` from existing rows scoped to the lift.
 - **`SessionPreview` single-use wrapper** — inlined into `Today.tsx` and the file deleted.
 
+### Second Senior-Review Pass — Post-Dexie Cleanup (2026-05-21)
+
+Follow-up review after the Dexie removal landed. Two real bugs, one robustness fix, and the
+documentation that was lying about deleted code.
+
+- **`Workout.handleLog` cascade not reverted on DB failure** — when the user adjusted the
+  weight on a main set or supplemental and `db.sets.add()` then threw, `deleteLastSet()` would
+  roll back the logged set but the cascaded weight changes on `allSets` stayed. Subsequent
+  supplemental sets would render and save with the wrong weight. Now snapshots `allSets`
+  before the cascade and restores it inside the catch.
+- **`SqliteClient.terminate()` leaked pending promises** — `pagehide` fires `worker.terminate()`,
+  but any in-flight RPC promises in `this.pending` never settled. Added explicit rejection of
+  every entry with `Error('SQLite worker terminated')` before clearing the map.
+- **Mutating `.sort()` on db arrays** — `AccessoryPicker.load` and `Settings.load` both wrote
+  `arr.sort(...)` on the fresh array returned by `db.*.toArray()`. Harmless today because the
+  arrays aren't read afterwards, but reads as if the mutation matters. Both call sites now use
+  `[...arr].sort(...)`.
+- **`.claude/ARCHITECTURE_MAP.md`** described a directory tree that no longer exists: `db/db.ts`,
+  `TableLike<T>`, the `db/index → db/db.ts` test alias, a `persistWorkoutToStorage` function name
+  that was renamed, and schema "inline in worker". Rewritten to match the post-Dexie reality
+  (single `db/schema.ts`, `/sqlite-client$/ → sqlite-test-client` alias,
+  `setupWorkoutPersistence`, etc.).
+- **`.claude/COMMON_MISTAKES.md`** mistake #1 was about Dexie-vs-SQLite dual-backend drift (gone).
+  Mistake #5 said `VITE_DEMO` was a dead declaration that should be removed — already removed.
+  Both rewritten around current state.
+
 ### Test Infrastructure — Coverage + Mutation
 
 414 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.

@@ -4,15 +4,18 @@
 
 ---
 
-### 1. Schema change applied to only one DB backend
+### 1. Schema change applied to only one place
 
-**Symptom**: Tests pass against Dexie but the column is missing in production SQLite (or vice
-versa); silent NULLs or "no such column" errors at runtime only.
-**Check**: `src/db/sqlite.worker.ts` `SCHEMA` block + `ALTER TABLE` calls, AND `src/db/db.ts`
-Dexie schema. Vitest aliases `db/index` → `db/db.ts`, so tests never exercise the SQLite worker.
-**Fix**: Update both files together. SQLite needs both a `CREATE TABLE` entry (for fresh installs)
-AND an `ALTER TABLE … ADD COLUMN` (for already-deployed DBs). Dexie is schemaless for plain fields
-but bump the Dexie version if the field is indexed. Mirror the column in `src/types/domain.ts`.
+**Symptom**: New column missing at runtime; "no such column" errors only on already-deployed DBs;
+or tests pass against in-memory but prod (OPFS-persisted) DBs error.
+**Check**: `src/db/schema.ts` — `SCHEMA` (used on fresh installs), `ADDITIVE_MIGRATIONS`
+(applied after `CREATE TABLE IF NOT EXISTS` for already-deployed DBs), and `ALL_TABLES`
+(used by `__resetForTest`). Both `src/db/sqlite.worker.ts` (prod) and
+`src/db/sqlite-test-client.ts` (vitest) import from here.
+**Fix**: Add the column to `SCHEMA` AND push a matching `ALTER TABLE … ADD COLUMN` into
+`ADDITIVE_MIGRATIONS`. Update `ALL_TABLES` if introducing a brand-new table. Mirror the
+column in `src/types/domain.ts`. Wire any non-trivial serialization (dates / booleans /
+JSON) into the matching `SQLiteTable` instance in `src/db/index.ts`.
 
 ---
 
@@ -42,7 +45,7 @@ helper; everywhere else look up by name.
 
 **Symptom**: Workout screen shows ghost session or wrong `currentSetIndex` after reload.
 **Check**: `src/store/workout-store.ts` — `loadFromStorage()` rehydrates from
-`localStorage['workout-store']` at module init, and `persistWorkoutToStorage()` registers a
+`localStorage['workout-store']` at module init, and `setupWorkoutPersistence()` registers a
 `createEffect` that writes back on every change. Persisted shape is gated by
 `STORAGE_VERSION` — mismatched version returns `{}` instead of throwing.
 **Fix**: Call `clearSession()` explicitly on session complete or abandon. Bump `STORAGE_VERSION`
@@ -50,14 +53,14 @@ when changing the persisted shape. Don't assume the store resets on page load.
 
 ---
 
-### 5. No automatic demo mode — `VITE_DEMO` is dead
+### 5. Demo data is shipped as a static asset, not auto-seeded
 
-**Symptom**: Setting `VITE_DEMO=true` does nothing; demo data doesn't appear on a fresh deploy.
-**Check**: `src/vite-env.d.ts` declares `VITE_DEMO` but no source file reads `import.meta.env.VITE_DEMO`.
-`public/demo-seed.json` is shipped as a static asset only.
-**Fix**: To populate demo data, import `public/demo-seed.json` manually via Settings → IMPORT JSON
-on a fresh DB. If you need automatic demo-mode seeding, you'll have to wire it up in `main.tsx`
-between `dbReady` and `seedDatabase`. Remove the dead `VITE_DEMO` declaration once decided.
+**Symptom**: Expecting demo content on a fresh deploy and finding the DB empty.
+**Check**: `public/demo-seed.json` is bundled but no code reads it; the `VITE_DEMO` declaration
+was removed.
+**Fix**: To populate demo data, import `public/demo-seed.json` manually via Settings →
+IMPORT JSON on a fresh DB. If automatic demo-mode seeding is needed, wire it up in `main.tsx`
+between `dbReady` and `seedDatabase` — don't reintroduce the dead env var.
 
 ---
 

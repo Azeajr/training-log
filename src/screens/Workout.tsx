@@ -165,6 +165,7 @@ export default function Workout() {
       reps,
       isAmrap: (s as MainSet).isAmrap ?? false,
     }
+    const prevAllSets = allSets()
     logSet(setData)
     advanceSet()
 
@@ -182,6 +183,7 @@ export default function Workout() {
       editSet(setIndex, { id: dbId })
     } catch (err) {
       deleteLastSet()
+      setAllSets(prevAllSets)
       showToast(`Failed to save set: ${err instanceof Error ? err.message : 'unknown error'}`)
       return
     }
