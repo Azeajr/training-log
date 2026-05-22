@@ -72,7 +72,7 @@ Last open tech-debt item from the roadmap, plus a small DRY win.
 
 414 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
 
-Coverage approach: lib functions tested with `fake-indexeddb`; screens tested end-to-end from DOM event through store to DB render with `@solidjs/testing-library` + jsdom. No mocking of the DB layer.
+Coverage approach: lib functions and screens both run against the real `@sqlite.org/sqlite-wasm` engine via the in-process `sqlite-test-client.ts` (Vite alias `/sqlite-client$/`). Screens are exercised end-to-end from DOM event → SolidJS store → SQLite → rendered output with no DB layer mocked.
 
 ### Editable History
 Route `/history/:sessionId/edit` — edit weight, reps, notes, and accessory exercises on any completed session. Swapping an accessory exercise deletes the old sets and reinserts under the new exercise ID.
@@ -102,7 +102,7 @@ RTL integration tests (`src/screens/Workout.test.tsx`) cover the joker-button fl
 `calcFslSets` was hardcoded to 65% TM regardless of week. FSL now derives its weight from the actual first main set (70% on week 2, 75% on week 3), matching the "First Set Last" definition. Parameterised tests cover all four weeks.
 
 ### Full Integration Test Suite
-`@solidjs/testing-library` + Vitest + `fake-indexeddb` covering every screen and key component: `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`, `AccessoryPicker`, `AmrapTargets`, `RestTimer`, `BottomNav`, `DurationInput`. Every user-visible interaction path exercises the full stack from UI event → SolidJS store → SQLite → rendered output with no DB layer mocked.
+`@solidjs/testing-library` + Vitest + in-process `@sqlite.org/sqlite-wasm` (via `sqlite-test-client.ts`) covering every screen and key component: `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`, `AccessoryPicker`, `AmrapTargets`, `RestTimer`, `BottomNav`, `DurationInput`. Every user-visible interaction path exercises the full stack from UI event → SolidJS store → SQLite → rendered output with no DB layer mocked.
 
 ### Joker Sets
 After logging the AMRAP top set with reps ≥ the week's minimum (≥5/≥3/≥1), a "+ JOKER SET Xlb" button appears. Each joker uses the same rep scheme as the main sets. Button reappears after each successful joker. Disabled on deload week. Joker sets survive reload.
@@ -272,31 +272,50 @@ Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Tra
 
 ## Tech Debt
 
-Findings from the 2026-05-21 code review that are out of scope for a single-PR cleanup. Listed here so future work can target them with a dedicated branch.
+### Open
 
-### ~~Dexie-Shaped Query Builder Reimplemented in SQL~~ ✅ resolved 2026-05-21
+#### Chainable Query Builder over a Single Backend
 
-Dropped the Dexie test backend; tests now run against `@sqlite.org/sqlite-wasm` in-process. `TableLike<T>` and `db/db.ts` deleted; `TrainingDB` is now `typeof db`. The chainable query API in `sqlite-table.ts` is still there but only has one implementation under it.
+`src/db/sqlite-table.ts` still exposes a Dexie-shaped chainable API
+(`WhereClause` → `WhereQuery` → `OrderByQuery` / `CollectionQuery` /
+`FilterQuery`) on top of a single SQL backend. With Dexie gone the wrapper
+classes are pure scaffolding — `FilterQuery` and `CollectionQuery` could
+disappear entirely; `WhereQuery` could collapse into a single `Query<T>`
+builder with accumulated state.
 
-### ~~Set-Section Duplication in Workout.tsx~~ ✅ resolved 2026-05-21
+Why not done yet: every screen and lib module reads from the chain
+(`db.foo.where(...).equals(...).filter(...).toArray()` etc.). A safe rewrite
+needs to keep the public API stable or convert every call site in lockstep,
+and the chain has subtle behaviour (`WhereQuery.filter` defers to in-JS
+filtering after a SQL fetch; `delete()` paths differ depending on whether a
+filter is attached). Out of scope for an incremental commit; do it on a
+dedicated branch with a wide test pass.
 
-`SetSection` component extracted; all 4 For loops replaced. Offset arithmetic centralised in component props.
+Scope when picked up:
+- Decide: collapse implementation, keep call-site syntax; OR replace with
+  thin SQL helpers and rewrite call sites.
+- Make sure the filter-after-fetch semantics are preserved (or explicitly
+  changed with caller updates).
+- Make sure `delete()` with a filter still scopes to the filtered ids.
 
-### ~~Module-Singleton Side Effects in RestTimer~~ ✅ resolved 2026-05-21
+### Resolved 2026-05-21
 
-`audioCtx` + `playTone` + `playCue` extracted to `src/lib/audio-cues.ts`; timer-worker
-singleton extracted to `src/lib/rest-timer-worker.ts`. `RestTimer.tsx` is now pure
-UI + reactive wiring. Module-singleton lifetime is still required (iOS audio unlock
-constraint), but it's now in a clearly-labelled lib module instead of buried in a
-component file.
-
-### ~~`deleteLastSet` Triggers Full `loadData` Reload~~ ✅ resolved 2026-05-21
-
-`handleDeleteSet` now calls `rebuildAllSets()` — recomputes `allSets` from existing signals with no DB round-trips.
-
-### ~~`History.tsx` `localStorage` Read at Signal Init~~ ✅ resolved 2026-05-21
-
-`HISTORY_LIFT_KEY` read moved into `load()`; no longer a hidden side-effect at component construction time.
+- ~~**Dexie-Shaped Query Builder vs SQL backend**~~ — Dexie test backend
+  dropped; tests now run against in-process `@sqlite.org/sqlite-wasm`.
+  `TableLike<T>` and `db/db.ts` deleted; `TrainingDB` is now `typeof db`.
+  (Residual chainable-API simplification tracked separately above.)
+- ~~**`SetSection` duplication in Workout.tsx**~~ — extracted; all four
+  `For` loops use it; offset arithmetic centralised.
+- ~~**Module-singleton side effects in RestTimer**~~ — `audioCtx` /
+  `playTone` / `playCue` extracted to `src/lib/audio-cues.ts`; timer-worker
+  getter extracted to `src/lib/rest-timer-worker.ts`. `RestTimer.tsx` is
+  now pure reactive UI wiring.
+- ~~**`deleteLastSet` triggered a full `loadData` reload**~~ —
+  `handleDeleteSet` now calls `rebuildAllSets()`, which recomputes
+  `allSets` from existing signals with no DB round-trips.
+- ~~**`History.tsx` localStorage read at signal init**~~ —
+  `HISTORY_LIFT_KEY` read moved into `load()`; no longer a hidden
+  side-effect at component construction time.
 
 ---
 
