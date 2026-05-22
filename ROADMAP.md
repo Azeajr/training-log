@@ -2,6 +2,36 @@
 
 ## Done
 
+### Security Hardening Pass (2026-05-22)
+
+Targeted review against the static client-authoritative PWA threat model. XSS = full OPFS DB
+read/write, so CSP and identifier hygiene are the load-bearing defenses; supply chain is the
+realistic active threat.
+
+- **Production CSP** — `<meta http-equiv="Content-Security-Policy">` in `index.html` (Cloudflare
+  Pages was previously unprotected; only the vite preview server set CSP). Mirrored and
+  tightened in `public/_headers` and `vite.config.ts` preview headers: added
+  `object-src 'none'`, `base-uri 'self'`, `form-action 'none'`, plus `Cross-Origin-Opener-Policy:
+  same-origin`. `script-src 'self' 'wasm-unsafe-eval'` keeps SQLite Wasm working;
+  `style-src 'self' 'unsafe-inline'` is the minimum Tailwind needs;
+  `worker-src 'self' blob:` is required for the vite-plugin-pwa service worker.
+- **Import file-size guard** — `importJson` now rejects files over `MAX_IMPORT_BYTES`
+  (50 MB) before `file.text()` runs, and rejects non-object top-level JSON with a
+  friendly error. Closes the OOM-by-large-backup path.
+- **SQL identifier hygiene** — added `assertIdent` (`^[A-Za-z_][A-Za-z0-9_]*$`) to
+  `src/db/sqlite-table.ts`. Applied to `SQLiteTable` constructor, `where()`,
+  `orderBy()`, and the column-key lists in `add` / `put` / `update`. All call sites
+  use literals today; this stops a future caller — or a `bulkAdd` path fed from
+  imported JSON — from interpolating attacker-controlled identifiers into the SQL.
+- **Deploy workflow** — `permissions: contents: read` on the job, `persist-credentials:
+  false` on `actions/checkout`, `npm install --prefer-offline --no-audit --no-fund`
+  followed by `npm audit signatures` so a tampered lockfile is caught before deploy.
+  Still on `npm install` rather than `npm ci` because the documented rolldown
+  optional-cpu lockfile bug blocks `npm ci`.
+
+Tests: `src/db/sqlite-table.test.ts` (new, 6 identifier-guard cases) + 3 new import-guard cases
+in `src/lib/export-import.test.ts`. 439/439 pass.
+
 ### PR Detection + Toast (2026-05-22)
 
 After an AMRAP is logged, `detectAmrapPRs` (in `src/lib/pr.ts`) compares the just-saved set
@@ -403,6 +433,26 @@ breakdowns, equipment changes, or rep-count uncertainty mid-session.
 - Additive schema migration
 - HistoryEdit shows notes inline beside each set; tap to edit
 - Export / CSV picks up the new column automatically
+
+---
+
+## Security
+
+*Threat model: static Cloudflare-Pages PWA, no server, no auth, client-authoritative. Primary
+risk is XSS → OPFS read/write; supply chain is the realistic active threat. CSP shipped in
+`index.html` and `public/_headers`; SQL identifier guard in `src/db/sqlite-table.ts`; import
+size cap in `src/lib/export-import.ts`; deploy workflow least-privilege + `npm audit
+signatures`. See "Security Hardening Pass (2026-05-22)" under Done for details.*
+
+No open items.
+
+### Future considerations
+
+- **Switch deploy from `npm install` → `npm ci`** once the rolldown optional-cpu lockfile bug
+  resolves upstream (tracked in `.github/workflows/deploy.yml`). `npm audit signatures` is the
+  current bridge.
+- **Subresource Integrity / dependency lockdown** — would catch a tampered CDN delivery, but
+  all assets are self-hosted today so impact is low. Revisit if any external `<script>` lands.
 
 ---
 
