@@ -55,6 +55,19 @@ documentation that was lying about deleted code.
   Mistake #5 said `VITE_DEMO` was a dead declaration that should be removed — already removed.
   Both rewritten around current state.
 
+### Third Pass — RestTimer Singletons + Workout DRY (2026-05-21)
+
+Last open tech-debt item from the roadmap, plus a small DRY win.
+
+- **RestTimer module-singletons extracted** — `audioCtx` / `playTone` / `playCue` moved to
+  `src/lib/audio-cues.ts`; the rest-timer-worker getter moved to
+  `src/lib/rest-timer-worker.ts`. `RestTimer.tsx` now only contains reactive UI wiring;
+  iOS audio-unlock semantics preserved (still module-scoped, just in lib modules instead of
+  buried in a component).
+- **`Workout.tsx` DRY** — `loadData` and `rebuildAllSets` shared a 6-line warmup/main/
+  joker/supplemental assembly. Extracted into a single `composeAllSets(tm, week, template)`
+  helper that both call. Roughly 12 lines collapsed to 3.
+
 ### Test Infrastructure — Coverage + Mutation
 
 414 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
@@ -269,9 +282,13 @@ Dropped the Dexie test backend; tests now run against `@sqlite.org/sqlite-wasm` 
 
 `SetSection` component extracted; all 4 For loops replaced. Offset arithmetic centralised in component props.
 
-### Module-Singleton Side Effects in RestTimer (low)
+### ~~Module-Singleton Side Effects in RestTimer~~ ✅ resolved 2026-05-21
 
-`audioCtx` and `timerWorker` in `src/components/workout/RestTimer.tsx` are module-scoped to survive remounts (iOS audio unlock requires a single context per user gesture). Comments document the constraint. Acceptable but worth noting if the timer ever moves into a store or a dedicated hook.
+`audioCtx` + `playTone` + `playCue` extracted to `src/lib/audio-cues.ts`; timer-worker
+singleton extracted to `src/lib/rest-timer-worker.ts`. `RestTimer.tsx` is now pure
+UI + reactive wiring. Module-singleton lifetime is still required (iOS audio unlock
+constraint), but it's now in a clearly-labelled lib module instead of buried in a
+component file.
 
 ### ~~`deleteLastSet` Triggers Full `loadData` Reload~~ ✅ resolved 2026-05-21
 
