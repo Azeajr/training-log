@@ -78,6 +78,18 @@ export default function Workout() {
     void loadData()
   }))
 
+  const composeAllSets = (tm: number, week: 1 | 2 | 3 | 4, template: SupplementalTemplate) => {
+    const main = calcMainSets(tm, week, settings.barWeight)
+    const loggedSets = workout.loggedSets
+    const fslRaw = calcSupplementalSets(template, main, tm, week, settings.barWeight)
+    const fsl = applySupplementalOverride(fslRaw, loggedSets, template)
+    const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
+    const restoredJokers: JokerSet[] = loggedSets
+      .filter(s => s.type === 'joker')
+      .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
+    return { all: [...warmup, ...main, ...restoredJokers, ...fsl], main }
+  }
+
   const loadData = async () => {
     const session = workout.activeSession
     if (!session) return
@@ -88,17 +100,10 @@ export default function Workout() {
     const tm = await getCurrentTm(db, l.id!)
     setTmWeight(tm)
 
-    const main = calcMainSets(tm, session.week, settings.barWeight)
     const template = settings.supplementalTemplate ?? 'fsl+bbb'
     setSupplementalTemplate(template)
-    const loggedSets = workout.loggedSets
-    const fslRaw = calcSupplementalSets(template, main, tm, session.week, settings.barWeight)
-    const fsl = applySupplementalOverride(fslRaw, loggedSets, template)
-    const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
-    const restoredJokers: JokerSet[] = loggedSets
-      .filter(s => s.type === 'joker')
-      .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
-    setAllSets([...warmup, ...main, ...restoredJokers, ...fsl])
+    const { all, main } = composeAllSets(tm, session.week, template)
+    setAllSets(all)
 
     if (session.week !== 4) {
       const amrapSet = main.find(s => s.isAmrap)
@@ -123,16 +128,8 @@ export default function Workout() {
     if (!session) return
     const tm = tmWeight()
     if (!tm) return
-    const main = calcMainSets(tm, session.week, settings.barWeight)
-    const template = supplementalTemplate()
-    const loggedSets = workout.loggedSets
-    const fslRaw = calcSupplementalSets(template, main, tm, session.week, settings.barWeight)
-    const fsl = applySupplementalOverride(fslRaw, loggedSets, template)
-    const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
-    const restoredJokers: JokerSet[] = loggedSets
-      .filter(s => s.type === 'joker')
-      .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
-    setAllSets([...warmup, ...main, ...restoredJokers, ...fsl])
+    const { all } = composeAllSets(tm, session.week, supplementalTemplate())
+    setAllSets(all)
   }
 
   const handleAmrapWeightChange = (weight: number) => {

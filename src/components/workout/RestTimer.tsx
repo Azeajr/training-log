@@ -1,65 +1,8 @@
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js'
 import { workout, stopRest } from '../../store/workout-store'
 import { formatDuration, restStatus, type RestPhase } from '../../lib/calc'
-
-// audioCtx and timerWorker are intentionally module-scoped: AudioContext can only be unlocked by a
-// user gesture, so we keep one instance across mounts. The rest-timer worker is cheap to keep alive.
-let audioCtx: AudioContext | null = null
-
-function getAudioCtx(): AudioContext {
-  if (!audioCtx || audioCtx.state === 'closed') {
-    audioCtx = new AudioContext()
-  }
-  return audioCtx
-}
-
-async function playTone(freq: number, duration: number, startDelay = 0) {
-  try {
-    const ctx = getAudioCtx()
-    if (ctx.state === 'suspended') await ctx.resume()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.type = 'sine'
-    osc.frequency.value = freq
-    const t = ctx.currentTime + startDelay
-    gain.gain.setValueAtTime(0.25, t)
-    gain.gain.exponentialRampToValueAtTime(0.001, t + duration)
-    osc.start(t)
-    osc.stop(t + duration + 0.05)
-  } catch {
-    // audio not available
-  }
-}
-
-function vibrate(pattern: number | number[]) {
-  if ('vibrate' in navigator) navigator.vibrate(pattern)
-}
-
-function playCue(level: 'nudge' | 'warning' | 'critical') {
-  if (level === 'nudge') {
-    playTone(880, 0.15)
-    vibrate(80)
-  } else if (level === 'warning') {
-    playTone(880, 0.15)
-    playTone(880, 0.15, 0.25)
-    vibrate([80, 40, 80])
-  } else {
-    playTone(660, 0.2)
-    playTone(660, 0.2, 0.3)
-    playTone(660, 0.2, 0.6)
-    vibrate([120, 60, 120, 60, 120])
-  }
-}
-
-let timerWorker: Worker | null = null
-function getTimerWorker(): Worker {
-  if (!timerWorker) {
-    timerWorker = new Worker(new URL('../../workers/timer.worker.ts', import.meta.url), { type: 'module' })
-  }
-  return timerWorker
-}
+import { playCue, unlockAudio, ensureAudioCtx } from '../../lib/audio-cues'
+import { getTimerWorker } from '../../lib/rest-timer-worker'
 
 export default function RestTimer() {
   const [elapsed, setElapsed] = createSignal(0)
@@ -82,14 +25,8 @@ export default function RestTimer() {
     }
   }
 
-  // iOS requires AudioContext.resume() inside a direct synchronous touch handler.
-  // Attach here (not module-level) so cleanup happens on unmount.
-  const touchUnlock = () => {
-    if (audioCtx?.state === 'running') return
-    try { void getAudioCtx().resume() } catch { /* ignore */ }
-  }
-  document.addEventListener('touchstart', touchUnlock, { passive: true })
-  onCleanup(() => document.removeEventListener('touchstart', touchUnlock))
+  document.addEventListener('touchstart', unlockAudio, { passive: true })
+  onCleanup(() => document.removeEventListener('touchstart', unlockAudio))
 
   const [isVisible, setIsVisible] = createSignal(!document.hidden)
   const visibilityHandler = () => setIsVisible(!document.hidden)
@@ -108,7 +45,7 @@ export default function RestTimer() {
     worker.onmessage = (e: MessageEvent<{ elapsed: number }>) => setElapsed(e.data.elapsed)
     worker.postMessage({ type: 'start', restStartedAt })
     void requestWakeLock()
-    try { getAudioCtx() } catch { /* ignore if browser blocks before gesture */ }
+    ensureAudioCtx()
     onCleanup(() => {
       worker.postMessage({ type: 'stop' })
       void releaseWakeLock()
