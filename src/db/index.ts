@@ -1,4 +1,5 @@
-import { SQLiteTable, dbReady, sqliteClient } from './sqlite-client'
+import { SQLiteTable } from './sqlite-table'
+import { dbReady, sqliteClient } from './sqlite-client'
 import type {
   Lift,
   TrainingMax,
@@ -12,7 +13,7 @@ import type {
   Settings,
 } from '../types/domain'
 
-export type { SQLiteTable } from './sqlite-client'
+export type { SQLiteTable } from './sqlite-table'
 
 class TrainingSQLiteDB {
   lifts = new SQLiteTable<Lift>('lifts')

@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm'
+import { SCHEMA, ADDITIVE_MIGRATIONS } from './schema'
 
 type InMsg =
   | { id: number; type: 'init' }
@@ -12,91 +13,11 @@ type InMsg =
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any = null
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS lifts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  "order" INTEGER NOT NULL,
-  progressionIncrement REAL NOT NULL,
-  baseWeight REAL NOT NULL,
-  liftType TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS trainingMaxes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  liftId INTEGER NOT NULL,
-  weight REAL NOT NULL,
-  setAt TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS cycles (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  number INTEGER NOT NULL,
-  startDate TEXT NOT NULL,
-  endDate TEXT
-);
-CREATE TABLE IF NOT EXISTS sessions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  cycleId INTEGER NOT NULL,
-  liftId INTEGER NOT NULL,
-  week INTEGER NOT NULL,
-  date TEXT NOT NULL,
-  notes TEXT,
-  status TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS sets (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sessionId INTEGER NOT NULL,
-  type TEXT NOT NULL,
-  setNumber INTEGER NOT NULL,
-  weight REAL NOT NULL,
-  reps INTEGER NOT NULL,
-  isAmrap INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS exercises (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  type TEXT NOT NULL,
-  archived INTEGER
-);
-CREATE TABLE IF NOT EXISTS liftAccessories (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  liftId INTEGER NOT NULL,
-  exerciseId INTEGER NOT NULL,
-  "order" INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS accessoryTrainingMaxes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  exerciseId INTEGER NOT NULL,
-  weight REAL NOT NULL,
-  incrementLb REAL NOT NULL,
-  setAt TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS accessorySets (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sessionId INTEGER NOT NULL,
-  exerciseId INTEGER NOT NULL,
-  setNumber INTEGER NOT NULL,
-  weight REAL,
-  reps INTEGER,
-  duration REAL,
-  distance REAL
-);
-CREATE TABLE IF NOT EXISTS settings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  restTimer1 INTEGER NOT NULL,
-  restTimer2 INTEGER NOT NULL,
-  restTimerFail INTEGER NOT NULL,
-  theme TEXT,
-  barWeight REAL,
-  plates TEXT,
-  supplementalTemplate TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_trainingMaxes_liftId ON trainingMaxes(liftId);
-CREATE INDEX IF NOT EXISTS idx_sessions_cycleId ON sessions(cycleId);
-CREATE INDEX IF NOT EXISTS idx_sessions_liftId ON sessions(liftId);
-CREATE INDEX IF NOT EXISTS idx_sets_sessionId ON sets(sessionId);
-CREATE INDEX IF NOT EXISTS idx_accessorySets_sessionId ON accessorySets(sessionId);
-CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTrainingMaxes(exerciseId);
-`
+function applyAdditiveMigrations() {
+  for (const sql of ADDITIVE_MIGRATIONS) {
+    try { db.exec(sql) } catch { /* column already exists */ }
+  }
+}
 
 async function init(): Promise<{ persistent: boolean }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,7 +30,7 @@ async function init(): Promise<{ persistent: boolean }> {
         const poolUtil = await (sqlite3 as any).installOpfsSAHPoolVfs({})
         db = new poolUtil.OpfsSAHPoolDb('/training-log.db')
         db.exec(SCHEMA)
-        if (!db.selectValue("SELECT COUNT(*) FROM pragma_table_info('settings') WHERE name='supplementalTemplate'")) db.exec("ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT")
+        applyAdditiveMigrations()
         return { persistent: true }
       } catch {
         if (attempt < 9) await new Promise(r => setTimeout(r, 150))
@@ -119,7 +40,7 @@ async function init(): Promise<{ persistent: boolean }> {
   }
   db = new sqlite3.oo1.DB()
   db.exec(SCHEMA)
-  try { db.exec("ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT") } catch { /* column exists */ }
+  applyAdditiveMigrations()
   return { persistent: false }
 }
 
