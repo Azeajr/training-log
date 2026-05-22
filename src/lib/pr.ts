@@ -17,7 +17,7 @@ export interface AmrapPrResult {
 //   - repPr: strictly more reps than any prior AMRAP at this exact weight
 //   - e1RmPr: strictly higher Epley estimated 1RM than any prior AMRAP
 //
-// First-ever AMRAP for a lift returns no PR (baseline, not a celebration).
+// First-ever AMRAP for a lift returns e1RmPr=true (sets the baseline record).
 export async function detectAmrapPRs(
   db: TrainingDB,
   liftId: number,
@@ -41,7 +41,7 @@ export async function detectAmrapPRs(
     amrapSets = amrapSets.filter(s => s.id !== excludeSetId)
   }
   if (amrapSets.length === 0) {
-    return { repPr: false, e1RmPr: false, newE1Rm }
+    return { repPr: false, e1RmPr: true, newE1Rm }
   }
 
   const sameWeight = amrapSets.filter(s => s.weight === weight)
