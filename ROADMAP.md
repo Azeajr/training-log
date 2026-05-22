@@ -2,6 +2,33 @@
 
 ## Done
 
+### Security Hardening Pass — Round 2 (2026-05-22)
+
+Second pass on the same threat model after CSP / SQL identifier / import size / CI hardening
+landed. Tightening the surrounding paths rather than expanding scope.
+
+- **`importFromRawData` column allowlist for every table** — the existing `pickCols` pattern
+  was only applied to `lifts`. Generalized so every table reads only known column names from
+  the imported payload. Pairs with the lower-level `assertIdent` guard: bad keys never reach
+  the `INSERT` column list, and legitimate-but-unknown-column legacy exports import cleanly
+  instead of throwing at the SQL layer.
+- **Workout store hydration allowlist** — `loadFromStorage` rejects non-object persisted
+  state and copies only keys in the explicit `PERSISTED_KEYS` set into the reactive store.
+  Defense in depth against a corrupted or tampered `localStorage` entry grafting extra fields
+  onto the Solid store after a future XSS or migration bug.
+- **`HistoryEdit` URL slug validation** — `:sessionId` coerced through
+  `Number.isInteger(n) && n > 0`; bad slugs now redirect to `/history` instead of binding
+  `NaN` into the SQL parameter (SQLite would silently match nothing, masking the broken
+  link).
+- **PWA cache tightening** — `cleanupOutdatedCaches: true` so an old (potentially tampered)
+  precached bundle gets evicted on SW update; `clientsClaim: false` / `skipWaiting: false`
+  keep the existing `registerType: 'prompt'` user-controlled refresh model; the `.wasm`
+  CacheFirst route capped at `maxEntries: 4` to bound cache growth.
+
+Tests: 2 new hydration-allowlist cases in `src/store/workout-store.test.ts`; the import
+malicious-column test now asserts friendly-strip behavior (strict throw stays covered in
+`src/db/sqlite-table.test.ts`). 441/441 pass.
+
 ### Security Hardening Pass (2026-05-22)
 
 Targeted review against the static client-authoritative PWA threat model. XSS = full OPFS DB
