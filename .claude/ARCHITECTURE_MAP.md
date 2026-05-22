@@ -42,9 +42,9 @@ src/
 │   │                             #   timeout, reentrant transactions
 │   ├── sqlite-test-client.ts     # TEST client: in-process @sqlite.org/sqlite-wasm (no Worker,
 │   │                             #   no OPFS). vite alias `/sqlite-client$/` → this file under vitest.
-│   ├── sqlite-table.ts           # query layer: SQLiteTable<T> + chainable WhereClause / WhereQuery /
-│   │                             #   OrderByQuery / CollectionQuery / FilterQuery. Handles
-│   │                             #   toSqlRow/fromSqlRow date/bool/json serialization.
+│   ├── sqlite-table.ts           # query layer: SQLiteTable<T> + chainable WhereClause → Query<T>
+│   │                             #   builder. Handles toSqlRow/fromSqlRow date/bool/json
+│   │                             #   serialization.
 │   ├── sqlite.worker.ts          # Web Worker — imports SCHEMA from db/schema.ts
 │   └── seed.ts                   # idempotent: lifts, exercises, lift-accessories, default settings
 │                                 #   (single in-flight promise via _seed cache, cleared on failure)
