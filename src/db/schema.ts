@@ -1,0 +1,94 @@
+export const SCHEMA = `
+CREATE TABLE IF NOT EXISTS lifts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  "order" INTEGER NOT NULL,
+  progressionIncrement REAL NOT NULL,
+  baseWeight REAL NOT NULL,
+  liftType TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trainingMaxes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  liftId INTEGER NOT NULL,
+  weight REAL NOT NULL,
+  setAt TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cycles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  number INTEGER NOT NULL,
+  startDate TEXT NOT NULL,
+  endDate TEXT
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cycleId INTEGER NOT NULL,
+  liftId INTEGER NOT NULL,
+  week INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  notes TEXT,
+  status TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sessionId INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  setNumber INTEGER NOT NULL,
+  weight REAL NOT NULL,
+  reps INTEGER NOT NULL,
+  isAmrap INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS exercises (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  archived INTEGER
+);
+CREATE TABLE IF NOT EXISTS liftAccessories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  liftId INTEGER NOT NULL,
+  exerciseId INTEGER NOT NULL,
+  "order" INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS accessoryTrainingMaxes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exerciseId INTEGER NOT NULL,
+  weight REAL NOT NULL,
+  incrementLb REAL NOT NULL,
+  setAt TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS accessorySets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sessionId INTEGER NOT NULL,
+  exerciseId INTEGER NOT NULL,
+  setNumber INTEGER NOT NULL,
+  weight REAL,
+  reps INTEGER,
+  duration REAL,
+  distance REAL
+);
+CREATE TABLE IF NOT EXISTS settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  restTimer1 INTEGER NOT NULL,
+  restTimer2 INTEGER NOT NULL,
+  restTimerFail INTEGER NOT NULL,
+  theme TEXT,
+  barWeight REAL,
+  plates TEXT,
+  supplementalTemplate TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_trainingMaxes_liftId ON trainingMaxes(liftId);
+CREATE INDEX IF NOT EXISTS idx_sessions_cycleId ON sessions(cycleId);
+CREATE INDEX IF NOT EXISTS idx_sessions_liftId ON sessions(liftId);
+CREATE INDEX IF NOT EXISTS idx_sets_sessionId ON sets(sessionId);
+CREATE INDEX IF NOT EXISTS idx_accessorySets_sessionId ON accessorySets(sessionId);
+CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTrainingMaxes(exerciseId);
+`
+
+export const ADDITIVE_MIGRATIONS = [
+  `ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT`,
+] as const
+
+export const ALL_TABLES = [
+  'lifts', 'trainingMaxes', 'cycles', 'sessions', 'sets',
+  'exercises', 'liftAccessories', 'accessoryTrainingMaxes', 'accessorySets', 'settings',
+] as const

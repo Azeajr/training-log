@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import 'fake-indexeddb/auto'
 import { beforeEach, afterEach, describe, it, expect } from 'vitest'
 import { db } from '../db/index'
 import { applyTheme, loadSettings, updateSettings, settings, THEMES, DEFAULT_BAR_WEIGHT, DEFAULT_PLATES, SETTINGS_DEFAULTS } from './settings-store'

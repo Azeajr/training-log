@@ -1,23 +1,23 @@
 // @vitest-environment jsdom
-import 'fake-indexeddb/auto'
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
-import { TrainingDB } from '../db/db'
+import { db } from '../db'
+import { __resetForTest } from '../db/sqlite-client'
 import { retryPendingExport, exportJson, importFromRawData, exportCsv, importJson } from './export-import'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let db: any
 let capturedBlob: Blob | null = null
 
 const PENDING_KEY = 'pending-export'
 
 beforeEach(async () => {
-  db = new TrainingDB()
+  await __resetForTest()
   capturedBlob = null
   localStorage.clear()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(globalThis as any).URL.createObjectURL = vi.fn((blob: Blob) => {
     capturedBlob = blob
     return 'blob:test'
   })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(globalThis as any).URL.revokeObjectURL = vi.fn()
   vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
     if (tag === 'a') {
@@ -28,7 +28,6 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await db.delete()
   vi.restoreAllMocks()
   localStorage.clear()
 })

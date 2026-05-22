@@ -2,10 +2,6 @@ import { defineConfig } from 'vitest/config'
 import solid from 'vite-plugin-solid'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { fileURLToPath } from 'url'
-import path from 'path'
-
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig(() => {
   return {
@@ -15,8 +11,12 @@ export default defineConfig(() => {
     setupFiles: ['./src/test-setup.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', 'src-solid/**', '.stryker-tmp/**'],
     alias: [
-      // In tests, redirect db/index (SQLite) to Dexie db so existing tests keep working
-      { find: /.*\/db\/index$/, replacement: path.resolve(__dirname, 'src/db/db.ts') },
+      // In tests, swap the worker-backed SQLite client for an in-process one
+      // (sqlite-wasm, no Worker, no OPFS). lib/* and screens/* keep importing
+      // from `db/index` and the same SQLiteTable layer — only the underlying
+      // RPC target changes. The pattern matches both `./sqlite-client` (from
+      // within db/) and `../db/sqlite-client` (from tests).
+      { find: /\/sqlite-client$/, replacement: '/sqlite-test-client' },
     ],
     coverage: {
       provider: 'v8' as const,

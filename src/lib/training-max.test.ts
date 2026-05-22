@@ -1,14 +1,10 @@
 // @vitest-environment jsdom
-import 'fake-indexeddb/auto'
-import { beforeEach, afterEach, describe, it, expect } from 'vitest'
-import { TrainingDB } from '../db/db'
+import { beforeEach, describe, it, expect } from 'vitest'
+import { db } from '../db'
+import { __resetForTest } from '../db/sqlite-client'
 import { getCurrentTm, setTm, getAllCurrentTms } from './training-max'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let db: any
-
-beforeEach(() => { db = new TrainingDB() })
-afterEach(async () => { await db.delete() })
+beforeEach(async () => { await __resetForTest() })
 
 async function seedLift(name: 'OHP' | 'Bench' | 'Squat' | 'Deadlift' = 'OHP') {
   return db.lifts.add({ name, order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })

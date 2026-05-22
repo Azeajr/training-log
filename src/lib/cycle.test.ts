@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import 'fake-indexeddb/auto'
-import { beforeEach, afterEach, describe, it, expect } from 'vitest'
-import { TrainingDB, type Lift, type Cycle } from '../db/db'
+import { beforeEach, describe, it, expect } from 'vitest'
+import { db } from '../db'
+import { __resetForTest } from '../db/sqlite-client'
+import type { Lift, Cycle } from '../types/domain'
 import {
   advanceCycleIfComplete,
   applyTmProgression,
@@ -11,11 +12,7 @@ import {
   getAmrapTargets,
 } from './cycle'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let db: any
-
-beforeEach(() => { db = new TrainingDB() })
-afterEach(async () => { await db.delete() })
+beforeEach(async () => { await __resetForTest() })
 
 const LIFT_DEFS = [
   { name: 'OHP' as const,      order: 1, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' as const },
