@@ -353,15 +353,17 @@ export default function Settings() {
               )}</For>
             </div>
           </div>
-          <div class="flex items-center gap-4 py-1">
-            <span class="w-20" />
-            <button
-              onClick={() => void handleSkipDeload()}
-              class="border border-border text-muted text-xs tracking-widest px-3 py-1.5 hover:border-danger hover:text-danger"
-            >
-              SKIP DELOAD
-            </button>
-          </div>
+          <Show when={currentCycleWeek() === 4}>
+            <div class="flex items-center gap-4 py-1">
+              <span class="w-20" />
+              <button
+                onClick={() => void handleSkipDeload()}
+                class="border border-border text-muted text-xs tracking-widest px-3 py-1.5 hover:border-danger hover:text-danger"
+              >
+                SKIP DELOAD
+              </button>
+            </div>
+          </Show>
         </div>
       </Show>
 
