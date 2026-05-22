@@ -230,6 +230,16 @@ export default function Workout() {
     })
   }
 
+  const handleAddSupplementalSet = () => {
+    const fsl = fslSets()
+    const last = fsl[fsl.length - 1]
+    if (!last) return
+    setAllSets(prev => [
+      ...prev,
+      { type: supplementalTemplate() as Exclude<SupplementalTemplate, 'none'>, setNumber: fsl.length + 1, weight: last.weight, reps: last.reps },
+    ])
+  }
+
   const finishSession = async () => {
     const { advanced, newTms } = await advanceCycleIfComplete(db)
     if (advanced) setCycleCompleteData({ newTms })
@@ -398,13 +408,7 @@ export default function Workout() {
               />
               <Show when={workout.loggedSets.filter(s => isSupplementalType(s.type)).length >= fslSets().length}>
                 <button
-                  onClick={() => {
-                    const last = fslSets()[fslSets().length - 1]
-                    setAllSets(prev => [
-                      ...prev,
-                      { type: supplementalTemplate() as Exclude<SupplementalTemplate, 'none'>, setNumber: fslSets().length + 1, weight: last.weight, reps: last.reps },
-                    ])
-                  }}
+                  onClick={handleAddSupplementalSet}
                   class="w-full border border-border text-muted py-2 font-mono text-xs tracking-widest hover:border-accent hover:text-accent mt-2"
                 >
                   + ADD SET
