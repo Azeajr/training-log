@@ -184,6 +184,52 @@ export default function HistoryEdit() {
     setPicker(null)
   }
 
+  const persistAccessory = async (acc: EditAccessory) => {
+    const swapped = acc.originalExerciseId !== null && acc.originalExerciseId !== acc.exerciseId
+    if (swapped) {
+      await db.accessorySets
+        .where('sessionId').equals(sid)
+        .filter(s => s.exerciseId === acc.originalExerciseId)
+        .delete()
+    }
+    const existing = !swapped && acc.originalExerciseId === acc.exerciseId
+      ? await db.accessorySets
+          .where('sessionId').equals(sid)
+          .filter(s => s.exerciseId === acc.exerciseId)
+          .toArray()
+      : []
+    const existingByNum = new Map(existing.map(s => [s.setNumber, s]))
+    const wantedNums = new Set(acc.sets.map(s => s.setNumber))
+
+    const toInsert: typeof acc.sets[number][] = []
+    for (const s of acc.sets) {
+      const old = existingByNum.get(s.setNumber)
+      if (old?.id != null) {
+        await db.accessorySets.update(old.id, {
+          weight: s.weight, reps: s.reps, duration: s.duration, distance: s.distance,
+        })
+      } else {
+        toInsert.push(s)
+      }
+    }
+    for (const old of existing) {
+      if (!wantedNums.has(old.setNumber) && old.id != null) {
+        await db.accessorySets.delete(old.id)
+      }
+    }
+    if (toInsert.length > 0) {
+      await db.accessorySets.bulkAdd(toInsert.map(s => ({
+        sessionId: sid,
+        exerciseId: acc.exerciseId,
+        setNumber: s.setNumber,
+        weight: s.weight,
+        reps: s.reps,
+        duration: s.duration,
+        distance: s.distance,
+      })))
+    }
+  }
+
   const handleSave = async () => {
     setIsSaving(true)
     try {
@@ -197,52 +243,7 @@ export default function HistoryEdit() {
             .filter(s => s.exerciseId === exId)
             .delete()
         }
-        for (const acc of editAccessories()) {
-          if (acc.originalExerciseId !== null && acc.originalExerciseId !== acc.exerciseId) {
-            await db.accessorySets
-              .where('sessionId').equals(sid)
-              .filter(s => s.exerciseId === acc.originalExerciseId)
-              .delete()
-          }
-          const existing = acc.originalExerciseId === acc.exerciseId
-            ? await db.accessorySets
-                .where('sessionId').equals(sid)
-                .filter(s => s.exerciseId === acc.exerciseId)
-                .toArray()
-            : []
-          const existingByNum = new Map(existing.map(s => [s.setNumber, s]))
-          const wantedNums = new Set(acc.sets.map(s => s.setNumber))
-          const toInsert: typeof acc.sets[number][] = []
-          for (const s of acc.sets) {
-            const old = existingByNum.get(s.setNumber)
-            if (old?.id != null) {
-              await db.accessorySets.update(old.id, {
-                weight: s.weight,
-                reps: s.reps,
-                duration: s.duration,
-                distance: s.distance,
-              })
-            } else {
-              toInsert.push(s)
-            }
-          }
-          for (const old of existing) {
-            if (!wantedNums.has(old.setNumber) && old.id != null) {
-              await db.accessorySets.delete(old.id)
-            }
-          }
-          if (toInsert.length > 0) {
-            await db.accessorySets.bulkAdd(toInsert.map(s => ({
-              sessionId: sid,
-              exerciseId: acc.exerciseId,
-              setNumber: s.setNumber,
-              weight: s.weight,
-              reps: s.reps,
-              duration: s.duration,
-              distance: s.distance,
-            })))
-          }
-        }
+        for (const acc of editAccessories()) await persistAccessory(acc)
         await db.sessions.update(sid, { notes: notes() })
       })
       navigate(liftId() != null ? `/history?liftId=${liftId()}` : '/history')

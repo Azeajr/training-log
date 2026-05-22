@@ -118,7 +118,7 @@ export const SETTINGS_DEFAULTS = {
   restTimer1: 90,
   restTimer2: 180,
   restTimerFail: 300,
-  theme: DEFAULT_THEME as string,
+  theme: DEFAULT_THEME,
   barWeight: DEFAULT_BAR_WEIGHT,
   plates: DEFAULT_PLATES,
   supplementalTemplate: 'fsl+bbb' as SupplementalTemplate,
