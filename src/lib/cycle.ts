@@ -1,4 +1,5 @@
 import type { TrainingDB } from '../db/index'
+import type { Lift, TrainingMax } from '../types/domain'
 
 const WEEKS = [1, 2, 3, 4] as const
 
@@ -8,6 +9,23 @@ const countCompletedByWeek = (sessions: Array<{ week: number; status: string }>)
     if (s.status !== 'pending') counts[s.week]++
   }
   return counts
+}
+
+async function progressTms(
+  db: TrainingDB,
+  nextWeight: (current: TrainingMax, lift: Lift) => number,
+): Promise<void> {
+  const lifts = await db.lifts.toArray()
+  for (const lift of lifts) {
+    const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
+    const current = tms[tms.length - 1]
+    if (!current) continue
+    await db.trainingMaxes.add({
+      liftId: lift.id!,
+      weight: nextWeight(current, lift),
+      setAt: new Date(),
+    })
+  }
 }
 
 export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
@@ -40,21 +58,8 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   return { advanced: true, newTms }
 }
 
-export async function applyTmProgression(db: TrainingDB) {
-  const lifts = await db.lifts.toArray()
-  for (const lift of lifts) {
-    const tms = await db.trainingMaxes
-      .where('liftId').equals(lift.id!)
-      .sortBy('setAt')
-    const currentTm = tms[tms.length - 1]
-    if (currentTm) {
-      await db.trainingMaxes.add({
-        liftId: lift.id!,
-        weight: currentTm.weight + lift.progressionIncrement,
-        setAt: new Date(),
-      })
-    }
-  }
+export async function applyTmProgression(db: TrainingDB): Promise<void> {
+  await progressTms(db, (current, lift) => current.weight + lift.progressionIncrement)
 }
 
 export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: number) {
@@ -83,18 +88,7 @@ export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: numbe
 }
 
 export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<void> {
-  const lifts = await db.lifts.toArray()
-  for (const lift of lifts) {
-    const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
-    const current = tms[tms.length - 1]
-    if (current) {
-      await db.trainingMaxes.add({
-        liftId: lift.id!,
-        weight: Math.round(current.weight * (1 - pct) / 5) * 5,
-        setAt: new Date(),
-      })
-    }
-  }
+  await progressTms(db, current => Math.round(current.weight * (1 - pct) / 5) * 5)
 }
 
 export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{

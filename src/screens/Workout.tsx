@@ -309,11 +309,11 @@ export default function Workout() {
   const warmupCount = () => warmupSets().length
   const mainCount = () => mainSets().length
   const jokerCount = () => jokerSetsRendered().length
-  const setOffset = (section: 'main' | 'joker' | 'fsl') => ({
-    main:  warmupCount(),
-    joker: warmupCount() + mainCount(),
-    fsl:   warmupCount() + mainCount() + jokerCount(),
-  }[section])
+  const setOffset = (section: 'main' | 'joker' | 'fsl') => {
+    if (section === 'main') return warmupCount()
+    if (section === 'joker') return warmupCount() + mainCount()
+    return warmupCount() + mainCount() + jokerCount()
+  }
 
   const showJokerButton = () => workout.activeSession ? shouldShowJokerButton({
     week: workout.activeSession.week,
