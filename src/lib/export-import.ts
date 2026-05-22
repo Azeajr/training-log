@@ -6,6 +6,10 @@ import type {
 import { formatDateIso } from './format'
 
 const PENDING_EXPORT_KEY = 'pending-export'
+// Cap import payloads before `file.text()` materializes them — a multi-GB JSON
+// would otherwise be slurped into a single string and OOM the renderer.
+// 50 MB is ~10x larger than any realistic full-history export.
+export const MAX_IMPORT_BYTES = 50 * 1024 * 1024
 
 export async function retryPendingExport(): Promise<void> {
   const pending = localStorage.getItem(PENDING_EXPORT_KEY)
@@ -44,9 +48,22 @@ export async function exportJson(db: TrainingDB): Promise<void> {
 }
 
 export async function importJson(db: TrainingDB, file: File): Promise<void> {
+  if (file.size > MAX_IMPORT_BYTES) {
+    throw new Error(`Import file too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max ${MAX_IMPORT_BYTES / 1024 / 1024} MB.`)
+  }
   const text = await file.text()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await importFromRawData(db, JSON.parse(text) as Record<string, any>)
+  let parsed: Record<string, any>
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    parsed = JSON.parse(text) as Record<string, any>
+  } catch {
+    throw new Error('Invalid JSON file')
+  }
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Invalid backup format: expected JSON object')
+  }
+  await importFromRawData(db, parsed)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -2,7 +2,7 @@
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
-import { retryPendingExport, exportJson, importFromRawData, exportCsv, importJson } from './export-import'
+import { retryPendingExport, exportJson, importFromRawData, exportCsv, importJson, MAX_IMPORT_BYTES } from './export-import'
 
 let capturedBlob: Blob | null = null
 
@@ -339,5 +339,36 @@ describe('importJson', () => {
     const lifts = await db.lifts.toArray()
     expect(lifts).toHaveLength(1)
     expect(lifts[0].name).toBe('OHP')
+  })
+
+  it('rejects files larger than the import cap before parsing', async () => {
+    const oversize = new File(['x'], 'big.json', { type: 'application/json' })
+    Object.defineProperty(oversize, 'size', { value: MAX_IMPORT_BYTES + 1 })
+    await expect(importJson(db, oversize)).rejects.toThrow(/too large/)
+  })
+
+  it('rejects malformed JSON with a friendly error', async () => {
+    const file = new File(['{not json'], 'broken.json', { type: 'application/json' })
+    await expect(importJson(db, file)).rejects.toThrow(/Invalid JSON/)
+  })
+
+  it('rejects JSON arrays / scalars at top level', async () => {
+    const file = new File(['[1,2,3]'], 'wrong-shape.json', { type: 'application/json' })
+    await expect(importJson(db, file)).rejects.toThrow(/expected JSON object/)
+  })
+
+  it('rejects backup with malicious column names (SQL identifier guard)', async () => {
+    const payload = {
+      lifts: [],
+      trainingMaxes: [],
+      cycles: [],
+      sessions: [],
+      sets: [{ 'id"; DROP TABLE sets; --': 1, sessionId: 1, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false }],
+      exercises: [],
+      liftAccessories: [],
+      settings: [],
+    }
+    const file = new File([JSON.stringify(payload)], 'attack.json', { type: 'application/json' })
+    await expect(importJson(db, file)).rejects.toThrow(/Invalid SQL identifier/)
   })
 })
