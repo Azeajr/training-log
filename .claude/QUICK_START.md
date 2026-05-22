@@ -46,8 +46,9 @@ in-process `@sqlite.org/sqlite-wasm` (no Web Worker, no OPFS) but through the sa
    bump it when changing the persisted shape so old state is dropped on reload.
 5. **Calc logic**: `src/lib/calc.ts` (pure) — always add to `calc.test.ts`.
 6. **DB-backed business logic**: `src/lib/cycle.ts`, `training-max.ts`, `exercise.ts`, etc. Take a
-   `TrainingDB` (`type TrainingDB = typeof db`, exported from `lib/types.ts`), never import
-   `db/index` directly — keeps signatures explicit and tests trivial.
+   `TrainingDB` parameter (`type TrainingDB = typeof db`, exported from `src/db/index.ts`).
+   The previous `lib/types.ts` indirection was removed — import the type directly from
+   `db/index`. Keeps signatures explicit and tests trivial.
 
 ## Deploy
 
@@ -57,4 +58,4 @@ demo-mode seed.
 
 ---
 
-**Last Updated**: 2026-05-21
+**Last Updated**: 2026-05-22

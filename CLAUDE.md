@@ -42,4 +42,4 @@ npm run lint         # ESLint
 
 ---
 
-**Last Updated**: 2026-05-21
+**Last Updated**: 2026-05-22
