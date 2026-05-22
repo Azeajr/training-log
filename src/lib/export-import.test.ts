@@ -357,18 +357,34 @@ describe('importJson', () => {
     await expect(importJson(db, file)).rejects.toThrow(/expected JSON object/)
   })
 
-  it('rejects backup with malicious column names (SQL identifier guard)', async () => {
+  it('silently strips malicious / unknown columns from imported rows', async () => {
+    // pickCols at the import boundary is the friendly defense — unknown keys
+    // (whether from a legacy export or a hostile file) are dropped before
+    // they ever reach bulkAdd / the INSERT column list. The strict defense
+    // (assertIdent throwing) is exercised in db/sqlite-table.test.ts.
     const payload = {
       lifts: [],
       trainingMaxes: [],
       cycles: [],
       sessions: [],
-      sets: [{ 'id"; DROP TABLE sets; --': 1, sessionId: 1, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false }],
+      sets: [{
+        'id"; DROP TABLE sets; --': 1,
+        sessionId: 1,
+        type: 'main',
+        setNumber: 1,
+        weight: 100,
+        reps: 5,
+        isAmrap: false,
+      }],
       exercises: [],
       liftAccessories: [],
       settings: [],
     }
     const file = new File([JSON.stringify(payload)], 'attack.json', { type: 'application/json' })
-    await expect(importJson(db, file)).rejects.toThrow(/Invalid SQL identifier/)
+    await importJson(db, file)
+    // Table still exists (no DROP ran) and the legitimate columns persisted.
+    const sets = await db.sets.toArray()
+    expect(sets).toHaveLength(1)
+    expect(sets[0].weight).toBe(100)
   })
 })

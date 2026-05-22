@@ -66,6 +66,23 @@ export async function importJson(db: TrainingDB, file: File): Promise<void> {
   await importFromRawData(db, parsed)
 }
 
+// Allowlist of columns per table. Anything else in the imported payload is
+// dropped before bulkAdd — pairs with the assertIdent guard in sqlite-table:
+// the guard prevents bad keys from reaching the INSERT, this layer just
+// gives a friendlier "ignore unknown column" experience for legacy backups.
+const COLS = {
+  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType'],
+  trainingMaxes: ['id', 'liftId', 'weight', 'setAt'],
+  cycles: ['id', 'number', 'startDate', 'endDate'],
+  sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
+  sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap'],
+  exercises: ['id', 'name', 'type', 'archived'],
+  liftAccessories: ['id', 'liftId', 'exerciseId', 'order'],
+  accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
+  accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],
+  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate'],
+} as const
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function importFromRawData(db: TrainingDB, d: Record<string, any>): Promise<void> {
   await db.transaction(
@@ -82,25 +99,25 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       await db.settings.clear()
 
       if (d.lifts?.length)
-        await db.lifts.bulkAdd(pickCols<Lift>(d.lifts, ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType']))
+        await db.lifts.bulkAdd(pickCols<Lift>(d.lifts, COLS.lifts))
       if (d.trainingMaxes?.length)
-        await db.trainingMaxes.bulkAdd(parseDates<TrainingMax>(d.trainingMaxes, ['setAt']))
+        await db.trainingMaxes.bulkAdd(parseDates<TrainingMax>(pickCols(d.trainingMaxes, COLS.trainingMaxes), ['setAt']))
       if (d.cycles?.length)
-        await db.cycles.bulkAdd(parseDates<Cycle>(d.cycles, ['startDate', 'endDate']))
+        await db.cycles.bulkAdd(parseDates<Cycle>(pickCols(d.cycles, COLS.cycles), ['startDate', 'endDate']))
       if (d.sessions?.length)
-        await db.sessions.bulkAdd(parseDates<Session>(d.sessions, ['date']))
+        await db.sessions.bulkAdd(parseDates<Session>(pickCols(d.sessions, COLS.sessions), ['date']))
       if (d.sets?.length)
-        await db.sets.bulkAdd(d.sets as Set[])
+        await db.sets.bulkAdd(pickCols<Set>(d.sets, COLS.sets))
       if (d.exercises?.length)
-        await db.exercises.bulkAdd(d.exercises as Exercise[])
+        await db.exercises.bulkAdd(pickCols<Exercise>(d.exercises, COLS.exercises))
       if (d.liftAccessories?.length)
-        await db.liftAccessories.bulkAdd(d.liftAccessories as LiftAccessory[])
+        await db.liftAccessories.bulkAdd(pickCols<LiftAccessory>(d.liftAccessories, COLS.liftAccessories))
       if (d.settings?.length)
-        await db.settings.bulkAdd(d.settings as Settings[])
+        await db.settings.bulkAdd(pickCols<Settings>(d.settings, COLS.settings))
       if (d.accessoryTrainingMaxes?.length)
-        await db.accessoryTrainingMaxes.bulkAdd(parseDates<AccessoryTrainingMax>(d.accessoryTrainingMaxes, ['setAt']))
+        await db.accessoryTrainingMaxes.bulkAdd(parseDates<AccessoryTrainingMax>(pickCols(d.accessoryTrainingMaxes, COLS.accessoryTrainingMaxes), ['setAt']))
       if (d.accessorySets?.length)
-        await db.accessorySets.bulkAdd(d.accessorySets as AccessorySet[])
+        await db.accessorySets.bulkAdd(pickCols<AccessorySet>(d.accessorySets, COLS.accessorySets))
     }
   )
 }
@@ -162,15 +179,15 @@ function triggerDownload(content: string, filename: string, mimeType: string): v
   URL.revokeObjectURL(url)
 }
 
-function pickCols<T>(rows: Record<string, unknown>[], cols: string[]): T[] {
-  const colSet = new Set(cols)
+function pickCols<T>(rows: Record<string, unknown>[], cols: readonly string[]): T[] {
+  const colSet = new Set<string>(cols)
   return rows.map(row =>
     Object.fromEntries(Object.entries(row).filter(([k]) => colSet.has(k))) as unknown as T
   )
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseDates<T>(rows: any[], fields: string[]): T[] {
+function parseDates<T>(rows: any[], fields: readonly string[]): T[] {
   return rows.map(row => {
     const copy = { ...row }
     for (const f of fields) {

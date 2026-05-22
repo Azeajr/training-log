@@ -44,7 +44,13 @@ interface LiftExercise {
 export default function HistoryEdit() {
   const params = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
-  const sid = parseInt(params.sessionId ?? '0')
+  // Coerce the URL slug to a finite positive integer; bind a NaN/negative
+  // value into the SQL parameter binder otherwise. SQLite would treat it as
+  // NULL and the page would silently render empty, masking the bad link.
+  const sid = (() => {
+    const n = Number(params.sessionId)
+    return Number.isInteger(n) && n > 0 ? n : 0
+  })()
 
   const [sessionInfo, setSessionInfo] = createSignal<{ liftName: string; week: number; date: string } | null>(null)
   const [liftId, setLiftId] = createSignal<number | null>(null)
@@ -56,7 +62,13 @@ export default function HistoryEdit() {
   const [picker, setPicker] = createSignal<PickerMode>(null)
   const [isSaving, setIsSaving] = createSignal(false)
 
-  onMount(() => { void load() })
+  onMount(() => {
+    if (sid === 0) {
+      navigate('/history', { replace: true })
+      return
+    }
+    void load()
+  })
 
   const load = async () => {
     const session = await db.sessions.get(sid)

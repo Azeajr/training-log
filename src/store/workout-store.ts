@@ -26,13 +26,34 @@ interface WorkoutState {
 const STORAGE_KEY = 'workout-store'
 const STORAGE_VERSION = 1
 
+// Allowlist of keys persisted to localStorage. Anything else is discarded on
+// rehydrate — defense in depth so a corrupted/tampered entry can't graft
+// extra fields onto the reactive store.
+const PERSISTED_KEYS = [
+  'activeSession',
+  'loggedSets',
+  'currentSetIndex',
+  'isResting',
+  'restStartedAt',
+  'restType',
+  'activeAccessories',
+  'notes',
+] as const satisfies readonly (keyof WorkoutState)[]
+
 function loadFromStorage(): Partial<WorkoutState> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return {}
-    const parsed = JSON.parse(raw) as { v?: number; state?: Partial<WorkoutState> }
+    const parsed = JSON.parse(raw) as { v?: number; state?: unknown }
     if (parsed.v !== STORAGE_VERSION) return {}
-    return parsed.state ?? {}
+    const state = parsed.state
+    if (state == null || typeof state !== 'object' || Array.isArray(state)) return {}
+    const src = state as Record<string, unknown>
+    const out: Partial<WorkoutState> = {}
+    for (const k of PERSISTED_KEYS) {
+      if (k in src) (out as Record<string, unknown>)[k] = src[k]
+    }
+    return out
   } catch {
     return {}
   }
