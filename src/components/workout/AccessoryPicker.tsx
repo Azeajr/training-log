@@ -38,7 +38,7 @@ export default function AccessoryPicker(props: Props) {
     for (const atm of allAtms) latestAtmByExercise.set(atm.exerciseId, atm.weight)
 
     const result: PickerRow[] = []
-    for (const la of accessories.sort((a, b) => a.order - b.order)) {
+    for (const la of [...accessories].sort((a, b) => a.order - b.order)) {
       const ex = exercises.find(e => e.id === la.exerciseId)
       if (!ex || ex.archived) continue
       const tmWeight = latestAtmByExercise.get(ex.id!) ?? null

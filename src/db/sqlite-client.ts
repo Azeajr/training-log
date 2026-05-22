@@ -68,6 +68,10 @@ class SqliteClient {
 
   terminate() {
     this.worker.terminate()
+    for (const { reject } of this.pending.values()) {
+      reject(new Error('SQLite worker terminated'))
+    }
+    this.pending.clear()
   }
 }
 
