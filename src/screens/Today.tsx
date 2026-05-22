@@ -9,7 +9,6 @@ import { getNextSessionAdvancingIfDone } from '../lib/cycle'
 import { getCurrentTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
-import SessionPreview from '../components/workout/SessionPreview'
 import Rule from '../components/layout/Rule'
 
 interface WeekStatus {
@@ -173,7 +172,38 @@ export default function Today() {
                 </p>
               </Show>
               <Show when={tm() > 0}>
-                <SessionPreview warmup={warmup()} main={main()} fsl={supplementalSets()} supplementalLabel={supplementalLabel()} />
+                <div class="space-y-4 font-mono text-sm">
+                  <div>
+                    <div class="text-muted uppercase text-xs tracking-widest mb-1">WARM UP</div>
+                    <For each={warmup()}>{s => (
+                      <div class="flex gap-4 text-text-dim pl-2">
+                        <span class="w-16 text-right">{s.weight}lb</span>
+                        <span>x {s.reps}</span>
+                      </div>
+                    )}</For>
+                  </div>
+                  <div>
+                    <div class="text-muted uppercase text-xs tracking-widest mb-1">MAIN</div>
+                    <For each={main()}>{s => (
+                      <div class="flex gap-4 text-text pl-2">
+                        <span class="w-16 text-right">{s.weight}lb</span>
+                        <span>x {s.reps}{s.isAmrap ? '+' : ''}</span>
+                        <Show when={s.isAmrap}>
+                          <span class="text-warn text-xs">AMRAP</span>
+                        </Show>
+                      </div>
+                    )}</For>
+                  </div>
+                  <Show when={supplementalLabel() !== null && supplementalSets().length > 0}>
+                    <div>
+                      <div class="text-muted uppercase text-xs tracking-widest mb-1">{supplementalLabel()}</div>
+                      <div class="flex gap-4 text-text-dim pl-2">
+                        <span class="w-16 text-right">{supplementalSets()[0].weight}lb</span>
+                        <span>x {supplementalSets()[0].reps}</span>
+                      </div>
+                    </div>
+                  </Show>
+                </div>
               </Show>
               <button
                 onClick={() => void handleStart()}

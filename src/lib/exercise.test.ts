@@ -83,24 +83,47 @@ describe('unarchiveExercise', () => {
 })
 
 describe('addExerciseToLift', () => {
-  it('creates a liftAccessory row with correct fields', async () => {
+  it('creates a liftAccessory row at order 0 when none exist', async () => {
     const exId   = await createExercise(db, 'Chinup', 'reps')
     const liftId = await seedLift()
-    await addExerciseToLift(db, liftId, exId, 0)
+    await addExerciseToLift(db, liftId, exId)
     const las = await db.liftAccessories.toArray()
     expect(las).toHaveLength(1)
     expect(las[0]).toMatchObject({ liftId, exerciseId: exId, order: 0 })
   })
 
-  it('uses currentCount as order value for subsequent additions', async () => {
+  it('appends after existing rows for the same lift', async () => {
     const exId1  = await createExercise(db, 'Chinup', 'reps')
     const exId2  = await createExercise(db, 'Dip',    'reps')
     const liftId = await seedLift()
-    await addExerciseToLift(db, liftId, exId1, 0)
-    await addExerciseToLift(db, liftId, exId2, 1)
-    const las = (await db.liftAccessories.toArray() as { order: number }[]).sort((a: { order: number }, b: { order: number }) => a.order - b.order)
+    await addExerciseToLift(db, liftId, exId1)
+    await addExerciseToLift(db, liftId, exId2)
+    const las = (await db.liftAccessories.toArray() as { order: number }[]).sort((a, b) => a.order - b.order)
     expect(las[0].order).toBe(0)
     expect(las[1].order).toBe(1)
+  })
+
+  it('uses max(existing order) + 1, tolerating gaps', async () => {
+    const exId  = await createExercise(db, 'Chinup', 'reps')
+    const liftId = await seedLift()
+    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 5 })
+    await addExerciseToLift(db, liftId, exId)
+    const orders = (await db.liftAccessories.toArray() as { order: number }[]).map(la => la.order).sort((a, b) => a - b)
+    expect(orders).toEqual([5, 6])
+  })
+
+  it('scopes order to each lift independently', async () => {
+    const exId = await createExercise(db, 'Chinup', 'reps')
+    const liftA = await seedLift()
+    const liftB = await db.lifts.add({ name: 'Bench', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await addExerciseToLift(db, liftA, exId)
+    await addExerciseToLift(db, liftA, exId)
+    await addExerciseToLift(db, liftB, exId)
+    const las = await db.liftAccessories.toArray() as { liftId: number; order: number }[]
+    const ordersA = las.filter(la => la.liftId === liftA).map(la => la.order).sort()
+    const ordersB = las.filter(la => la.liftId === liftB).map(la => la.order).sort()
+    expect(ordersA).toEqual([0, 1])
+    expect(ordersB).toEqual([0])
   })
 })
 
