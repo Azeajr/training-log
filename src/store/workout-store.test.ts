@@ -272,4 +272,25 @@ describe('loadFromStorage', () => {
     const { workout: w } = await import('./workout-store')
     expect(w.activeSession).toBeNull()
   })
+
+  it('drops unknown keys from persisted state (hydration allowlist)', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({
+      v: 1,
+      state: {
+        notes: 'kept',
+        __proto__: { polluted: true },
+        evilField: 'should not appear',
+      },
+    }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.notes).toBe('kept')
+    expect((w as Record<string, unknown>).evilField).toBeUndefined()
+  })
+
+  it('returns defaults when persisted state is not a plain object', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({ v: 1, state: [1, 2, 3] }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.activeSession).toBeNull()
+    expect(w.notes).toBe('')
+  })
 })

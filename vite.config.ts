@@ -44,13 +44,20 @@ export default defineConfig(() => {
       registerType: 'prompt',
       workbox: {
         globPatterns: ['**/*.{js,css,ico,png,wasm}'],
+        // Evict stale precaches on SW update so an old (potentially
+        // tampered) bundle does not get served forever from cache.
+        cleanupOutdatedCaches: true,
+        // Don't claim clients automatically — gives the user the explicit
+        // refresh prompt configured above before a new SW takes over.
+        clientsClaim: false,
+        skipWaiting: false,
         runtimeCaching: [
           {
             urlPattern: /\.wasm$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'wasm-cache',
-              expiration: { maxAgeSeconds: 60 * 60 * 24 * 365 },
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
           },
         ],
