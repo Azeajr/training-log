@@ -399,3 +399,74 @@ describe('History — view modes', () => {
     })
   })
 })
+
+// ─── calendar mode ────────────────────────────────────────────────────────────
+
+describe('History — calendar', () => {
+  beforeEach(async () => {
+    localStorage.clear()
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(),
+      db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  it('switches to calendar view and renders current month label', async () => {
+    await seedLift()
+    renderHistory()
+    fireEvent.click(screen.getByText('Calendar'))
+    const label = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    await waitFor(() => expect(screen.getByText(label)).toBeInTheDocument())
+  })
+
+  it('shows session count badge on the day when a session exists', async () => {
+    const liftId = await seedLift()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const today = new Date()
+    const todayMidday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10)
+    await db.sessions.add({
+      cycleId, liftId, week: 1, date: todayMidday, notes: null, status: 'completed',
+    })
+
+    renderHistory()
+    fireEvent.click(screen.getByText('Calendar'))
+
+    // Verify the cell for today contains both the day number and a session count of 1.
+    await waitFor(() => {
+      const cell = screen.queryByLabelText(todayMidday.toDateString())
+      const compact = (cell?.textContent ?? '').replace(/\s+/g, '')
+      expect(compact).toBe(`${today.getDate()}1`)
+    })
+  })
+
+  it('clicking a day with sessions expands them inline', async () => {
+    const liftId = await seedLift()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const today = new Date()
+    const todayMidday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10)
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1, date: todayMidday, notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 200, reps: 5, isAmrap: true })
+
+    renderHistory()
+    fireEvent.click(screen.getByText('Calendar'))
+
+    // Wait for the count badge to render before clicking — guards against an empty
+    // monthSessions racing with the click handler.
+    const cellLabel = todayMidday.toDateString()
+    await waitFor(() => {
+      const cell = screen.queryByLabelText(cellLabel)
+      const compact = (cell?.textContent ?? '').replace(/\s+/g, '')
+      expect(compact).toBe(`${today.getDate()}1`)
+    })
+
+    fireEvent.click(screen.getByLabelText(cellLabel))
+
+    await waitFor(() => {
+      expect(document.body.textContent ?? '').toContain('Bench W1')
+    }, { timeout: 3000 })
+  })
+})

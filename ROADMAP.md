@@ -2,6 +2,33 @@
 
 ## Done
 
+### PR Detection + Toast (2026-05-22)
+
+After an AMRAP is logged, `detectAmrapPRs` (in `src/lib/pr.ts`) compares the just-saved set
+against all prior AMRAP sets for that lift and reports two PR flavors independently:
+
+- **Rep PR** — strictly more reps than any prior AMRAP at this *exact* weight
+- **e1RM PR** — strictly higher Epley estimated 1RM than any prior AMRAP
+
+First-ever AMRAP for a lift is treated as a baseline, not a celebration. `Workout.handleLog`
+calls the detector with `excludeSetId = dbId` (the just-inserted row) so the new set doesn't
+self-compare. A toast fires when either flag is set, e.g. `BENCH — REP PR 225×8 · e1RM 285lb`.
+
+Pure-logic test coverage in `src/lib/pr.test.ts` (10 cases): no priors → no PR, ties don't
+trigger, lift-id isolation, exclusion filter, both flag combinations.
+
+### Calendar Heatmap (2026-05-22)
+
+Third tab in History (alongside "By lift" / "By date") shows a month-grid heatmap of training
+days. Each cell is a button labeled with `Date.toDateString()` (e.g. `Fri May 22 2026`) and
+colored by session count: 0 (border-dim), 1 (accent/10), 2 (accent/25), 3+ (solid accent).
+Selecting a current-month cell reveals that day's sessions inline using the existing
+`HistorySessionRow` expand pattern. Prev/next month arrows reset the selection.
+
+Cells include both the day number and a small count badge when sessions exist. Out-of-month
+padding cells are disabled. RTL coverage in `src/screens/History.test.tsx` exercises the mode
+switch, the count badge render, and the click-to-expand flow.
+
 ### Drop Dexie Test Backend; Single SQLite Backend (2026-05-21)
 
 Tests now run against the same SQLite Wasm engine that ships in production
@@ -304,29 +331,6 @@ record; if null, fall back to `settings.barWeight`.
 - Surface in Settings → LIFTS edit row
 - Plate math, warmup floor logic, and Stepper min already use a `barWeight` arg — wire the
   per-lift value through `composeAllSets`, `calcWarmup`, and the AccessoryPicker
-
----
-
-### PR Detection + Toast
-
-After logging an AMRAP, compare the result against history. If the just-logged set beats the
-all-time rep PR at that weight OR the all-time estimated 1RM, fire a celebratory toast and
-flag the set in History.
-
-- Pure calc — runs on the existing `sets` table at log time
-- Persist a `personalRecords` materialized view (or compute on demand if dataset is small)
-- Toast example: "Bench PR — 225 × 8 (e1RM 282 lb)"
-
----
-
-### Calendar Heatmap
-
-Month-grid view in History (third tab alongside By Lift / By Date) showing trained days as
-filled cells coloured by lift count or tonnage. Tap a cell to expand that day's sessions.
-
-- Plain SVG / CSS grid, no library
-- 6 columns × 7 rows per month; arrow navigation between months
-- Empty days render as muted; filled days colour-coded by lift type
 
 ---
 

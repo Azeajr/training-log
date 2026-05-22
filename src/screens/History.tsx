@@ -3,9 +3,27 @@ import { useNavigate, useSearchParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Session, Lift, Set as TrainingSet, AccessorySet } from '../types/domain'
 import { estimated1RM, formatDuration, SET_TYPE_DISPLAY_ORDER } from '../lib/calc'
-import { formatDateShort } from '../lib/format'
+import { formatDateShort, formatDateLong } from '../lib/format'
 
-type ViewMode = 'lift' | 'date'
+type ViewMode = 'lift' | 'date' | 'calendar'
+
+const dateKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1)
+
+const addMonths = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth() + n, 1)
+
+const monthLabel = (d: Date) =>
+  d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+
+interface CalendarCell {
+  date: Date
+  isCurrentMonth: boolean
+  sessions: Session[]
+}
 
 const HISTORY_LIFT_KEY = 'history-lift'
 
@@ -172,6 +190,11 @@ export default function History() {
   const [expanded, setExpanded] = createSignal<number | null>(null)
   const [detail, setDetail] = createSignal<Detail | null>(null)
 
+  const [calendarMonth, setCalendarMonth] = createSignal(startOfMonth(new Date()))
+  const [monthSessions, setMonthSessions] = createSignal<Session[]>([])
+  const [selectedDay, setSelectedDay] = createSignal<Date | null>(null)
+  const [selectedDayRows, setSelectedDayRows] = createSignal<SessionRow[]>([])
+
   const e1rmHistory = createMemo<ChartPoint[]>(() =>
     [...sessions()]
       .reverse()
@@ -183,6 +206,75 @@ export default function History() {
   )
 
   createEffect(() => { void load(mode(), selectedLiftId()) })
+
+  createEffect(() => {
+    if (mode() !== 'calendar') return
+    void loadMonth(calendarMonth())
+  })
+
+  createEffect(() => {
+    const day = selectedDay()
+    if (!day) { setSelectedDayRows([]); return }
+    const k = dateKey(day)
+    const ds = monthSessions().filter(s => dateKey(new Date(s.date)) === k)
+    void buildRows(ds, lifts()).then(setSelectedDayRows)
+  })
+
+  const loadMonth = async (month: Date) => {
+    const start = startOfMonth(month)
+    const end = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999)
+    const all = await db.sessions
+      .filter(s => {
+        const d = new Date(s.date)
+        return d >= start && d <= end && s.status === 'completed'
+      })
+      .toArray()
+    setMonthSessions(all)
+    setSelectedDay(null)
+  }
+
+  const calendarCells = createMemo<CalendarCell[]>(() => {
+    const month = calendarMonth()
+    const first = startOfMonth(month)
+    const startDow = first.getDay()
+    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
+    const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7
+
+    const byDay = new Map<string, Session[]>()
+    for (const s of monthSessions()) {
+      const k = dateKey(new Date(s.date))
+      const arr = byDay.get(k) ?? []
+      arr.push(s)
+      byDay.set(k, arr)
+    }
+
+    const cells: CalendarCell[] = []
+    for (let i = 0; i < totalCells; i++) {
+      const dayNum = i - startDow + 1
+      const date = new Date(month.getFullYear(), month.getMonth(), dayNum)
+      cells.push({
+        date,
+        isCurrentMonth: dayNum >= 1 && dayNum <= daysInMonth,
+        sessions: byDay.get(dateKey(date)) ?? [],
+      })
+    }
+    return cells
+  })
+
+  const dayCellClass = (cell: CalendarCell) => {
+    if (!cell.isCurrentMonth) return 'border border-border-dim text-faint'
+    const n = cell.sessions.length
+    if (n === 0) return 'border border-border-dim text-muted'
+    if (n === 1) return 'border border-accent/40 text-accent bg-accent/10'
+    if (n === 2) return 'border border-accent/70 text-accent bg-accent/25'
+    return 'border border-accent text-on-accent bg-accent'
+  }
+
+  const isToday = (d: Date) => dateKey(d) === dateKey(new Date())
+  const isSelected = (d: Date) => {
+    const sel = selectedDay()
+    return sel != null && dateKey(sel) === dateKey(d)
+  }
 
   const load = async (m: ViewMode, selId: number | null) => {
     const allLifts = await db.lifts.orderBy('order').toArray()
@@ -248,7 +340,7 @@ export default function History() {
   return (
     <div class="p-4 font-mono">
       <div class="flex gap-0 mb-4 border border-border">
-        <For each={['lift', 'date'] as ViewMode[]}>
+        <For each={['lift', 'date', 'calendar'] as ViewMode[]}>
           {m => (
             <button
               onClick={() => setMode(m)}
@@ -256,7 +348,7 @@ export default function History() {
                 mode() === m ? 'bg-surface-high text-accent' : 'text-muted hover:text-text'
               }`}
             >
-              By {m}
+              {m === 'calendar' ? 'Calendar' : `By ${m}`}
             </button>
           )}
         </For>
@@ -290,22 +382,86 @@ export default function History() {
         </Show>
       </Show>
 
-      <Show
-        when={sessions().length > 0}
-        fallback={<div class="text-muted text-sm">No completed sessions yet.</div>}
-      >
-        <div class="overflow-auto max-h-[60vh]">
-          <For each={sessions()}>
-            {row => (
-              <HistorySessionRow
-                row={row}
-                onExpand={handleExpand}
-                expanded={expanded() === row.session.id}
-                detail={expanded() === row.session.id ? detail() : null}
-              />
-            )}
-          </For>
+      <Show when={mode() === 'calendar'}>
+        <div class="mb-4">
+          <div class="flex items-center justify-between mb-3">
+            <button
+              onClick={() => setCalendarMonth(m => addMonths(m, -1))}
+              class="text-muted hover:text-text px-3 py-1 text-sm font-mono"
+              aria-label="Previous month"
+            >
+              ‹
+            </button>
+            <span class="text-text uppercase tracking-widest text-sm">{monthLabel(calendarMonth())}</span>
+            <button
+              onClick={() => setCalendarMonth(m => addMonths(m, 1))}
+              class="text-muted hover:text-text px-3 py-1 text-sm font-mono"
+              aria-label="Next month"
+            >
+              ›
+            </button>
+          </div>
+          <div class="grid grid-cols-7 gap-1 mb-1">
+            <For each={WEEKDAY_LABELS}>
+              {d => <div class="text-center text-muted text-xs font-mono py-1">{d}</div>}
+            </For>
+          </div>
+          <div class="grid grid-cols-7 gap-1">
+            <For each={calendarCells()}>
+              {cell => (
+                <button
+                  aria-label={cell.date.toDateString()}
+                  onClick={() => cell.isCurrentMonth && setSelectedDay(cell.date)}
+                  disabled={!cell.isCurrentMonth}
+                  class={`aspect-square flex flex-col items-center justify-center font-mono text-xs ${dayCellClass(cell)} ${isSelected(cell.date) ? 'ring-2 ring-accent' : ''} ${isToday(cell.date) && cell.isCurrentMonth ? 'font-bold' : ''}`}
+                >
+                  <span>{cell.date.getDate()}</span>
+                  <Show when={cell.sessions.length > 0}>
+                    <span class="text-[10px] opacity-80">{cell.sessions.length}</span>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
         </div>
+        <Show when={selectedDay() && selectedDayRows().length > 0}>
+          <div class="mb-2">
+            <div class="text-muted text-xs uppercase tracking-widest mb-2">{formatDateLong(selectedDay()!)}</div>
+            <For each={selectedDayRows()}>
+              {row => (
+                <HistorySessionRow
+                  row={row}
+                  onExpand={handleExpand}
+                  expanded={expanded() === row.session.id}
+                  detail={expanded() === row.session.id ? detail() : null}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
+        <Show when={selectedDay() && selectedDayRows().length === 0}>
+          <div class="text-muted text-sm">No sessions on this day.</div>
+        </Show>
+      </Show>
+
+      <Show when={mode() !== 'calendar'}>
+        <Show
+          when={sessions().length > 0}
+          fallback={<div class="text-muted text-sm">No completed sessions yet.</div>}
+        >
+          <div class="overflow-auto max-h-[60vh]">
+            <For each={sessions()}>
+              {row => (
+                <HistorySessionRow
+                  row={row}
+                  onExpand={handleExpand}
+                  expanded={expanded() === row.session.id}
+                  detail={expanded() === row.session.id ? detail() : null}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
       </Show>
     </div>
   )
