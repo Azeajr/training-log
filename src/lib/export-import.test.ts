@@ -140,6 +140,18 @@ describe('importFromRawData', () => {
     expect(sessions[0].date).toBeInstanceOf(Date)
   })
 
+  it('strips unknown columns from lifts (e.g. supplementalTemplate from legacy export)', async () => {
+    await importFromRawData(db, {
+      lifts: [
+        { id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', supplementalTemplate: 'fsl' },
+      ],
+      trainingMaxes: [], cycles: [], sessions: [], sets: [], exercises: [], liftAccessories: [], settings: [],
+    })
+    const lifts = await db.lifts.toArray()
+    expect(lifts).toHaveLength(1)
+    expect(lifts[0].name).toBe('OHP')
+  })
+
   it('parses date strings in cycles including endDate', async () => {
     await importFromRawData(db, {
       lifts: [],
