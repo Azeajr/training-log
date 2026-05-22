@@ -64,6 +64,16 @@ between `dbReady` and `seedDatabase` — don't reintroduce the dead env var.
 
 ---
 
+### 6. iOS Safari back-swipe gesture cannot be disabled from web code
+
+**Symptom**: Swiping left-to-right in the PWA navigates back to the previous route.
+**Check**: This is a native WebKit gesture — not triggered by any app code.
+`overscroll-behavior-x: none` (in `src/index.css`) does NOT suppress it on iOS.
+**Fix**: None available. Apple does not expose a disable API for this gesture. Do not
+spend time trying CSS, touch event handlers, or history manipulation to block it.
+
+---
+
 **Update when**: bug took >1h, could cause data loss, or repeated across sessions.
 
-**Last Updated**: 2026-05-21
+**Last Updated**: 2026-05-22
