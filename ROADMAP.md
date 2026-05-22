@@ -270,6 +270,138 @@ Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Tra
 
 ---
 
+### Body Weight Tracking
+
+Log body weight per session (or per day). New `bodyWeights` table (`{ id, weight, recordedAt }`).
+Surface as a third series on the History By Lift chart so users can correlate strength vs scale
+weight. Optional gate so it doesn't clutter the chart for users who don't track BW.
+
+- Log inline at session start or via a dedicated Settings → BODY WEIGHT entry
+- Show latest BW on Today header (optional, behind a Settings toggle)
+- Export / import already covers arbitrary tables — extend the JSON shape
+
+---
+
+### Unit Toggle (lb / kg)
+
+Currently every weight in the app is lb. Add a global `settings.unit: 'lb' | 'kg'` and route
+all display through a single formatter. Stored weights remain in lb (the canonical unit); the
+toggle only affects display and input.
+
+- Affects: SetRow, PlateDisplay, History, HistoryEdit, Setup, Settings, Workout, Today
+- Plate math: convert kg input → lb internally, compute plate combination on lb plates,
+  display kg labels if user has kg plates configured
+- One `formatWeight(lb, unit)` helper used everywhere; no scattered conversions
+
+---
+
+### Per-Lift Bar Weight Override
+
+Some lifts use specialty bars (e.g., 35 lb safety squat bar, 55 lb trap bar, 20 lb women's bar
+for OHP). Today the bar weight is global. Add an optional `barWeight` override on each `Lift`
+record; if null, fall back to `settings.barWeight`.
+
+- Surface in Settings → LIFTS edit row
+- Plate math, warmup floor logic, and Stepper min already use a `barWeight` arg — wire the
+  per-lift value through `composeAllSets`, `calcWarmup`, and the AccessoryPicker
+
+---
+
+### PR Detection + Toast
+
+After logging an AMRAP, compare the result against history. If the just-logged set beats the
+all-time rep PR at that weight OR the all-time estimated 1RM, fire a celebratory toast and
+flag the set in History.
+
+- Pure calc — runs on the existing `sets` table at log time
+- Persist a `personalRecords` materialized view (or compute on demand if dataset is small)
+- Toast example: "Bench PR — 225 × 8 (e1RM 282 lb)"
+
+---
+
+### Calendar Heatmap
+
+Month-grid view in History (third tab alongside By Lift / By Date) showing trained days as
+filled cells coloured by lift count or tonnage. Tap a cell to expand that day's sessions.
+
+- Plain SVG / CSS grid, no library
+- 6 columns × 7 rows per month; arrow navigation between months
+- Empty days render as muted; filled days colour-coded by lift type
+
+---
+
+### Pre-Session Readiness Rating
+
+1–5 sleep / soreness / energy rating logged at the start of a workout. Stored on the session
+row (`readiness: number | null`). Surfaces nowhere by default but can be plotted against AMRAP
+performance to spot patterns (e.g., low readiness consistently → bailed AMRAP).
+
+- New optional `sessions.readiness` column (additive migration)
+- Pre-workout modal at session launch, dismissible
+- History chart adds a fourth series option toggleable in the legend
+
+---
+
+### Session Search & Date-Range Filter
+
+History currently filters by lift or date toggle. Add:
+- Text search over `sessions.notes`
+- Date-range picker (from / to) applied across both view modes
+- Filter chips for status (completed / skipped) and week (1–4)
+
+URL-driven so filters survive reload and share via link.
+
+---
+
+### Lift Order Customization
+
+`lifts.order` exists but the UI to reorder it doesn't. Add drag-reorder controls (or up / down
+buttons for mobile reliability) in Settings → LIFTS. Reorder applies everywhere lifts are
+listed (Today week status, Settings, History By Lift tabs).
+
+- Persisted via `db.lifts.update(id, { order: newOrder })`
+- Single transaction to avoid intermediate states where two lifts share an order
+
+---
+
+### Workout Reminders (Scheduled Notifications)
+
+Separate from rest-timer notifications (covered in `Push Notifications` above). Recurring
+weekly schedule (M / W / F at 6 PM, etc.) that fires a notification reminding the user to log
+a session.
+
+- Depends on push-notification infra being landed first
+- Settings → REMINDERS UI: day-of-week checkboxes + time picker
+- Scheduled via service worker `setTimeout` chain (Android) or Web Push (iOS PWA)
+- Skipped if a session is already logged for that day
+
+---
+
+### Microloading Plate Support
+
+`PlateConfig` already supports fractional weights. UX gaps:
+- Settings → PLATES doesn't list 1.25 / 0.5 lb rows by default
+- Stepper `step={2.5}` on weight inputs prevents entering microloaded values
+- Plate math handles them but display lines truncate awkwardly with many small plates
+
+Add a "MICROLOAD" toggle in Settings → PLATES that exposes 1.25 / 0.5 lb (and 0.25 kg) rows
+and switches the default stepper step on Workout / HistoryEdit weight inputs from 2.5 to 1.25
+when enabled.
+
+---
+
+### Per-Set Comments
+
+`sets.notes` doesn't exist; only session-level notes do. Add an optional `sets.notes: string |
+null` column and a small "+ note" affordance on the active set row. Useful for flagging form
+breakdowns, equipment changes, or rep-count uncertainty mid-session.
+
+- Additive schema migration
+- HistoryEdit shows notes inline beside each set; tap to edit
+- Export / CSV picks up the new column automatically
+
+---
+
 ## Tech Debt
 
 No open items.

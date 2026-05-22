@@ -52,11 +52,11 @@ Tests are split into three layers:
 
 | Layer | Location | Tools |
 |---|---|---|
-| Unit | `src/lib/*.test.ts`, `src/store/*.test.ts` | Vitest + fake-indexeddb |
+| Unit | `src/lib/*.test.ts`, `src/store/*.test.ts` | Vitest + in-process `@sqlite.org/sqlite-wasm` |
 | Component integration | `src/screens/*.test.tsx`, `src/components/*.test.tsx` | Vitest + @solidjs/testing-library + jsdom |
 | End-to-end | `tests/e2e/*.spec.ts` | Playwright |
 
-Component integration tests render the full component tree and interact through the DOM. Every screen exercises the full stack: UI event → SolidJS store → SQLite (in-memory worker) → rendered output. No DB layer is mocked.
+Component integration tests render the full component tree and interact through the DOM. Every screen exercises the full stack: UI event → SolidJS store → in-process SQLite (no Worker, no OPFS) → rendered output. The vitest alias `/sqlite-client$/` swaps the production worker-based client for an in-process `@sqlite.org/sqlite-wasm` build that shares the rest of the query layer. No DB layer is mocked.
 
 Coverage targets: ≥80% line, branch, function, statement across `src/lib`, `src/screens`, `src/store`.
 Mutation score target: ≥80% (Stryker, `src/lib` only).
