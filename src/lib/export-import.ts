@@ -65,7 +65,7 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       await db.settings.clear()
 
       if (d.lifts?.length)
-        await db.lifts.bulkAdd(d.lifts as Lift[])
+        await db.lifts.bulkAdd(pickCols<Lift>(d.lifts, ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType']))
       if (d.trainingMaxes?.length)
         await db.trainingMaxes.bulkAdd(parseDates<TrainingMax>(d.trainingMaxes, ['setAt']))
       if (d.cycles?.length)
@@ -143,6 +143,13 @@ function triggerDownload(content: string, filename: string, mimeType: string): v
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+function pickCols<T>(rows: Record<string, unknown>[], cols: string[]): T[] {
+  const colSet = new Set(cols)
+  return rows.map(row =>
+    Object.fromEntries(Object.entries(row).filter(([k]) => colSet.has(k))) as unknown as T
+  )
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
