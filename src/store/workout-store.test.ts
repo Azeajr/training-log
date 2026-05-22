@@ -284,7 +284,7 @@ describe('loadFromStorage', () => {
     }))
     const { workout: w } = await import('./workout-store')
     expect(w.notes).toBe('kept')
-    expect((w as Record<string, unknown>).evilField).toBeUndefined()
+    expect((w as unknown as Record<string, unknown>).evilField).toBeUndefined()
   })
 
   it('returns defaults when persisted state is not a plain object', async () => {
