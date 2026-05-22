@@ -272,38 +272,20 @@ Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Tra
 
 ## Tech Debt
 
-### Open
-
-#### Chainable Query Builder over a Single Backend
-
-`src/db/sqlite-table.ts` still exposes a Dexie-shaped chainable API
-(`WhereClause` → `WhereQuery` → `OrderByQuery` / `CollectionQuery` /
-`FilterQuery`) on top of a single SQL backend. With Dexie gone the wrapper
-classes are pure scaffolding — `FilterQuery` and `CollectionQuery` could
-disappear entirely; `WhereQuery` could collapse into a single `Query<T>`
-builder with accumulated state.
-
-Why not done yet: every screen and lib module reads from the chain
-(`db.foo.where(...).equals(...).filter(...).toArray()` etc.). A safe rewrite
-needs to keep the public API stable or convert every call site in lockstep,
-and the chain has subtle behaviour (`WhereQuery.filter` defers to in-JS
-filtering after a SQL fetch; `delete()` paths differ depending on whether a
-filter is attached). Out of scope for an incremental commit; do it on a
-dedicated branch with a wide test pass.
-
-Scope when picked up:
-- Decide: collapse implementation, keep call-site syntax; OR replace with
-  thin SQL helpers and rewrite call sites.
-- Make sure the filter-after-fetch semantics are preserved (or explicitly
-  changed with caller updates).
-- Make sure `delete()` with a filter still scopes to the filtered ids.
+No open items.
 
 ### Resolved 2026-05-21
 
 - ~~**Dexie-Shaped Query Builder vs SQL backend**~~ — Dexie test backend
   dropped; tests now run against in-process `@sqlite.org/sqlite-wasm`.
   `TableLike<T>` and `db/db.ts` deleted; `TrainingDB` is now `typeof db`.
-  (Residual chainable-API simplification tracked separately above.)
+- ~~**Chainable query builder wrapper classes**~~ — five internal classes
+  (`WhereClause` / `WhereQuery` / `OrderByQuery` / `CollectionQuery` /
+  `FilterQuery`) in `src/db/sqlite-table.ts` collapsed to two
+  (`WhereClause` + `Query<T>`). External chainable API preserved exactly,
+  zero call-site changes. Small bonus: `Query.first()` without a filter
+  now emits `LIMIT 1` instead of fetching the whole result set and taking
+  `rows[0]`. 414/414 tests still pass.
 - ~~**`SetSection` duplication in Workout.tsx**~~ — extracted; all four
   `For` loops use it; offset arithmetic centralised.
 - ~~**Module-singleton side effects in RestTimer**~~ — `audioCtx` /
