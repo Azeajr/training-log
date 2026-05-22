@@ -1,4 +1,4 @@
-import type { TrainingDB } from './types'
+import type { TrainingDB } from '../db/index'
 import type {
   Lift, TrainingMax, AccessoryTrainingMax, Cycle, Session,
   Set, Exercise, LiftAccessory, AccessorySet, Settings,

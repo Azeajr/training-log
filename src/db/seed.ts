@@ -53,7 +53,7 @@ async function _seedDatabase() {
   // Seed lift accessories if missing — done separately so a partial first-run recovers
   const accessoryCount = await db.liftAccessories.count()
   if (accessoryCount === 0) {
-    const lifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+    const lifts = await db.lifts.orderBy('order').toArray()
     const exercises = await db.exercises.toArray()
 
     const byName = (name: string) => exercises.find(e => e.name === name)!.id!

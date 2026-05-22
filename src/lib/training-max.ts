@@ -1,4 +1,4 @@
-import type { TrainingDB } from './types'
+import type { TrainingDB } from '../db/index'
 
 export async function getCurrentTm(db: TrainingDB, liftId: number): Promise<number> {
   const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')

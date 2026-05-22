@@ -42,7 +42,7 @@ export default function Settings() {
   onMount(load)
 
   async function load() {
-    const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+    const allLifts = await db.lifts.orderBy('order').toArray()
     setLifts(allLifts)
     const tmMap: Record<number, number> = {}
     await Promise.all(allLifts.map(async l => {
@@ -177,7 +177,7 @@ export default function Settings() {
       { destructive: true, confirmLabel: 'SKIP' }
     )) return
 
-    const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+    const allLifts = await db.lifts.orderBy('order').toArray()
     await db.transaction(async () => {
       for (let w = week; w < targetWeek; w++) {
         const wk = w as 1 | 2 | 3 | 4

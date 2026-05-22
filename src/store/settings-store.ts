@@ -140,35 +140,26 @@ interface SettingsState {
   barWeight: number
   plates: PlateConfig[]
   supplementalTemplate: SupplementalTemplate
-  loaded: boolean
 }
 
-export const [settings, setSettings] = createStore<SettingsState>({
-  ...SETTINGS_DEFAULTS,
-  loaded: false,
-})
+export const [settings, setSettings] = createStore<SettingsState>({ ...SETTINGS_DEFAULTS })
 
 export async function loadSettings() {
   const row = await db.settings.toCollection().first()
-  if (row) {
-    const theme = row.theme ?? DEFAULT_THEME
-    setSettings({
-      restTimer1: row.restTimer1,
-      restTimer2: row.restTimer2,
-      restTimerFail: row.restTimerFail,
-      theme,
-      barWeight: row.barWeight ?? DEFAULT_BAR_WEIGHT,
-      plates: row.plates ?? DEFAULT_PLATES,
-      supplementalTemplate: row.supplementalTemplate ?? 'fsl+bbb',
-      loaded: true,
-    })
-  } else {
-    setSettings({ loaded: true })
-  }
+  if (!row) return
+  setSettings({
+    restTimer1: row.restTimer1,
+    restTimer2: row.restTimer2,
+    restTimerFail: row.restTimerFail,
+    theme: row.theme ?? DEFAULT_THEME,
+    barWeight: row.barWeight ?? DEFAULT_BAR_WEIGHT,
+    plates: row.plates ?? DEFAULT_PLATES,
+    supplementalTemplate: row.supplementalTemplate ?? 'fsl+bbb',
+  })
 }
 
 export async function updateSettings(
-  updates: Partial<Omit<SettingsState, 'loaded'>>
+  updates: Partial<SettingsState>
 ) {
   const row = await db.settings.toCollection().first()
   if (row?.id) {

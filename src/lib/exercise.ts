@@ -1,4 +1,4 @@
-import type { TrainingDB } from './types'
+import type { TrainingDB } from '../db/index'
 
 export async function createExercise(
   db: TrainingDB,
