@@ -188,12 +188,16 @@ export default function Workout() {
     }
 
     if (setData.isAmrap && lift()) {
-      const prs = await detectAmrapPRs(db, lift()!.id!, weight, reps, dbId)
-      if (prs.repPr || prs.e1RmPr) {
-        const msgs: string[] = []
-        if (prs.repPr) msgs.push(`REP PR ${weight}×${reps}`)
-        if (prs.e1RmPr) msgs.push(`e1RM ${Math.round(prs.newE1Rm)}lb`)
-        showToast(`${lift()!.name.toUpperCase()} — ${msgs.join(' · ')}`, 4000)
+      try {
+        const prs = await detectAmrapPRs(db, lift()!.id!, weight, reps, dbId)
+        if (prs.repPr || prs.e1RmPr) {
+          const msgs: string[] = []
+          if (prs.repPr) msgs.push(`REP PR ${weight}×${reps}`)
+          if (prs.e1RmPr) msgs.push(`e1RM ${Math.round(prs.newE1Rm)}lb`)
+          showToast(`${lift()!.name.toUpperCase()} — ${msgs.join(' · ')}`, 5000)
+        }
+      } catch {
+        // PR detection is best-effort; do not block the workout flow.
       }
     }
 
