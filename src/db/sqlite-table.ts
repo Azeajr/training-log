@@ -6,6 +6,17 @@ export interface TableSchema {
   jsonFields?: string[]
 }
 
+// Identifiers (table names, column names) are interpolated into SQL because
+// SQLite has no bind parameter for them. Every call site today passes a
+// hardcoded literal, but interpolation + future refactors = injection risk.
+// Reject anything that isn't a plain identifier so a future caller can't
+// pass through user input (e.g. `name"; DROP TABLE x; --`).
+const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+function assertIdent(name: string): string {
+  if (!IDENT_RE.test(name)) throw new Error(`Invalid SQL identifier: ${name}`)
+  return name
+}
+
 function toSqlRow(obj: Record<string, unknown>, schema: TableSchema): Record<string, unknown> {
   const row = { ...obj }
   for (const f of schema.dateFields ?? []) {
@@ -80,7 +91,7 @@ class Query<T> {
 
   orderBy(field: string, desc = false): Query<T> {
     const next = this.clone()
-    next.orderField = field
+    next.orderField = assertIdent(field)
     next.orderDesc = desc
     return next
   }
@@ -143,7 +154,7 @@ class WhereClause<T> {
 
   constructor(table: SQLiteTable<T>, field: string) {
     this.table = table
-    this.field = field
+    this.field = assertIdent(field)
   }
 
   equals(value: unknown): Query<T> {
@@ -161,7 +172,7 @@ export class SQLiteTable<T> {
   private schema: TableSchema
 
   constructor(tableName: string, schema: TableSchema = {}) {
-    this.tableName = tableName
+    this.tableName = assertIdent(tableName)
     this.schema = schema
   }
 
@@ -193,7 +204,7 @@ export class SQLiteTable<T> {
   async add(obj: Omit<T, 'id'> | T): Promise<number> {
     const row = toSqlRow(obj as Record<string, unknown>, this.schema)
     if (row.id == null) delete row.id
-    const cols = Object.keys(row).filter((k) => row[k] !== undefined)
+    const cols = Object.keys(row).filter((k) => row[k] !== undefined).map(assertIdent)
     const values = cols.map((k) => row[k])
     const placeholders = cols.map(() => '?').join(',')
     const sql = `INSERT INTO "${this.tableName}" (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${placeholders}) RETURNING id`
@@ -203,7 +214,7 @@ export class SQLiteTable<T> {
 
   async put(obj: T): Promise<number> {
     const row = toSqlRow(obj as Record<string, unknown>, this.schema)
-    const cols = Object.keys(row).filter((k) => row[k] !== undefined)
+    const cols = Object.keys(row).filter((k) => row[k] !== undefined).map(assertIdent)
     const values = cols.map((k) => row[k])
     const placeholders = cols.map(() => '?').join(',')
     const sql = `INSERT OR REPLACE INTO "${this.tableName}" (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${placeholders}) RETURNING id`
@@ -213,7 +224,7 @@ export class SQLiteTable<T> {
 
   async update(id: number, changes: Partial<T>): Promise<number> {
     const row = toSqlRow(changes as Record<string, unknown>, this.schema)
-    const cols = Object.keys(row).filter((k) => row[k] !== undefined && k !== 'id')
+    const cols = Object.keys(row).filter((k) => row[k] !== undefined && k !== 'id').map(assertIdent)
     if (cols.length === 0) return 0
     const setClauses = cols.map((k) => `"${k}" = ?`).join(', ')
     const values = cols.map((k) => row[k])
