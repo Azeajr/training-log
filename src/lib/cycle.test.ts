@@ -177,6 +177,9 @@ describe('advanceCycleIfComplete', () => {
     expect(byName['Deadlift']).toBe(210)
     expect(byName['Bench']).toBe(205)
     expect(byName['Squat']).toBe(210)
+    const byOld = Object.fromEntries(newTms.map(t => [t.liftName, t.oldWeight]))
+    expect(byOld['OHP']).toBe(200)
+    expect(byOld['Deadlift']).toBe(200)
   })
 
   it('is idempotent — second call does not advance again', async () => {

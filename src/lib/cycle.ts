@@ -30,7 +30,7 @@ async function progressTms(
 
 export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   advanced: boolean
-  newTms: Array<{ liftName: string; weight: number }>
+  newTms: Array<{ liftName: string; oldWeight: number; weight: number }>
 }> {
   const cycle = await db.cycles.orderBy('number').last()
   if (!cycle?.id) return { advanced: false, newTms: [] }
@@ -48,11 +48,12 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   })
 
   const lifts = await db.lifts.orderBy('order').toArray()
-  const newTms: Array<{ liftName: string; weight: number }> = []
+  const newTms: Array<{ liftName: string; oldWeight: number; weight: number }> = []
   for (const lift of lifts) {
     const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
+    const prev = tms[tms.length - 2]
     const latest = tms[tms.length - 1]
-    if (latest) newTms.push({ liftName: lift.name, weight: latest.weight })
+    if (latest) newTms.push({ liftName: lift.name, oldWeight: prev?.weight ?? latest.weight, weight: latest.weight })
   }
 
   return { advanced: true, newTms }
