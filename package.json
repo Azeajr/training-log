@@ -27,7 +27,6 @@
     "serialize-javascript": ">=7.0.5"
   },
   "devDependencies": {
-    "dexie": "^4.4.2",
     "@eslint/js": "^10.0.1",
     "@solidjs/testing-library": "^0.8.10",
     "@stryker-mutator/core": "^9.6.1",
@@ -39,7 +38,6 @@
     "@types/node": "^24.12.2",
     "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^10.2.1",
-    "fake-indexeddb": "^6.2.5",
     "globals": "^17.5.0",
     "jsdom": "^29.1.1",
     "playwright": "^1.59.1",

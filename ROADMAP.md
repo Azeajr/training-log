@@ -2,6 +2,22 @@
 
 ## Done
 
+### Drop Dexie Test Backend; Single SQLite Backend (2026-05-21)
+
+Tests now run against the same SQLite Wasm engine that ships in production
+(`@sqlite.org/sqlite-wasm`) via an in-process client (no worker, no OPFS).
+The Dexie shim and `TableLike<T>` interface are gone.
+
+- `src/db/db.ts` (Dexie schema) deleted; `dexie` and `fake-indexeddb` removed from `devDependencies`.
+- `src/lib/types.ts` is now just `type TrainingDB = typeof db` — single source of truth.
+- `src/db/schema.ts` holds the shared `SCHEMA`, `ADDITIVE_MIGRATIONS`, and `ALL_TABLES`.
+- `src/db/sqlite-table.ts` (was inside `sqlite-client.ts`) owns the `SQLiteTable` query layer.
+- `src/db/sqlite-client.ts` is the prod (Web Worker + OPFS) client; `src/db/sqlite-test-client.ts` is the vitest in-process variant. Vite alias `/sqlite-client$/` -> `/sqlite-test-client` swaps the dependency under test.
+- Both clients implement reentrant `transaction()` (depth counter) so `archiveExercise` can be called from inside `handleCleanupAccessoryData`'s outer transaction without "cannot start a transaction within a transaction".
+- `toSqlRow` no longer injects `null` for missing date fields — broke updates that only touch a subset of columns under real NOT NULL constraints.
+
+Net result: one production backend, one mirror test backend, no Dexie surface to maintain.
+
 ### Senior-Review Cleanup Pass (2026-05-21)
 
 Targeted maintainability fixes flagged by deep code review.
@@ -219,19 +235,9 @@ Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Tra
 
 Findings from the 2026-05-21 code review that are out of scope for a single-PR cleanup. Listed here so future work can target them with a dedicated branch.
 
-### Dexie-Shaped Query Builder Reimplemented in SQL (high)
+### ~~Dexie-Shaped Query Builder Reimplemented in SQL~~ ✅ resolved 2026-05-21
 
-`src/db/sqlite-client.ts` still ships `WhereClause` / `WhereQuery` / `OrderByQuery` / `CollectionQuery` / `FilterQuery` classes mirroring Dexie's chainable query API in SQL. `src/lib/types.ts` (`TableLike<T>`) declares the same surface as a shared interface so `src/lib/*` can target both backends. Root cause: tests run against Dexie + `fake-indexeddb` while production runs against SQLite Wasm.
-
-The cost is rigid coupling: every new query shape needs SQL, Dexie, and the `TableLike` interface kept in lockstep, plus the `db.ts` `transaction(fn)` override that bypasses Dexie's overloads with `any`.
-
-Partial progress (2026-05-21): unused `WhereQuery.and()` alias removed; `TableLike` member dropped. The structural shim is still in place.
-
-Options to flatten the rest:
-- Drop Dexie entirely and back tests with the same SQLite Wasm worker (initialised in-memory under jsdom). One backend, no shim layer.
-- Replace the chained API in `lib/*` with direct SQL helpers (`db.query(sql, params)`) and a few typed wrappers per entity.
-
-Either path lets us delete the `TableLike` interface and the Dexie override.
+Dropped the Dexie test backend; tests now run against `@sqlite.org/sqlite-wasm` in-process. `TableLike<T>` and `db/db.ts` deleted; `TrainingDB` is now `typeof db`. The chainable query API in `sqlite-table.ts` is still there but only has one implementation under it.
 
 ### ~~Set-Section Duplication in Workout.tsx~~ ✅ resolved 2026-05-21
 
