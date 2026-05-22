@@ -3,13 +3,15 @@ import { db } from '../db/index'
 import type { Lift, Exercise, LiftAccessory, SupplementalTemplate } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
-import { deloadTms } from '../lib/cycle'
+import { deloadTms, advanceCycleIfComplete } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
 import { calcMainSets, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
+import CycleCompleteModal from '../components/modals/CycleCompleteModal'
+import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
 import Rule from '../components/layout/Rule'
 import Stepper from '../components/forms/Stepper'
 import ExerciseEditor from '../components/forms/ExerciseEditor'
@@ -32,6 +34,7 @@ export default function Settings() {
   const [accessoryIncrements, setAccessoryIncrements] = createSignal<Record<number, { tmId: number; incrementLb: number }>>({})
   const [currentCycleWeek, setCurrentCycleWeek] = createSignal<1 | 2 | 3 | 4 | null>(null)
   const [currentCycleId, setCurrentCycleId] = createSignal<number | null>(null)
+  const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
 
   const [addToLift, setAddToLift] = createSignal<number | null>(null)
   const [addToLiftExId, setAddToLiftExId] = createSignal<number | null>(null)
@@ -196,6 +199,36 @@ export default function Settings() {
     showToast(`Advanced to week ${targetWeek}`)
   }
 
+  const handleSkipDeload = async () => {
+    const week = currentCycleWeek()
+    const cycleId = currentCycleId()
+    if (!week || !cycleId) return
+    if (!await confirm('Skip deload week? Remaining sessions will be marked skipped and TMs will progress.', { destructive: true, confirmLabel: 'SKIP DELOAD' })) return
+
+    const allLifts = await db.lifts.orderBy('order').toArray()
+    await db.transaction(async () => {
+      for (let w = week; w <= 4; w++) {
+        const wk = w as 1 | 2 | 3 | 4
+        const weekSessions = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === wk).toArray()
+        for (const lift of allLifts) {
+          const existing = weekSessions.find(s => s.liftId === lift.id)
+          if (existing) {
+            if (existing.status === 'pending') await db.sessions.update(existing.id!, { status: 'skipped' })
+          } else {
+            await db.sessions.add({ cycleId, liftId: lift.id!, week: wk, date: new Date(), notes: null, status: 'skipped' })
+          }
+        }
+      }
+    })
+
+    const { advanced, newTms } = await advanceCycleIfComplete(db)
+    if (advanced) {
+      setCycleCompleteData({ newTms })
+    } else {
+      await load()
+    }
+  }
+
   const handleDeload = async () => {
     if (!await confirm('Drop all TMs by 10%?', { destructive: true, confirmLabel: 'DELOAD' })) return
     await deloadTms(db)
@@ -319,6 +352,15 @@ export default function Settings() {
                 </button>
               )}</For>
             </div>
+          </div>
+          <div class="flex items-center gap-4 py-1">
+            <span class="w-20" />
+            <button
+              onClick={() => void handleSkipDeload()}
+              class="border border-border text-muted text-xs tracking-widest px-3 py-1.5 hover:border-danger hover:text-danger"
+            >
+              SKIP DELOAD
+            </button>
           </div>
         </div>
       </Show>
@@ -582,6 +624,12 @@ export default function Settings() {
           JSON backup restores all history. CSV exports completed sessions for spreadsheets.
         </div>
       </div>
+
+      <CycleCompleteModal
+        data={cycleCompleteData()}
+        onDismiss={async () => { setCycleCompleteData(null); await load() }}
+        onDeload={async () => { await deloadTms(db); setCycleCompleteData(null); await load() }}
+      />
     </div>
   )
 }
