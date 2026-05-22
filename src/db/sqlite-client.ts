@@ -22,7 +22,14 @@ class SqliteClient {
   private send<T>(type: string, sql: string | undefined, params: unknown[]): Promise<T> {
     const doSend = (): Promise<T> => new Promise((resolve, reject) => {
       const id = this.nextId++
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject })
+      // init may stall briefly while OPFS pool retries; other ops time out at 10s
+      const timer = type === 'init' ? null : setTimeout(() => {
+        if (this.pending.delete(id)) reject(new Error(`SQLite worker timeout: ${type}`))
+      }, 10000)
+      this.pending.set(id, {
+        resolve: (v) => { if (timer) clearTimeout(timer); resolve(v as T) },
+        reject:  (e) => { if (timer) clearTimeout(timer); reject(e) },
+      })
       this.worker.postMessage({ id, type, sql, params })
     })
     return type !== 'init' ? this.ready.then(doSend) : doSend()
@@ -110,10 +117,6 @@ class WhereQuery<T> {
     const clone = new WhereQuery<T>(this.table, this.whereClause, this.params)
     clone.filterFn = this.filterFn ? (r) => this.filterFn!(r) && fn(r) : fn
     return clone
-  }
-
-  and(fn: (row: T) => boolean): WhereQuery<T> {
-    return this.filter(fn)
   }
 
   async toArray(): Promise<T[]> {

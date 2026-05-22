@@ -26,10 +26,11 @@ export async function unarchiveExercise(db: TrainingDB, id: number): Promise<voi
 export async function addExerciseToLift(
   db: TrainingDB,
   liftId: number,
-  exerciseId: number,
-  currentCount: number
+  exerciseId: number
 ): Promise<void> {
-  await db.liftAccessories.add({ liftId, exerciseId, order: currentCount })
+  const existing = await db.liftAccessories.where('liftId').equals(liftId).toArray()
+  const nextOrder = existing.reduce((m, la) => Math.max(m, la.order), -1) + 1
+  await db.liftAccessories.add({ liftId, exerciseId, order: nextOrder })
 }
 
 export async function removeExerciseFromLift(db: TrainingDB, liftAccessoryId: number): Promise<void> {

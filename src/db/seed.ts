@@ -31,7 +31,9 @@ const EXERCISES = [
 
 let _seed: Promise<void> | null = null
 export function seedDatabase(): Promise<void> {
-  if (!_seed) _seed = _seedDatabase()
+  if (!_seed) {
+    _seed = _seedDatabase().catch(err => { _seed = null; throw err })
+  }
   return _seed
 }
 

@@ -194,20 +194,20 @@ export default function HistoryEdit() {
         for (const exId of deletedAccessoryIds()) {
           await db.accessorySets
             .where('sessionId').equals(sid)
-            .and(s => s.exerciseId === exId)
+            .filter(s => s.exerciseId === exId)
             .delete()
         }
         for (const acc of editAccessories()) {
           if (acc.originalExerciseId !== null && acc.originalExerciseId !== acc.exerciseId) {
             await db.accessorySets
               .where('sessionId').equals(sid)
-              .and(s => s.exerciseId === acc.originalExerciseId)
+              .filter(s => s.exerciseId === acc.originalExerciseId)
               .delete()
           }
           const existing = acc.originalExerciseId === acc.exerciseId
             ? await db.accessorySets
                 .where('sessionId').equals(sid)
-                .and(s => s.exerciseId === acc.exerciseId)
+                .filter(s => s.exerciseId === acc.exerciseId)
                 .toArray()
             : []
           const existingByNum = new Map(existing.map(s => [s.setNumber, s]))

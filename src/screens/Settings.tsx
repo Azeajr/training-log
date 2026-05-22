@@ -114,8 +114,7 @@ export default function Settings() {
   }
 
   const handleAddToLift = async (liftId: number, exerciseId: number) => {
-    const count = liftAccessories().filter(la => la.liftId === liftId).length
-    await addExerciseToLift(db, liftId, exerciseId, count)
+    await addExerciseToLift(db, liftId, exerciseId)
     setAddToLift(null)
     setAddToLiftExId(null)
     await load()

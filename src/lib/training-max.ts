@@ -12,12 +12,15 @@ export async function setTm(db: TrainingDB, liftId: number, weight: number): Pro
 export async function getAllCurrentTms(
   db: TrainingDB
 ): Promise<Record<number, number>> {
-  const lifts = await db.lifts.toArray()
+  const tms = await db.trainingMaxes.toArray()
   const result: Record<number, number> = {}
-  for (const lift of lifts) {
-    const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
-    const latest = tms[tms.length - 1]
-    if (latest) result[lift.id!] = latest.weight
+  const latestAt: Record<number, number> = {}
+  for (const tm of tms) {
+    const ts = new Date(tm.setAt).getTime()
+    if (latestAt[tm.liftId] === undefined || ts > latestAt[tm.liftId]) {
+      latestAt[tm.liftId] = ts
+      result[tm.liftId] = tm.weight
+    }
   }
   return result
 }

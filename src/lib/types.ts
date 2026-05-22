@@ -21,10 +21,7 @@ export interface TableLike<T> {
       filter(fn: (row: T) => boolean): {
         first(): Promise<T | undefined>
         toArray(): Promise<T[]>
-      }
-      and(fn: (row: T) => boolean): {
         delete(): Promise<void>
-        toArray(): Promise<T[]>
       }
     }
     anyOf(values: unknown[]): {
