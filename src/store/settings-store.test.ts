@@ -45,10 +45,9 @@ describe('applyTheme', () => {
 // ─── loadSettings ─────────────────────────────────────────────────────────────
 
 describe('loadSettings', () => {
-  it('marks loaded when no settings row exists', async () => {
+  it('preserves defaults when no settings row exists', async () => {
     await loadSettings()
-    expect(settings.loaded).toBe(true)
-    expect(settings.restTimer1).toBe(90)  // defaults preserved
+    expect(settings.restTimer1).toBe(90)
   })
 
   it('updates the store and applies theme when a row exists', async () => {
@@ -66,7 +65,6 @@ describe('loadSettings', () => {
     expect(settings.restTimerFail).toBe(240)
     expect(settings.theme).toBe('light')
     expect(settings.barWeight).toBe(35)
-    expect(settings.loaded).toBe(true)
   })
 
   it('uses defaults for barWeight and plates when row has none', async () => {

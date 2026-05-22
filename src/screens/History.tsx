@@ -185,7 +185,7 @@ export default function History() {
   createEffect(() => { void load(mode(), selectedLiftId()) })
 
   const load = async (m: ViewMode, selId: number | null) => {
-    const allLifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+    const allLifts = await db.lifts.orderBy('order').toArray()
     setLifts(allLifts)
     if (!selId && allLifts.length > 0) {
       const stored = localStorage.getItem(HISTORY_LIFT_KEY)

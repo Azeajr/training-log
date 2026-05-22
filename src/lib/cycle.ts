@@ -1,4 +1,4 @@
-import type { TrainingDB } from './types'
+import type { TrainingDB } from '../db/index'
 
 export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   advanced: boolean
@@ -22,7 +22,7 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
     await applyAccessoryTmProgression(db, cycleId)
   })
 
-  const lifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+  const lifts = await db.lifts.orderBy('order').toArray()
   const newTms: Array<{ liftName: string; weight: number }> = []
   for (const lift of lifts) {
     const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
@@ -102,7 +102,7 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
       startDate: new Date(),
       endDate: null,
     })
-    const lifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+    const lifts = await db.lifts.orderBy('order').toArray()
     return { liftId: lifts[0].id!, week: 1, cycleId }
   }
 
@@ -132,7 +132,7 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
     .filter(s => s.week === currentWeek && s.status !== 'pending')
     .map(s => s.liftId)
 
-  const lifts = (await db.lifts.toArray()).sort((a, b) => a.order - b.order)
+  const lifts = await db.lifts.orderBy('order').toArray()
   const nextLift = lifts.find(l => !completedLiftIds.includes(l.id!))
 
   return {
