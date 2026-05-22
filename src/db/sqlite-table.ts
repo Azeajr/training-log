@@ -34,43 +34,92 @@ function fromSqlRow<T>(row: Record<string, unknown>, schema: TableSchema): T {
   return result as T
 }
 
-class WhereQuery<T> {
-  private table: SQLiteTable<T>
-  private whereClause: string
-  private params: unknown[]
-  private filterFn?: (row: T) => boolean
+// Single chainable query builder. State accumulates lazily; terminal methods
+// (toArray/first/last/sortBy/delete) emit the SQL. Previous incarnation had five
+// separate classes (WhereQuery / WhereClause / OrderByQuery / CollectionQuery /
+// FilterQuery) — leftover scaffolding from the Dexie days when the chain had to
+// match Dexie's surface across two backends. Now there's one backend.
+class Query<T> {
+  private readonly table: SQLiteTable<T>
+  private whereSql: string | null = null
+  private whereParams: unknown[] = []
+  private orderField: string | null = null
+  private orderDesc = false
+  private filterFn: ((row: T) => boolean) | null = null
+  private limitN: number | null = null
 
-  constructor(table: SQLiteTable<T>, whereClause: string, params: unknown[]) {
+  constructor(table: SQLiteTable<T>) {
     this.table = table
-    this.whereClause = whereClause
-    this.params = params
   }
 
-  filter(fn: (row: T) => boolean): WhereQuery<T> {
-    const clone = new WhereQuery<T>(this.table, this.whereClause, this.params)
-    clone.filterFn = this.filterFn ? (r) => this.filterFn!(r) && fn(r) : fn
-    return clone
+  // Mutating setter used by WhereClause to install the initial WHERE — the
+  // builder is freshly constructed here so the mutation is local.
+  _setWhere(clause: string, params: unknown[]): this {
+    this.whereSql = clause
+    this.whereParams = params
+    return this
+  }
+
+  private clone(): Query<T> {
+    const q = new Query<T>(this.table)
+    q.whereSql = this.whereSql
+    q.whereParams = this.whereParams
+    q.orderField = this.orderField
+    q.orderDesc = this.orderDesc
+    q.filterFn = this.filterFn
+    q.limitN = this.limitN
+    return q
+  }
+
+  filter(fn: (row: T) => boolean): Query<T> {
+    const next = this.clone()
+    const prev = this.filterFn
+    next.filterFn = prev ? (r: T) => prev(r) && fn(r) : fn
+    return next
+  }
+
+  orderBy(field: string, desc = false): Query<T> {
+    const next = this.clone()
+    next.orderField = field
+    next.orderDesc = desc
+    return next
+  }
+
+  private buildSelect(): string {
+    let sql = `SELECT * FROM "${this.table.tableName}"`
+    if (this.whereSql) sql += ` WHERE ${this.whereSql}`
+    if (this.orderField) sql += ` ORDER BY "${this.orderField}"${this.orderDesc ? ' DESC' : ''}`
+    if (this.limitN != null) sql += ` LIMIT ${this.limitN}`
+    return sql
   }
 
   async toArray(): Promise<T[]> {
-    const rows = await this.table._query(
-      `SELECT * FROM "${this.table.tableName}" WHERE ${this.whereClause}`,
-      this.params,
-    )
+    const rows = await this.table._query(this.buildSelect(), this.whereParams)
     return this.filterFn ? rows.filter(this.filterFn) : rows
   }
 
   async first(): Promise<T | undefined> {
-    const rows = await this.toArray()
+    if (this.filterFn) {
+      const rows = await this.toArray()
+      return rows[0]
+    }
+    const q = this.clone()
+    q.limitN = 1
+    const rows = await this.table._query(q.buildSelect(), q.whereParams)
     return rows[0]
   }
 
-  async sortBy(field: string): Promise<T[]> {
-    const rows = await this.table._query(
-      `SELECT * FROM "${this.table.tableName}" WHERE ${this.whereClause} ORDER BY "${field}"`,
-      this.params,
-    )
-    return this.filterFn ? rows.filter(this.filterFn) : rows
+  async last(): Promise<T | undefined> {
+    if (!this.orderField) throw new Error('Query.last() requires orderBy()')
+    const q = this.clone()
+    q.orderDesc = !q.orderDesc
+    q.limitN = 1
+    const rows = await this.table._query(q.buildSelect(), q.whereParams)
+    return rows[0]
+  }
+
+  sortBy(field: string): Promise<T[]> {
+    return this.orderBy(field).toArray()
   }
 
   async delete(): Promise<void> {
@@ -81,85 +130,29 @@ class WhereQuery<T> {
         const ph = ids.map(() => '?').join(',')
         await sqliteClient.run(`DELETE FROM "${this.table.tableName}" WHERE id IN (${ph})`, ids)
       }
-    } else {
-      await sqliteClient.run(
-        `DELETE FROM "${this.table.tableName}" WHERE ${this.whereClause}`,
-        this.params,
-      )
+      return
     }
+    const whereClause = this.whereSql ? ` WHERE ${this.whereSql}` : ''
+    await sqliteClient.run(`DELETE FROM "${this.table.tableName}"${whereClause}`, this.whereParams)
   }
 }
 
 class WhereClause<T> {
-  private table: SQLiteTable<T>
-  private field: string
+  private readonly table: SQLiteTable<T>
+  private readonly field: string
+
   constructor(table: SQLiteTable<T>, field: string) {
     this.table = table
     this.field = field
   }
 
-  equals(value: unknown): WhereQuery<T> {
-    return new WhereQuery<T>(this.table, `"${this.field}" = ?`, [value])
+  equals(value: unknown): Query<T> {
+    return new Query<T>(this.table)._setWhere(`"${this.field}" = ?`, [value])
   }
 
-  anyOf(values: unknown[]): WhereQuery<T> {
+  anyOf(values: unknown[]): Query<T> {
     const placeholders = values.map(() => '?').join(',')
-    return new WhereQuery<T>(this.table, `"${this.field}" IN (${placeholders})`, values)
-  }
-}
-
-class CollectionQuery<T> {
-  private table: SQLiteTable<T>
-  constructor(table: SQLiteTable<T>) { this.table = table }
-
-  async first(): Promise<T | undefined> {
-    const rows = await this.table._query(
-      `SELECT * FROM "${this.table.tableName}" LIMIT 1`,
-      [],
-    )
-    return rows[0]
-  }
-
-  async toArray(): Promise<T[]> {
-    return this.table.toArray()
-  }
-}
-
-class FilterQuery<T> {
-  private table: SQLiteTable<T>
-  private fn: (row: T) => boolean
-  constructor(table: SQLiteTable<T>, fn: (row: T) => boolean) {
-    this.table = table
-    this.fn = fn
-  }
-
-  async toArray(): Promise<T[]> {
-    const rows = await this.table.toArray()
-    return rows.filter(this.fn)
-  }
-}
-
-class OrderByQuery<T> {
-  private table: SQLiteTable<T>
-  private field: string
-  constructor(table: SQLiteTable<T>, field: string) {
-    this.table = table
-    this.field = field
-  }
-
-  async last(): Promise<T | undefined> {
-    const rows = await this.table._query(
-      `SELECT * FROM "${this.table.tableName}" ORDER BY "${this.field}" DESC LIMIT 1`,
-      [],
-    )
-    return rows[0]
-  }
-
-  async toArray(): Promise<T[]> {
-    return this.table._query(
-      `SELECT * FROM "${this.table.tableName}" ORDER BY "${this.field}"`,
-      [],
-    )
+    return new Query<T>(this.table)._setWhere(`"${this.field}" IN (${placeholders})`, values)
   }
 }
 
@@ -176,16 +169,16 @@ export class SQLiteTable<T> {
     return new WhereClause<T>(this, field)
   }
 
-  orderBy(field: string): OrderByQuery<T> {
-    return new OrderByQuery<T>(this, field)
+  orderBy(field: string): Query<T> {
+    return new Query<T>(this).orderBy(field)
   }
 
-  toCollection(): CollectionQuery<T> {
-    return new CollectionQuery<T>(this)
+  toCollection(): Query<T> {
+    return new Query<T>(this)
   }
 
-  filter(fn: (row: T) => boolean): FilterQuery<T> {
-    return new FilterQuery<T>(this, fn)
+  filter(fn: (row: T) => boolean): Query<T> {
+    return new Query<T>(this).filter(fn)
   }
 
   async toArray(): Promise<T[]> {
