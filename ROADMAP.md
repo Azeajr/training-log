@@ -2,9 +2,20 @@
 
 ## Done
 
+### Senior-Review Cleanup Pass (2026-05-21)
+
+Targeted maintainability fixes flagged by deep code review.
+
+- **N+1 in `getAllCurrentTms`** — replaced per-lift query loop with one `toArray()` + in-memory group-by (`src/lib/training-max.ts`).
+- **Dead `.and()` alias on `WhereQuery`** — removed from `sqlite-client.ts` and from `TableLike<T>`. Three call sites in `HistoryEdit.tsx` switched to `.filter()`; `.filter()` return type widened to expose `.delete()` to match real usage.
+- **`seedDatabase` cache traps rejection** — `_seed` is now cleared on failure so transient first-run errors (e.g. OPFS lock contention) can be retried instead of permanently re-throwing.
+- **Worker promises could hang forever** — 10s per-request timeout added to `SqliteClient.send`; `init` exempted because OPFS SAH pool retries can legitimately take ~1.5s.
+- **`addExerciseToLift` trusted caller-passed `currentCount`** — parameter dropped; the function now computes `max(order)+1` from existing rows scoped to the lift.
+- **`SessionPreview` single-use wrapper** — inlined into `Today.tsx` and the file deleted.
+
 ### Test Infrastructure — Coverage + Mutation
 
-412 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
+414 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
 
 Coverage approach: lib functions tested with `fake-indexeddb`; screens tested end-to-end from DOM event through store to DB render with `@solidjs/testing-library` + jsdom. No mocking of the DB layer.
 
@@ -36,7 +47,7 @@ RTL integration tests (`src/screens/Workout.test.tsx`) cover the joker-button fl
 `calcFslSets` was hardcoded to 65% TM regardless of week. FSL now derives its weight from the actual first main set (70% on week 2, 75% on week 3), matching the "First Set Last" definition. Parameterised tests cover all four weeks.
 
 ### Full Integration Test Suite
-`@solidjs/testing-library` + Vitest + `fake-indexeddb` covering every screen and key component: `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`, `AccessoryPicker`, `AmrapTargets`, `SessionPreview`, `RestTimer`, `BottomNav`, `DurationInput`. Every user-visible interaction path exercises the full stack from UI event → SolidJS store → SQLite → rendered output with no DB layer mocked.
+`@solidjs/testing-library` + Vitest + `fake-indexeddb` covering every screen and key component: `Today`, `Setup`, `History`, `HistoryEdit`, `Settings`, `AccessoryPicker`, `AmrapTargets`, `RestTimer`, `BottomNav`, `DurationInput`. Every user-visible interaction path exercises the full stack from UI event → SolidJS store → SQLite → rendered output with no DB layer mocked.
 
 ### Joker Sets
 After logging the AMRAP top set with reps ≥ the week's minimum (≥5/≥3/≥1), a "+ JOKER SET Xlb" button appears. Each joker uses the same rep scheme as the main sets. Button reappears after each successful joker. Disabled on deload week. Joker sets survive reload.
@@ -210,11 +221,13 @@ Findings from the 2026-05-21 code review that are out of scope for a single-PR c
 
 ### Dexie-Shaped Query Builder Reimplemented in SQL (high)
 
-`src/db/sqlite-client.ts` ships ~230 LOC of `WhereClause` / `WhereQuery` / `OrderByQuery` / `CollectionQuery` / `FilterQuery` classes that mirror Dexie's chainable query API in SQL. `src/lib/types.ts` (`TableLike<T>`, ~58 LOC) declares the same surface as a shared interface so `src/lib/*` can target both backends. Root cause: tests run against Dexie + `fake-indexeddb` while production runs against SQLite Wasm.
+`src/db/sqlite-client.ts` still ships `WhereClause` / `WhereQuery` / `OrderByQuery` / `CollectionQuery` / `FilterQuery` classes mirroring Dexie's chainable query API in SQL. `src/lib/types.ts` (`TableLike<T>`) declares the same surface as a shared interface so `src/lib/*` can target both backends. Root cause: tests run against Dexie + `fake-indexeddb` while production runs against SQLite Wasm.
 
 The cost is rigid coupling: every new query shape needs SQL, Dexie, and the `TableLike` interface kept in lockstep, plus the `db.ts` `transaction(fn)` override that bypasses Dexie's overloads with `any`.
 
-Options to flatten this:
+Partial progress (2026-05-21): unused `WhereQuery.and()` alias removed; `TableLike` member dropped. The structural shim is still in place.
+
+Options to flatten the rest:
 - Drop Dexie entirely and back tests with the same SQLite Wasm worker (initialised in-memory under jsdom). One backend, no shim layer.
 - Replace the chained API in `lib/*` with direct SQL helpers (`db.query(sql, params)`) and a few typed wrappers per entity.
 
