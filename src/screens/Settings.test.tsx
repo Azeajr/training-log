@@ -532,7 +532,7 @@ describe('Settings — exercises', () => {
   })
 
   it('+ assign → select exercise → ADD assigns exercise to lift', async () => {
-    const [_liftId] = await seedLifts()
+    await seedLifts()
     const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
     renderSettings()
 

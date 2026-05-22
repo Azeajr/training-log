@@ -8,7 +8,7 @@ class MockWorker {
   private intervalId: ReturnType<typeof setInterval> | null = null
   private startTime: number | null = null
 
-  constructor(_url: unknown, _opts?: unknown) {}
+  constructor() {}
 
   postMessage(data: unknown) {
     const msg = data as Record<string, unknown>

@@ -173,7 +173,7 @@ describe('exportJson', () => {
 
   it('saves to localStorage when download throws', async () => {
     await seedBase()
-    ;(globalThis as any).URL.createObjectURL = vi.fn(() => { throw new Error('unavailable') })
+    ;(globalThis.URL as { createObjectURL: unknown }).createObjectURL = vi.fn(() => { throw new Error('unavailable') })
     await exportJson(db)
     const pending = localStorage.getItem(PENDING_KEY)
     expect(pending).not.toBeNull()

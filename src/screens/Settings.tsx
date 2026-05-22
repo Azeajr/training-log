@@ -36,6 +36,7 @@ export default function Settings() {
   const [addToLift, setAddToLift] = createSignal<number | null>(null)
   const [addToLiftExId, setAddToLiftExId] = createSignal<number | null>(null)
   const [importError, setImportError] = createSignal<string | null>(null)
+  // eslint-disable-next-line no-unassigned-vars -- Solid `ref={fileInputRef}` reassigns at runtime
   let fileInputRef!: HTMLInputElement
 
   onMount(load)
