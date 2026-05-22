@@ -13,6 +13,7 @@ import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/c
 import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getAmrapTargets, deloadTms } from '../lib/cycle'
+import { detectAmrapPRs } from '../lib/pr'
 import { getCurrentTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -175,14 +176,25 @@ export default function Workout() {
       setAllSets(prev => applyMainCascadeToSupplemental(prev, supplementalTemplate(), weight))
     }
 
+    let dbId: number
     try {
-      const dbId = await db.sets.add(setData)
+      dbId = await db.sets.add(setData)
       editSet(setIndex, { id: dbId })
     } catch (err) {
       deleteLastSet()
       setAllSets(prevAllSets)
       showToast(`Failed to save set: ${err instanceof Error ? err.message : 'unknown error'}`)
       return
+    }
+
+    if (setData.isAmrap && lift()) {
+      const prs = await detectAmrapPRs(db, lift()!.id!, weight, reps, dbId)
+      if (prs.repPr || prs.e1RmPr) {
+        const msgs: string[] = []
+        if (prs.repPr) msgs.push(`REP PR ${weight}×${reps}`)
+        if (prs.e1RmPr) msgs.push(`e1RM ${Math.round(prs.newE1Rm)}lb`)
+        showToast(`${lift()!.name.toUpperCase()} — ${msgs.join(' · ')}`, 4000)
+      }
     }
 
     const nextS = allSets()[setIndex + 1]
