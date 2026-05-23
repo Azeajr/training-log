@@ -26,7 +26,8 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30000,
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: process.env.CI ? 2 : 4,
+  fullyParallel: true,
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
