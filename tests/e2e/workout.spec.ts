@@ -19,7 +19,9 @@ test.describe('workout flow', () => {
   test('active set shows weight and reps steppers and a LOG button', async ({ page }) => {
     await startWorkout(page)
     await expect(page.getByRole('button', { name: 'LOG' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '+' }).first()).toBeVisible()
+    await expect(
+      page.getByTestId('stepper-reps').getByRole('button', { name: '+' })
+    ).toBeVisible()
   })
 
   test('logging a set starts the rest timer', async ({ page }) => {
@@ -232,7 +234,8 @@ test.describe('joker sets', () => {
 // driven UI text transitions live in the unit suite to avoid mocking our own
 // timer worker.
 test.describe('rest type wiring on log', () => {
-  const getRestState = (page: Parameters<typeof logSet>[0]) => getWorkoutState(page)
+  const pollRestType = (page: Parameters<typeof logSet>[0]) =>
+    expect.poll(async () => (await getWorkoutState(page))?.restType)
 
   test('last warmup→main sets restType to transition', async ({ page }) => {
     await startWorkout(page)
@@ -242,9 +245,8 @@ test.describe('rest type wiring on log', () => {
     await page.getByRole('button', { name: 'SKIP REST' }).click()
     await logSet(page, 3) // last warmup → next is main = transition
 
-    const state = await getRestState(page)
-    expect(state?.isResting).toBe(true)
-    expect(state?.restType).toBe('transition')
+    await expect.poll(async () => (await getWorkoutState(page))?.isResting).toBe(true)
+    await pollRestType(page).toBe('transition')
   })
 
   test('main→main set sets restType to normal', async ({ page }) => {
@@ -252,8 +254,7 @@ test.describe('rest type wiring on log', () => {
     await advanceThroughWarmups(page)
     await logSet(page, 5) // main set 1 → main set 2 = normal
 
-    const state = await getRestState(page)
-    expect(state?.restType).toBe('normal')
+    await pollRestType(page).toBe('normal')
   })
 
   test('AMRAP at or above program minimum sets restType to transition (to FSL)', async ({ page }) => {
@@ -261,8 +262,7 @@ test.describe('rest type wiring on log', () => {
     await advanceToAmrap(page)
     await logSet(page, 6) // 6 >= 5 minimum; next set is FSL → transition
 
-    const state = await getRestState(page)
-    expect(state?.restType).toBe('transition')
+    await pollRestType(page).toBe('transition')
   })
 
   test('AMRAP below program minimum sets restType to fail', async ({ page }) => {
@@ -270,7 +270,6 @@ test.describe('rest type wiring on log', () => {
     await advanceToAmrap(page)
     await logSet(page, 3) // 3 < 5 (week 1 minimum)
 
-    const state = await getRestState(page)
-    expect(state?.restType).toBe('fail')
+    await pollRestType(page).toBe('fail')
   })
 })

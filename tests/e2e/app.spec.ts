@@ -4,10 +4,10 @@ import { completeSetupWizard } from './helpers'
 test.describe('first run', () => {
   test('shows setup wizard on fresh DB', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /STEP 1/ })).toBeVisible()
-    await expect(page.getByText('OHP')).toBeVisible()
-    await expect(page.getByText('Bench')).toBeVisible()
-    await expect(page.getByText('Squat')).toBeVisible()
-    await expect(page.getByText('Deadlift')).toBeVisible()
+    await expect(page.getByTestId('stepper-tm-ohp')).toBeVisible()
+    await expect(page.getByTestId('stepper-tm-bench')).toBeVisible()
+    await expect(page.getByTestId('stepper-tm-squat')).toBeVisible()
+    await expect(page.getByTestId('stepper-tm-deadlift')).toBeVisible()
   })
 
   test('setup wizard navigates through both steps', async ({ page }) => {
@@ -20,7 +20,7 @@ test.describe('first run', () => {
   test('after setup lands on Today with WEEK 1', async ({ page }) => {
     await completeSetupWizard(page)
     await expect(page.getByText('WEEK 1')).toBeVisible()
-    await expect(page.getByRole('button', { name: /OHP/ }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /^OHP/ })).toBeVisible()
     await expect(page.getByRole('button', { name: 'START WORKOUT' })).toBeVisible()
   })
 
