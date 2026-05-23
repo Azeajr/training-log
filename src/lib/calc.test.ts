@@ -23,6 +23,11 @@ import {
   calcJokerIncrement,
   shouldShowJokerButton,
   applySupplementalOverride,
+  restStatus,
+  REST_NORMAL_THRESHOLD,
+  REST_TRANSITION_THRESHOLD,
+  REST_FAIL_NUDGE,
+  REST_FAIL_MAX,
 } from './calc'
 import { DEFAULT_PLATES } from '../store/settings-store'
 
@@ -526,5 +531,44 @@ describe('applySupplementalOverride', () => {
     ]
     const out = applySupplementalOverride(bbb, logged, 'bbb')
     expect(out[1].weight).toBe(100)
+  })
+})
+
+describe('restStatus', () => {
+  describe('normal rest', () => {
+    it('idle before threshold', () => {
+      expect(restStatus(0,                            'normal')).toEqual({ phase: 'idle',  message: '' })
+      expect(restStatus(REST_NORMAL_THRESHOLD - 1,    'normal')).toEqual({ phase: 'idle',  message: '' })
+    })
+    it('nudge at and after threshold', () => {
+      expect(restStatus(REST_NORMAL_THRESHOLD,        'normal')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
+      expect(restStatus(REST_NORMAL_THRESHOLD + 30,   'normal')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
+    })
+  })
+
+  describe('transition rest', () => {
+    it('idle before threshold', () => {
+      expect(restStatus(0,                              'transition')).toEqual({ phase: 'idle',  message: '' })
+      expect(restStatus(REST_TRANSITION_THRESHOLD - 1,  'transition')).toEqual({ phase: 'idle',  message: '' })
+    })
+    it('nudge at and after threshold', () => {
+      expect(restStatus(REST_TRANSITION_THRESHOLD,      'transition')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
+      expect(restStatus(REST_NORMAL_THRESHOLD,          'transition')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
+    })
+  })
+
+  describe('fail rest', () => {
+    it('idle before nudge threshold', () => {
+      expect(restStatus(0,                  'fail')).toEqual({ phase: 'idle',     message: '' })
+      expect(restStatus(REST_FAIL_NUDGE - 1, 'fail')).toEqual({ phase: 'idle',    message: '' })
+    })
+    it('warning between nudge and max thresholds', () => {
+      expect(restStatus(REST_FAIL_NUDGE,    'fail')).toEqual({ phase: 'warning', message: 'TIME FOR YOUR NEXT SET' })
+      expect(restStatus(REST_FAIL_MAX - 1,  'fail')).toEqual({ phase: 'warning', message: 'TIME FOR YOUR NEXT SET' })
+    })
+    it('critical at and after max threshold', () => {
+      expect(restStatus(REST_FAIL_MAX,       'fail')).toEqual({ phase: 'critical', message: 'REST UP — SET FAILED' })
+      expect(restStatus(REST_FAIL_MAX + 60,   'fail')).toEqual({ phase: 'critical', message: 'REST UP — SET FAILED' })
+    })
   })
 })
