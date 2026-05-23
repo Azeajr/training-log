@@ -85,7 +85,7 @@ export default function RestTimer() {
         <div class="max-w-3xl mx-auto flex items-center justify-between gap-6">
           <div>
             <div class="text-muted text-xs uppercase tracking-widest mb-1">REST</div>
-            <div class="text-warn font-mono text-4xl leading-none">{formatDuration(elapsed())}</div>
+            <div class="text-warn font-mono text-4xl leading-none" data-testid="rest-timer-display">{formatDuration(elapsed())}</div>
             <Show when={status().message}>
               <div class="text-warn text-xs uppercase tracking-widest mt-2">{status().message}</div>
             </Show>
