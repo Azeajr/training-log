@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm'
-import { SCHEMA, ADDITIVE_MIGRATIONS } from './schema'
+import { SCHEMA, ADDITIVE_MIGRATIONS, ALL_TABLES } from './schema'
 
 type InMsg =
   | { id: number; type: 'init' }
@@ -9,6 +9,7 @@ type InMsg =
   | { id: number; type: 'begin' }
   | { id: number; type: 'commit' }
   | { id: number; type: 'rollback' }
+  | { id: number; type: 'reset' }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any = null
@@ -73,6 +74,11 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
       self.postMessage({ id, result: null })
     } else if (type === 'rollback') {
       db.exec('ROLLBACK')
+      self.postMessage({ id, result: null })
+    } else if (type === 'reset') {
+      for (const table of ALL_TABLES) db.exec(`DROP TABLE IF EXISTS "${table}"`)
+      db.exec(SCHEMA)
+      applyAdditiveMigrations()
       self.postMessage({ id, result: null })
     }
   } catch (err) {

@@ -72,6 +72,7 @@ export default function Setup() {
                 step={5}
                 min={BAR_WEIGHT}
                 max={1000}
+                label={`tm-${lift.name.toLowerCase().replace(/\s+/g, '-')}`}
               />
               <span class="text-muted text-xs">lb</span>
             </div>

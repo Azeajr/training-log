@@ -66,6 +66,10 @@ class SqliteClient {
     }
   }
 
+  resetDb(): Promise<void> {
+    return this.send('reset', undefined, [])
+  }
+
   terminate() {
     this.worker.terminate()
     for (const { reject } of this.pending.values()) {
@@ -84,4 +88,8 @@ export const dbReady = sqliteClient.ready
 // this in production is a programming error.
 export async function __resetForTest(): Promise<void> {
   throw new Error('__resetForTest is only available under vitest')
+}
+
+if (import.meta.env.DEV) {
+  ;(window as Window & { __e2eResetDb?: () => Promise<void> }).__e2eResetDb = () => sqliteClient.resetDb()
 }
