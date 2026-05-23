@@ -27,4 +27,9 @@ scripts/screenshot.png
 # Local tooling
 .claude/
 .playwright-mcp/
+.agents/
+skills-lock.json
 training-log-*.json
+
+# Test coverage output (regenerable via `npm run test:coverage`)
+coverage/
