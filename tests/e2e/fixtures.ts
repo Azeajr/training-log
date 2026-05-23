@@ -1,8 +1,6 @@
 import { test as base } from 'playwright/test'
 import { freshStart } from './helpers'
 
-type E2EWindow = Window & { __e2eResetDb?: () => Promise<void> }
-
 export const test = base.extend<{ _noPageErrors: void; _freshDb: void }>({
   _noPageErrors: [async ({ page }, use) => {
     const errors: string[] = []
@@ -21,5 +19,3 @@ export const test = base.extend<{ _noPageErrors: void; _freshDb: void }>({
 })
 
 export { expect } from 'playwright/test'
-
-export type { E2EWindow }
