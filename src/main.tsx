@@ -7,7 +7,7 @@ import { loadSettings, applyTheme } from './store/settings-store'
 import { settings } from './store/settings-store'
 import { setupWorkoutPersistence } from './store/workout-store'
 
-dbReady
+void dbReady
   .then(seedDatabase)
   .then(loadSettings)
   .then(() => {

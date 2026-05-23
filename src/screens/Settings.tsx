@@ -258,7 +258,7 @@ export default function Settings() {
 
   const timerStep = (field: 'restTimer1' | 'restTimer2' | 'restTimerFail', delta: number) => {
     const next = Math.max(30, settings[field] + delta)
-    updateSettings({ [field]: next })
+    void updateSettings({ [field]: next })
   }
 
 
@@ -475,7 +475,7 @@ export default function Settings() {
                   </select>
                   <div class="flex gap-3">
                     <button
-                      onClick={() => { const id = addToLiftExId(); if (id) handleAddToLift(lift.id!, id) }}
+                      onClick={() => { const id = addToLiftExId(); if (id) void handleAddToLift(lift.id!, id) }}
                       disabled={!addToLiftExId()}
                       class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted"
                     >
@@ -578,7 +578,7 @@ export default function Settings() {
                   const next = settings.plates.some(p => p.weight === weight)
                     ? settings.plates.map(p => p.weight === weight ? { ...p, count: v } : p)
                     : [...settings.plates, { weight, count: v }]
-                  updateSettings({ plates: next })
+                  void updateSettings({ plates: next })
                 }}
                 step={1}
                 min={0}

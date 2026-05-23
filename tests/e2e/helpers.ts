@@ -1,47 +1,73 @@
-import type { Page } from 'playwright/test'
+import { type Locator, type Page, expect } from 'playwright/test'
+
+type E2EWindow = Window & { __e2eResetDb?: () => Promise<void> }
 
 export async function freshStart(page: Page) {
   await page.goto('/')
-  await page.waitForTimeout(600)
-  await page.evaluate(() => {
-    indexedDB.deleteDatabase('TrainingLog')
+  await page.waitForFunction(() => typeof (window as E2EWindow).__e2eResetDb === 'function')
+  await page.evaluate(async () => {
+    await (window as E2EWindow).__e2eResetDb!()
     localStorage.clear()
   })
   await page.reload()
-  await page.waitForTimeout(800)
+  await page.waitForFunction(() => typeof (window as E2EWindow).__e2eResetDb === 'function')
 }
 
-// Open a Stepper into edit mode, fill a value, commit with Enter.
-async function fillStepper(page: Page, stepperIndex: number, value: number) {
-  const steppers = page.locator('.flex.items-center.font-mono')
-  const valueBtn = steppers.nth(stepperIndex).locator('button').nth(1)
-  await valueBtn.click()
-  const input = page.locator('input[type=number]').first()
+async function fillStepper(locator: Locator, value: number) {
+  await locator.getByTestId('stepper-value').click()
+  const input = locator.getByTestId('stepper-input')
   await input.fill(String(value))
   await input.press('Enter')
 }
 
+const TM_LIFT_NAMES = ['ohp', 'deadlift', 'bench', 'squat']
+
 export async function completeSetupWizard(page: Page, tms = [95, 95, 135, 135]) {
-  await page.waitForSelector('text=STEP 1')
-  // Four Steppers on the setup screen, one per lift (OHP, Bench, Squat, Deadlift)
+  await expect(page.getByRole('heading', { name: /STEP 1/ })).toBeVisible()
   for (let i = 0; i < tms.length; i++) {
-    await fillStepper(page, i, tms[i] ?? 100)
+    await fillStepper(page.getByTestId(`stepper-tm-${TM_LIFT_NAMES[i]}`), tms[i] ?? 100)
   }
-  await page.click('button:has-text("NEXT")')
-  await page.waitForSelector('text=STEP 2')
-  await page.click('button:has-text("START TRAINING")')
-  await page.waitForSelector('text=WEEK 1')
+  await page.getByRole('button', { name: 'NEXT' }).click()
+  await expect(page.getByRole('heading', { name: /STEP 2/ })).toBeVisible()
+  await page.getByRole('button', { name: 'START TRAINING' }).click()
+  await expect(page.getByText('WEEK 1')).toBeVisible()
 }
 
 export async function startWorkout(page: Page) {
-  await page.click('button:has-text("START WORKOUT")')
-  await page.waitForSelector('text=COMPLETE SESSION')
+  await page.getByRole('button', { name: 'START WORKOUT' }).click()
+  await expect(page.getByRole('button', { name: 'COMPLETE SESSION' })).toBeVisible()
 }
 
-// Log the active set with the given rep count.
-// The active set has two Steppers: weight (index 0) and reps (index 1).
 export async function logSet(page: Page, reps: number) {
-  await fillStepper(page, 1, reps)
-  await page.click('button:has-text("LOG")')
-  await page.waitForTimeout(400)
+  await fillStepper(page.getByTestId('stepper-reps'), reps)
+  await page.getByRole('button', { name: 'LOG' }).click()
+  await expect(page.getByRole('button', { name: 'SKIP REST' })).toBeVisible()
+}
+
+export async function getWorkoutState(page: Page) {
+  return page.evaluate(() => {
+    const stored = localStorage.getItem('workout-store')
+    return stored ? (JSON.parse(stored).state as Record<string, unknown>) : null
+  })
+}
+
+// Logs all 3 warmup sets and dismisses rest after each — leaves cursor at the
+// first main set.
+export async function advanceThroughWarmups(page: Page) {
+  await logSet(page, 5)
+  await page.getByRole('button', { name: 'SKIP REST' }).click()
+  await logSet(page, 5)
+  await page.getByRole('button', { name: 'SKIP REST' }).click()
+  await logSet(page, 3)
+  await page.getByRole('button', { name: 'SKIP REST' }).click()
+}
+
+// Advances through 3 warmups + 2 main sets to reach the AMRAP set.
+// With TM=95 / OHP week 1: warmups 45/50/55lb, main 60/70/80(AMRAP)lb.
+export async function advanceToAmrap(page: Page) {
+  await advanceThroughWarmups(page)
+  await logSet(page, 5)  // main set 1
+  await page.getByRole('button', { name: 'SKIP REST' }).click()
+  await logSet(page, 5)  // main set 2
+  await page.getByRole('button', { name: 'SKIP REST' }).click()
 }

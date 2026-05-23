@@ -6,6 +6,7 @@ interface Props {
   step?: number
   min?: number
   max?: number
+  label?: string
 }
 
 const fmt = (v: number) => v % 1 === 0 ? String(v) : v.toFixed(1)
@@ -59,7 +60,7 @@ export default function Stepper(props: Props) {
   }
 
   return (
-    <div class="flex items-center font-mono">
+    <div class="flex items-center font-mono" data-testid={props.label ? `stepper-${props.label}` : 'stepper'}>
       <button
         type="button"
         onClick={() => applyStep(-step())}
@@ -76,6 +77,7 @@ export default function Stepper(props: Props) {
         fallback={
           <button
             type="button"
+            data-testid="stepper-value"
             onClick={() => { setRaw(fmt(props.value)); setEditing(true) }}
             class="bg-surface border-y border-border text-text font-mono px-3 py-3 min-w-[2.5rem] text-center"
           >
@@ -85,6 +87,7 @@ export default function Stepper(props: Props) {
       >
         <input
           type="number"
+          data-testid="stepper-input"
           value={raw()}
           autofocus
           onInput={e => setRaw(e.currentTarget.value)}

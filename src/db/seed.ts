@@ -38,15 +38,17 @@ export function seedDatabase(): Promise<void> {
 }
 
 async function _seedDatabase() {
-  // Seed lifts if missing
+  // Seed lifts — re-seed if count is less than expected (handles partial-seed recovery)
   const liftCount = await db.lifts.count()
-  if (liftCount === 0) {
+  if (liftCount < LIFTS.length) {
+    if (liftCount > 0) await db.lifts.clear()
     await db.lifts.bulkAdd(LIFTS)
   }
 
-  // Seed exercises if missing
+  // Seed exercises — re-seed if count is less than expected
   const exerciseCount = await db.exercises.count()
-  if (exerciseCount === 0) {
+  if (exerciseCount < EXERCISES.length) {
+    if (exerciseCount > 0) await db.exercises.clear()
     await db.exercises.bulkAdd(EXERCISES)
   }
 

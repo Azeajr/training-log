@@ -207,9 +207,9 @@ export class SQLiteTable<T> {
     const cols = Object.keys(row).filter((k) => row[k] !== undefined).map(assertIdent)
     const values = cols.map((k) => row[k])
     const placeholders = cols.map(() => '?').join(',')
-    const sql = `INSERT INTO "${this.tableName}" (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${placeholders}) RETURNING id`
-    const rows = await sqliteClient.query<{ id: number }>(sql, values)
-    return rows[0]?.id ?? 0
+    const sql = `INSERT INTO "${this.tableName}" (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${placeholders})`
+    const result = await sqliteClient.run(sql, values)
+    return result.lastInsertRowid
   }
 
   async put(obj: T): Promise<number> {
@@ -217,9 +217,9 @@ export class SQLiteTable<T> {
     const cols = Object.keys(row).filter((k) => row[k] !== undefined).map(assertIdent)
     const values = cols.map((k) => row[k])
     const placeholders = cols.map(() => '?').join(',')
-    const sql = `INSERT OR REPLACE INTO "${this.tableName}" (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${placeholders}) RETURNING id`
-    const rows = await sqliteClient.query<{ id: number }>(sql, values)
-    return rows[0]?.id ?? 0
+    const sql = `INSERT OR REPLACE INTO "${this.tableName}" (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${placeholders})`
+    const result = await sqliteClient.run(sql, values)
+    return result.lastInsertRowid
   }
 
   async update(id: number, changes: Partial<T>): Promise<number> {
@@ -248,7 +248,9 @@ export class SQLiteTable<T> {
   }
 
   async bulkAdd(items: T[]): Promise<void> {
-    for (const item of items) await this.add(item)
+    await this.transaction(async () => {
+      for (const item of items) await this.add(item)
+    })
   }
 
   async clear(): Promise<void> {
