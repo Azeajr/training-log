@@ -77,6 +77,7 @@ export default function Stepper(props: Props) {
         fallback={
           <button
             type="button"
+            data-testid="stepper-value"
             onClick={() => { setRaw(fmt(props.value)); setEditing(true) }}
             class="bg-surface border-y border-border text-text font-mono px-3 py-3 min-w-[2.5rem] text-center"
           >
@@ -86,6 +87,7 @@ export default function Stepper(props: Props) {
       >
         <input
           type="number"
+          data-testid="stepper-input"
           value={raw()}
           autofocus
           onInput={e => setRaw(e.currentTarget.value)}
