@@ -2,6 +2,11 @@
 
 ## Done
 
+### SKIP DELOAD + Cycle-Complete TM Delta (2026-05-22)
+
+- **SKIP DELOAD button** — appears in Settings → CYCLE only when the current week is week 4. Marks all remaining `pending` sessions in weeks 4 (and any gap weeks) as `skipped`, creating missing lift sessions as needed, then calls `advanceCycleIfComplete` to apply TM progression and open the next cycle. Gated behind a destructive confirm dialog. A fix restricted the button to week 4 only (an earlier draft showed it in all weeks).
+- **Cycle-complete modal TM delta** — `advanceCycleIfComplete` now returns `Array<{ liftName, oldWeight, weight }>`. `CycleCompleteModal` renders the old → new weight for each lift (e.g. `BENCH  205 → 210 lbs`). Affects both the Workout and Settings trigger paths.
+
 ### Security Hardening Pass — Round 2 (2026-05-22)
 
 Second pass on the same threat model after CSP / SQL identifier / import size / CI hardening
@@ -67,7 +72,7 @@ against all prior AMRAP sets for that lift and reports two PR flavors independen
 - **Rep PR** — strictly more reps than any prior AMRAP at this *exact* weight
 - **e1RM PR** — strictly higher Epley estimated 1RM than any prior AMRAP
 
-First-ever AMRAP for a lift is treated as a baseline, not a celebration. `Workout.handleLog`
+First-ever AMRAP for a lift returns `e1RmPr: true` and fires the toast (sets the baseline record). `Workout.handleLog`
 calls the detector with `excludeSetId = dbId` (the just-inserted row) so the new set doesn't
 self-compare. A toast fires when either flag is set, e.g. `BENCH — REP PR 225×8 · e1RM 285lb`.
 
@@ -222,9 +227,10 @@ CYCLE section in Settings shows the current week (1–4) with skip-forward butto
 ### Supplemental Template Selection
 
 Global supplemental template selector in Settings (single choice applies to all lifts). Templates:
-- **FSL+BBB** (default) — 5×5 FSL then 5×10 BBB
+- **FSL+BBB** (default) — 5×10 at first working set weight (FSL's weight, BBB's volume)
 - **FSL** — 5×5 at the first working set weight
 - **SSL** — 5×5 at the second working set weight
+- **SSL+BBB** — 5×10 at second working set weight (SSL's weight, BBB's volume)
 - **BBB** — 5×10 at 50% TM
 - **BBS** — 10×5 at 60%/70%/80% TM across weeks 1–3; hidden on deload week
 - **None** — no supplemental block

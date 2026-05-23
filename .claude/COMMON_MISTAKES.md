@@ -76,4 +76,4 @@ spend time trying CSS, touch event handlers, or history manipulation to block it
 
 **Update when**: bug took >1h, could cause data loss, or repeated across sessions.
 
-**Last Updated**: 2026-05-22
+**Last Updated**: 2026-05-23

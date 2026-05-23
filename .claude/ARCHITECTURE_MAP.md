@@ -14,14 +14,16 @@ src/
 ├── screens/                      # page-level components (one per route)
 │   ├── Today.tsx                 # lift picker + week status + session preview + launch
 │   ├── Workout.tsx               # active session: warmups, mains, jokers, supplementals, accessories, notes
-│   ├── History.tsx               # cycle/session browser, est-1RM, AMRAP history
+│   ├── History.tsx               # cycle/session browser, est-1RM, AMRAP history; 3 modes: by-lift, by-date, calendar heatmap
 │   ├── HistoryEdit.tsx           # edit a past session: sets, notes, status
 │   ├── Setup.tsx                 # first-run TM entry
-│   └── Settings.tsx              # rest timers, theme, plate config, supplemental template, export/import, cleanup
+│   └── Settings.tsx              # rest timers, theme, plate config, supplemental template, export/import, cleanup,
+│                                 #   cycle controls (skip-to-week, SKIP DELOAD — only visible in week 4)
 │
 ├── components/
 │   ├── layout/                   # BottomNav, Toast, Rule
 │   ├── modals/                   # ConfirmationDialog (wired to use-confirmation), CycleCompleteModal
+│   │                             #   (shows old → new TM weights on cycle completion)
 │   ├── forms/                    # Stepper, DurationInput, PlateDisplay, ExerciseEditor
 │   ├── ui/                       # InlineConfirm
 │   └── workout/                  # RestTimer, SetRow, AccessoryLog, AccessoryPicker, AmrapTargets
@@ -51,7 +53,8 @@ src/
 │
 ├── lib/                          # pure business logic — takes a TrainingDB or plain inputs
 │   ├── calc.ts                   # 5/3/1 math: main %s, warmups, jokers, FSL/SSL/BBB/BBS,
-│   │                             #   AMRAP targets, plate math, formatDuration
+│   │                             #   AMRAP targets, plate math, formatDuration;
+│   │                             #   restStatus/RestPhase/RestStatus + rest thresholds
 │   ├── cycle.ts                  # getNextSessionAdvancingIfDone, advanceCycleIfComplete,
 │   │                             #   applyTmProgression, applyAccessoryTmProgression, deloadTms,
 │   │                             #   getAmrapTargets
@@ -61,8 +64,12 @@ src/
 │   ├── export-import.ts          # JSON export+import (destructive replace), CSV export,
 │   │                             #   pending-export retry via localStorage
 │   ├── format.ts                 # formatDateShort/Long/Iso
-│   └── types.ts                  # `type TrainingDB = typeof db` — single source of truth
-│                                 #   (post-Dexie removal there is only one backend)
+│   ├── audio-cues.ts             # module-scoped AudioContext; playCue(level), unlockAudio, ensureAudioCtx;
+│   │                             #   tone + vibration for rest-timer nudge/warning/critical phases
+│   ├── pr.ts                     # detectAmrapPRs — rep-PR and e1RM-PR detection vs. all prior AMRAPs;
+│   │                             #   first-ever AMRAP returns e1RmPr=true (sets baseline)
+│   └── rest-timer-worker.ts      # module-scoped Worker factory (getTimerWorker); keeps Worker alive
+│                                 #   across RestTimer remounts; wraps workers/timer.worker.ts
 │
 ├── hooks/
 │   └── use-confirmation.ts       # createConfirmation() API + ConfirmationContext + useConfirmation hook
@@ -152,4 +159,4 @@ If TM count is zero on first mount, AppShell navigates to `/setup`.
 
 ---
 
-**Last Updated**: 2026-05-21
+**Last Updated**: 2026-05-23
