@@ -44,7 +44,7 @@ in-process `@sqlite.org/sqlite-wasm` (no Web Worker, no OPFS) but through the sa
 4. **State change**: edit `src/store/workout-store.ts` or `settings-store.ts` (Solid `createStore`,
    not Zustand). Persisted workout state is keyed by `STORAGE_VERSION` in `workout-store.ts` —
    bump it when changing the persisted shape so old state is dropped on reload.
-5. **Calc logic**: `src/lib/calc.ts` (pure) — always add to `calc.test.ts`.
+5. **Calc logic**: `src/lib/calc.ts` (pure) — always add to `calc.test.ts`. **PR detection**: `src/lib/pr.ts` (`detectAmrapPRs`) — always add to `pr.test.ts`.
 6. **DB-backed business logic**: `src/lib/cycle.ts`, `training-max.ts`, `exercise.ts`, etc. Take a
    `TrainingDB` parameter (`type TrainingDB = typeof db`, exported from `src/db/index.ts`).
    The previous `lib/types.ts` indirection was removed — import the type directly from
@@ -58,4 +58,4 @@ demo-mode seed.
 
 ---
 
-**Last Updated**: 2026-05-22
+**Last Updated**: 2026-05-23

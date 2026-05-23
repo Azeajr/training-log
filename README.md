@@ -7,13 +7,13 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 ## Features
 
 - **5/3/1 program logic** — calculates warmup, main, and FSL sets from your training max each week; warmup follows Wendler's 40/50/60% TM prescription (3 sets × 5/5/3 reps)
-- **AMRAP tracking** — logs rep PRs on the third main set and shows targets based on prior performance
+- **AMRAP tracking** — logs the third main set as AMRAP; detects rep PRs (more reps at same weight) and e1RM PRs (Epley 1RM higher than any prior AMRAP) and shows a toast; displays targets from prior performance
 - **Joker sets** — unlock extra sets after a strong AMRAP; weight increment scales with performance
 - **Accessory work** — select assistance exercises per lift, log reps/weight/duration/distance; per-exercise TM progression rate
 - **Rest timer** — in-session countdown with audio and vibration cues; Screen Wake Lock keeps display active; different durations for normal, transition, and failed sets
-- **Supplemental template** — global selector in Settings (defaults to FSL+BBB): FSL (5×5 at first working weight), SSL (5×5 at second), BBB (5×10 at 50% TM), FSL+BBB (5×5 then 5×10), SSL+BBB, BBS (10×5 at 60/70/80% TM), or None
-- **4-week cycles** — auto-advances week and applies TM progression after each deload; manual week override in Settings
-- **History** — view completed sessions by lift or date, editable after the fact, estimated 1RM history chart alongside TM
+- **Supplemental template** — global selector in Settings (defaults to FSL+BBB): FSL (5×5 at first working weight), SSL (5×5 at second), BBB (5×10 at 50% TM), FSL+BBB (5×10 at first set weight), SSL+BBB (5×10 at second set weight), BBS (10×5 at 60/70/80% TM), or None
+- **4-week cycles** — auto-advances week and applies TM progression after each deload; manual week override in Settings; SKIP DELOAD button (week 4 only) marks remaining sessions skipped and advances the cycle immediately; cycle-complete modal shows old → new TM for each lift
+- **History** — view completed sessions by lift, by date, or on a calendar heatmap; editable after the fact; estimated 1RM history chart alongside TM
 - **Export / Import** — full JSON or CSV backup and restore
 - **PWA** — installable, works offline
 
@@ -72,7 +72,7 @@ Each cycle is 4 weeks across 4 lifts (OHP, Deadlift, Bench, Squat):
 | 3 | 75% × 5 | 85% × 3 | 95% × 1+ |
 | 4 (deload) | 40% × 5 | 50% × 5 | 60% × 5 |
 
-The default supplemental template is FSL+BBB: 5 × 5 FSL (first working set weight) followed by 5 × 10 BBB (50% TM) after every non-deload session. Alternative templates (FSL, SSL, SSL+BBB, BBB, BBS, None) are selectable in Settings; the choice is global across lifts.
+The default supplemental template is FSL+BBB: 5 × 10 at first working set weight (FSL's weight, BBB's volume). Alternative templates (FSL, SSL, SSL+BBB, BBB, BBS, None) are selectable in Settings; the choice is global across lifts.
 
 Warmup sets follow Wendler's prescription — 3 sets calculated from TM, not working weight:
 
