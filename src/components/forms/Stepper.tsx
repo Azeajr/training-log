@@ -6,6 +6,7 @@ interface Props {
   step?: number
   min?: number
   max?: number
+  label?: string
 }
 
 const fmt = (v: number) => v % 1 === 0 ? String(v) : v.toFixed(1)
@@ -59,7 +60,7 @@ export default function Stepper(props: Props) {
   }
 
   return (
-    <div class="flex items-center font-mono">
+    <div class="flex items-center font-mono" data-testid={props.label ? `stepper-${props.label}` : 'stepper'}>
       <button
         type="button"
         onClick={() => applyStep(-step())}
