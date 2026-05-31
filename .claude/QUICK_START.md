@@ -50,9 +50,8 @@ in-process `@sqlite.org/sqlite-wasm` (no Web Worker, no OPFS) but through the sa
    doubling eligibility). Thresholds: `SESSION_TM_BUMP_THRESHOLD = 0.15`,
    `CYCLE_DOUBLE_THRESHOLD = 0.10`. Always add to `tm-recommendations.test.ts`.
 7. **DB-backed business logic**: `src/lib/cycle.ts`, `training-max.ts`, `exercise.ts`, etc. Take a
-   `TrainingDB` parameter (`type TrainingDB = typeof db`, exported from `src/db/index.ts`).
-   The previous `lib/types.ts` indirection was removed — import the type directly from
-   `db/index`. Keeps signatures explicit and tests trivial.
+   `TrainingDB` parameter — import the type directly from `src/db/index.ts`
+   (`type TrainingDB = TrainingSQLiteDB`, exported as `TrainingDB`). Keeps signatures explicit and tests trivial.
 
 ## Deploy
 

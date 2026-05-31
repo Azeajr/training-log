@@ -33,7 +33,7 @@ src/
 │   ├── workout-store.ts          # active session, logged sets, rest timer, accessories, notes;
 │   │                             #   persisted to localStorage via createEffect, version-gated
 │   ├── settings-store.ts         # rest timers, theme, barWeight, plates, supplementalTemplate;
-│   │                             #   loaded from db.settings on boot; THEMES table + applyTheme()
+│   │                             #   loaded from db.settings on boot; THEMES map + applyTheme()
 │   └── toast-store.ts            # createSignal singleton + showToast(msg, ms)
 │
 ├── db/
