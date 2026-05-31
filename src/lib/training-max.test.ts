@@ -91,4 +91,15 @@ describe('getAllCurrentTms', () => {
     expect(result[ids[0]]).toBe(105)
     expect(result[ids[1]]).toBe(155)
   })
+
+  it('keeps newer TM when an older TM is encountered after it (ts > latestAt false branch)', async () => {
+    // Insert newer TM first so toArray() likely returns it first.
+    // Second iteration: Jan timestamp < Mar timestamp → condition is FALSE → no update.
+    // A mutant changing > to < or >= would return 200 (the older weight) instead of 210.
+    const liftId = await seedLift()
+    await db.trainingMaxes.add({ liftId, weight: 210, setAt: new Date('2026-03-01') }) // newer, first
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') }) // older, second
+    const result = await getAllCurrentTms(db)
+    expect(result[liftId]).toBe(210)
+  })
 })

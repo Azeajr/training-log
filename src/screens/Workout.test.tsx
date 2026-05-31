@@ -1050,3 +1050,64 @@ describe('Workout screen — cycle complete', () => {
     await waitFor(() => expect(document.body.textContent).not.toContain('STRONG CYCLE'))
   })
 })
+
+// ─── TM recommendation modal ──────────────────────────────────────────────────
+// Math: TM=200, AMRAP weight=190, reps=11 → e1RM=259.7, suggestedTm=235, delta=17.5% ≥ 15%
+
+describe('Workout screen — TM recommendation modal', () => {
+  beforeEach(async () => {
+    // Pre-seed an AMRAP set for session 1 (week 1, liftId 1)
+    // Session.week !== 4 so handleComplete checks for TM recommendation
+    await db.sets.add({ sessionId: 1, type: 'main' as const, setNumber: 3, weight: 190, reps: 11, isAmrap: true })
+  })
+
+  afterEach(async () => {
+    clearSession()
+    await drain()
+  })
+
+  it('COMPLETE SESSION shows TM ADJUSTMENT modal when AMRAP delta ≥ 15%', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
+  })
+
+  it('KEEP CURRENT dismisses TM modal and navigates to /today', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
+
+    fireEvent.click(screen.getByText('KEEP CURRENT'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    // TM was NOT changed
+    const tms = await db.trainingMaxes.where('liftId').equals(1).sortBy('setAt')
+    expect(tms[tms.length - 1].weight).toBe(200)
+  })
+
+  it('UPDATE TM applies suggestedTm and navigates to /today', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
+
+    fireEvent.click(screen.getByText('UPDATE TM'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    const tms = await db.trainingMaxes.where('liftId').equals(1).sortBy('setAt')
+    expect(tms[tms.length - 1].weight).toBe(235)
+  })
+
+  it('TM ADJUSTMENT does not appear for week-4 session', async () => {
+    await db.sessions.update(1, { week: 4 })
+    startSession({ ...BENCH, week: 4 })
+    renderWorkout()
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+
+    // Week 4 skips TM recommendation check entirely
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    expect(document.body.textContent).not.toContain('TM ADJUSTMENT')
+  })
+})

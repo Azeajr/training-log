@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
+import { createRoot } from 'solid-js'
 import {
   workout, startSession, logSet, editSet, advanceSet, deleteLastSet,
   startRest, stopRest,
   addAccessory, logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory,
-  clearSession, setNotes,
+  clearSession, setNotes, setupWorkoutPersistence,
 } from './workout-store'
 import type { Session } from '../types/domain'
 
@@ -292,5 +293,93 @@ describe('loadFromStorage', () => {
     const { workout: w } = await import('./workout-store')
     expect(w.activeSession).toBeNull()
     expect(w.notes).toBe('')
+  })
+
+  it('returns defaults when storage version does not match (v !== STORAGE_VERSION)', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({ v: 99, state: { notes: 'stale' } }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.notes).toBe('')
+    expect(w.activeSession).toBeNull()
+  })
+})
+
+// ─── setupWorkoutPersistence ──────────────────────────────────────────────────
+
+describe('setupWorkoutPersistence', () => {
+  let dispose: (() => void) | undefined
+
+  beforeEach(() => {
+    clearSession()
+    localStorage.clear()
+    dispose = undefined
+  })
+
+  afterEach(() => {
+    dispose?.()
+  })
+
+  const flush = () => new Promise<void>(r => setTimeout(r, 0))
+
+  it('writes initial state to localStorage after first effect run', async () => {
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    const raw = localStorage.getItem('workout-store')
+    expect(raw).not.toBeNull()
+    const stored = JSON.parse(raw!)
+    expect(stored.v).toBe(1)
+    expect(stored.state).toMatchObject({
+      loggedSets: [],
+      currentSetIndex: 0,
+      isResting: false,
+      activeAccessories: [],
+      notes: '',
+    })
+  })
+
+  it('updates localStorage when notes change', async () => {
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    setNotes('persisted note')
+    await flush()
+    const stored = JSON.parse(localStorage.getItem('workout-store')!)
+    expect(stored.state.notes).toBe('persisted note')
+  })
+
+  it('updates localStorage when rest state changes', async () => {
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    startRest('fail')
+    await flush()
+    const stored = JSON.parse(localStorage.getItem('workout-store')!)
+    expect(stored.state.isResting).toBe(true)
+    expect(stored.state.restType).toBe('fail')
+  })
+
+  it('written value has version = 1 and contains all persisted keys', async () => {
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    const stored = JSON.parse(localStorage.getItem('workout-store')!)
+    expect(stored.v).toBe(1)
+    const keys = Object.keys(stored.state)
+    expect(keys).toContain('activeSession')
+    expect(keys).toContain('loggedSets')
+    expect(keys).toContain('currentSetIndex')
+    expect(keys).toContain('isResting')
+    expect(keys).toContain('restStartedAt')
+    expect(keys).toContain('restType')
+    expect(keys).toContain('activeAccessories')
+    expect(keys).toContain('notes')
+  })
+
+  it('clearSession is reflected in localStorage', async () => {
+    startSession({ id: 1, cycleId: 1, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending' })
+    setNotes('some note')
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    clearSession()
+    await flush()
+    const stored = JSON.parse(localStorage.getItem('workout-store')!)
+    expect(stored.state.activeSession).toBeNull()
+    expect(stored.state.notes).toBe('')
   })
 })

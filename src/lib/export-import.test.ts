@@ -273,6 +273,56 @@ describe('exportCsv', () => {
     expect(text.trim().split('\n')[1].split(',')[8]).toBe('""') // notes ?? ''
   })
 
+  it('CSV header contains all 10 expected column names exactly (kills StringLiteral mutants on L135)', async () => {
+    const cycleId = await seedBase()
+    await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed' })
+    await exportCsv(db)
+    const header = (await capturedBlob!.text()).split('\n')[0]
+    for (const col of ['date', 'lift', 'week', 'type', 'set_number', 'weight_lb', 'reps', 'is_amrap', 'session_notes', 'exercise_name']) {
+      expect(header).toContain(`"${col}"`)
+    }
+  })
+
+  it('no-sets completed session row has empty type, set_number, weight, reps, is_amrap, exercise_name (kills L146 StringLiteral mutants)', async () => {
+    const cycleId = await seedBase()
+    await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed' })
+    await exportCsv(db)
+    const cols = (await capturedBlob!.text()).trim().split('\n')[1].split(',')
+    expect(cols[3]).toBe('""')  // type
+    expect(cols[4]).toBe('""')  // set_number
+    expect(cols[5]).toBe('""')  // weight_lb
+    expect(cols[6]).toBe('""')  // reps
+    expect(cols[7]).toBe('""')  // is_amrap
+    expect(cols[9]).toBe('""')  // exercise_name
+  })
+
+  it('CSV assigns each set to its own session — filter removes cross-session sets (kills L140-L141 filter mutants)', async () => {
+    const cycleId = await seedBase()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const s1 = await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed' })
+    const s2 = await db.sessions.add({ cycleId, liftId: 1, week: 2, date: new Date('2026-01-13'), notes: null, status: 'completed' })
+    await db.sets.add({ sessionId: s1, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+    await db.sets.add({ sessionId: s2, type: 'main', setNumber: 1, weight: 105, reps: 5, isAmrap: false })
+    await db.accessorySets.add({ sessionId: s1, exerciseId: exId, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    await exportCsv(db)
+    const text = await capturedBlob!.text()
+    const lines = text.trim().split('\n')
+    // 1 header + 1 main set (s1) + 1 accessory (s1) + 1 main set (s2) = 4 lines
+    // With unfiltered sets: each session would accumulate all sets → more rows
+    expect(lines).toHaveLength(4)
+  })
+
+  it('accessory non-null weight and reps write exact values in CSV (kills L151 col 66 String mutant)', async () => {
+    const cycleId = await seedBase()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed' })
+    await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 75, reps: 12, duration: null, distance: null })
+    await exportCsv(db)
+    const cols = (await capturedBlob!.text()).trim().split('\n')[1].split(',')
+    expect(cols[5]).toBe('"75"')   // weight exact, not ""
+    expect(cols[6]).toBe('"12"')   // reps exact, not ""
+  })
+
   it('accessory set with null weight, null reps, and unknown exerciseId uses fallbacks', async () => {
     const cycleId = await seedBase()
     const sessionId = await db.sessions.add({
@@ -286,6 +336,33 @@ describe('exportCsv', () => {
     expect(cols[5]).toBe('""')    // weight null → ''
     expect(cols[6]).toBe('""')    // reps null → ''
     expect(cols[9]).toBe('"999"') // exerciseMap[999] ?? '999'
+  })
+})
+
+// ─── importFromRawData — optional keys & parseDates precision ────────────────
+
+describe('importFromRawData — mutation precision', () => {
+  it('handles completely absent optional keys without throwing (kills optional-chaining → true mutants)', async () => {
+    // All keys except lifts omitted — with `d.trainingMaxes?.length → d.trainingMaxes.length`
+    // and `if (true)` mutants, calling pickCols/bulkAdd on undefined would throw.
+    await expect(importFromRawData(db, {
+      lifts: [{ id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
+    })).resolves.toBeUndefined()
+    expect(await db.lifts.count()).toBe(1)
+    expect(await db.trainingMaxes.count()).toBe(0)
+    expect(await db.settings.count()).toBe(0)
+  })
+
+  it('parseDates leaves null date fields as null (copy[f] != null guard is necessary)', async () => {
+    // endDate=null: without the != null check, new Date(null) = epoch (1970-01-01), not null.
+    await importFromRawData(db, {
+      lifts: [], trainingMaxes: [],
+      cycles: [{ id: 1, number: 1, startDate: '2026-01-01T00:00:00.000Z', endDate: null }],
+      sessions: [], sets: [], exercises: [], liftAccessories: [], settings: [],
+    })
+    const cycles = await db.cycles.toArray()
+    expect(cycles[0].startDate).toBeInstanceOf(Date)
+    expect(cycles[0].endDate).toBeNull()
   })
 })
 
@@ -355,6 +432,27 @@ describe('importJson', () => {
   it('rejects JSON arrays / scalars at top level', async () => {
     const file = new File(['[1,2,3]'], 'wrong-shape.json', { type: 'application/json' })
     await expect(importJson(db, file)).rejects.toThrow(/expected JSON object/)
+  })
+
+  it('rejects scalar number at top level (kills typeof !== object → false mutant)', async () => {
+    const file = new File(['42'], 'scalar.json', { type: 'application/json' })
+    await expect(importJson(db, file)).rejects.toThrow(/expected JSON object/)
+  })
+
+  it('accepts file of exactly MAX_IMPORT_BYTES (boundary: > not >=)', async () => {
+    const payload = JSON.stringify({ lifts: [], trainingMaxes: [], cycles: [], sessions: [], sets: [], exercises: [], liftAccessories: [], settings: [] })
+    const file = new File([payload], 'ok.json', { type: 'application/json' })
+    Object.defineProperty(file, 'size', { value: MAX_IMPORT_BYTES })
+    await expect(importJson(db, file)).resolves.toBeUndefined()
+  })
+
+  it('error message includes the actual file size and the limit in MB', async () => {
+    const over = new File(['x'], 'big.json', { type: 'application/json' })
+    Object.defineProperty(over, 'size', { value: MAX_IMPORT_BYTES + 1 })
+    const actualMb = ((MAX_IMPORT_BYTES + 1) / 1024 / 1024).toFixed(1)
+    const limitMb = String(MAX_IMPORT_BYTES / 1024 / 1024)
+    await expect(importJson(db, over)).rejects.toThrow(actualMb)
+    await expect(importJson(db, over)).rejects.toThrow(limitMb)
   })
 
   it('silently strips malicious / unknown columns from imported rows', async () => {

@@ -1044,3 +1044,92 @@ describe('Settings — SUPPLEMENTAL', () => {
     })
   })
 })
+
+// ─── Settings — skip deload (week 4) ─────────────────────────────────────────
+
+describe('Settings — skip deload', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(),
+      db.cycles.clear(), db.sessions.clear(),
+      db.settings.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  // Seed 4 lifts + TMs + cycle + weeks 1-3 completed → currentCycleWeek = 4
+  async function seedWeek4Context() {
+    const liftIds = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await Promise.all(liftIds.map(liftId =>
+      db.trainingMaxes.add({ liftId, weight: 100, setAt: new Date() })
+    ))
+    for (const week of [1, 2, 3] as const) {
+      for (const liftId of liftIds) {
+        await db.sessions.add({ cycleId, liftId, week, date: new Date(), notes: null, status: 'completed' })
+      }
+    }
+    return { cycleId, liftIds }
+  }
+
+  it('SKIP DELOAD button is visible only in week 4', async () => {
+    await seedWeek4Context()
+    renderSettings()
+    await screen.findByText('SKIP DELOAD')
+  })
+
+  it('cancelling skip deload confirmation leaves DB unchanged', async () => {
+    await seedWeek4Context()
+    renderSettings()
+    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    await screen.findByText('CANCEL')
+    fireEvent.click(screen.getByText('CANCEL'))
+    await drain()
+    expect(await db.cycles.count()).toBe(1)
+    expect(await db.sessions.count()).toBe(12) // weeks 1-3, 4 lifts each
+  })
+
+  it('confirming skip deload creates skipped week-4 sessions and advances cycle', async () => {
+    await seedWeek4Context()
+    renderSettings()
+
+    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    await screen.findByText('CANCEL') // dialog open
+
+    // Both the Settings button and dialog confirm say "SKIP DELOAD"; click the dialog's
+    const skipBtns = screen.getAllByText('SKIP DELOAD')
+    fireEvent.click(skipBtns[skipBtns.length - 1])
+
+    await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
+    // New cycle created by advanceCycleIfComplete
+    expect(await db.cycles.count()).toBe(2)
+    // 12 (weeks 1-3) + 4 (skipped week 4) = 16 sessions
+    const week4Sessions = await db.sessions.filter(s => s.week === 4).toArray()
+    expect(week4Sessions).toHaveLength(4)
+    expect(week4Sessions.every(s => s.status === 'skipped')).toBe(true)
+  })
+
+  it('confirming skip deload from mid-week-4 marks only pending sessions skipped', async () => {
+    const { cycleId, liftIds } = await seedWeek4Context()
+    // liftIds[0] already has a completed week-4 session
+    await db.sessions.add({ cycleId, liftId: liftIds[0], week: 4, date: new Date(), notes: null, status: 'completed' })
+    // liftIds[1] has a pending week-4 session
+    await db.sessions.add({ cycleId, liftId: liftIds[1], week: 4, date: new Date(), notes: null, status: 'pending' })
+    renderSettings()
+
+    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    await screen.findByText('CANCEL')
+    const skipBtns = screen.getAllByText('SKIP DELOAD')
+    fireEvent.click(skipBtns[skipBtns.length - 1])
+
+    await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
+
+    const week4 = await db.sessions.filter(s => s.week === 4).toArray()
+    const completed = week4.filter(s => s.status === 'completed')
+    const skipped = week4.filter(s => s.status === 'skipped')
+    expect(completed).toHaveLength(1) // liftIds[0] kept as completed
+    expect(skipped.length).toBeGreaterThanOrEqual(3) // liftIds[1] + liftIds[2,3] created as skipped
+  })
+})
