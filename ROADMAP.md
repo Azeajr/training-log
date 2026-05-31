@@ -22,7 +22,7 @@ Auto-progression still fires for all lifts regardless; doubling is opt-in.
 Threshold constants: `SESSION_TM_BUMP_THRESHOLD = 0.15`, `CYCLE_DOUBLE_THRESHOLD = 0.10`,
 `CYCLE_START_TOLERANCE_MS = 60_000` (distinguishes auto-progression TMs from user bumps).
 
-20 new tests in `src/lib/tm-recommendations.test.ts`; 2 in `src/lib/cycle.test.ts`. 468/468 pass.
+18 new tests in `src/lib/tm-recommendations.test.ts`; 2 in `src/lib/cycle.test.ts`. 468/468 pass.
 
 ### SKIP DELOAD + Cycle-Complete TM Delta (2026-05-22)
 
