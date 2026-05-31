@@ -347,11 +347,17 @@ export default function Workout() {
 
   const handleDoubleIncrement = async (liftId: number, progressionIncrement: number) => {
     const currentTm = await getCurrentTm(db, liftId)
-    await setTm(db, liftId, roundToNearest5(currentTm + progressionIncrement))
-    setCycleCompleteData(prev => prev ? {
-      ...prev,
-      doublingCandidates: prev.doublingCandidates.filter(c => c.liftId !== liftId),
-    } : null)
+    const newTm = roundToNearest5(currentTm + progressionIncrement)
+    await setTm(db, liftId, newTm)
+    setCycleCompleteData(prev => {
+      if (!prev) return null
+      const liftName = prev.doublingCandidates.find(c => c.liftId === liftId)?.liftName
+      return {
+        ...prev,
+        newTms: prev.newTms.map(t => t.liftName === liftName ? { ...t, weight: newTm } : t),
+        doublingCandidates: prev.doublingCandidates.filter(c => c.liftId !== liftId),
+      }
+    })
   }
 
   const warmupSets = () => allSets().filter(s => s.type === 'warmup') as WarmupSet[]

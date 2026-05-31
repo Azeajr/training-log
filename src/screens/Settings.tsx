@@ -633,11 +633,17 @@ export default function Settings() {
         onDeload={async () => { await deloadTms(db); setCycleCompleteData(null); await load() }}
         onDoubleIncrement={async (liftId, progressionIncrement) => {
           const currentTm = await getCurrentTm(db, liftId)
-          await setTm(db, liftId, Math.round((currentTm + progressionIncrement) / 5) * 5)
-          setCycleCompleteData(prev => prev ? {
-            ...prev,
-            doublingCandidates: prev.doublingCandidates.filter(c => c.liftId !== liftId),
-          } : null)
+          const newTm = Math.round((currentTm + progressionIncrement) / 5) * 5
+          await setTm(db, liftId, newTm)
+          setCycleCompleteData(prev => {
+            if (!prev) return null
+            const liftName = prev.doublingCandidates.find(c => c.liftId === liftId)?.liftName
+            return {
+              ...prev,
+              newTms: prev.newTms.map(t => t.liftName === liftName ? { ...t, weight: newTm } : t),
+              doublingCandidates: prev.doublingCandidates.filter(c => c.liftId !== liftId),
+            }
+          })
         }}
       />
     </div>
