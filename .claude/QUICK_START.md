@@ -45,7 +45,11 @@ in-process `@sqlite.org/sqlite-wasm` (no Web Worker, no OPFS) but through the sa
    not Zustand). Persisted workout state is keyed by `STORAGE_VERSION` in `workout-store.ts` —
    bump it when changing the persisted shape so old state is dropped on reload.
 5. **Calc logic**: `src/lib/calc.ts` (pure) — always add to `calc.test.ts`. **PR detection**: `src/lib/pr.ts` (`detectAmrapPRs`) — always add to `pr.test.ts`.
-6. **DB-backed business logic**: `src/lib/cycle.ts`, `training-max.ts`, `exercise.ts`, etc. Take a
+6. **TM recommendation logic**: `src/lib/tm-recommendations.ts` — `getSessionTmRecommendation`
+   (post-session AMRAP e1RM check, ≥15% delta) and `getCycleDoublingCandidates` (cycle-end
+   doubling eligibility). Thresholds: `SESSION_TM_BUMP_THRESHOLD = 0.15`,
+   `CYCLE_DOUBLE_THRESHOLD = 0.10`. Always add to `tm-recommendations.test.ts`.
+7. **DB-backed business logic**: `src/lib/cycle.ts`, `training-max.ts`, `exercise.ts`, etc. Take a
    `TrainingDB` parameter (`type TrainingDB = typeof db`, exported from `src/db/index.ts`).
    The previous `lib/types.ts` indirection was removed — import the type directly from
    `db/index`. Keeps signatures explicit and tests trivial.
@@ -58,4 +62,4 @@ demo-mode seed.
 
 ---
 
-**Last Updated**: 2026-05-23
+**Last Updated**: 2026-05-31
