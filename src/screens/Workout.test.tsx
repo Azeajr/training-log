@@ -357,6 +357,30 @@ async function setupCycleComplete(): Promise<Session> {
   return { id: sid, cycleId: 1, liftId: 1, week: 4, date: new Date(), notes: null, status: 'pending' }
 }
 
+// Bench progressionIncrement=5; TM=200 in beforeEach; all 3 working weeks at exactly 10% delta:
+//   week1: 170lbs×13reps → suggestedTm=220 (10%), week2: 180lbs×11reps → 220, week3: 190lbs×9reps → 220
+async function setupCycleCompleteWithDoubling(): Promise<Session> {
+  await db.lifts.add({ id: 2, name: 'OHP',      order: 2, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' })
+  await db.lifts.add({ id: 3, name: 'Squat',    order: 3, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+  await db.lifts.add({ id: 4, name: 'Deadlift', order: 4, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+  await db.trainingMaxes.add({ liftId: 2, weight: 150, setAt: new Date() })
+  await db.trainingMaxes.add({ liftId: 3, weight: 250, setAt: new Date() })
+  await db.trainingMaxes.add({ liftId: 4, weight: 300, setAt: new Date() })
+  for (const { week, weight, reps } of [
+    { week: 1 as const, weight: 170, reps: 13 },
+    { week: 2 as const, weight: 180, reps: 11 },
+    { week: 3 as const, weight: 190, reps: 9 },
+  ]) {
+    const sessionId = await db.sessions.add({ cycleId: 1, liftId: 1, week, date: new Date(), notes: null, status: 'completed' })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+  }
+  await db.sessions.add({ cycleId: 1, liftId: 2, week: 4, date: new Date(), notes: null, status: 'completed' })
+  await db.sessions.add({ cycleId: 1, liftId: 3, week: 4, date: new Date(), notes: null, status: 'completed' })
+  await db.sessions.add({ cycleId: 1, liftId: 4, week: 4, date: new Date(), notes: null, status: 'completed' })
+  const sid = await db.sessions.add({ cycleId: 1, liftId: 1, week: 4, date: new Date(), notes: null, status: 'pending' })
+  return { id: sid, cycleId: 1, liftId: 1, week: 4, date: new Date(), notes: null, status: 'pending' }
+}
+
 // ─── rest types ───────────────────────────────────────────────────────────────
 
 describe('Workout screen — rest types', () => {
@@ -964,5 +988,65 @@ describe('Workout screen — cycle complete', () => {
     fireEvent.click(screen.getByText('SKIP'))
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
+  })
+
+  it('STRONG CYCLE section appears when all 3 AMRAP sets meet ≥10% threshold', async () => {
+    const session4 = await setupCycleCompleteWithDoubling()
+    startSession(session4)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'))
+  })
+
+  it('double increment button shows 2× progressionIncrement (+10 LBS for Bench increment=5)', async () => {
+    const session4 = await setupCycleCompleteWithDoubling()
+    startSession(session4)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'))
+    await screen.findByText('+10 LBS')
+  })
+
+  it('clicking double increment updates newTms display from 205 to 210', async () => {
+    const session4 = await setupCycleCompleteWithDoubling()
+    startSession(session4)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    await waitFor(() => expect(document.body.textContent).toContain('205')) // normal progression applied
+
+    fireEvent.click(await screen.findByText('+10 LBS'))
+
+    await waitFor(() => expect(document.body.textContent).toContain('210'))
+    expect(document.body.textContent).not.toContain('205')
+  })
+
+  it('clicking double increment writes doubled TM to DB', async () => {
+    const session4 = await setupCycleCompleteWithDoubling()
+    startSession(session4)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'))
+    fireEvent.click(await screen.findByText('+10 LBS'))
+
+    await waitFor(async () => {
+      const tms = await db.trainingMaxes.where('liftId').equals(1).sortBy('setAt')
+      expect(tms[tms.length - 1].weight).toBe(210)
+    })
+  })
+
+  it('clicking double increment removes lift from STRONG CYCLE section', async () => {
+    const session4 = await setupCycleCompleteWithDoubling()
+    startSession(session4)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'))
+    fireEvent.click(await screen.findByText('+10 LBS'))
+
+    await waitFor(() => expect(document.body.textContent).not.toContain('STRONG CYCLE'))
   })
 })
