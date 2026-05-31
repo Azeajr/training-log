@@ -449,3 +449,23 @@ describe('getAmrapTargets', () => {
     expect(result[0]).toMatchObject({ weight: 210, reps: 10, label: 'Last session' })
   })
 })
+
+// ─── advanceCycleIfComplete — doublingCandidates ──────────────────────────────
+
+describe('advanceCycleIfComplete doublingCandidates', () => {
+  it('returns doublingCandidates: [] on non-advanced path', async () => {
+    const result = await advanceCycleIfComplete(db)
+    expect(result.advanced).toBe(false)
+    expect(result.doublingCandidates).toEqual([])
+  })
+
+  it('returns doublingCandidates: [] when cycle advances but no AMRAP sets logged', async () => {
+    const lifts = await seedLifts()
+    await seedTms(lifts)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (let w = 1; w <= 4; w++) await addSessions(cycleId, w as 1 | 2 | 3 | 4, lifts)
+    const { advanced, doublingCandidates } = await advanceCycleIfComplete(db)
+    expect(advanced).toBe(true)
+    expect(doublingCandidates).toEqual([])
+  })
+})
