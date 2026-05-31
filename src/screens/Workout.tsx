@@ -7,14 +7,14 @@ import {
   calcMainSets, calcWarmup, calcAmrapTargets, calcSupplementalSets, getSupplementalLabel,
   calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
   targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType,
-  applyMainCascadeToSupplemental, applySupplementalOverride,
+  applyMainCascadeToSupplemental, applySupplementalOverride, roundToNearest5,
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getAmrapTargets, deloadTms } from '../lib/cycle'
 import { detectAmrapPRs } from '../lib/pr'
-import { getCurrentTm } from '../lib/training-max'
+import { getCurrentTm, setTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
@@ -24,6 +24,9 @@ import AccessoryLog from '../components/workout/AccessoryLog'
 import RestTimer from '../components/workout/RestTimer'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
+import TmRecommendationModal from '../components/modals/TmRecommendationModal'
+import { getSessionTmRecommendation } from '../lib/tm-recommendations'
+import type { SessionTmRecommendation } from '../lib/tm-recommendations'
 import Rule from '../components/layout/Rule'
 
 function SetSection(props: {
@@ -70,6 +73,7 @@ export default function Workout() {
   const [showPicker, setShowPicker] = createSignal(false)
   const [exercises, setExercises] = createSignal<Exercise[]>([])
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
+  const [tmRecommendation, setTmRecommendation] = createSignal<SessionTmRecommendation | null>(null)
 
   const [prevAmrapSets, setPrevAmrapSets] = createSignal<Array<{ weight: number; reps: number; label: string }>>([])
   const [tmWeight, setTmWeight] = createSignal(0)
@@ -256,10 +260,26 @@ export default function Workout() {
     ])
   }
 
-  const finishSession = async () => {
-    const { advanced, newTms } = await advanceCycleIfComplete(db)
-    if (advanced) setCycleCompleteData({ newTms })
+  const proceedAfterSession = async () => {
+    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db)
+    if (advanced) setCycleCompleteData({ newTms, doublingCandidates })
     else { clearSession(); navigate('/today') }
+  }
+
+  const finishSession = async () => {
+    await proceedAfterSession()
+  }
+
+  const handleTmRecommendationAccept = async (newTm: number) => {
+    const rec = tmRecommendation()
+    if (rec) await setTm(db, rec.liftId, newTm)
+    setTmRecommendation(null)
+    await proceedAfterSession()
+  }
+
+  const handleTmRecommendationDismiss = async () => {
+    setTmRecommendation(null)
+    await proceedAfterSession()
   }
 
   const handleComplete = async () => {
@@ -283,7 +303,14 @@ export default function Workout() {
       await db.sessions.update(sessionId, { status: 'completed', notes: workout.notes, date: new Date() })
       if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
     })
-    await finishSession()
+    if (session.week !== 4) {
+      const l = lift()
+      if (l) {
+        const rec = await getSessionTmRecommendation(db, sessionId, session.liftId, l.name)
+        if (rec) { setTmRecommendation(rec); return }
+      }
+    }
+    await proceedAfterSession()
   }
 
   const handleExit = async () => {
@@ -316,6 +343,15 @@ export default function Workout() {
   const handleCycleDeload = async () => {
     await deloadTms(db)
     handleCycleCompleteDismiss()
+  }
+
+  const handleDoubleIncrement = async (liftId: number, progressionIncrement: number) => {
+    const currentTm = await getCurrentTm(db, liftId)
+    await setTm(db, liftId, roundToNearest5(currentTm + progressionIncrement))
+    setCycleCompleteData(prev => prev ? {
+      ...prev,
+      doublingCandidates: prev.doublingCandidates.filter(c => c.liftId !== liftId),
+    } : null)
   }
 
   const warmupSets = () => allSets().filter(s => s.type === 'warmup') as WarmupSet[]
@@ -501,7 +537,20 @@ export default function Workout() {
           data={cycleCompleteData()}
           onDismiss={handleCycleCompleteDismiss}
           onDeload={handleCycleDeload}
+          onDoubleIncrement={handleDoubleIncrement}
         />
+
+        <Show when={tmRecommendation()}>
+          {rec => (
+            <TmRecommendationModal
+              liftName={rec().liftName}
+              currentTm={rec().currentTm}
+              suggestedTm={rec().suggestedTm}
+              onAccept={handleTmRecommendationAccept}
+              onDismiss={handleTmRecommendationDismiss}
+            />
+          )}
+        </Show>
 
         <RestTimer />
       </div>

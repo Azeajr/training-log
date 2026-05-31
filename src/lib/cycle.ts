@@ -1,5 +1,7 @@
 import type { TrainingDB } from '../db/index'
 import type { Lift, TrainingMax } from '../types/domain'
+import { getCycleDoublingCandidates } from './tm-recommendations'
+import type { DoublingCandidate } from './tm-recommendations'
 
 const WEEKS = [1, 2, 3, 4] as const
 
@@ -30,15 +32,19 @@ async function progressTms(
 
 export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   advanced: boolean
+  doublingCandidates: DoublingCandidate[]
   newTms: Array<{ liftName: string; oldWeight: number; weight: number }>
 }> {
   const cycle = await db.cycles.orderBy('number').last()
-  if (!cycle?.id) return { advanced: false, newTms: [] }
+  if (!cycle?.id) return { advanced: false, doublingCandidates: [], newTms: [] }
 
   const sessions = await db.sessions.where('cycleId').equals(cycle.id).toArray()
   const weekCounts = countCompletedByWeek(sessions)
 
-  if (weekCounts[4] < 4) return { advanced: false, newTms: [] }
+  if (weekCounts[4] < 4) return { advanced: false, doublingCandidates: [], newTms: [] }
+
+  // Compute before progression fires so TM bump detection sees pre-progression state
+  const doublingCandidates = await getCycleDoublingCandidates(db, cycle)
 
   const cycleId = cycle.id!
   await db.transaction(async () => {
@@ -56,7 +62,7 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
     if (latest) newTms.push({ liftName: lift.name, oldWeight: prev?.weight ?? latest.weight, weight: latest.weight })
   }
 
-  return { advanced: true, newTms }
+  return { advanced: true, doublingCandidates, newTms }
 }
 
 export async function applyTmProgression(db: TrainingDB): Promise<void> {

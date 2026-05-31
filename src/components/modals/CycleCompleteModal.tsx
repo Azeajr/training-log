@@ -1,13 +1,16 @@
 import { Show, For } from 'solid-js'
+import type { DoublingCandidate } from '../../lib/tm-recommendations'
 
 export interface CycleCompleteData {
   newTms: Array<{ liftName: string; oldWeight: number; weight: number }>
+  doublingCandidates: DoublingCandidate[]
 }
 
 interface Props {
   data: CycleCompleteData | null
   onDismiss: () => void
   onDeload: () => void
+  onDoubleIncrement: (liftId: number, progressionIncrement: number) => void
 }
 
 export default function CycleCompleteModal(props: Props) {
@@ -28,6 +31,27 @@ export default function CycleCompleteModal(props: Props) {
                 )}
               </For>
             </div>
+            <Show when={data().doublingCandidates.length > 0}>
+              <div class="border-t border-border pt-4 mb-6">
+                <div class="text-accent uppercase tracking-widest text-xs mb-1">STRONG CYCLE</div>
+                <div class="text-muted text-xs mb-3">All AMRAP sets ≥10% above TM. Double increment?</div>
+                <div class="space-y-2">
+                  <For each={data().doublingCandidates}>
+                    {c => (
+                      <div class="flex items-center justify-between text-sm">
+                        <span class="text-text uppercase tracking-widest">{c.liftName}</span>
+                        <button
+                          onClick={() => props.onDoubleIncrement(c.liftId, c.progressionIncrement)}
+                          class="border border-accent text-accent px-3 py-1 text-xs tracking-widest hover:bg-accent/10"
+                        >
+                          +{c.progressionIncrement * 2} LBS
+                        </button>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
             <button
               onClick={props.onDismiss}
               class="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono mb-2"

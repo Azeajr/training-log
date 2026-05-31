@@ -221,9 +221,9 @@ export default function Settings() {
       }
     })
 
-    const { advanced, newTms } = await advanceCycleIfComplete(db)
+    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db)
     if (advanced) {
-      setCycleCompleteData({ newTms })
+      setCycleCompleteData({ newTms, doublingCandidates })
     } else {
       await load()
     }
@@ -631,6 +631,14 @@ export default function Settings() {
         data={cycleCompleteData()}
         onDismiss={async () => { setCycleCompleteData(null); await load() }}
         onDeload={async () => { await deloadTms(db); setCycleCompleteData(null); await load() }}
+        onDoubleIncrement={async (liftId, progressionIncrement) => {
+          const currentTm = await getCurrentTm(db, liftId)
+          await setTm(db, liftId, Math.round((currentTm + progressionIncrement) / 5) * 5)
+          setCycleCompleteData(prev => prev ? {
+            ...prev,
+            doublingCandidates: prev.doublingCandidates.filter(c => c.liftId !== liftId),
+          } : null)
+        }}
       />
     </div>
   )
