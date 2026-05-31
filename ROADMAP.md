@@ -2,6 +2,28 @@
 
 ## Done
 
+### Post-Session TM Adjustment Prompt + Cycle-End Doubling Recommendation (2026-05-31)
+
+Two linked features that replace silent/fixed TM progression with performance-driven suggestions:
+
+**Feature 1 — Post-session TM prompt**: After completing a non-deload session, `getSessionTmRecommendation`
+computes `e1RM = weight × (1 + reps/30)` for the AMRAP set and derives `suggestedTm = round(e1RM × 0.9, 5)`.
+If `(suggestedTm − currentTm) / currentTm ≥ 15%`, `TmRecommendationModal` surfaces with an editable
+suggested TM (±5 lb stepper). User accepts or dismisses; cycle-advance logic runs after either action.
+Week 4 (deload) is skipped entirely.
+
+**Feature 2 — Cycle-end doubling**: `getCycleDoublingCandidates` runs before `applyTmProgression` fires
+(so pre-progression TM state is readable). A lift qualifies if: (a) all three working-week AMRAP sets
+showed ≥10% suggested TM delta, and (b) no mid-cycle TM bump (feature 1 acceptance) occurred. Qualifying
+lifts appear in the `CycleCompleteModal` under a STRONG CYCLE banner with per-lift `+Xlbs` buttons that
+apply a one-time 2× increment (e.g. 5 lb → 10 lb, 10 lb → 20 lb) on top of the normal progression.
+Auto-progression still fires for all lifts regardless; doubling is opt-in.
+
+Threshold constants: `SESSION_TM_BUMP_THRESHOLD = 0.15`, `CYCLE_DOUBLE_THRESHOLD = 0.10`,
+`CYCLE_START_TOLERANCE_MS = 60_000` (distinguishes auto-progression TMs from user bumps).
+
+20 new tests in `src/lib/tm-recommendations.test.ts`; 2 in `src/lib/cycle.test.ts`. 468/468 pass.
+
 ### SKIP DELOAD + Cycle-Complete TM Delta (2026-05-22)
 
 - **SKIP DELOAD button** — appears in Settings → CYCLE only when the current week is week 4. Marks all remaining `pending` sessions in weeks 4 (and any gap weeks) as `skipped`, creating missing lift sessions as needed, then calls `advanceCycleIfComplete` to apply TM progression and open the next cycle. Gated behind a destructive confirm dialog. A fix restricted the button to week 4 only (an earlier draft showed it in all weeks).

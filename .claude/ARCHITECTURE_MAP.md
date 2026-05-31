@@ -23,7 +23,8 @@ src/
 ├── components/
 │   ├── layout/                   # BottomNav, Toast, Rule
 │   ├── modals/                   # ConfirmationDialog (wired to use-confirmation), CycleCompleteModal
-│   │                             #   (shows old → new TM weights on cycle completion)
+│   │                             #   (shows old → new TM weights + STRONG CYCLE doubling section),
+│   │                             #   TmRecommendationModal (post-session ≥15% AMRAP TM bump prompt)
 │   ├── forms/                    # Stepper, DurationInput, PlateDisplay, ExerciseEditor
 │   ├── ui/                       # InlineConfirm
 │   └── workout/                  # RestTimer, SetRow, AccessoryLog, AccessoryPicker, AmrapTargets
@@ -57,7 +58,11 @@ src/
 │   │                             #   restStatus/RestPhase/RestStatus + rest thresholds
 │   ├── cycle.ts                  # getNextSessionAdvancingIfDone, advanceCycleIfComplete,
 │   │                             #   applyTmProgression, applyAccessoryTmProgression, deloadTms,
-│   │                             #   getAmrapTargets
+│   │                             #   getAmrapTargets; advanceCycleIfComplete returns doublingCandidates
+│   │                             #   (computed pre-progression via tm-recommendations)
+│   ├── tm-recommendations.ts     # getSessionTmRecommendation (≥15% AMRAP delta → post-session prompt),
+│   │                             #   getCycleDoublingCandidates (all 3 weeks ≥10% + no mid-cycle bump
+│   │                             #   → offer 2× increment at cycle end)
 │   ├── training-max.ts           # getCurrentTm, setTm, getAllCurrentTms
 │   ├── exercise.ts               # create/rename/archive/unarchive + add/remove to a lift
 │   ├── cleanup.ts                # pure buildCleanupPlan: orphan la/atm/sets + exercises-to-archive
@@ -159,4 +164,4 @@ If TM count is zero on first mount, AppShell navigates to `/setup`.
 
 ---
 
-**Last Updated**: 2026-05-23
+**Last Updated**: 2026-05-31
