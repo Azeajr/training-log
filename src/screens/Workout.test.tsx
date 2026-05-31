@@ -7,6 +7,7 @@ import {
   clearSession, startSession, addAccessory, logAccessorySet, workout,
 } from '../store/workout-store'
 import { loadSettings, updateSettings } from '../store/settings-store'
+import { toast } from '../store/toast-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import type { Session } from '../types/domain'
@@ -1109,5 +1110,69 @@ describe('Workout screen — TM recommendation modal', () => {
     // Week 4 skips TM recommendation check entirely
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
     expect(document.body.textContent).not.toContain('TM ADJUSTMENT')
+  })
+})
+
+// ─── DB error handling ────────────────────────────────────────────────────────
+
+describe('Workout screen — DB error handling', () => {
+  beforeEach(async () => {
+    clearSession()
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(),
+      db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+      db.exercises.clear(), db.liftAccessories.clear(), db.accessorySets.clear(),
+      db.settings.clear(),
+    ])
+    mockNavigate.mockClear()
+    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await db.cycles.add({ id: 1, number: 1, startDate: new Date(), endDate: null })
+    await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
+    await db.sessions.add(BENCH)
+    await db.settings.add({ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, supplementalTemplate: 'fsl+bbb' })
+    await loadSettings()
+  })
+
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    clearSession()
+    await drain()
+  })
+
+  it('db.sets.add failure shows toast and rolls back logged set state', async () => {
+    // Covers the catch block at Workout.tsx ~lines 187-191.
+    // logSet + advanceSet run before the await; on failure deleteLastSet reverts both.
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText('LOG')
+
+    vi.spyOn(db.sets, 'add').mockRejectedValueOnce(new Error('disk full'))
+    fireEvent.click(screen.getByText('LOG'))
+
+    await waitFor(() => expect(toast()).toContain('Failed to save set'))
+    expect(workout.loggedSets).toHaveLength(0)
+    expect(workout.currentSetIndex).toBe(0)
+    const sets = await db.sets.toArray()
+    expect(sets).toHaveLength(0)
+  })
+
+  it('db.sets.update failure in handleEdit shows toast and reverts edit', async () => {
+    // Covers the catch block at Workout.tsx ~lines 227-229.
+    // editSet(new values) runs before the await; on failure editSet(prev values) reverts.
+    startSession(BENCH)
+    renderWorkout()
+
+    // Log first warmup set so loggedSets[0] has a DB-assigned id
+    fireEvent.click(await screen.findByText('LOG'))
+    await waitFor(() => expect(workout.loggedSets[0]?.id).toBeDefined())
+
+    // Click the completed set row to enter edit mode
+    fireEvent.click(screen.getAllByText('done')[0])
+    await screen.findByText('SAVE')
+
+    vi.spyOn(db.sets, 'update').mockRejectedValueOnce(new Error('constraint violation'))
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(() => expect(toast()).toContain('Failed to save edit'))
   })
 })

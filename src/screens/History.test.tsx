@@ -531,4 +531,50 @@ describe('History — calendar', () => {
 
     await screen.findByText('EDIT →')
   })
+
+  it('cell with 2 sessions on the same day gets medium accent bg (covers dayCellClass n=2 branch)', async () => {
+    // dayCellClass: n=2 → 'border border-accent/70 text-accent bg-accent/25'
+    const liftId = await seedLift()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const today = new Date()
+    const todayMidday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10)
+
+    await db.sessions.add({ cycleId, liftId, week: 1, date: todayMidday, notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId, week: 2, date: todayMidday, notes: null, status: 'completed' })
+
+    renderHistory()
+    fireEvent.click(screen.getByText('Calendar'))
+
+    await waitFor(() => {
+      const cell = screen.queryByLabelText(todayMidday.toDateString())
+      expect(cell).not.toBeNull()
+      expect(cell!.className).toContain('bg-accent/25')
+      const compact = (cell!.textContent ?? '').replace(/\s+/g, '')
+      expect(compact).toBe(`${today.getDate()}2`)
+    })
+  })
+
+  it('cell with ≥3 sessions on the same day gets full-strength accent bg (covers dayCellClass n≥3 branch)', async () => {
+    // dayCellClass: n>=3 → 'border border-accent text-on-accent bg-accent' (solid, no opacity modifier)
+    const liftId = await seedLift()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const today = new Date()
+    const todayMidday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10)
+
+    await db.sessions.add({ cycleId, liftId, week: 1, date: todayMidday, notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId, week: 2, date: todayMidday, notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId, week: 3, date: todayMidday, notes: null, status: 'completed' })
+
+    renderHistory()
+    fireEvent.click(screen.getByText('Calendar'))
+
+    await waitFor(() => {
+      const cell = screen.queryByLabelText(todayMidday.toDateString())
+      expect(cell).not.toBeNull()
+      expect(cell!.className).toContain('bg-accent')
+      expect(cell!.className).not.toContain('bg-accent/')
+      const compact = (cell!.textContent ?? '').replace(/\s+/g, '')
+      expect(compact).toBe(`${today.getDate()}3`)
+    })
+  })
 })
