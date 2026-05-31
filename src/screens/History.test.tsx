@@ -169,6 +169,7 @@ describe('History — session expansion', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+      db.accessorySets.clear(), db.exercises.clear(),
     ])
     mockNavigate.mockClear()
   })
@@ -267,6 +268,31 @@ describe('History — session expansion', () => {
     fireEvent.click(rowBtn)
 
     await waitFor(() => expect(document.body.textContent).toContain('felt great'))
+  })
+
+  it('expanded detail shows accessory sets with exercise name (covers handleExpand accSets.length > 0 branch)', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1,
+      date: new Date(Date.now() - 1_000_000),
+      notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+    await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+
+    renderHistory()
+
+    const rowBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const row = btns.find(b => b.textContent?.includes('W1') && b.textContent?.includes('Bench'))
+      expect(row).toBeTruthy()
+      return row!
+    })
+    fireEvent.click(rowBtn)
+
+    await waitFor(() => expect(document.body.textContent?.toUpperCase()).toContain('CHINUP'))
   })
 })
 
@@ -408,6 +434,7 @@ describe('History — calendar', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+      db.accessorySets.clear(),
     ])
   })
 
@@ -468,5 +495,40 @@ describe('History — calendar', () => {
     await waitFor(() => {
       expect(document.body.textContent ?? '').toContain('Bench W1')
     }, { timeout: 3000 })
+  })
+
+  it('clicking session row in calendar day view expands detail (covers calendar detail ternary)', async () => {
+    const liftId = await seedLift()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const today = new Date()
+    const todayMidday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10)
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1, date: todayMidday, notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+
+    renderHistory()
+    fireEvent.click(screen.getByText('Calendar'))
+
+    const cellLabel = todayMidday.toDateString()
+    await waitFor(() => {
+      const cell = screen.queryByLabelText(cellLabel)
+      const compact = (cell?.textContent ?? '').replace(/\s+/g, '')
+      expect(compact).toBe(`${today.getDate()}1`)
+    })
+
+    fireEvent.click(screen.getByLabelText(cellLabel))
+    await waitFor(() => expect(document.body.textContent ?? '').toContain('Bench W1'), { timeout: 3000 })
+
+    // Click the session row → expanded() === sessionId → detail() truthy in calendar ternary
+    const rowBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const row = btns.find(b => b.textContent?.includes('W1') && b.textContent?.includes('Bench'))
+      expect(row).toBeTruthy()
+      return row!
+    })
+    fireEvent.click(rowBtn)
+
+    await screen.findByText('EDIT →')
   })
 })

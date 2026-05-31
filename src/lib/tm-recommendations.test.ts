@@ -120,6 +120,17 @@ describe('getSessionTmRecommendation', () => {
     expect(result).not.toBeNull()
     expect(result!.suggestedTm).toBe(230)
   })
+
+  it('reps=1 AMRAP is valid — reps < 1 guard, not <= 1 (kills L31 EqualityOperator mutant)', async () => {
+    // estimated1RM(w, 1) = w (exact, not Epley). weight=260: e1RM=260, suggestedTm=235, delta=17.5%>15%
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+    const { sessionId } = await seedSessionWithAmrap({ liftId, week: 3, weight: 260, reps: 1 })
+    const result = await getSessionTmRecommendation(db, sessionId, liftId, lifts[0].name)
+    expect(result).not.toBeNull()
+    expect(result!.suggestedTm).toBe(235)
+  })
 })
 
 // ─── getCycleDoublingCandidates ───────────────────────────────────────────────
@@ -325,5 +336,91 @@ describe('getCycleDoublingCandidates', () => {
 
     const cycle: Cycle = { id: cycleId, number: 1, startDate: CYCLE_START, endDate: null }
     expect(await getCycleDoublingCandidates(db, cycle)).toEqual([])
+  })
+
+  it('uses the MOST RECENT TM before cycle start, not the oldest (kills L72 .reverse() mutant)', async () => {
+    // Old TM (weight=220): delta=(220-220)/220=0% → would NOT qualify
+    // New TM (weight=200): delta=(220-200)/200=10% → qualifies
+    // Without .reverse(), find() returns the oldest TM first → no candidate
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    const cycleId = await db.cycles.add({ number: 1, startDate: CYCLE_START, endDate: null })
+    await db.trainingMaxes.add({ liftId, weight: 220, setAt: new Date('2025-11-01T12:00:00Z') })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: TM_DATE })
+    for (const { week, weight, reps } of QUALIFYING_WEEKS) {
+      const sessionId = await db.sessions.add({
+        cycleId, liftId, week,
+        date: new Date(CYCLE_START.getTime() + week * 86_400_000),
+        notes: null, status: 'completed',
+      })
+      await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+    }
+    const cycle: Cycle = { id: cycleId, number: 1, startDate: CYCLE_START, endDate: null }
+    const result = await getCycleDoublingCandidates(db, cycle)
+    expect(result).toHaveLength(1)
+  })
+
+  it('TM at exactly cycle start + 60s is NOT a bump and IS a valid cycleTm (kills L68 >= and L73 < boundary mutants)', async () => {
+    // CYCLE_START_TOLERANCE_MS = 60_000
+    // L68: `> tolerance` — exact boundary should NOT be a bump (>), mutant `>=` would flag as bump
+    // L73: `<= tolerance` — exact boundary should be found as cycleTm (<=), mutant `<` would exclude it
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    const exactBoundary = new Date(CYCLE_START.getTime() + 60_000)
+    const cycleId = await db.cycles.add({ number: 1, startDate: CYCLE_START, endDate: null })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: exactBoundary })
+    for (const { week, weight, reps } of QUALIFYING_WEEKS) {
+      const sessionId = await db.sessions.add({
+        cycleId, liftId, week,
+        date: new Date(CYCLE_START.getTime() + week * 86_400_000),
+        notes: null, status: 'completed',
+      })
+      await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+    }
+    const cycle: Cycle = { id: cycleId, number: 1, startDate: CYCLE_START, endDate: null }
+    const result = await getCycleDoublingCandidates(db, cycle)
+    expect(result).toHaveLength(1)
+  })
+
+  it('only main AMRAP sets determine doubling eligibility — non-AMRAP main sets are excluded (kills L80 || mutant)', async () => {
+    // With `|| isAmrap` mutation, find() picks the first main set (non-amrap, low reps)
+    // whose e1RM gives negative delta → allOver=false → no candidate
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    const cycleId = await db.cycles.add({ number: 1, startDate: CYCLE_START, endDate: null })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: TM_DATE })
+    for (const { week, weight, reps } of QUALIFYING_WEEKS) {
+      const sessionId = await db.sessions.add({
+        cycleId, liftId, week,
+        date: new Date(CYCLE_START.getTime() + week * 86_400_000),
+        notes: null, status: 'completed',
+      })
+      // Non-AMRAP main set first (low reps → negative delta)
+      await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight, reps: 3, isAmrap: false })
+      // AMRAP set with qualifying reps
+      await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+    }
+    const cycle: Cycle = { id: cycleId, number: 1, startDate: CYCLE_START, endDate: null }
+    const result = await getCycleDoublingCandidates(db, cycle)
+    expect(result).toHaveLength(1)
+  })
+
+  it('reps=1 per session is valid (reps < 1 guard, not <= 1) (kills L81 EqualityOperator mutant)', async () => {
+    // estimated1RM(w, 1) = w. weight=245: e1RM=245, suggestedTm=roundToNearest5(220.5)=220, delta=10%
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    const cycleId = await db.cycles.add({ number: 1, startDate: CYCLE_START, endDate: null })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: TM_DATE })
+    for (const week of [1, 2, 3] as const) {
+      const sessionId = await db.sessions.add({
+        cycleId, liftId, week,
+        date: new Date(CYCLE_START.getTime() + week * 86_400_000),
+        notes: null, status: 'completed',
+      })
+      await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 245, reps: 1, isAmrap: true })
+    }
+    const cycle: Cycle = { id: cycleId, number: 1, startDate: CYCLE_START, endDate: null }
+    const result = await getCycleDoublingCandidates(db, cycle)
+    expect(result).toHaveLength(1)
   })
 })

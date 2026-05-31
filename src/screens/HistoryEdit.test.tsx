@@ -92,6 +92,13 @@ describe('HistoryEdit screen', () => {
     await screen.findByText('Loading...')
   })
 
+  it('redirects to /history when sessionId is 0 (sid === 0 guard)', async () => {
+    renderHistoryEdit(0)
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/history', { replace: true })
+    })
+  })
+
   it('back arrow navigates to history', async () => {
     const { sessionId, liftId } = await seedSession()
     renderHistoryEdit(sessionId)

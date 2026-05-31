@@ -28,6 +28,12 @@ import {
   REST_TRANSITION_THRESHOLD,
   REST_FAIL_NUDGE,
   REST_FAIL_MAX,
+  calcSupplementalSets,
+  getSupplementalLabel,
+  isSupplementalType,
+  applyMainCascadeToSupplemental,
+  est1RMFromTm,
+  TM_PCT_OF_1RM,
 } from './calc'
 import { DEFAULT_PLATES } from '../store/settings-store'
 
@@ -570,5 +576,176 @@ describe('restStatus', () => {
       expect(restStatus(REST_FAIL_MAX,       'fail')).toEqual({ phase: 'critical', message: 'REST UP — SET FAILED' })
       expect(restStatus(REST_FAIL_MAX + 60,   'fail')).toEqual({ phase: 'critical', message: 'REST UP — SET FAILED' })
     })
+  })
+})
+
+describe('est1RMFromTm', () => {
+  it('is inverse of multiplying by TM_PCT_OF_1RM', () => {
+    const e1rm = 250
+    expect(est1RMFromTm(e1rm * TM_PCT_OF_1RM)).toBeCloseTo(e1rm, 10)
+  })
+
+  it('est1RMFromTm(180) ≈ 200 (90% of 200 = 180)', () => {
+    expect(est1RMFromTm(180)).toBeCloseTo(200, 1)
+  })
+
+  it('est1RMFromTm(200) = 200 / 0.9', () => {
+    expect(est1RMFromTm(200)).toBeCloseTo(200 / TM_PCT_OF_1RM, 5)
+  })
+})
+
+describe('isSupplementalType', () => {
+  it.each(['fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs'])('"%s" → true', (type) => {
+    expect(isSupplementalType(type)).toBe(true)
+  })
+
+  it.each(['main', 'warmup', 'joker', '', 'unknown'])('"%s" → false', (type) => {
+    expect(isSupplementalType(type)).toBe(false)
+  })
+})
+
+describe('applyMainCascadeToSupplemental', () => {
+  const fslSets = [
+    { type: 'fsl', weight: 130 },
+    { type: 'fsl', weight: 130 },
+  ]
+
+  it('fsl: updates all fsl sets to mainSet1Weight', () => {
+    const out = applyMainCascadeToSupplemental(fslSets, 'fsl', 125)
+    expect(out).toEqual([
+      { type: 'fsl', weight: 125 },
+      { type: 'fsl', weight: 125 },
+    ])
+  })
+
+  it('fsl+bbb: updates all fsl+bbb sets', () => {
+    const sets = [{ type: 'fsl+bbb', weight: 130 }, { type: 'fsl+bbb', weight: 130 }]
+    const out = applyMainCascadeToSupplemental(sets, 'fsl+bbb', 120)
+    out.forEach(s => expect(s.weight).toBe(120))
+  })
+
+  it('ssl: returns original sets unchanged', () => {
+    const sets = [{ type: 'ssl', weight: 150 }]
+    expect(applyMainCascadeToSupplemental(sets, 'ssl', 125)).toEqual(sets)
+  })
+
+  it('bbb: returns original sets unchanged', () => {
+    const sets = [{ type: 'bbb', weight: 100 }]
+    expect(applyMainCascadeToSupplemental(sets, 'bbb', 125)).toEqual(sets)
+  })
+
+  it('none: returns original sets unchanged', () => {
+    expect(applyMainCascadeToSupplemental(fslSets, 'none', 125)).toEqual(fslSets)
+  })
+
+  it('does not mutate the original array', () => {
+    const original = [{ type: 'fsl', weight: 130 }]
+    applyMainCascadeToSupplemental(original, 'fsl', 125)
+    expect(original[0].weight).toBe(130)
+  })
+})
+
+describe('calcSupplementalSets', () => {
+  const main = calcMainSets(200, 1) // [130×5, 150×5, 170×5amrap]
+  const tm = 200
+
+  it('none: returns []', () => {
+    expect(calcSupplementalSets('none', main, tm, 1)).toHaveLength(0)
+  })
+
+  it('empty main: returns [] regardless of template', () => {
+    expect(calcSupplementalSets('fsl', [], tm, 1)).toHaveLength(0)
+  })
+
+  it('fsl: 5 sets at first main set weight', () => {
+    const sets = calcSupplementalSets('fsl', main, tm, 1)
+    expect(sets).toHaveLength(5)
+    sets.forEach(s => expect(s.weight).toBe(130))
+    expect(sets[0].type).toBe('fsl')
+  })
+
+  it('ssl: 5 sets at second main set weight', () => {
+    const sets = calcSupplementalSets('ssl', main, tm, 1)
+    expect(sets).toHaveLength(5)
+    sets.forEach(s => expect(s.weight).toBe(150))
+    expect(sets[0].type).toBe('ssl')
+  })
+
+  it('bbb: 5 × 10 at 50% TM', () => {
+    const sets = calcSupplementalSets('bbb', main, tm, 1)
+    expect(sets).toHaveLength(5)
+    expect(sets[0].reps).toBe(10)
+    expect(sets[0].weight).toBe(100) // 200 * 0.50 = 100
+  })
+
+  it('fsl+bbb: 5 × 10 at first main set weight', () => {
+    const sets = calcSupplementalSets('fsl+bbb', main, tm, 1)
+    expect(sets).toHaveLength(5)
+    expect(sets[0].reps).toBe(10)
+    expect(sets[0].weight).toBe(130)
+    expect(sets[0].type).toBe('fsl+bbb')
+  })
+
+  it('ssl+bbb: 5 × 10 at second main set weight', () => {
+    const sets = calcSupplementalSets('ssl+bbb', main, tm, 1)
+    expect(sets).toHaveLength(5)
+    expect(sets[0].reps).toBe(10)
+    expect(sets[0].weight).toBe(150)
+  })
+
+  it('bbs week 1: 10 × 5 at 60% TM', () => {
+    const sets = calcSupplementalSets('bbs', main, tm, 1)
+    expect(sets).toHaveLength(10)
+    expect(sets[0].weight).toBe(120) // 200 * 0.60 = 120
+    expect(sets[0].reps).toBe(5)
+  })
+
+  it('bbs week 4 (deload): returns []', () => {
+    expect(calcSupplementalSets('bbs', main, tm, 4)).toHaveLength(0)
+  })
+})
+
+describe('getSupplementalLabel', () => {
+  it('returns null when sets is empty', () => {
+    expect(getSupplementalLabel('fsl', [], 1)).toBeNull()
+  })
+
+  it('fsl: returns FSL count string', () => {
+    const sets = calcFslSets(130)
+    expect(getSupplementalLabel('fsl', sets, 1)).toBe('FSL  5 × 5')
+  })
+
+  it('ssl: returns SSL count string', () => {
+    const sets = calcSslSets(150)
+    expect(getSupplementalLabel('ssl', sets, 1)).toBe('SSL  5 × 5')
+  })
+
+  it('bbb: includes 50% TM label', () => {
+    const sets = calcBbbSets(200)
+    expect(getSupplementalLabel('bbb', sets, 1)).toBe('BBB  5 × 10  50% TM')
+  })
+
+  it('fsl+bbb: returns FSL+BBB count string', () => {
+    const sets = calcFslBbbSets(130)
+    expect(getSupplementalLabel('fsl+bbb', sets, 1)).toBe('FSL+BBB  5 × 10')
+  })
+
+  it('ssl+bbb: returns SSL+BBB count string', () => {
+    const sets = calcSslBbbSets(150)
+    expect(getSupplementalLabel('ssl+bbb', sets, 1)).toBe('SSL+BBB  5 × 10')
+  })
+
+  it('bbs week 1: includes 60% TM label', () => {
+    const sets = calcBbsSets(200, 1)
+    expect(getSupplementalLabel('bbs', sets, 1)).toBe('BBS  10 × 5  60% TM')
+  })
+
+  it('bbs week 2: includes 70% TM label', () => {
+    const sets = calcBbsSets(200, 2)
+    expect(getSupplementalLabel('bbs', sets, 2)).toBe('BBS  10 × 5  70% TM')
+  })
+
+  it('bbs week 4 deload: returns null (empty set array)', () => {
+    expect(getSupplementalLabel('bbs', [], 4)).toBeNull()
   })
 })
