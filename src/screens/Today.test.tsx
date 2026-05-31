@@ -250,4 +250,38 @@ describe('Today screen', () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
     clearSession()
   })
+
+  it('confirming abandon deletes session, sets, and accessory sets from DB', async () => {
+    // Covers the db.transaction cleanup block (Today.tsx ~lines 97-103).
+    // The previous "confirming YES" test uses id=10 which is NOT in the DB, so the
+    // transaction runs but deletes nothing. This test uses a real persisted session.
+    const cycleId = (await db.cycles.toArray())[0].id!
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending',
+    })
+    await db.sets.add({ sessionId, type: 'warmup', setNumber: 1, weight: 45, reps: 5, isAmrap: false })
+    await db.accessorySets.add({
+      sessionId, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null,
+    })
+
+    startSession({ id: sessionId, cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending' })
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    // Select Deadlift (liftId=2) — different from active OHP session
+    const allBtns = screen.getAllByRole('button')
+    const deadliftBtn = allBtns.find(b => b.textContent?.includes('Deadlift'))!
+    fireEvent.click(deadliftBtn)
+
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+    await screen.findByText(/Abandon OHP session\?/)
+    fireEvent.click(screen.getByText('YES'))
+
+    await waitFor(async () => {
+      expect(await db.sessions.get(sessionId)).toBeUndefined()
+      expect(await db.sets.where('sessionId').equals(sessionId).toArray()).toHaveLength(0)
+      expect(await db.accessorySets.where('sessionId').equals(sessionId).toArray()).toHaveLength(0)
+    })
+    clearSession()
+  })
 })

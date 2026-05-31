@@ -423,4 +423,42 @@ describe('getCycleDoublingCandidates', () => {
     const result = await getCycleDoublingCandidates(db, cycle)
     expect(result).toHaveLength(1)
   })
+
+  it('skips sessions whose liftId is absent from lifts table (orphaned FK — defensive guard)', async () => {
+    // Covers the `if (!lift) continue` guard at the end of getCycleDoublingCandidates.
+    // A session row referencing liftId=9999 (not in db.lifts) should be silently skipped;
+    // a valid lift in the same cycle still qualifies.
+    //
+    // Math: TM=200, week 1 weight=170 reps=13 → delta 10% ✓ (same as QUALIFYING_WEEKS)
+    const lifts = await seedLifts()
+    const validLiftId = lifts[0].id!
+    const orphanLiftId = 9999
+
+    const cycleId = await db.cycles.add({ number: 1, startDate: CYCLE_START, endDate: null })
+    await db.trainingMaxes.add({ liftId: validLiftId, weight: 200, setAt: TM_DATE })
+    // TM for the orphan id — needed so hasBump/cycleTm checks run, reaching the lift lookup
+    await db.trainingMaxes.add({ liftId: orphanLiftId, weight: 200, setAt: TM_DATE })
+
+    for (const { week, weight, reps } of QUALIFYING_WEEKS) {
+      const validSid = await db.sessions.add({
+        cycleId, liftId: validLiftId, week,
+        date: new Date(CYCLE_START.getTime() + week * 86_400_000),
+        notes: null, status: 'completed',
+      })
+      await db.sets.add({ sessionId: validSid, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+
+      const orphanSid = await db.sessions.add({
+        cycleId, liftId: orphanLiftId, week,
+        date: new Date(CYCLE_START.getTime() + week * 86_400_000),
+        notes: null, status: 'completed',
+      })
+      await db.sets.add({ sessionId: orphanSid, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+    }
+
+    const cycle: Cycle = { id: cycleId, number: 1, startDate: CYCLE_START, endDate: null }
+    const result = await getCycleDoublingCandidates(db, cycle)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].liftId).toBe(validLiftId)
+  })
 })

@@ -1132,4 +1132,90 @@ describe('Settings — skip deload', () => {
     expect(completed).toHaveLength(1) // liftIds[0] kept as completed
     expect(skipped.length).toBeGreaterThanOrEqual(3) // liftIds[1] + liftIds[2,3] created as skipped
   })
+
+  it('CONTINUE in Settings CycleCompleteModal dismisses modal and reloads data (covers onDismiss)', async () => {
+    await seedWeek4Context()
+    renderSettings()
+
+    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    await screen.findByText('CANCEL')
+    const skipBtns = screen.getAllByText('SKIP DELOAD')
+    fireEvent.click(skipBtns[skipBtns.length - 1])
+
+    await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
+    fireEvent.click(screen.getByText('CONTINUE'))
+
+    await waitFor(() => expect(screen.queryByText('CYCLE COMPLETE')).toBeNull())
+  })
+
+  it('DELOAD INSTEAD in Settings CycleCompleteModal deloads TMs and dismisses modal (covers onDeload)', async () => {
+    const { liftIds } = await seedWeek4Context()
+    renderSettings()
+
+    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    await screen.findByText('CANCEL')
+    const skipBtns = screen.getAllByText('SKIP DELOAD')
+    fireEvent.click(skipBtns[skipBtns.length - 1])
+
+    await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
+    fireEvent.click(screen.getByText(/DELOAD INSTEAD/))
+
+    await waitFor(async () => {
+      const tms = await db.trainingMaxes.where('liftId').equals(liftIds[0]).sortBy('setAt')
+      // applyTmProgression: 100→105; then deloadTms: round(105*(1-0.10)/5)*5 = round(94.5/5)*5 = 95
+      expect(tms[tms.length - 1].weight).toBe(95)
+    })
+    await waitFor(() => expect(screen.queryByText('CYCLE COMPLETE')).toBeNull())
+  })
+
+  it('double-increment in CycleCompleteModal (via Settings) updates TM and removes candidate', async () => {
+    // Math (TM=100, progressionIncrement=5):
+    //   Week 1: 85 lbs × 13 reps → e1RM=121.8, suggestedTm=110, delta=10% ✓
+    //   Week 2: 90 lbs × 11 reps → e1RM=123.0, suggestedTm=110, delta=10% ✓
+    //   Week 3: 95 lbs × 9  reps → e1RM=123.5, suggestedTm=110, delta=10% ✓
+    //   After applyTmProgression: TM 100→105; onDoubleIncrement adds 5 more → 110.
+    const [squatId, benchId, deadliftId, ohpId] = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+
+    for (const liftId of [squatId, benchId, deadliftId, ohpId]) {
+      await db.trainingMaxes.add({ liftId, weight: 100, setAt: new Date() })
+    }
+
+    // Weeks 1-3 for all lifts so currentCycleWeek()===4 and SKIP DELOAD is visible
+    for (const week of [1, 2, 3] as const) {
+      for (const liftId of [benchId, deadliftId, ohpId]) {
+        await db.sessions.add({ cycleId, liftId, week, date: new Date(), notes: null, status: 'completed' })
+      }
+      // Squat gets qualifying AMRAP sets
+      const sid = await db.sessions.add({
+        cycleId, liftId: squatId, week, date: new Date(), notes: null, status: 'completed',
+      })
+      const amrapByWeek: Record<1 | 2 | 3, { weight: number; reps: number }> = {
+        1: { weight: 85, reps: 13 },
+        2: { weight: 90, reps: 11 },
+        3: { weight: 95, reps: 9 },
+      }
+      const { weight, reps } = amrapByWeek[week]
+      await db.sets.add({ sessionId: sid, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+    }
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    await screen.findByText('CANCEL')
+    const skipBtns = screen.getAllByText('SKIP DELOAD')
+    fireEvent.click(skipBtns[skipBtns.length - 1])
+
+    await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'), { timeout: 5000 })
+    const dblBtn = await screen.findByText('+10 LBS')
+    fireEvent.click(dblBtn)
+
+    // TM: 100 (start) + 5 (progression) + 5 (doubling) = 110
+    await waitFor(async () => {
+      const tms = await db.trainingMaxes.where('liftId').equals(squatId).sortBy('setAt')
+      expect(tms[tms.length - 1].weight).toBe(110)
+    })
+    // Squat removed from STRONG CYCLE candidates
+    await waitFor(() => expect(screen.queryByText('+10 LBS')).toBeNull())
+  })
 })
