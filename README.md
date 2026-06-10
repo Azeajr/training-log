@@ -48,6 +48,12 @@ npm run test:coverage  # coverage report (v8)
 npm run test:mutation  # mutation score (Stryker)
 ```
 
+**Arch Linux**: Playwright's bundled Chromium requires system libs not installed by default:
+
+```bash
+sudo pacman -S atk at-spi2-atk libxcomposite libxdamage libxfixes libxrandr alsa-lib nss cups
+```
+
 Tests are split into three layers:
 
 | Layer | Location | Tools |

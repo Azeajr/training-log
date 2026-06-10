@@ -23,6 +23,11 @@ npm run test:e2e                 # Playwright e2e (needs built app or dev server
 
 Unit tests live next to source: `src/**/*.test.ts(x)`.
 E2e tests: `tests/e2e/`.
+
+**Arch Linux**: Playwright's bundled Chromium needs system libs not installed by default:
+```bash
+sudo pacman -S atk at-spi2-atk libxcomposite libxdamage libxfixes libxrandr alsa-lib nss cups
+```
 Vitest aliases `/sqlite-client$/` → `src/db/sqlite-test-client.ts` so tests run against
 in-process `@sqlite.org/sqlite-wasm` (no Web Worker, no OPFS) but through the same
 `SQLiteTable` query layer as production.
