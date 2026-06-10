@@ -277,8 +277,9 @@ export function getSupplementalLabel(
   week: 1 | 2 | 3 | 4,
 ): string | null {
   if (sets.length === 0) return null
-  const count = `${sets.length} × ${sets[0]?.reps ?? 0}`
+  const count = `${sets.length} × ${sets[0].reps}`
   switch (template) {
+    case 'fsl':     return `FSL  ${count}`
     case 'ssl':     return `SSL  ${count}`
     case 'bbb':     return `BBB  ${count}  ${Math.round(BBB_PCT * 100)}% TM`
     case 'fsl+bbb': return `FSL+BBB  ${count}`
@@ -287,7 +288,7 @@ export function getSupplementalLabel(
       const pct = BBS_PERCENTAGES[week]
       return pct !== null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
     }
-    default: return `FSL  ${count}`
+    case 'none':    return null
   }
 }
 

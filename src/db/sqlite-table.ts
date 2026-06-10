@@ -122,6 +122,10 @@ class Query<T> {
 
   async last(): Promise<T | undefined> {
     if (!this.orderField) throw new Error('Query.last() requires orderBy()')
+    if (this.filterFn) {
+      const rows = await this.toArray()
+      return rows[rows.length - 1]
+    }
     const q = this.clone()
     q.orderDesc = !q.orderDesc
     q.limitN = 1

@@ -59,7 +59,9 @@ function loadFromStorage(): Partial<WorkoutState> {
   }
 }
 
-export const [workout, setWorkout] = createStore<WorkoutState>({
+// Factory, not a shared constant: the store's produce() helpers mutate arrays
+// in place, so each reset needs fresh array instances.
+const emptyState = (): WorkoutState => ({
   activeSession: null,
   loggedSets: [],
   currentSetIndex: 0,
@@ -68,6 +70,10 @@ export const [workout, setWorkout] = createStore<WorkoutState>({
   restType: 'normal',
   activeAccessories: [],
   notes: '',
+})
+
+export const [workout, setWorkout] = createStore<WorkoutState>({
+  ...emptyState(),
   ...loadFromStorage(),
 })
 
@@ -92,16 +98,7 @@ export function setupWorkoutPersistence() {
 }
 
 export function startSession(session: Session) {
-  setWorkout({
-    activeSession: session,
-    loggedSets: [],
-    currentSetIndex: 0,
-    isResting: false,
-    restStartedAt: null,
-    restType: 'normal',
-    activeAccessories: [],
-    notes: '',
-  })
+  setWorkout({ ...emptyState(), activeSession: session })
 }
 
 export function logSet(set: Set) {
@@ -167,16 +164,7 @@ export function removeAccessory(exerciseId: number) {
 }
 
 export function clearSession() {
-  setWorkout({
-    activeSession: null,
-    loggedSets: [],
-    currentSetIndex: 0,
-    isResting: false,
-    restStartedAt: null,
-    restType: 'normal',
-    activeAccessories: [],
-    notes: '',
-  })
+  setWorkout(emptyState())
 }
 
 export function setNotes(notes: string) {

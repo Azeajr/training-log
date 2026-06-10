@@ -56,3 +56,28 @@ describe('SQL identifier guard', () => {
     expect(sorted).toHaveLength(1)
   })
 })
+
+describe('Query edge cases', () => {
+  const addLift = (name: 'OHP' | 'Bench' | 'Squat', order: number) =>
+    db.lifts.add({ name, order, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+
+  it('anyOf([]) matches no rows instead of emitting invalid SQL (IN ())', async () => {
+    await addLift('OHP', 1)
+    const rows = await db.lifts.where('id').anyOf([]).toArray()
+    expect(rows).toEqual([])
+  })
+
+  it('anyOf([]).delete() deletes nothing', async () => {
+    await addLift('OHP', 1)
+    await db.lifts.where('id').anyOf([]).delete()
+    expect(await db.lifts.count()).toBe(1)
+  })
+
+  it('last() applies filter()', async () => {
+    await addLift('OHP', 1)
+    await addLift('Bench', 2)
+    await addLift('Squat', 3)
+    const row = await db.lifts.filter(l => l.order < 3).orderBy('order').last()
+    expect(row?.order).toBe(2)
+  })
+})
