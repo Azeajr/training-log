@@ -1,5 +1,6 @@
 import type { TrainingDB } from '../db/index'
 import type { Lift, TrainingMax } from '../types/domain'
+import { roundToNearest5 } from './calc'
 import { getCycleDoublingCandidates } from './tm-recommendations'
 import type { DoublingCandidate } from './tm-recommendations'
 
@@ -95,7 +96,7 @@ export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: numbe
 }
 
 export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<void> {
-  await progressTms(db, current => Math.round(current.weight * (1 - pct) / 5) * 5)
+  await progressTms(db, current => roundToNearest5(current.weight * (1 - pct)))
 }
 
 export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
