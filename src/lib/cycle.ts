@@ -14,27 +14,33 @@ const countCompletedByWeek = (sessions: Array<{ week: number; status: string }>)
   return counts
 }
 
+export interface TmChange {
+  liftName: string
+  oldWeight: number
+  weight: number
+}
+
 async function progressTms(
   db: TrainingDB,
   nextWeight: (current: TrainingMax, lift: Lift) => number,
-): Promise<void> {
-  const lifts = await db.lifts.toArray()
+): Promise<TmChange[]> {
+  const lifts = await db.lifts.orderBy('order').toArray()
+  const changes: TmChange[] = []
   for (const lift of lifts) {
     const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
     const current = tms[tms.length - 1]
     if (!current) continue
-    await db.trainingMaxes.add({
-      liftId: lift.id!,
-      weight: nextWeight(current, lift),
-      setAt: new Date(),
-    })
+    const weight = nextWeight(current, lift)
+    await db.trainingMaxes.add({ liftId: lift.id!, weight, setAt: new Date() })
+    changes.push({ liftName: lift.name, oldWeight: current.weight, weight })
   }
+  return changes
 }
 
 export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   advanced: boolean
   doublingCandidates: DoublingCandidate[]
-  newTms: Array<{ liftName: string; oldWeight: number; weight: number }>
+  newTms: TmChange[]
 }> {
   const cycle = await db.cycles.orderBy('number').last()
   if (!cycle?.id) return { advanced: false, doublingCandidates: [], newTms: [] }
@@ -48,26 +54,19 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   const doublingCandidates = await getCycleDoublingCandidates(db, cycle)
 
   const cycleId = cycle.id!
+  let newTms: TmChange[] = []
   await db.transaction(async () => {
+    await db.cycles.update(cycleId, { endDate: new Date() })
     await db.cycles.add({ number: cycle.number + 1, startDate: new Date(), endDate: null })
-    await applyTmProgression(db)
+    newTms = await applyTmProgression(db)
     await applyAccessoryTmProgression(db, cycleId)
   })
-
-  const lifts = await db.lifts.orderBy('order').toArray()
-  const newTms: Array<{ liftName: string; oldWeight: number; weight: number }> = []
-  for (const lift of lifts) {
-    const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
-    const prev = tms[tms.length - 2]
-    const latest = tms[tms.length - 1]
-    if (latest) newTms.push({ liftName: lift.name, oldWeight: prev?.weight ?? latest.weight, weight: latest.weight })
-  }
 
   return { advanced: true, doublingCandidates, newTms }
 }
 
-export async function applyTmProgression(db: TrainingDB): Promise<void> {
-  await progressTms(db, (current, lift) => current.weight + lift.progressionIncrement)
+export async function applyTmProgression(db: TrainingDB): Promise<TmChange[]> {
+  return progressTms(db, (current, lift) => current.weight + lift.progressionIncrement)
 }
 
 export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: number) {
@@ -95,8 +94,8 @@ export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: numbe
   }
 }
 
-export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<void> {
-  await progressTms(db, current => roundToNearest5(current.weight * (1 - pct)))
+export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<TmChange[]> {
+  return progressTms(db, current => roundToNearest5(current.weight * (1 - pct)))
 }
 
 export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
@@ -180,7 +179,9 @@ export async function getAmrapTargets(
   const prevCycleSession = allSessions.find(s =>
     s.cycleId !== currentCycleId && s.week === currentWeek
   )
-  if (prevCycleSession?.id) {
+  // Skip when it's the same session already shown as "Last session" — otherwise
+  // the targets list shows the identical set twice under two labels.
+  if (prevCycleSession?.id && prevCycleSession.id !== lastSession?.id) {
     const amrap = await getAmrapSet(prevCycleSession.id)
     if (amrap) targets.push({ weight: amrap.weight, reps: amrap.reps, label: 'Last cycle' })
   }
