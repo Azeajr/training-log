@@ -37,13 +37,26 @@ export const SET_TYPE_EDIT_ORDER = ['warmup', 'main', 'fsl', 'ssl', 'bbb', 'fsl+
 export const isSupplementalType = (t: string): boolean =>
   t === 'fsl' || t === 'ssl' || t === 'bbb' || t === 'fsl+bbb' || t === 'ssl+bbb' || t === 'bbs'
 
+// Which main set a supplemental template derives its weight from:
+// FSL variants follow main set 1, SSL variants follow main set 2.
+// BBB/BBS are TM-percentage based and have no main-set source.
+export const supplementalSourceSetNumber = (template: SupplementalTemplate): 1 | 2 | null => {
+  switch (template) {
+    case 'fsl':
+    case 'fsl+bbb': return 1
+    case 'ssl':
+    case 'ssl+bbb': return 2
+    default: return null
+  }
+}
+
 export function applyMainCascadeToSupplemental<T extends { type: string; weight: number }>(
   sets: T[],
   template: SupplementalTemplate,
-  mainSet1Weight: number,
+  sourceSetWeight: number,
 ): T[] {
-  if (template !== 'fsl' && template !== 'fsl+bbb') return sets
-  return sets.map(s => s.type === template ? { ...s, weight: mainSet1Weight } : s)
+  if (supplementalSourceSetNumber(template) === null) return sets
+  return sets.map(s => s.type === template ? { ...s, weight: sourceSetWeight } : s)
 }
 
 export function applySupplementalOverride<T extends { type: string; weight: number }>(
@@ -126,6 +139,20 @@ export const calcJokerSet = (prevWeight: number, setNumber: number, reps: number
   reps,
   isAmrap: false,
 })
+
+// Jokers chain off what was actually lifted, not the plan: the last logged
+// joker if any, otherwise the logged AMRAP (the last logged main set). Falls
+// back to the planned AMRAP weight when no main/joker set is logged yet.
+export const jokerChainBaseWeight = (
+  loggedSets: ReadonlyArray<{ type: string; weight: number }>,
+  plannedAmrapWeight: number,
+): number => {
+  for (let i = loggedSets.length - 1; i >= 0; i--) {
+    const { type, weight } = loggedSets[i]
+    if (type === 'joker' || type === 'main') return weight
+  }
+  return plannedAmrapWeight
+}
 
 export const shouldShowJokerButton = (params: {
   week: 1 | 2 | 3 | 4

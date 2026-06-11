@@ -1156,24 +1156,143 @@ describe('Workout screen — DB error handling', () => {
     expect(sets).toHaveLength(0)
   })
 
-  it('db.sets.update failure in handleEdit shows toast and reverts edit', async () => {
-    // Covers the catch block at Workout.tsx ~lines 227-229.
-    // editSet(new values) runs before the await; on failure editSet(prev values) reverts.
+  it('db.sets.update failure in handleEdit shows toast and reverts to the pre-edit values', async () => {
+    // editSet(new values) runs before the await; on failure the snapshot taken
+    // BEFORE the store mutation restores the original reps/weight. (Reading the
+    // store proxy after editSet would "revert" to the already-edited values.)
     startSession(BENCH)
     renderWorkout()
 
-    // Log first warmup set so loggedSets[0] has a DB-assigned id
+    // Log first warmup set (80lb × 5 at TM 200) so loggedSets[0] has a DB-assigned id
     fireEvent.click(await screen.findByText('LOG'))
     await waitFor(() => expect(workout.loggedSets[0]?.id).toBeDefined())
 
-    // Click the completed set row to enter edit mode
+    // Click the completed set row to enter edit mode and decrease reps 5 → 4
     fireEvent.click(screen.getAllByText('done')[0])
     await screen.findByText('SAVE')
+    fireEvent.click(screen.getAllByText('−')[1])
 
     vi.spyOn(db.sets, 'update').mockRejectedValueOnce(new Error('constraint violation'))
     fireEvent.click(screen.getByText('SAVE'))
 
     await waitFor(() => expect(toast()).toContain('Failed to save edit'))
+    expect(workout.loggedSets[0].reps).toBe(5)
+    expect(workout.loggedSets[0].weight).toBe(80)
+  })
+})
+
+// ─── logged-weight cascade regressions ────────────────────────────────────────
+// TM 200, week 1: warmups 80/100/120, mains 130/150/170 (AMRAP 170), fsl+bbb 5×10 @130.
+// These pin that prescriptions chain off what was actually lifted, not the
+// precalculated plan — and that the chain survives a mid-session remount.
+
+describe('Workout screen — logged-weight cascade regressions', () => {
+  const findWeightButton = () => waitFor(() => {
+    const btns = screen.getAllByRole('button')
+    const btn = btns.find(b => /^\d+(\.\d+)?lb$/.test((b.textContent ?? '').replace(/\s+/g, '')))
+    expect(btn).toBeTruthy()
+    return btn!
+  })
+
+  const findJokerButton = () => waitFor(() => {
+    const btn = screen.getAllByRole('button').find(b => b.textContent?.includes('JOKER SET'))
+    expect(btn).toBeTruthy()
+    return btn!
+  })
+
+  // Enable weight editing on the active set and click the weight Stepper's + twice (2 × 2.5lb)
+  const bumpActiveWeightBy5 = async () => {
+    fireEvent.click(await findWeightButton())
+    await waitFor(() => expect(screen.getAllByText('+').length).toBeGreaterThanOrEqual(2))
+    fireEvent.click(screen.getAllByText('+')[0])
+    fireEvent.click(screen.getAllByText('+')[0])
+  }
+
+  it('joker prescription chains off the logged AMRAP weight, not the planned one', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(5)               // 3 warmups + 2 mains → AMRAP (planned 170) active
+    await bumpActiveWeightBy5()     // 170 → 175
+    fireEvent.click(screen.getByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(6))
+
+    // 175 × 1.05 = 183.75 → 185; the old planned-weight chain showed 180
+    const jokerBtn = await findJokerButton()
+    expect(jokerBtn.textContent).toContain('185lb')
+    expect(jokerBtn.textContent).not.toContain('180lb')
+
+    fireEvent.click(jokerBtn)
+    await waitFor(() => expect(document.body.textContent).toContain('JOKER SETS'))
+    expect(document.body.textContent).toContain('185lb')
+  })
+
+  it('ssl: logging main set 2 at a higher weight cascades into the SSL sets', async () => {
+    await updateSettings({ supplementalTemplate: 'ssl' })
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(4)               // 3 warmups + main set 1 → main set 2 (planned 150) active
+    await bumpActiveWeightBy5()     // 150 → 155
+    fireEvent.click(screen.getByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(5))
+
+    // SSL sets follow main set 2: planned 150 must be gone everywhere
+    await waitFor(() => expect(document.body.textContent).toContain('155lb'))
+    expect(document.body.textContent).not.toContain('150lb')
+  })
+
+  it('overridden main set 1 weight survives a mid-session remount', async () => {
+    startSession(BENCH)
+    const first = renderWorkout()
+
+    await logNSets(3)               // warmups → main set 1 (planned 130) active
+    await bumpActiveWeightBy5()     // 130 → 135
+    fireEvent.click(screen.getByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(4))
+
+    first.unmount()
+    renderWorkout()                 // same active session — loadData recomposes from loggedSets
+
+    await waitFor(() => expect(document.body.textContent).toContain('135lb'))
+    expect(document.body.textContent).not.toContain('130lb')
+  })
+
+  it('editing the logged main set 1 weight re-cascades pending FSL sets', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(4)               // 3 warmups + main set 1 at planned 130
+    await waitFor(() => expect(workout.loggedSets[3]?.id).toBeDefined())
+
+    fireEvent.click(screen.getAllByText('done')[3])   // main set 1 row → edit mode
+    await screen.findByText('SAVE')
+    fireEvent.click(screen.getAllByText('+')[0])      // edit-weight stepper: 130 → 132.5
+    fireEvent.click(screen.getAllByText('+')[0])      // → 135
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(() => expect(document.body.textContent).not.toContain('130lb'))
+    expect(document.body.textContent).toContain('135lb')
+  })
+
+  it('a user-added extra supplemental set is restored after a remount', async () => {
+    startSession(BENCH)
+    const first = renderWorkout()
+
+    await logNSets(11)              // 3 warmup + 3 main + 5 fsl+bbb
+    const addBtn = await waitFor(() => {
+      const btn = screen.getAllByRole('button').find(b => b.textContent?.includes('ADD SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(addBtn)
+    fireEvent.click(await screen.findByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(12))
+
+    first.unmount()
+    renderWorkout()
+
+    await waitFor(() => expect(screen.getAllByText('done')).toHaveLength(12))
   })
 })
 
