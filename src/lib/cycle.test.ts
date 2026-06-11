@@ -462,6 +462,18 @@ describe('getAmrapTargets', () => {
     expect(result[0]).toMatchObject({ weight: 200, reps: 7, label: 'Last session' })
   })
 
+  it('omits Last cycle when prev-cycle same-week session has no AMRAP set', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    // Prev-cycle week-1 session completed but without an AMRAP set logged
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, date: new Date('2026-01-05') })
+    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
+    await seedAmrapSession({ cycleId: cycle2, liftId: lifts[0].id!, week: 2, amrapWeight: 205, amrapReps: 9, date: new Date('2026-02-15') })
+    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ weight: 205, reps: 9, label: 'Last session' })
+  })
+
   it('picks most recent session as Last session when multiple exist', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })

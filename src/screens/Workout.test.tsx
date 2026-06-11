@@ -1176,3 +1176,39 @@ describe('Workout screen — DB error handling', () => {
     await waitFor(() => expect(toast()).toContain('Failed to save edit'))
   })
 })
+
+// ─── AMRAP PR toast ───────────────────────────────────────────────────────────
+
+describe('Workout screen — AMRAP PR toast', () => {
+  // Week 1 main sets at TM 200 are 130/150/170; the LOG button logs the AMRAP
+  // (main set 3) at 170×5 → e1RM 170*(1+5/30) ≈ 198.
+  async function seedPriorAmrap(weight: number, reps: number) {
+    const sessionId = await db.sessions.add({
+      cycleId: 1, liftId: 1, week: 1, date: new Date('2026-01-01'), notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+  }
+
+  it('rep PR without e1RM PR: toast reports REP PR only', async () => {
+    await seedPriorAmrap(170, 3)  // beaten on reps at the exact weight (5 > 3)
+    await seedPriorAmrap(200, 8)  // prior best e1RM ≈ 253 stays unbeaten
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(6) // 3 warmup + 3 main; 6th logged set is the AMRAP at 170×5
+
+    await waitFor(() => expect(toast()).toContain('REP PR'))
+    expect(toast()).not.toContain('e1RM')
+  })
+
+  it('e1RM PR without rep PR: toast reports e1RM only', async () => {
+    await seedPriorAmrap(160, 2)  // prior best e1RM ≈ 171; no prior AMRAP at 170
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(6)
+
+    await waitFor(() => expect(toast()).toContain('e1RM'))
+    expect(toast()).not.toContain('REP PR')
+  })
+})

@@ -748,4 +748,15 @@ describe('getSupplementalLabel', () => {
   it('bbs week 4 deload: returns null (empty set array)', () => {
     expect(getSupplementalLabel('bbs', [], 4)).toBeNull()
   })
+
+  it('bbs week 4 with non-empty sets: still returns null (BBS_PERCENTAGES[4] is null)', () => {
+    // Guards the pct !== null check itself, not just the empty-sets early return.
+    const sets = calcBbsSets(200, 1)
+    expect(getSupplementalLabel('bbs', sets, 4)).toBeNull()
+  })
+
+  it('none with non-empty sets: returns null', () => {
+    const sets = calcFslSets(130)
+    expect(getSupplementalLabel('none', sets, 1)).toBeNull()
+  })
 })
