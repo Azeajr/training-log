@@ -6,8 +6,8 @@ import { workout, logSet, editSet, advanceSet, deleteLastSet, startRest, clearSe
 import {
   calcMainSets, calcWarmup, calcAmrapTargets, calcSupplementalSets, getSupplementalLabel,
   calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
-  targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType,
-  applyMainCascadeToSupplemental, applySupplementalOverride, roundToNearest5,
+  targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType, jokerChainBaseWeight,
+  applyMainCascadeToSupplemental, applySupplementalOverride, supplementalSourceSetNumber, roundToNearest5,
 } from '../lib/calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
@@ -83,16 +83,32 @@ export default function Workout() {
     void loadData()
   }))
 
+  // The single derivation of the rendered set list. Planned sets come from the
+  // TM; everything the user actually did — an overridden source-set weight, a
+  // supplemental override, jokers, extra added sets — is restored from
+  // loggedSets, so the result is identical after a rebuild or a mid-session reload.
   const composeAllSets = (tm: number, week: 1 | 2 | 3 | 4, template: SupplementalTemplate) => {
-    const main = calcMainSets(tm, week, settings.barWeight)
     const loggedSets = workout.loggedSets
-    const fslRaw = calcSupplementalSets(template, main, tm, week, settings.barWeight)
-    const fsl = applySupplementalOverride(fslRaw, loggedSets, template)
+    const main = calcMainSets(tm, week, settings.barWeight)
     const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
+
+    let fsl = calcSupplementalSets(template, main, tm, week, settings.barWeight)
+    const sourceSetNumber = supplementalSourceSetNumber(template)
+    const loggedSource = sourceSetNumber === null
+      ? undefined
+      : loggedSets.find(s => s.type === 'main' && s.setNumber === sourceSetNumber)
+    if (loggedSource) fsl = applyMainCascadeToSupplemental(fsl, template, loggedSource.weight)
+    fsl = applySupplementalOverride(fsl, loggedSets, template)
+    const extraFsl: FslSet[] = template === 'none' ? [] : loggedSets
+      .filter(s => s.type === template)
+      .slice(fsl.length)
+      .map((s, i) => ({ setNumber: fsl.length + i + 1, weight: s.weight, reps: s.reps, type: template }))
+
     const restoredJokers: JokerSet[] = loggedSets
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
-    return { all: [...warmup, ...main, ...restoredJokers, ...fsl], main }
+
+    return { all: [...warmup, ...main, ...restoredJokers, ...fsl, ...extraFsl], main }
   }
 
   const loadData = async () => {
@@ -113,15 +129,8 @@ export default function Workout() {
     if (session.week !== 4) {
       const amrapSet = main.find(s => s.isAmrap)
       if (amrapSet) {
-        const prevSets = await getAmrapTargets(db, session.liftId, session.week, session.cycleId)
-        if (prevSets.length > 0) {
-          setPrevAmrapSets(prevSets)
-          setAmrapTargets(calcAmrapTargets(prevSets, amrapSet.weight))
-        } else {
-          setPrevAmrapSets([])
-          const est1RM = est1RMFromTm(tm)
-          setAmrapTargets([{ label: 'goal', reps: targetReps(est1RM, amrapSet.weight), est1RM: Math.round(est1RM) }])
-        }
+        setPrevAmrapSets(await getAmrapTargets(db, session.liftId, session.week, session.cycleId))
+        setAmrapTargets(amrapTargetsFor(amrapSet.weight))
       }
     }
 
@@ -131,22 +140,22 @@ export default function Workout() {
   const rebuildAllSets = () => {
     const session = workout.activeSession
     if (!session) return
-    const tm = tmWeight()
-    if (!tm) return
-    const { all } = composeAllSets(tm, session.week, supplementalTemplate())
+    const { all } = composeAllSets(tmWeight(), session.week, supplementalTemplate())
     setAllSets(all)
   }
 
-  const handleAmrapWeightChange = (weight: number) => {
+  // Targets for today's AMRAP at a given weight: beat the matching previous
+  // AMRAP sets when history exists, otherwise the e1RM implied by the TM.
+  const amrapTargetsFor = (weight: number): AmrapTarget[] => {
     const prev = prevAmrapSets()
+    if (prev.length > 0) return calcAmrapTargets(prev, weight)
     const tm = tmWeight()
-    if (prev.length > 0) {
-      setAmrapTargets(calcAmrapTargets(prev, weight))
-    } else if (tm > 0) {
-      const est1RM = est1RMFromTm(tm)
-      setAmrapTargets([{ label: 'goal', reps: targetReps(est1RM, weight), est1RM: Math.round(est1RM) }])
-    }
+    if (tm <= 0) return []
+    const est1RM = est1RMFromTm(tm)
+    return [{ label: 'goal', reps: targetReps(est1RM, weight), est1RM: Math.round(est1RM) }]
   }
+
+  const handleAmrapWeightChange = (weight: number) => setAmrapTargets(amrapTargetsFor(weight))
 
   const handleDeleteSet = async () => {
     const sets = workout.loggedSets
@@ -170,15 +179,9 @@ export default function Workout() {
     const prevAllSets = allSets()
     logSet(setData)
     advanceSet()
-
-    if (isSupplementalType(s.type) && weight !== s.weight) {
-      setAllSets(prev => prev.map((ps, idx) =>
-        ps.type === s.type && idx > setIndex ? { ...ps, weight } : ps
-      ))
-    }
-    if (s.type === 'main' && s.setNumber === 1 && weight !== s.weight) {
-      setAllSets(prev => applyMainCascadeToSupplemental(prev, supplementalTemplate(), weight))
-    }
+    // Re-derive the planned tail from the new logged state — this is what
+    // cascades an overridden weight into the not-yet-logged sets after it.
+    rebuildAllSets()
 
     let dbId: number
     try {
@@ -220,33 +223,35 @@ export default function Workout() {
   const handleEdit = async (setIndex: number, reps: number, weight: number) => {
     const prev = workout.loggedSets[setIndex]
     if (!prev) return
+    // Snapshot before editSet: `prev` is a store proxy, so it reflects the
+    // edit once applied — reading it in the catch would "revert" to the new values.
+    const { id, type, setNumber, reps: prevReps, weight: prevWeight } = prev
     editSet(setIndex, { reps, weight })
-    if (!prev.id) return
+    if (!id) return
     try {
-      await db.sets.update(prev.id, { reps, weight })
+      await db.sets.update(id, { reps, weight })
     } catch (err) {
-      editSet(setIndex, { reps: prev.reps, weight: prev.weight })
+      editSet(setIndex, { reps: prevReps, weight: prevWeight })
       showToast(`Failed to save edit: ${err instanceof Error ? err.message : 'unknown error'}`)
+      return
+    }
+    // Editing the supplemental source set's weight re-cascades the pending
+    // supplemental sets; once one is logged, its override wins instead.
+    const template = supplementalTemplate()
+    if (type === 'main' && setNumber === supplementalSourceSetNumber(template)
+      && !workout.loggedSets.some(s => isSupplementalType(s.type))) {
+      setAllSets(sets => applyMainCascadeToSupplemental(sets, template, weight))
     }
   }
 
   const handleAddJoker = () => {
-    const sets = allSets()
-    const amrapSet = sets.find(s => s.type === 'main' && (s as MainSet).isAmrap) as MainSet | undefined
-    const amrapIdx = amrapSet ? sets.indexOf(amrapSet) : -1
-    const loggedAmrapReps = amrapIdx >= 0 ? (workout.loggedSets[amrapIdx]?.reps ?? 0) : 0
-    const weekGoalReps = JOKER_MIN_REPS[workout.activeSession!.week] ?? 1
-    const increment = calcJokerIncrement(loggedAmrapReps, weekGoalReps)
-    const jk = sets.filter(s => s.type === 'joker') as JokerSet[]
-    const lastWeight = jk.length > 0 ? jk[jk.length - 1].weight : (amrapSet?.weight ?? 0)
     const jokerReps = JOKER_MIN_REPS[workout.activeSession!.week] ?? 5
-    const newJoker = calcJokerSet(lastWeight, jk.length + 1, jokerReps, increment)
-    const updatedJokers = [...jk, newJoker]
+    const newJoker = calcJokerSet(jokerBaseWeight(), jokerCount() + 1, jokerReps, jokerIncrement())
     setAllSets(prev => {
-      const w = prev.filter(s => s.type === 'warmup') as WarmupSet[]
-      const m = prev.filter(s => s.type === 'main') as MainSet[]
-      const f = prev.filter(s => isSupplementalType(s.type)) as FslSet[]
-      return [...w, ...m, ...updatedJokers, ...f]
+      const insertAt = prev.findIndex(s => isSupplementalType(s.type))
+      const next = [...prev]
+      next.splice(insertAt === -1 ? next.length : insertAt, 0, newJoker)
+      return next
     })
   }
 
@@ -382,11 +387,10 @@ export default function Workout() {
   }) : false
 
   const amrapSet = () => mainSets().find(s => s.isAmrap)
-  const amrapIdx = () => { const a = amrapSet(); return a ? allSets().indexOf(a) : -1 }
-  const loggedAmrapReps = () => amrapIdx() >= 0 ? (workout.loggedSets[amrapIdx()]?.reps ?? 0) : 0
+  const loggedAmrapReps = () => workout.loggedSets.find(s => s.isAmrap)?.reps ?? 0
   const jokerIncrement = () => calcJokerIncrement(loggedAmrapReps(), JOKER_MIN_REPS[workout.activeSession?.week ?? 1] ?? 1)
-  const lastJokerWeight = () => jokerCount() > 0 ? jokerSetsRendered()[jokerCount() - 1].weight : (amrapSet()?.weight ?? 0)
-  const nextJokerWeight = () => calcNextJokerWeight(lastJokerWeight(), jokerIncrement())
+  const jokerBaseWeight = () => jokerChainBaseWeight(workout.loggedSets, amrapSet()?.weight ?? 0)
+  const nextJokerWeight = () => calcNextJokerWeight(jokerBaseWeight(), jokerIncrement())
   const liftName = () => lift()?.name ?? '...'
 
   const supplementalLabel = () =>

@@ -22,6 +22,8 @@ import {
   calcJokerSet,
   calcJokerIncrement,
   shouldShowJokerButton,
+  jokerChainBaseWeight,
+  supplementalSourceSetNumber,
   applySupplementalOverride,
   restStatus,
   REST_NORMAL_THRESHOLD,
@@ -339,6 +341,40 @@ describe('calcJokerSet', () => {
   })
 })
 
+describe('jokerChainBaseWeight', () => {
+  const logged = (type: string, weight: number) => ({ type, weight })
+
+  it('falls back to the planned AMRAP weight when nothing is logged', () => {
+    expect(jokerChainBaseWeight([], 170)).toBe(170)
+  })
+
+  it('falls back to the planned AMRAP weight when only warmups are logged', () => {
+    expect(jokerChainBaseWeight([logged('warmup', 80), logged('warmup', 100)], 170)).toBe(170)
+  })
+
+  it('uses the logged AMRAP weight, not the plan — overridden AMRAP regression', () => {
+    // Planned AMRAP 170, user lifted 175 → the joker chain must start at 175
+    const sets = [logged('warmup', 80), logged('main', 130), logged('main', 150), logged('main', 175)]
+    expect(jokerChainBaseWeight(sets, 170)).toBe(175)
+  })
+
+  it('uses the last logged joker weight once jokers are logged', () => {
+    const sets = [logged('main', 175), logged('joker', 185), logged('joker', 195)]
+    expect(jokerChainBaseWeight(sets, 170)).toBe(195)
+  })
+
+  it('chains off the logged joker weight even when the user overrode it', () => {
+    // Joker prescribed 185 but logged at 190 → next joker starts at 190
+    const sets = [logged('main', 170), logged('joker', 190)]
+    expect(jokerChainBaseWeight(sets, 170)).toBe(190)
+  })
+
+  it('ignores supplemental sets logged after the mains', () => {
+    const sets = [logged('main', 175), logged('fsl', 130)]
+    expect(jokerChainBaseWeight(sets, 170)).toBe(175)
+  })
+})
+
 describe('shouldShowJokerButton', () => {
   // layout: 1 warmup, 3 main sets (last is AMRAP), 0+ jokers
   const base = { warmupCount: 1, mainCount: 3 }
@@ -624,14 +660,28 @@ describe('applyMainCascadeToSupplemental', () => {
     out.forEach(s => expect(s.weight).toBe(120))
   })
 
-  it('ssl: returns original sets unchanged', () => {
-    const sets = [{ type: 'ssl', weight: 150 }]
-    expect(applyMainCascadeToSupplemental(sets, 'ssl', 125)).toEqual(sets)
+  it('ssl: updates all ssl sets to the source-set weight — overridden main set 2 regression', () => {
+    const sets = [{ type: 'ssl', weight: 150 }, { type: 'ssl', weight: 150 }]
+    expect(applyMainCascadeToSupplemental(sets, 'ssl', 155)).toEqual([
+      { type: 'ssl', weight: 155 },
+      { type: 'ssl', weight: 155 },
+    ])
   })
 
-  it('bbb: returns original sets unchanged', () => {
+  it('ssl+bbb: updates all ssl+bbb sets', () => {
+    const sets = [{ type: 'ssl+bbb', weight: 150 }, { type: 'ssl+bbb', weight: 150 }]
+    const out = applyMainCascadeToSupplemental(sets, 'ssl+bbb', 155)
+    out.forEach(s => expect(s.weight).toBe(155))
+  })
+
+  it('bbb: returns original sets unchanged (TM-based, no main-set source)', () => {
     const sets = [{ type: 'bbb', weight: 100 }]
     expect(applyMainCascadeToSupplemental(sets, 'bbb', 125)).toEqual(sets)
+  })
+
+  it('bbs: returns original sets unchanged (TM-based, no main-set source)', () => {
+    const sets = [{ type: 'bbs', weight: 120 }]
+    expect(applyMainCascadeToSupplemental(sets, 'bbs', 125)).toEqual(sets)
   })
 
   it('none: returns original sets unchanged', () => {
@@ -642,6 +692,22 @@ describe('applyMainCascadeToSupplemental', () => {
     const original = [{ type: 'fsl', weight: 130 }]
     applyMainCascadeToSupplemental(original, 'fsl', 125)
     expect(original[0].weight).toBe(130)
+  })
+})
+
+describe('supplementalSourceSetNumber', () => {
+  it('FSL variants follow main set 1', () => {
+    expect(supplementalSourceSetNumber('fsl')).toBe(1)
+    expect(supplementalSourceSetNumber('fsl+bbb')).toBe(1)
+  })
+  it('SSL variants follow main set 2', () => {
+    expect(supplementalSourceSetNumber('ssl')).toBe(2)
+    expect(supplementalSourceSetNumber('ssl+bbb')).toBe(2)
+  })
+  it('TM-based templates have no source set', () => {
+    expect(supplementalSourceSetNumber('bbb')).toBeNull()
+    expect(supplementalSourceSetNumber('bbs')).toBeNull()
+    expect(supplementalSourceSetNumber('none')).toBeNull()
   })
 })
 
