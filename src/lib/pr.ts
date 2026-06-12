@@ -18,6 +18,9 @@ export interface AmrapPrResult {
 //   - e1RmPr: strictly higher Epley estimated 1RM than any prior AMRAP
 //
 // First-ever AMRAP for a lift returns e1RmPr=true (sets the baseline record).
+// A 0-rep AMRAP (failed set) is never a PR and never a record: Epley
+// degenerates to estimated1RM(weight, 0) === weight, which would otherwise
+// credit an e1RM for a lift that was never completed.
 export async function detectAmrapPRs(
   db: TrainingDB,
   liftId: number,
@@ -26,6 +29,7 @@ export async function detectAmrapPRs(
   excludeSetId?: number,
 ): Promise<AmrapPrResult> {
   const newE1Rm = estimated1RM(weight, reps)
+  if (reps < 1) return { repPr: false, e1RmPr: false, newE1Rm }
 
   const sessions = await db.sessions.where('liftId').equals(liftId).toArray()
   const sessionIds = sessions.map(s => s.id!).filter(Boolean)
@@ -35,7 +39,7 @@ export async function detectAmrapPRs(
 
   let amrapSets = await db.sets
     .where('sessionId').anyOf(sessionIds)
-    .filter(s => s.isAmrap)
+    .filter(s => s.isAmrap && s.reps >= 1)
     .toArray()
   if (excludeSetId != null) {
     amrapSets = amrapSets.filter(s => s.id !== excludeSetId)
