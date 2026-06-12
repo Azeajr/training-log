@@ -179,4 +179,23 @@ describe('detectAmrapPRs', () => {
     expect(result.repPr).toBe(false)
     expect(result.e1RmPr).toBe(true)  // first completed AMRAP → baseline
   })
+
+  it('1-rep prior AMRAP IS a record — boundary of the reps >= 1 filter (kills L42 >= → > mutant)', async () => {
+    const sid = await addSession(1)
+    await addAmrap(sid, 200, 1)  // e1RM = 200 via the reps===1 short-circuit
+    const result = await detectAmrapPRs(db, 1, 200, 3)  // e1RM = 220
+    // With `reps > 1` the prior would be filtered out: prevBestReps undefined, no record
+    expect(result.prevBestReps).toBe(1)
+    expect(result.prevBestE1Rm).toBe(200)
+    expect(result.repPr).toBe(true)
+    expect(result.e1RmPr).toBe(true)
+  })
+
+  it('1-rep prior AMRAP blocks a lower e1RM from claiming a baseline PR', async () => {
+    const sid = await addSession(1)
+    await addAmrap(sid, 300, 1)  // e1RM = 300 — must remain the standing record
+    const result = await detectAmrapPRs(db, 1, 200, 5)  // e1RM ≈ 233
+    expect(result.e1RmPr).toBe(false)
+    expect(result.prevBestE1Rm).toBe(300)
+  })
 })
