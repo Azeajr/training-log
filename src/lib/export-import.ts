@@ -83,8 +83,34 @@ const COLS = {
   settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate'],
 } as const
 
+// Reject malformed table payloads BEFORE the destructive clear. Without this,
+// a non-array table value either crashed mid-transaction with a raw TypeError
+// (string: truthy .length) or — worse — silently skipped the bulkAdd after
+// clear() had run (number/object: no .length), erasing the table while the
+// import "succeeded". Duplicate ids surfaced as a raw UNIQUE-constraint SQL
+// error. SQLite coerces numeric-string rowids, so ids are compared as strings.
+function validateImportShape(d: Record<string, unknown>): void {
+  for (const name of Object.keys(COLS) as (keyof typeof COLS)[]) {
+    const rows = d[name]
+    if (rows == null) continue
+    if (!Array.isArray(rows)) throw new Error(`Invalid backup: "${name}" must be an array`)
+    const seen = new Set<string>()
+    for (const row of rows) {
+      if (row == null || typeof row !== 'object' || Array.isArray(row)) {
+        throw new Error(`Invalid backup: "${name}" contains a non-object entry`)
+      }
+      const id = (row as Record<string, unknown>).id
+      if (id == null) continue
+      const key = String(id)
+      if (seen.has(key)) throw new Error(`Invalid backup: duplicate id ${key} in "${name}"`)
+      seen.add(key)
+    }
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function importFromRawData(db: TrainingDB, d: Record<string, any>): Promise<void> {
+  validateImportShape(d)
   await db.transaction(
     async () => {
       await db.lifts.clear()

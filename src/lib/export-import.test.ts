@@ -402,6 +402,45 @@ describe('importFromRawData — full payload', () => {
   })
 })
 
+// ─── importFromRawData — malformed table payloads fail safe ──────────────────
+
+describe('importFromRawData — malformed table payloads', () => {
+  it('rejects duplicate ids within one table with a friendly error, before clearing data', async () => {
+    await seedBase()
+    await expect(importFromRawData(db, {
+      lifts: [
+        { id: 1, name: 'OHP',   order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+        { id: 1, name: 'Bench', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+      ],
+    })).rejects.toThrow(/duplicate id 1 in "lifts"/)
+    // Validation runs before the destructive clear — existing data intact.
+    expect(await db.lifts.count()).toBe(1)
+    expect(await db.trainingMaxes.count()).toBe(1)
+  })
+
+  it('string id colliding with a numeric id is still a duplicate', async () => {
+    await expect(importFromRawData(db, {
+      exercises: [{ id: 3, name: 'A', type: 'reps' }, { id: '3', name: 'B', type: 'reps' }],
+    })).rejects.toThrow(/duplicate id 3 in "exercises"/)
+  })
+
+  it('rejects a non-array table value instead of silently wiping the table', async () => {
+    await seedBase()
+    // Previously { lifts: 5 } skipped the bulkAdd (no .length) but still ran clear() —
+    // a malformed backup silently erased the table while the import "succeeded".
+    await expect(importFromRawData(db, { lifts: 5 })).rejects.toThrow(/"lifts" must be an array/)
+    expect(await db.lifts.count()).toBe(1)
+  })
+
+  it('rejects a string table value instead of crashing mid-transaction', async () => {
+    await expect(importFromRawData(db, { sets: 'abc' })).rejects.toThrow(/"sets" must be an array/)
+  })
+
+  it('rejects non-object rows with a friendly error', async () => {
+    await expect(importFromRawData(db, { sets: [null] })).rejects.toThrow(/"sets" contains a non-object entry/)
+  })
+})
+
 // ─── importJson ───────────────────────────────────────────────────────────────
 
 describe('importJson', () => {
