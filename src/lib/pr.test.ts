@@ -153,4 +153,30 @@ describe('detectAmrapPRs', () => {
     // Early return path yields no prevBestE1Rm; computing Math.max() would give -Infinity
     expect(result.prevBestE1Rm).toBeUndefined()
   })
+
+  it('0-rep AMRAP is never a PR — even as the first-ever AMRAP for the lift', async () => {
+    const sid = await addSession(1)
+    await db.sets.add({ sessionId: sid, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+    // Failed AMRAP: estimated1RM(weight, 0) === weight must not set a baseline e1RM record
+    const result = await detectAmrapPRs(db, 1, 170, 0)
+    expect(result.repPr).toBe(false)
+    expect(result.e1RmPr).toBe(false)
+  })
+
+  it('prior 0-rep AMRAPs are not records — the next real AMRAP is still the baseline PR', async () => {
+    const sid = await addSession(1)
+    await addAmrap(sid, 300, 0)  // failed set; estimated1RM(300, 0) = 300 must not become prevBest
+    const result = await detectAmrapPRs(db, 1, 200, 5)  // e1RM ≈ 233
+    expect(result.e1RmPr).toBe(true)
+    expect(result.prevBestE1Rm).toBeUndefined()
+  })
+
+  it('prior 0-rep AMRAP at the same weight provides no prevBestReps', async () => {
+    const sid = await addSession(1)
+    await addAmrap(sid, 200, 0)
+    const result = await detectAmrapPRs(db, 1, 200, 1)
+    expect(result.prevBestReps).toBeUndefined()
+    expect(result.repPr).toBe(false)
+    expect(result.e1RmPr).toBe(true)  // first completed AMRAP → baseline
+  })
 })
