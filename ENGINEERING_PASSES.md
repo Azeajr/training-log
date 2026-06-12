@@ -36,6 +36,7 @@ Repo shape the prompts assume:
 | [2. Security Mitigation](#2-security-mitigation) | Concrete, local hardening against this PWA's real threat model — not security theater. |
 | [3. High-Signal Testing](#3-high-signal-testing) | Coverage is thin or vanity; you want behavior tests that make refactoring safe. |
 | [4. Mutation-Hardening Loop](#4-mutation-hardening-loop) | Run Stryker against `src/lib`, find tests that pass but don't actually pin behavior, kill survivors, ship. Repeat to ratchet the suite. |
+| [5. Bug Hunting](#5-bug-hunting) | You suspect real defects ship silently — wrong weights, mis-classified cycles, missed PRs, crashes on bad input. Find, confirm, fix, and pin them; no refactoring, no coverage-chasing, no security work. |
 
 Verification commands referenced by every pass (this repo):
 
@@ -203,4 +204,78 @@ GUARDRAILS
 - A test that only raises the line-coverage number without killing a mutant is exactly the vanity test this loop exists to replace — don't add it.
 - If killing a mutant requires asserting an exact float, round in the assertion the same way the code does (roundToNearest5 / the 0.01 plate tolerance) — don't pin raw floating-point noise.
 - One module per run keeps the mutation run fast and the diff reviewable; resist scope creep into a second module.
+```
+
+---
+
+## 5. Bug Hunting
+
+Where Pass 1 hunts bugs as a side effect of restructuring, this pass makes defect discovery the *only* job. Nothing
+gets refactored, no coverage target gets chased, no threat gets hardened. The agent reads the source, reasons about
+what can go wrong at each boundary, confirms a defect is real before touching it, applies the minimal fix, and pins it
+with a regression test that fails on the pre-fix code. The discipline is the point: a suspected bug that turns out to be
+intentional design (destructive import, positional lift IDs, the week-4 hidden sets) gets noted and left alone, not
+"fixed" into a behavior change.
+
+```text
+Act as a pragmatic, veteran TypeScript engineer doing a defect hunt on training-log, a Solid.js + SQLite-Wasm offline-first PWA for 5/3/1 strength training. Your ONLY mandate is to find and fix real bugs — logic errors, edge-case failures, silent wrong outputs, and crashes. You are NOT refactoring, NOT adding coverage for its own sake, and NOT doing security hardening. Read the source, reason about what can go wrong, confirm the defect, fix it minimally, pin it with a regression test — in that order.
+
+A "real bug" is code that, on a plausible input, produces a wrong training weight/rep, mis-classifies cycle state, misses or invents a PR, corrupts persisted/imported data, or throws where it should degrade. A line that merely looks risky but is provably correct on every reachable input is NOT a bug — do not add defensive code for it.
+
+HUNT IN LAYERS, highest-value first. For each suspected defect, name the input that triggers it before you decide it is real.
+
+PHASE A — 5/3/1 math boundaries (src/lib/calc.ts; pin in src/lib/calc.test.ts):
+- roundToNearest5: behavior on inputs below bar weight and on any negative/zero input — does the result ever drop below the bar-weight floor (Math.max(barWeight, ...)) or round the wrong direction?
+- calcPlatesPerSide: the null-return path when the target is NOT achievable with available plates. The loop tracks `remaining` against a `Math.abs(remaining) < 0.01` tolerance — probe a target whose half-difference lands just inside/outside 0.01 (float accumulation across several plate subtractions), and a target below the empty-bar weight.
+- calcWarmup dedup/break: the dedup collapses a set when `weight === sets[sets.length - 1].weight` (rounded), and breaks when `weight >= workingWeight`. Construct a TM where two consecutive warmup percentages round to the SAME weight from DIFFERENT raw values (should collapse to one) AND a TM low enough that a warmup rounds up to ≥ workingWeight (should break, not emit a warmup at/above the work set).
+- Week-4 deload gates, per supplement variant: shouldShowJokerButton returns false when `week === 4`; BBS is hidden in week 4 via `BBS_PERCENTAGES[4] === null` → calcBbsSets returns []. Confirm FSL/BBB/BBS each produce the correct week-4 set list (no AMRAP, no joker, BBS empty) and that NO variant leaks an AMRAP or supplemental set into the deload.
+- estimated1RM (Epley): the `reps === 1 ? weight : weight * (1 + reps/30)` short-circuit. Check reps === 0 (should it ever be called with 0?) and large reps (20+) — does any downstream consumer assume a bounded e1RM?
+- AMRAP target back-calc (calcAmrapTargets / targetReps): when the target e1RM is LOWER than the working weight, the back-calculated reps would be ≤ 0 — confirm the output is clamped/sane, not a negative or zero rep target presented to the user.
+
+PHASE B — cycle state machine (src/lib/cycle.ts, src/lib/tm-recommendations.ts; pin in cycle.test.ts / tm-recommendations.test.ts):
+- CYCLE_START_TOLERANCE_MS (= 60_000 in tm-recommendations.ts) discriminates an auto-progression TM from a user mid-cycle bump. Probe EXACTLY the boundary: a timestamp delta of exactly 60_000 ms — does `<` vs `<=` mis-classify it? A bump at the boundary must not be double-credited as both an auto-progression and a manual bump.
+- getCycleDoublingCandidates AND-chain: the all-three-weeks eligibility when one week's AMRAP is MISSING vs. present-but-0 reps — these are different inputs and must not collapse to the same branch. Confirm a missing week blocks doubling and a logged 0-rep AMRAP is treated as a real (failing) result, not absent.
+- TM progression when the user manually bumped the TM mid-cycle and THEN completed the cycle: the auto-vs-bump discriminator must not double-credit (one increment, not two).
+- getNextSessionAdvancingIfDone on an EMPTY session list, and getCycleDoublingCandidates when all three AMRAP results are below CYCLE_DOUBLE_THRESHOLD — assert a safe, defined return, not undefined/throw.
+
+PHASE C — PR detection (src/lib/pr.ts; pin in pr.test.ts):
+- detectAmrapPRs at the boundaries: a rep-PR at EXACTLY the previous best weight (strict `>` vs `>=` on weight and on reps); an e1RM that EQUALS the previous record exactly (is that a PR or not — confirm the comparator matches intent); the first-ever baseline with no prior records (must return a PR, not a false "no PR"); the exclude-self path when the session under test IS the current record-holder (must not compare a record against itself and report "no PR").
+
+PHASE D — query layer (src/db/sqlite-table.ts and the transaction guard in src/db/sqlite-client.ts; pin in sqlite-table.test.ts):
+- Reentrant transaction: the `txDepth` guard in the client's transaction() method — call a transaction from WITHIN an already-open transaction and confirm it nests/joins correctly rather than opening a second real transaction or deadlocking.
+- where() with an empty condition object; orderBy() with a column name that is not a real row column — does assertIdent reject it, or does a valid-but-nonexistent identifier produce a silent bad query / empty result?
+- bulkAdd([]) with an empty array (no-op, no malformed SQL); date/bool/json column round-trips for NULL values (write null, read back null — not "null" string, not 0, not undefined).
+
+PHASE E — store hydration (src/store/workout-store.ts; pin in workout-store.test.ts):
+- loadFromStorage on a STORAGE_VERSION mismatch must DROP state, not throw. Probe a partially-written blob: valid JSON object but missing required keys, or an incomplete nested object.
+- The PERSISTED_KEYS allowlist when localStorage holds a key that matches an allowlisted name but with a TYPE mismatch (a string where the store expects an object/array) — confirm the bad value can't graft a wrong-typed field into the reactive store.
+
+PHASE F — import/export (src/lib/export-import.ts; pin in export-import.test.ts):
+- importFromRawData on valid JSON of the WRONG shape: a top-level array instead of an object; string values where numbers are expected; negative IDs; duplicate IDs within one table. Each must fail safe (friendly rejection or dropped via the pickCols/COLS allowlist) — never a raw SQL error and never extra grafted columns.
+- export → re-import round-trip on a DB with ZERO sessions (empty but valid backup must restore cleanly, not throw on an empty table).
+
+CONFIRMATION DISCIPLINE — verify a suspected bug is real BEFORE fixing:
+- Math errors: compute expected vs. actual by hand (or with a throwaway in-file scratch assertion) and state the concrete numbers explicitly in the commit message — "estimated1RM(weight 100, reps 1) must return 100 via the reps===1 short-circuit but returned 103.33" beats "fixed e1RM bug".
+- Framework behavior (Solid reactivity, @solidjs/router, @sqlite.org/sqlite-wasm, the SQLite SQL semantics): confirm against the INSTALLED source under node_modules or reproduce empirically in a test. No speculative defensive code for behavior the library/engine doesn't actually have.
+
+FIX DISCIPLINE — minimal change that corrects the defect:
+- No opportunistic refactoring at or around the fix site. If the fix needs you to understand a neighboring abstraction, understand it — do not rewrite it.
+- Every confirmed fix gets a regression test in the matching src/lib|db|store *.test.ts BEFORE you move to the next suspect. The test MUST fail on the pre-fix code and pass after — verify both directions (stash the fix, watch it fail, restore).
+
+TRIAGE — recognize intentional design and leave it alone:
+- The destructive import (clear-then-bulkAdd in a transaction, COMMON_MISTAKES #2), the positional lift-ID system (look up by name, COMMON_MISTAKES #3), and the week-4 deload hidden sets are DELIBERATE. If a suspected bug turns out to be one of these (or any documented invariant), note it in your working log as "confirmed intentional — not a bug" and move on without changing it.
+
+SCOPE GUARDS (a fix that needs any of these is out of scope — stop and note it instead):
+- No schema changes (SCHEMA + ADDITIVE_MIGRATIONS + ALL_TABLES + domain.ts + serialization move together — COMMON_MISTAKES #1).
+- No changes to 5/3/1 program constants (MAIN_PERCENTAGES, MAIN_REPS, BBB_PCT, BBS_PERCENTAGES, warmup 40/50/60, SESSION_TM_BUMP_THRESHOLD/CYCLE_DOUBLE_THRESHOLD) — re-weighing a constant is a behavior change, not a bug fix.
+- No change to the destructive-import contract, the persisted-store shape (without bumping STORAGE_VERSION), or src/lib purity (no DOM, no module-level I/O).
+
+EXECUTION WORKFLOW (run in order; do not stop until green):
+1. Hunt: walk PHASE A→F. Keep a short running log of each suspect: the triggering input, confirmed-bug vs. confirmed-intentional vs. out-of-scope.
+2. For each CONFIRMED bug: write the failing regression test first, then apply the minimal fix, then confirm the test passes and no existing test regressed.
+3. Build/typecheck: `npm run build`.
+4. Lint: `npm run lint`.
+5. Test: `npm test`. If a fix broke an existing assertion, decide whether the old assertion pinned the BUG (update it, and say so) or whether your fix is wrong (revert). For a path the unit suite can't reach (real Worker/OPFS), spot-check with `npm run test:e2e` or `npm run debug:browser`.
+6. Commit each fix (or a tight cluster of related fixes) with a message stating the concrete defect and the input that triggered it — WHY it was wrong, with the expected-vs-actual values. No Co-Authored-By trailer.
+7. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `npm test` is the regression gate.
 ```
