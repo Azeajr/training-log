@@ -301,6 +301,48 @@ describe('loadFromStorage', () => {
     expect(w.notes).toBe('')
     expect(w.activeSession).toBeNull()
   })
+
+  it('drops allowlisted keys whose persisted value has the wrong type', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({
+      v: 1,
+      state: {
+        loggedSets: 'corrupt',      // string where array expected — would crash loggedSets.filter()
+        activeAccessories: 42,      // number where array expected
+        currentSetIndex: 'three',   // string where number expected
+        isResting: 'yes',           // string where boolean expected
+        restStartedAt: {},          // object where number|null expected
+        restType: 'bogus',          // not one of normal|transition|fail
+        activeSession: [1, 2],      // array where object|null expected
+        notes: 'kept',              // valid — must survive alongside the dropped keys
+      },
+    }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.loggedSets).toEqual([])
+    expect(w.activeAccessories).toEqual([])
+    expect(w.currentSetIndex).toBe(0)
+    expect(w.isResting).toBe(false)
+    expect(w.restStartedAt).toBeNull()
+    expect(w.restType).toBe('normal')
+    expect(w.activeSession).toBeNull()
+    expect(w.notes).toBe('kept')
+  })
+
+  it('rejects a negative currentSetIndex', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({ v: 1, state: { currentSetIndex: -5 } }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.currentSetIndex).toBe(0)
+  })
+
+  it('keeps valid persisted values: session object, numeric index, rest timestamp', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({
+      v: 1,
+      state: { activeSession: { id: 7, liftId: 1, week: 2 }, currentSetIndex: 3, restStartedAt: 1234 },
+    }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.activeSession).toMatchObject({ id: 7, week: 2 })
+    expect(w.currentSetIndex).toBe(3)
+    expect(w.restStartedAt).toBe(1234)
+  })
 })
 
 // ─── setupWorkoutPersistence ──────────────────────────────────────────────────
