@@ -263,6 +263,21 @@ describe('targetReps', () => {
   it('250.67 target at 170lb rounds up to 15', () => {
     expect(targetReps(250.67, 170)).toBe(15)
   })
+  it('returns 1 when today weight exceeds the target e1RM — never a negative target', () => {
+    // 200×5 prior → e1RM 233.33; AMRAP weight bumped to 245 → raw back-calc is ceil(-1.43) = -1
+    expect(targetReps(233.33, 245)).toBe(1)
+  })
+  it('returns 1 when today weight equals the target e1RM — never a 0-rep target', () => {
+    expect(targetReps(200, 200)).toBe(1)
+  })
+  it('returns 1 for a non-positive today weight instead of Infinity', () => {
+    expect(targetReps(200, 0)).toBe(1)
+  })
+  it('returns 2 when 1 rep would score below the target — estimated1RM reps===1 short-circuit', () => {
+    // raw back-calc gives ceil(0.64) = 1, but estimated1RM(235, 1) = 235 < 240:
+    // a 1-rep "target" can never reach the displayed est. 1RM
+    expect(targetReps(240, 235)).toBe(2)
+  })
 })
 
 describe('calcAmrapTargets', () => {
@@ -275,6 +290,12 @@ describe('calcAmrapTargets', () => {
     expect(targets[0].label).toBe('Last session')
     expect(targets[0].reps).toBe(15)
     expect(targets[0].est1RM).toBeCloseTo(250.67, 1)
+  })
+
+  it('clamps the rep target to 1 when today weight is above the previous e1RM', () => {
+    // 200×5 → e1RM 233.33; today's AMRAP overridden to 245 — the raw back-calc is negative
+    const targets = calcAmrapTargets([{ weight: 200, reps: 5, label: 'Last session' }], 245)
+    expect(targets[0].reps).toBe(1)
   })
 })
 

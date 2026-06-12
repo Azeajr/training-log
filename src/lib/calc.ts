@@ -242,8 +242,15 @@ export const calcWarmup = (
 export const estimated1RM = (weight: number, reps: number): number =>
   reps === 1 ? weight : weight * (1 + reps / 30)
 
-export const targetReps = (prev1RM: number, todayWeight: number): number =>
-  Math.ceil((prev1RM / todayWeight - 1) * 30)
+// Fewest AMRAP reps at todayWeight whose e1RM reaches prev1RM. A single rep
+// scores plain weight (the estimated1RM reps===1 short-circuit), so when the
+// weight already meets the target the answer is 1 — never 0 or negative. Below
+// that, the Epley back-calc applies, floored at 2 because a 1-rep result can
+// never reach a target above the weight itself.
+export const targetReps = (prev1RM: number, todayWeight: number): number => {
+  if (todayWeight <= 0 || todayWeight >= prev1RM) return 1
+  return Math.max(2, Math.ceil((prev1RM / todayWeight - 1) * 30))
+}
 
 export interface AmrapTarget {
   label: string
