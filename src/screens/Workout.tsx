@@ -242,6 +242,15 @@ export default function Workout() {
       && !workout.loggedSets.some(s => isSupplementalType(s.type))) {
       setAllSets(sets => applyMainCascadeToSupplemental(sets, template, weight))
     }
+    // Editing a main or joker set re-derives the pending (un-logged) joker's
+    // prescription — its chain base and increment both come from logged state.
+    if (type === 'main' || type === 'joker') {
+      const loggedJokerCount = workout.loggedSets.filter(s => s.type === 'joker').length
+      const pendingJokerWeight = nextJokerWeight()
+      setAllSets(sets => sets.map(s =>
+        s.type === 'joker' && s.setNumber > loggedJokerCount ? { ...s, weight: pendingJokerWeight } : s,
+      ))
+    }
   }
 
   const handleAddJoker = () => {

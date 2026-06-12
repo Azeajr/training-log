@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
+import { render, screen, fireEvent, waitFor, within } from '@solidjs/testing-library'
 import { Router, Route } from '@solidjs/router'
 import Workout from './Workout'
 import { db } from '../db/index'
@@ -656,6 +656,113 @@ describe('Workout screen — joker sets', () => {
     await waitFor(() => expect(document.body.textContent).toContain('JOKER SETS'))
     // drain allows the async loadData() re-run to complete (covers restoredJokers lines 63-64)
     await drain()
+  })
+
+  // Sets a value on an inline-edit Stepper via its text input.
+  const setEditStepper = (label: 'edit-weight' | 'edit-reps', value: number) => {
+    const stepper = screen.getByTestId(`stepper-${label}`)
+    fireEvent.click(within(stepper).getByTestId('stepper-value'))
+    const input = within(stepper).getByTestId('stepper-input')
+    fireEvent.input(input, { target: { value: String(value) } })
+    fireEvent.blur(input)
+  }
+
+  // Weight shown on the active set row (the big "<n>lb" button).
+  const activeRowWeight = () =>
+    screen.getAllByRole('button').find(b => /^\d+(\.\d+)?lb$/.test(b.textContent ?? ''))?.textContent
+
+  // TM 200, week 1: AMRAP logged at 170×5 → joker prescription 170×1.05 → 180.
+  it('editing the logged AMRAP weight re-derives a pending joker', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(6) // 3 warmup + 3 main
+
+    const jokerBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    expect(jokerBtn.textContent).toContain('180')
+    fireEvent.click(jokerBtn)
+    await screen.findByText('LOG') // pending joker is the active row at 180
+
+    // Edit the logged AMRAP (last "done" row) 170 → 180
+    const doneSigns = screen.getAllByText('done')
+    fireEvent.click(doneSigns[doneSigns.length - 1])
+    await screen.findByText('SAVE')
+    setEditStepper('edit-weight', 180)
+    fireEvent.click(screen.getByText('SAVE'))
+    await waitFor(() => expect(workout.loggedSets[5]?.weight).toBe(180))
+
+    // Pending joker re-derives: 180 × 1.05 = 189 → 190
+    await waitFor(() => expect(activeRowWeight()).toBe('190lb'))
+  })
+
+  it('editing AMRAP reps across the double-goal threshold re-derives the pending joker increment', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(6)
+
+    const jokerBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(jokerBtn) // pending joker at 180 (5% increment)
+
+    // Edit AMRAP reps 5 → 11 (> 2× the week-1 goal of 5) → increment becomes 10%
+    const doneSigns = screen.getAllByText('done')
+    fireEvent.click(doneSigns[doneSigns.length - 1])
+    await screen.findByText('SAVE')
+    setEditStepper('edit-reps', 11)
+    fireEvent.click(screen.getByText('SAVE'))
+    await waitFor(() => expect(workout.loggedSets[5]?.reps).toBe(11))
+
+    // Pending joker re-derives: 170 × 1.10 = 187 → 185
+    await waitFor(() => expect(activeRowWeight()).toBe('185lb'))
+  })
+
+  it('editing a logged joker weight re-derives the next pending joker', async () => {
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(6)
+
+    // Add joker 1 and log it at the prescribed 180
+    const jokerBtn1 = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(jokerBtn1)
+    fireEvent.click(await screen.findByText('LOG'))
+    await waitFor(() => expect(workout.currentSetIndex).toBe(7))
+
+    // Add joker 2, leave it pending (180 × 1.05 → 190)
+    const jokerBtn2 = await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      expect(btn).toBeTruthy()
+      return btn!
+    })
+    fireEvent.click(jokerBtn2)
+    await screen.findByText('LOG')
+
+    // Edit logged joker 1 (last "done" row) 180 → 200
+    const doneSigns = screen.getAllByText('done')
+    fireEvent.click(doneSigns[doneSigns.length - 1])
+    await screen.findByText('SAVE')
+    setEditStepper('edit-weight', 200)
+    fireEvent.click(screen.getByText('SAVE'))
+    await waitFor(() => expect(workout.loggedSets[6]?.weight).toBe(200))
+
+    // Pending joker 2 re-derives off the edited joker 1: 200 × 1.05 = 210
+    await waitFor(() => expect(activeRowWeight()).toBe('210lb'))
   })
 })
 
