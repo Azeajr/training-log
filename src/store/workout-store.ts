@@ -40,6 +40,23 @@ const PERSISTED_KEYS = [
   'notes',
 ] as const satisfies readonly (keyof WorkoutState)[]
 
+const isPlainObject = (v: unknown): boolean =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+// Per-key shape checks for rehydrate. A wrong-typed value under an allowlisted
+// key must be dropped, not grafted — a string where loggedSets belongs crashes
+// every `.filter()`/`.map()` consumer on the next render.
+const PERSISTED_VALIDATORS: Record<(typeof PERSISTED_KEYS)[number], (v: unknown) => boolean> = {
+  activeSession: v => v === null || isPlainObject(v),
+  loggedSets: Array.isArray,
+  currentSetIndex: v => Number.isInteger(v) && (v as number) >= 0,
+  isResting: v => typeof v === 'boolean',
+  restStartedAt: v => v === null || typeof v === 'number',
+  restType: v => v === 'normal' || v === 'transition' || v === 'fail',
+  activeAccessories: Array.isArray,
+  notes: v => typeof v === 'string',
+}
+
 function loadFromStorage(): Partial<WorkoutState> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -51,7 +68,7 @@ function loadFromStorage(): Partial<WorkoutState> {
     const src = state as Record<string, unknown>
     const out: Partial<WorkoutState> = {}
     for (const k of PERSISTED_KEYS) {
-      if (k in src) (out as Record<string, unknown>)[k] = src[k]
+      if (k in src && PERSISTED_VALIDATORS[k](src[k])) (out as Record<string, unknown>)[k] = src[k]
     }
     return out
   } catch {
