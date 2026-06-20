@@ -1,9 +1,9 @@
-import { createSignal, onMount, Show, For } from 'solid-js'
+import { createSignal, createResource, onMount, Show, For } from 'solid-js'
 import { useNavigate, A } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, Session } from '../types/domain'
 import { workout, startSession, clearSession } from '../store/workout-store'
-import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel } from '../lib/calc'
+import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, calcCrossSets, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSessionAdvancingIfDone } from '../lib/cycle'
 import { getCurrentTm } from '../lib/training-max'
@@ -32,7 +32,7 @@ export default function Today() {
   const load = async () => {
     setLoading(true)
     const next = await getNextSessionAdvancingIfDone(db)
-    const allLifts = await db.lifts.orderBy('order').toArray()
+    const allLifts = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived)
     setLifts(allLifts)
     setCurrentWeek(next.week)
     setCurrentCycleId(next.cycleId)
@@ -109,11 +109,41 @@ export default function Today() {
   const main = () => selectedLift() ? calcMainSets(tm(), currentWeek(), settings.barWeight) : []
   const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm(), settings.barWeight) : []
 
-  const supplementalSets = (): FslSet[] =>
-    calcSupplementalSets(settings.supplementalTemplate ?? 'fsl+bbb', main(), tm(), currentWeek(), settings.barWeight)
+  // Supplemental preview runs at the effective week (deload may remap or skip).
+  const effSuppWeek = () => effectiveSupplementalWeek(currentWeek(), settings.deloadSupplemental)
+  const supplementalSets = (): FslSet[] => {
+    const e = effSuppWeek()
+    if (e === null) return []
+    return calcSupplementalSets(settings.supplementalTemplate ?? 'fsl+bbb', calcMainSets(tm(), e, settings.barWeight), tm(), e, settings.barWeight)
+  }
 
-  const supplementalLabel = (): string | null =>
-    getSupplementalLabel(settings.supplementalTemplate ?? 'fsl+bbb', supplementalSets(), currentWeek())
+  const supplementalLabel = (): string | null => {
+    const e = effSuppWeek()
+    if (e === null) return null
+    return getSupplementalLabel(settings.supplementalTemplate ?? 'fsl+bbb', supplementalSets(), e)
+  }
+
+  // Cross-lift supplemental preview for the selected lift. Mirrors the Workout
+  // screen: each block computed from its movement lift's TM, skipped on deload.
+  const [crossPreview] = createResource(
+    () => ({ liftId: selectedLiftId(), week: currentWeek(), mode: settings.deloadSupplemental }),
+    async ({ liftId, week, mode }) => {
+      const eff = effectiveSupplementalWeek(week, mode)
+      if (!liftId || eff === null) return []
+      const blocks = (await db.liftSupplementals.where('liftId').equals(liftId).toArray())
+        .sort((a, b) => a.order - b.order)
+      const allLifts = await db.lifts.toArray()
+      const out: Array<{ label: string; weight: number; reps: number }> = []
+      for (const b of blocks) {
+        const mLift = allLifts.find(l => l.id === b.movementLiftId)
+        if (!mLift) continue
+        const mTm = await getCurrentTm(db, b.movementLiftId)
+        const sets = calcCrossSets(b, mTm, eff, settings.barWeight)
+        if (sets.length > 0) out.push({ label: getCrossLabel(b, mLift.name), weight: sets[0].weight, reps: sets[0].reps })
+      }
+      return out
+    },
+  )
 
   const statusLabel = (ws: WeekStatus) => {
     if (ws.liftId === selectedLiftId()) return '->'
@@ -203,6 +233,17 @@ export default function Today() {
                       </div>
                     </div>
                   </Show>
+                  <For each={crossPreview() ?? []}>
+                    {block => (
+                      <div>
+                        <div class="text-muted uppercase text-xs tracking-widest mb-1">{block.label}</div>
+                        <div class="flex gap-4 text-text-dim pl-2">
+                          <span class="w-16 text-right">{block.weight}lb</span>
+                          <span>x {block.reps}</span>
+                        </div>
+                      </div>
+                    )}
+                  </For>
                 </div>
               </Show>
               <button

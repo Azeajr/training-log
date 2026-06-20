@@ -1,6 +1,6 @@
 import { createStore } from 'solid-js/store'
 import { db } from '../db/index'
-import type { PlateConfig, SupplementalTemplate } from '../types/domain'
+import type { PlateConfig, SupplementalTemplate, DeloadSupplemental } from '../types/domain'
 
 export const THEMES = {
   dark: {
@@ -122,6 +122,7 @@ export const SETTINGS_DEFAULTS = {
   barWeight: DEFAULT_BAR_WEIGHT,
   plates: DEFAULT_PLATES,
   supplementalTemplate: 'fsl+bbb' as SupplementalTemplate,
+  deloadSupplemental: 'normal' as DeloadSupplemental,
 }
 
 export function applyTheme(key: string) {
@@ -140,6 +141,7 @@ interface SettingsState {
   barWeight: number
   plates: PlateConfig[]
   supplementalTemplate: SupplementalTemplate
+  deloadSupplemental: DeloadSupplemental
 }
 
 export const [settings, setSettings] = createStore<SettingsState>({ ...SETTINGS_DEFAULTS })
@@ -155,6 +157,7 @@ export async function loadSettings() {
     barWeight: row.barWeight ?? DEFAULT_BAR_WEIGHT,
     plates: row.plates ?? DEFAULT_PLATES,
     supplementalTemplate: row.supplementalTemplate ?? 'fsl+bbb',
+    deloadSupplemental: row.deloadSupplemental ?? 'normal',
   })
 }
 

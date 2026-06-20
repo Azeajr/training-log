@@ -11,6 +11,12 @@ import {
   getNextSessionAdvancingIfDone,
   getAmrapTargets,
 } from './cycle'
+import { archiveLift } from './lift'
+
+const mkLift = (name: string, order: number) =>
+  db.lifts.add({ name, order, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' as const })
+const complete = (cycleId: number, liftId: number, week: 1 | 2 | 3 | 4) =>
+  db.sessions.add({ cycleId, liftId, week, date: new Date(), notes: null, status: 'completed' as const })
 
 beforeEach(async () => { await __resetForTest() })
 
@@ -131,14 +137,14 @@ describe('getNextSession', () => {
     expect(result.liftId).toBe(lifts[1].id)
   })
 
-  it('falls back to first lift when all current-week lifts done but fewer than 4 lifts exist', async () => {
+  it('advances week with a 2-lift roster once both week lifts are done (completion = active lift count)', async () => {
     const lift1Id = await db.lifts.add({ name: 'OHP' as const,   order: 1, progressionIncrement: 5, baseWeight: 95,  liftType: 'upper' as const })
     const lift2Id = await db.lifts.add({ name: 'Bench' as const, order: 2, progressionIncrement: 5, baseWeight: 95,  liftType: 'upper' as const })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await db.sessions.add({ cycleId, liftId: lift1Id, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.sessions.add({ cycleId, liftId: lift2Id, week: 1, date: new Date(), notes: null, status: 'completed' })
     const result = await getNextSessionAdvancingIfDone(db)
-    expect(result.week).toBe(1)
+    expect(result.week).toBe(2)
     expect(result.liftId).toBe(lift1Id)
   })
 })
@@ -387,6 +393,75 @@ describe('deloadTms', () => {
     const tms = await db.trainingMaxes.where('liftId').equals(lifts[0].id!).sortBy('setAt')
     expect(tms).toHaveLength(2)
     expect(tms[0].weight).toBe(200)
+  })
+})
+
+// ─── flexible roster: completion = active lift count, with mid-cycle guards ────
+
+describe('flexible roster completion', () => {
+  it('requires every active lift before advancing the week (3-lift roster)', async () => {
+    const a = await mkLift('A', 1)
+    const b = await mkLift('B', 2)
+    const c = await mkLift('C', 3)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await complete(cycleId, a, 1)
+    await complete(cycleId, b, 1)
+
+    let r = await getNextSessionAdvancingIfDone(db)
+    expect(r.week).toBe(1)
+    expect(r.liftId).toBe(c) // C still owes week 1
+
+    await complete(cycleId, c, 1)
+    r = await getNextSessionAdvancingIfDone(db)
+    expect(r.week).toBe(2)
+  })
+
+  it('adding a lift mid-cycle does not reopen already-closed weeks', async () => {
+    const a = await mkLift('A', 1)
+    const b = await mkLift('B', 2)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 0 })
+    await complete(cycleId, a, 1)
+    await complete(cycleId, b, 1)
+    // Close week 1 (persists the high-water mark)
+    let r = await getNextSessionAdvancingIfDone(db)
+    expect(r.week).toBe(2)
+    expect((await db.cycles.get(cycleId))?.closedThroughWeek).toBe(1)
+
+    // New lift added after week 1 closed — week 1 stays done, C only owes week 2+
+    await mkLift('C', 3)
+    r = await getNextSessionAdvancingIfDone(db)
+    expect(r.week).toBe(2)
+    expect((await db.cycles.get(cycleId))?.closedThroughWeek).toBe(1)
+  })
+
+  it('archiving a lift mid-week lets the remaining lifts complete the week', async () => {
+    const a = await mkLift('A', 1)
+    const b = await mkLift('B', 2)
+    const c = await mkLift('C', 3)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await complete(cycleId, a, 1)
+    await complete(cycleId, b, 1)
+    // C not done — week 1 incomplete with 3 lifts
+    let r = await getNextSessionAdvancingIfDone(db)
+    expect(r.week).toBe(1)
+    expect(r.liftId).toBe(c)
+
+    await archiveLift(db, c)
+    r = await getNextSessionAdvancingIfDone(db)
+    expect(r.week).toBe(2) // only A and B required now; week 1 is complete
+  })
+
+  it('archived lift completed history still counts; advance ignores it', async () => {
+    const a = await mkLift('A', 1)
+    const b = await mkLift('B', 2)
+    await db.trainingMaxes.add({ liftId: a, weight: 200, setAt: new Date() })
+    await db.trainingMaxes.add({ liftId: b, weight: 200, setAt: new Date() })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (const w of [1, 2, 3, 4] as const) { await complete(cycleId, a, w); await complete(cycleId, b, w) }
+    const extra = await mkLift('C', 3)
+    await archiveLift(db, extra) // archived → not required for week 4
+    const { advanced } = await advanceCycleIfComplete(db)
+    expect(advanced).toBe(true)
   })
 })
 

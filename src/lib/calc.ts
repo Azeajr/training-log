@@ -1,4 +1,4 @@
-import type { PlateConfig, SupplementalTemplate, SupplementalSetType } from '../types/domain'
+import type { PlateConfig, SupplementalTemplate, SupplementalSetType, DeloadSupplemental } from '../types/domain'
 
 export const MAIN_PERCENTAGES = {
   1: [0.65, 0.75, 0.85],
@@ -286,6 +286,21 @@ export const formatDuration = (seconds: number): string => {
   return `${mm}:${ss.toString().padStart(2, '0')}`
 }
 
+// Which week's percentages drive supplemental + cross work. Weeks 1-3 always
+// use their own week. The deload (week 4) is governed by the user's setting:
+// skip → none, normal → week 1 (~65%), deload → week 4 (~40-60%). Returning
+// null means "no supplemental this week". This is the single switch that keeps
+// self-supplemental and cross-lift work consistent on the deload.
+export const effectiveSupplementalWeek = (
+  week: 1 | 2 | 3 | 4,
+  mode: DeloadSupplemental,
+): 1 | 2 | 3 | 4 | null => {
+  if (week !== 4) return week
+  if (mode === 'skip') return null
+  if (mode === 'normal') return 1
+  return 4
+}
+
 export function calcSupplementalSets(
   template: SupplementalTemplate,
   main: MainSet[],
@@ -324,6 +339,54 @@ export function getSupplementalLabel(
     }
     case 'none':    return null
   }
+}
+
+// ── Cross-lift supplemental ───────────────────────────────────────────────
+// After the day's main + self-supplemental, run volume sets of *another* main
+// lift's movement. Weight is FSL of that movement (its first main set for the
+// week) or a straight percentage of its TM. Unlike FSL/SSL there is no source
+// set in this session to cascade from — the weight is fixed from the other
+// lift's TM.
+export interface CrossSet {
+  setNumber: number
+  weight: number
+  reps: number
+  type: 'cross'
+  liftId: number  // the movement lift
+}
+
+export interface CrossBlockConfig {
+  movementLiftId: number
+  weightMode: 'fsl' | 'percent'
+  percent: number | null
+  sets: number
+  reps: number
+}
+
+export const calcCrossSets = (
+  block: CrossBlockConfig,
+  movementTm: number,
+  week: 1 | 2 | 3 | 4,
+  barWeight = BAR_WEIGHT,
+): CrossSet[] => {
+  const weight = block.weightMode === 'fsl'
+    ? calcMainSets(movementTm, week, barWeight)[0].weight
+    : Math.max(barWeight, roundToNearest5(movementTm * (block.percent ?? 0)))
+  return Array.from({ length: Math.max(0, block.sets) }, (_, i) => ({
+    setNumber: i + 1,
+    weight,
+    reps: block.reps,
+    type: 'cross' as const,
+    liftId: block.movementLiftId,
+  }))
+}
+
+export const getCrossLabel = (
+  block: { sets: number; reps: number; weightMode: 'fsl' | 'percent'; percent: number | null },
+  movementName: string,
+): string => {
+  const mode = block.weightMode === 'fsl' ? 'FSL' : `${Math.round((block.percent ?? 0) * 100)}% TM`
+  return `${movementName.toUpperCase()}  ${block.sets} × ${block.reps}  ${mode}`
 }
 
 export const calcPlatesPerSide = (
