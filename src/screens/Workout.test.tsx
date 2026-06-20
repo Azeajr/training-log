@@ -1210,6 +1210,9 @@ describe('Workout screen — TM recommendation modal', () => {
 
   it('TM ADJUSTMENT does not appear for week-4 session', async () => {
     await db.sessions.update(1, { week: 4 })
+    // A second active lift keeps the cycle from completing on this lone week-4
+    // session, so the flow navigates to /today instead of opening the cycle modal.
+    await db.lifts.add({ name: 'OHP', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     startSession({ ...BENCH, week: 4 })
     renderWorkout()
     fireEvent.click(await screen.findByText('COMPLETE SESSION'))
