@@ -4,14 +4,38 @@ import { roundToNearest5 } from './calc'
 import { getCycleDoublingCandidates } from './tm-recommendations'
 import type { DoublingCandidate } from './tm-recommendations'
 
-const WEEKS = [1, 2, 3, 4] as const
+// Active = non-archived lifts, ordered. The number of active lifts is the
+// per-week session target (one training day per lift). Archived lifts keep
+// their history but no longer count toward completion.
+async function activeLiftsOrdered(db: TrainingDB): Promise<Lift[]> {
+  const lifts = await db.lifts.orderBy('order').toArray()
+  return lifts.filter(l => !l.archived)
+}
 
-const countCompletedByWeek = (sessions: Array<{ week: number; status: string }>) => {
-  const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
-  for (const s of sessions) {
-    if (s.status !== 'pending') counts[s.week]++
+const weekComplete = (
+  sessions: Array<{ week: number; liftId: number; status: string }>,
+  week: number,
+  activeLiftIds: number[],
+): boolean =>
+  activeLiftIds.length > 0 &&
+  activeLiftIds.every(id =>
+    sessions.some(s => s.week === week && s.liftId === id && s.status !== 'pending'))
+
+// Highest contiguous fully-completed week, never dropping below the stored
+// high-water mark. Freezing closed weeks is what lets the lift roster change
+// mid-cycle without reopening finished weeks (added lifts only owe later weeks)
+// or prematurely completing them (archived lifts drop out of the active set).
+const computeClosedThroughWeek = (
+  sessions: Array<{ week: number; liftId: number; status: string }>,
+  activeLiftIds: number[],
+  prevClosed: number,
+): number => {
+  let closed = prevClosed
+  for (let w = closed + 1; w <= 4; w++) {
+    if (weekComplete(sessions, w, activeLiftIds)) closed = w
+    else break
   }
-  return counts
+  return closed
 }
 
 export interface TmChange {
@@ -24,7 +48,7 @@ async function progressTms(
   db: TrainingDB,
   nextWeight: (current: TrainingMax, lift: Lift) => number,
 ): Promise<TmChange[]> {
-  const lifts = await db.lifts.orderBy('order').toArray()
+  const lifts = await activeLiftsOrdered(db)
   const changes: TmChange[] = []
   for (const lift of lifts) {
     const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
@@ -46,9 +70,14 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   if (!cycle?.id) return { advanced: false, doublingCandidates: [], newTms: [] }
 
   const sessions = await db.sessions.where('cycleId').equals(cycle.id).toArray()
-  const weekCounts = countCompletedByWeek(sessions)
+  const activeLiftIds = (await activeLiftsOrdered(db)).map(l => l.id!)
+  const closed = computeClosedThroughWeek(sessions, activeLiftIds, cycle.closedThroughWeek ?? 0)
 
-  if (weekCounts[4] < 4) return { advanced: false, doublingCandidates: [], newTms: [] }
+  if (closed !== (cycle.closedThroughWeek ?? 0)) {
+    await db.cycles.update(cycle.id, { closedThroughWeek: closed })
+  }
+  // A cycle ends when its final week is complete for every active lift.
+  if (!weekComplete(sessions, 4, activeLiftIds)) return { advanced: false, doublingCandidates: [], newTms: [] }
 
   // Compute before progression fires so TM bump detection sees pre-progression state
   const doublingCandidates = await getCycleDoublingCandidates(db, cycle)
@@ -57,7 +86,7 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   let newTms: TmChange[] = []
   await db.transaction(async () => {
     await db.cycles.update(cycleId, { endDate: new Date() })
-    await db.cycles.add({ number: cycle.number + 1, startDate: new Date(), endDate: null })
+    await db.cycles.add({ number: cycle.number + 1, startDate: new Date(), endDate: null, closedThroughWeek: 0 })
     newTms = await applyTmProgression(db)
     await applyAccessoryTmProgression(db, cycleId)
   })
@@ -109,8 +138,10 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
       number: 1,
       startDate: new Date(),
       endDate: null,
+      closedThroughWeek: 0,
     })
-    const lifts = await db.lifts.orderBy('order').toArray()
+    const lifts = await activeLiftsOrdered(db)
+    if (lifts.length === 0) throw new Error('No active lifts')
     return { liftId: lifts[0].id!, week: 1, cycleId }
   }
 
@@ -118,26 +149,30 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
     .where('cycleId').equals(cycle.id)
     .toArray()
 
-  let weekCounts = countCompletedByWeek(sessions)
+  let lifts = await activeLiftsOrdered(db)
+  if (lifts.length === 0) throw new Error('No active lifts')
+  const activeLiftIds = lifts.map(l => l.id!)
+  let closed = computeClosedThroughWeek(sessions, activeLiftIds, cycle.closedThroughWeek ?? 0)
+  if (closed !== (cycle.closedThroughWeek ?? 0)) {
+    await db.cycles.update(cycle.id, { closedThroughWeek: closed })
+  }
 
-  if (WEEKS.every(w => weekCounts[w] >= 4)) {
+  if (closed >= 4) {
     await advanceCycleIfComplete(db)
     cycle = await db.cycles.orderBy('number').last()
     if (!cycle?.id) throw new Error('Cycle advance failed')
     sessions = []
-    weekCounts = countCompletedByWeek(sessions)
+    lifts = await activeLiftsOrdered(db)
+    if (lifts.length === 0) throw new Error('No active lifts')
+    closed = 0
   }
 
-  let currentWeek: 1 | 2 | 3 | 4 = 1
-  for (const w of WEEKS) {
-    if (weekCounts[w] < 4) { currentWeek = w; break }
-  }
+  const currentWeek = Math.min(4, closed + 1) as 1 | 2 | 3 | 4
 
   const completedLiftIds = sessions
     .filter(s => s.week === currentWeek && s.status !== 'pending')
     .map(s => s.liftId)
 
-  const lifts = await db.lifts.orderBy('order').toArray()
   const nextLift = lifts.find(l => !completedLiftIds.includes(l.id!))
 
   return {

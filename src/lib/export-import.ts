@@ -1,7 +1,7 @@
 import type { TrainingDB } from '../db/index'
 import type {
   Lift, TrainingMax, AccessoryTrainingMax, Cycle, Session,
-  Set, Exercise, LiftAccessory, AccessorySet, Settings,
+  Set, Exercise, LiftAccessory, LiftSupplemental, AccessorySet, Settings,
 } from '../types/domain'
 import { formatDateIso } from './format'
 
@@ -35,6 +35,7 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     sets: await db.sets.toArray(),
     exercises: await db.exercises.toArray(),
     liftAccessories: await db.liftAccessories.toArray(),
+    liftSupplementals: await db.liftSupplementals.toArray(),
     accessorySets: await db.accessorySets.toArray(),
     settings: await db.settings.toArray(),
   }
@@ -71,16 +72,17 @@ export async function importJson(db: TrainingDB, file: File): Promise<void> {
 // the guard prevents bad keys from reaching the INSERT, this layer just
 // gives a friendlier "ignore unknown column" experience for legacy backups.
 const COLS = {
-  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType'],
+  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived'],
   trainingMaxes: ['id', 'liftId', 'weight', 'setAt'],
-  cycles: ['id', 'number', 'startDate', 'endDate'],
+  cycles: ['id', 'number', 'startDate', 'endDate', 'closedThroughWeek'],
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
-  sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap'],
+  sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId'],
   exercises: ['id', 'name', 'type', 'archived'],
   liftAccessories: ['id', 'liftId', 'exerciseId', 'order'],
+  liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order'],
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],
-  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate'],
+  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental'],
 } as const
 
 // Reject malformed table payloads BEFORE the destructive clear. Without this,
@@ -120,6 +122,7 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       await db.sets.clear()
       await db.exercises.clear()
       await db.liftAccessories.clear()
+      await db.liftSupplementals.clear()
       await db.accessoryTrainingMaxes.clear()
       await db.accessorySets.clear()
       await db.settings.clear()
@@ -138,6 +141,8 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
         await db.exercises.bulkAdd(pickCols<Exercise>(d.exercises, COLS.exercises))
       if (d.liftAccessories?.length)
         await db.liftAccessories.bulkAdd(pickCols<LiftAccessory>(d.liftAccessories, COLS.liftAccessories))
+      if (d.liftSupplementals?.length)
+        await db.liftSupplementals.bulkAdd(pickCols<LiftSupplemental>(d.liftSupplementals, COLS.liftSupplementals))
       if (d.settings?.length)
         await db.settings.bulkAdd(pickCols<Settings>(d.settings, COLS.settings))
       if (d.accessoryTrainingMaxes?.length)

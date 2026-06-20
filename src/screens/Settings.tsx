@@ -6,12 +6,14 @@ import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
+import { createLift, updateLift, archiveLift, unarchiveLift, moveLift } from '../lib/lift'
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
 import { calcMainSets, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
+import LiftSetupModal from '../components/modals/LiftSetupModal'
 import Rule from '../components/layout/Rule'
 import Stepper from '../components/forms/Stepper'
 import ExerciseEditor from '../components/forms/ExerciseEditor'
@@ -39,6 +41,19 @@ export default function Settings() {
   const [addToLift, setAddToLift] = createSignal<number | null>(null)
   const [addToLiftExId, setAddToLiftExId] = createSignal<number | null>(null)
   const [importError, setImportError] = createSignal<string | null>(null)
+
+  const activeLifts = () => lifts().filter(l => !l.archived)
+  const archivedLifts = () => lifts().filter(l => l.archived)
+
+  const [setupLiftId, setSetupLiftId] = createSignal<number | null>(null)
+  const [showAddLift, setShowAddLift] = createSignal(false)
+  const [newLiftName, setNewLiftName] = createSignal('')
+  const [newLiftIncrement, setNewLiftIncrement] = createSignal(5)
+  const [newLiftBase, setNewLiftBase] = createSignal(95)
+  const [newLiftType, setNewLiftType] = createSignal<'upper' | 'lower'>('upper')
+  const [editingLift, setEditingLift] = createSignal<number | null>(null)
+  const [editLiftName, setEditLiftName] = createSignal('')
+  const [editLiftIncrement, setEditLiftIncrement] = createSignal(5)
   // eslint-disable-next-line no-unassigned-vars -- Solid `ref={fileInputRef}` reassigns at runtime
   let fileInputRef!: HTMLInputElement
 
@@ -67,11 +82,13 @@ export default function Settings() {
     const latestCycle = await db.cycles.orderBy('number').last()
     if (latestCycle?.id) {
       const cycleSessions = await db.sessions.where('cycleId').equals(latestCycle.id).toArray()
-      const weekCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
-      cycleSessions.forEach(s => { if (s.status !== 'pending') weekCounts[s.week]++ })
+      const activeIds = allLifts.filter(l => !l.archived).map(l => l.id!)
+      const isWeekDone = (w: number) =>
+        activeIds.length > 0 &&
+        activeIds.every(id => cycleSessions.some(s => s.week === w && s.liftId === id && s.status !== 'pending'))
       let week: 1 | 2 | 3 | 4 = 1
       for (const w of [1, 2, 3, 4] as const) {
-        if (weekCounts[w] < 4) { week = w; break }
+        if (!isWeekDone(w)) { week = w; break }
       }
       setCurrentCycleWeek(week)
       setCurrentCycleId(latestCycle.id)
@@ -83,6 +100,53 @@ export default function Settings() {
     await setTm(db, liftId, tmInput())
     setEditingTm(null)
     setTmInput(0)
+    await load()
+  }
+
+  const handleAddLift = async () => {
+    const name = newLiftName().trim()
+    if (!name) return
+    const id = await createLift(db, {
+      name,
+      progressionIncrement: newLiftIncrement(),
+      baseWeight: newLiftBase(),
+      liftType: newLiftType(),
+    })
+    setShowAddLift(false)
+    setNewLiftName('')
+    setNewLiftIncrement(5)
+    setNewLiftBase(95)
+    setNewLiftType('upper')
+    await load()
+    // New lift starts with empty assistance — open setup to assign it now.
+    setSetupLiftId(id)
+  }
+
+  const handleSaveLiftEdit = async (id: number) => {
+    const name = editLiftName().trim()
+    if (!name) return
+    await updateLift(db, id, { name, progressionIncrement: editLiftIncrement() })
+    setEditingLift(null)
+    await load()
+  }
+
+  const handleArchiveLift = async (id: number) => {
+    if (activeLifts().length <= 1) {
+      showToast('Keep at least one active lift')
+      return
+    }
+    if (!await confirm('Archive this lift? History is kept; it leaves the active roster next.', { destructive: true, confirmLabel: 'ARCHIVE' })) return
+    await archiveLift(db, id)
+    await load()
+  }
+
+  const handleUnarchiveLift = async (id: number) => {
+    await unarchiveLift(db, id)
+    await load()
+  }
+
+  const handleMoveLift = async (id: number, direction: 'up' | 'down') => {
+    await moveLift(db, id, direction)
     await load()
   }
 
@@ -180,7 +244,7 @@ export default function Settings() {
       { destructive: true, confirmLabel: 'SKIP' }
     )) return
 
-    const allLifts = await db.lifts.orderBy('order').toArray()
+    const allLifts = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived)
     await db.transaction(async () => {
       for (let w = week; w < targetWeek; w++) {
         const wk = w as 1 | 2 | 3 | 4
@@ -205,7 +269,7 @@ export default function Settings() {
     if (!week || !cycleId) return
     if (!await confirm('Skip deload week? Remaining sessions will be marked skipped and TMs will progress.', { destructive: true, confirmLabel: 'SKIP DELOAD' })) return
 
-    const allLifts = await db.lifts.orderBy('order').toArray()
+    const allLifts = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived)
     await db.transaction(async () => {
       for (let w = week; w <= 4; w++) {
         const wk = w as 1 | 2 | 3 | 4
@@ -266,8 +330,111 @@ export default function Settings() {
     <div class="p-4 font-mono text-sm">
 
       <div class="mb-6">
+        <Rule label="MAIN LIFTS" class="text-muted mb-2" />
+        <For each={activeLifts()}>{(l, i) => (
+          <div class="py-1 border-b border-border-dim">
+            <Show when={editingLift() === l.id} fallback={
+              <div class="flex items-center gap-2">
+                <div class="flex flex-col">
+                  <button
+                    onClick={() => void handleMoveLift(l.id!, 'up')}
+                    disabled={i() === 0}
+                    class="text-faint text-xs leading-none hover:text-accent disabled:opacity-30"
+                    aria-label="Move up"
+                  >▲</button>
+                  <button
+                    onClick={() => void handleMoveLift(l.id!, 'down')}
+                    disabled={i() === activeLifts().length - 1}
+                    class="text-faint text-xs leading-none hover:text-accent disabled:opacity-30"
+                    aria-label="Move down"
+                  >▼</button>
+                </div>
+                <span class="text-text uppercase tracking-widest text-xs flex-1">{l.name}</span>
+                <span class="text-faint text-xs">+{l.progressionIncrement}</span>
+                <button onClick={() => setSetupLiftId(l.id!)} class="text-muted text-xs hover:text-accent">setup</button>
+                <button
+                  onClick={() => { setEditingLift(l.id!); setEditLiftName(l.name); setEditLiftIncrement(l.progressionIncrement) }}
+                  class="text-muted text-xs hover:text-accent"
+                >rename</button>
+                <button onClick={() => void handleArchiveLift(l.id!)} class="text-muted text-xs hover:text-danger">archive</button>
+              </div>
+            }>
+              <div class="flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={editLiftName()}
+                  onInput={e => setEditLiftName(e.currentTarget.value)}
+                  class="bg-surface border border-border text-text px-2 py-1 focus:outline-none focus:border-accent"
+                />
+                <div class="flex items-center gap-2">
+                  <span class="text-muted text-xs w-20">increment</span>
+                  <Stepper value={editLiftIncrement()} onChange={setEditLiftIncrement} step={5} min={0} max={50} />
+                  <span class="text-muted text-xs">lb</span>
+                </div>
+                <div class="flex gap-3">
+                  <button onClick={() => void handleSaveLiftEdit(l.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">SAVE</button>
+                  <button onClick={() => setEditingLift(null)} class="text-muted text-lg sm:text-xl">cancel</button>
+                </div>
+              </div>
+            </Show>
+          </div>
+        )}</For>
+
+        <Show when={showAddLift()} fallback={
+          <button
+            onClick={() => setShowAddLift(true)}
+            class="mt-2 border border-border text-muted px-3 py-1 text-lg sm:text-xl hover:border-accent hover:text-accent"
+          >
+            + ADD LIFT
+          </button>
+        }>
+          <div class="flex flex-col gap-2 mt-2">
+            <input
+              type="text"
+              value={newLiftName()}
+              onInput={e => setNewLiftName(e.currentTarget.value)}
+              placeholder="Lift name"
+              class="bg-surface border border-border text-text px-2 py-1 focus:outline-none focus:border-accent"
+            />
+            <div class="flex items-center gap-2">
+              <span class="text-muted text-xs w-20">increment</span>
+              <Stepper value={newLiftIncrement()} onChange={setNewLiftIncrement} step={5} min={0} max={50} />
+              <span class="text-muted text-xs">lb</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-muted text-xs w-20">base wt</span>
+              <Stepper value={newLiftBase()} onChange={setNewLiftBase} step={5} min={0} max={500} />
+              <span class="text-muted text-xs">lb</span>
+            </div>
+            <div class="flex gap-2">
+              <For each={(['upper', 'lower'] as const)}>{type => (
+                <button
+                  onClick={() => setNewLiftType(type)}
+                  class={`px-2 py-1 text-xs border ${newLiftType() === type ? 'border-accent text-accent' : 'border-border text-muted'}`}
+                >{type}</button>
+              )}</For>
+            </div>
+            <div class="flex gap-3">
+              <button onClick={() => void handleAddLift()} disabled={!newLiftName().trim()} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted">ADD</button>
+              <button onClick={() => setShowAddLift(false)} class="text-muted text-lg sm:text-xl">cancel</button>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={archivedLifts().length > 0}>
+          <Rule label="ARCHIVED LIFTS" class="text-faint mt-4 mb-2" />
+          <For each={archivedLifts()}>{(l) => (
+            <div class="py-1 border-b border-border-dim flex items-center justify-between">
+              <span class="text-faint text-sm uppercase tracking-widest">{l.name}</span>
+              <button onClick={() => void handleUnarchiveLift(l.id!)} class="text-muted text-xs hover:text-accent">unarchive</button>
+            </div>
+          )}</For>
+        </Show>
+      </div>
+
+      <div class="mb-6">
         <Rule label="TRAINING MAXES" class="text-muted mb-2" />
-        <For each={lifts()}>{(l) => (
+        <For each={activeLifts()}>{(l) => (
           <div class="py-1 border-b border-border-dim">
             <div class="flex items-center gap-3">
               <span class="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
@@ -327,6 +494,25 @@ export default function Settings() {
             </button>
           )}</For>
         </div>
+
+        <div class="text-muted text-xs uppercase tracking-widest mt-3 mb-1">Deload week</div>
+        <div class="flex gap-1 flex-wrap">
+          <For each={([['skip', 'SKIP IT'], ['deload', 'DELOAD %'], ['normal', 'NORMAL']] as const)}>{([m, label]) => (
+            <button
+              class={`px-2 py-1 text-xs font-mono tracking-widest border ${
+                (settings.deloadSupplemental ?? 'normal') === m
+                  ? 'border-accent text-accent'
+                  : 'border-border text-muted hover:border-accent hover:text-accent'
+              }`}
+              onClick={() => void updateSettings({ deloadSupplemental: m })}
+            >
+              {label}
+            </button>
+          )}</For>
+        </div>
+        <p class="text-faint text-xs mt-1">
+          Supplemental + cross-lift work on the week-4 deload: skip it, run it at deload %, or at normal (~65%) weights.
+        </p>
       </div>
 
       <Show when={currentCycleWeek() !== null}>
@@ -412,7 +598,7 @@ export default function Settings() {
       <div class="mb-6">
         <Rule label="EXERCISES" class="text-muted mb-2" />
 
-        <For each={lifts()}>{(lift) => {
+        <For each={activeLifts()}>{(lift) => {
           const assigned = () => liftAccessories()
             .filter(la => la.liftId === lift.id)
             .sort((a, b) => a.order - b.order)
@@ -646,6 +832,13 @@ export default function Settings() {
           })
         }}
       />
+
+      <Show when={setupLiftId() !== null}>
+        <LiftSetupModal
+          liftId={setupLiftId()!}
+          onClose={() => { setSetupLiftId(null); void load() }}
+        />
+      </Show>
     </div>
   )
 }

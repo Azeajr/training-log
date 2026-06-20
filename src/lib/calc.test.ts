@@ -36,6 +36,9 @@ import {
   applyMainCascadeToSupplemental,
   est1RMFromTm,
   TM_PCT_OF_1RM,
+  calcCrossSets,
+  getCrossLabel,
+  effectiveSupplementalWeek,
 } from './calc'
 import { DEFAULT_PLATES } from '../store/settings-store'
 
@@ -845,5 +848,71 @@ describe('getSupplementalLabel', () => {
   it('none with non-empty sets: returns null', () => {
     const sets = calcFslSets(130)
     expect(getSupplementalLabel('none', sets, 1)).toBeNull()
+  })
+})
+
+describe('calcCrossSets', () => {
+  const block = (over: Partial<Parameters<typeof calcCrossSets>[0]> = {}) => ({
+    movementLiftId: 7, weightMode: 'fsl' as const, percent: null, sets: 5, reps: 10, ...over,
+  })
+
+  it('fsl mode uses the movement lift first main set for the week', () => {
+    // week 1 first main set = round5(200 * 0.65) = 130
+    const sets = calcCrossSets(block({ weightMode: 'fsl' }), 200, 1)
+    expect(sets).toHaveLength(5)
+    expect(sets.every(s => s.weight === 130 && s.reps === 10 && s.type === 'cross' && s.liftId === 7)).toBe(true)
+    expect(sets.map(s => s.setNumber)).toEqual([1, 2, 3, 4, 5])
+  })
+
+  it('fsl mode scales the first main set by week (week 3 = 75%)', () => {
+    const sets = calcCrossSets(block({ weightMode: 'fsl' }), 200, 3)
+    expect(sets[0].weight).toBe(150) // round5(200 * 0.75)
+  })
+
+  it('percent mode uses a straight percentage of the movement TM', () => {
+    const sets = calcCrossSets(block({ weightMode: 'percent', percent: 0.75, sets: 3 }), 200, 1)
+    expect(sets).toHaveLength(3)
+    expect(sets.every(s => s.weight === 150)).toBe(true) // round5(200 * 0.75)
+  })
+
+  it('percent mode floors at the bar weight', () => {
+    const sets = calcCrossSets(block({ weightMode: 'percent', percent: 0.1 }), 100, 1, 45)
+    expect(sets[0].weight).toBe(45) // round5(100 * 0.1) = 10 → max(45, 10)
+  })
+
+  it('returns no sets when sets count is zero', () => {
+    expect(calcCrossSets(block({ sets: 0 }), 200, 1)).toHaveLength(0)
+  })
+})
+
+describe('getCrossLabel', () => {
+  it('fsl mode labels with FSL', () => {
+    expect(getCrossLabel({ sets: 5, reps: 10, weightMode: 'fsl', percent: null }, 'OHP')).toBe('OHP  5 × 10  FSL')
+  })
+
+  it('percent mode labels with the rounded percentage', () => {
+    expect(getCrossLabel({ sets: 3, reps: 10, weightMode: 'percent', percent: 0.75 }, 'Deadlift')).toBe('DEADLIFT  3 × 10  75% TM')
+  })
+})
+
+describe('effectiveSupplementalWeek', () => {
+  it('weeks 1-3 always use their own week regardless of mode', () => {
+    for (const w of [1, 2, 3] as const) {
+      expect(effectiveSupplementalWeek(w, 'skip')).toBe(w)
+      expect(effectiveSupplementalWeek(w, 'deload')).toBe(w)
+      expect(effectiveSupplementalWeek(w, 'normal')).toBe(w)
+    }
+  })
+
+  it('week 4 skip → null (no supplemental)', () => {
+    expect(effectiveSupplementalWeek(4, 'skip')).toBeNull()
+  })
+
+  it('week 4 deload → week 4 (deload percentages)', () => {
+    expect(effectiveSupplementalWeek(4, 'deload')).toBe(4)
+  })
+
+  it('week 4 normal → week 1 (~65% percentages)', () => {
+    expect(effectiveSupplementalWeek(4, 'normal')).toBe(1)
   })
 })
