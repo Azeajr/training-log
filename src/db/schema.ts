@@ -49,6 +49,16 @@ CREATE TABLE IF NOT EXISTS liftAccessories (
   exerciseId INTEGER NOT NULL,
   "order" INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS liftSupplementals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  liftId INTEGER NOT NULL,
+  movementLiftId INTEGER NOT NULL,
+  weightMode TEXT NOT NULL,
+  percent REAL,
+  sets INTEGER NOT NULL,
+  reps INTEGER NOT NULL,
+  "order" INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS accessoryTrainingMaxes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   exerciseId INTEGER NOT NULL,
@@ -82,13 +92,20 @@ CREATE INDEX IF NOT EXISTS idx_sessions_liftId ON sessions(liftId);
 CREATE INDEX IF NOT EXISTS idx_sets_sessionId ON sets(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessorySets_sessionId ON accessorySets(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTrainingMaxes(exerciseId);
+CREATE INDEX IF NOT EXISTS idx_liftAccessories_liftId ON liftAccessories(liftId);
+CREATE INDEX IF NOT EXISTS idx_liftSupplementals_liftId ON liftSupplementals(liftId);
 `
 
 export const ADDITIVE_MIGRATIONS = [
   `ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT`,
+  `ALTER TABLE lifts ADD COLUMN archived INTEGER`,
+  `ALTER TABLE cycles ADD COLUMN closedThroughWeek INTEGER`,
+  `ALTER TABLE sets ADD COLUMN liftId INTEGER`,
+  `ALTER TABLE settings ADD COLUMN deloadSupplemental TEXT`,
 ] as const
 
 export const ALL_TABLES = [
   'lifts', 'trainingMaxes', 'cycles', 'sessions', 'sets',
-  'exercises', 'liftAccessories', 'accessoryTrainingMaxes', 'accessorySets', 'settings',
+  'exercises', 'liftAccessories', 'liftSupplementals',
+  'accessoryTrainingMaxes', 'accessorySets', 'settings',
 ] as const

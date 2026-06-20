@@ -8,8 +8,9 @@ import {
   calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
   targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType, jokerChainBaseWeight,
   applyMainCascadeToSupplemental, applySupplementalOverride, supplementalSourceSetNumber, roundToNearest5,
+  calcCrossSets, getCrossLabel, effectiveSupplementalWeek,
 } from '../lib/calc'
-import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet } from '../lib/calc'
+import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getAmrapTargets, deloadTms } from '../lib/cycle'
@@ -29,8 +30,18 @@ import { getSessionTmRecommendation } from '../lib/tm-recommendations'
 import type { SessionTmRecommendation } from '../lib/tm-recommendations'
 import Rule from '../components/layout/Rule'
 
+interface LoadedCrossBlock {
+  movementLiftId: number
+  movementName: string
+  weightMode: 'fsl' | 'percent'
+  percent: number | null
+  sets: number
+  reps: number
+  computed: CrossSet[]
+}
+
 function SetSection(props: {
-  sets: () => (WarmupSet | MainSet | JokerSet | FslSet)[]
+  sets: () => (WarmupSet | MainSet | JokerSet | FslSet | CrossSet)[]
   offset: () => number
   forceAmrapFalse?: boolean
   amrapTargets?: () => AmrapTarget[]
@@ -68,7 +79,8 @@ export default function Workout() {
 
   const [lift, setLift] = createSignal<Lift | null>(null)
   const [supplementalTemplate, setSupplementalTemplate] = createSignal<SupplementalTemplate>('fsl')
-  const [allSets, setAllSets] = createSignal<(WarmupSet | MainSet | FslSet | JokerSet)[]>([])
+  const [allSets, setAllSets] = createSignal<(WarmupSet | MainSet | FslSet | JokerSet | CrossSet)[]>([])
+  const [crossBlocks, setCrossBlocks] = createSignal<LoadedCrossBlock[]>([])
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
   const [showPicker, setShowPicker] = createSignal(false)
   const [exercises, setExercises] = createSignal<Exercise[]>([])
@@ -92,12 +104,18 @@ export default function Workout() {
     const main = calcMainSets(tm, week, settings.barWeight)
     const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
 
-    let fsl = calcSupplementalSets(template, main, tm, week, settings.barWeight)
+    // Supplemental runs at the effective week (deload may remap or skip it).
+    const eff = effectiveSupplementalWeek(week, settings.deloadSupplemental)
+    const suppMain = eff === null ? [] : calcMainSets(tm, eff, settings.barWeight)
+    let fsl = eff === null ? [] : calcSupplementalSets(template, suppMain, tm, eff, settings.barWeight)
     const sourceSetNumber = supplementalSourceSetNumber(template)
     const loggedSource = sourceSetNumber === null
       ? undefined
       : loggedSets.find(s => s.type === 'main' && s.setNumber === sourceSetNumber)
-    if (loggedSource) fsl = applyMainCascadeToSupplemental(fsl, template, loggedSource.weight)
+    // Cascade the logged top set into supplemental only when supplemental tracks
+    // this week's main sets. On a remapped deload (eff !== week) the supplemental
+    // weight is decoupled from the lighter deload top set, so skip the cascade.
+    if (loggedSource && eff === week) fsl = applyMainCascadeToSupplemental(fsl, template, loggedSource.weight)
     fsl = applySupplementalOverride(fsl, loggedSets, template)
     const extraFsl: FslSet[] = template === 'none' ? [] : loggedSets
       .filter(s => s.type === template)
@@ -108,7 +126,24 @@ export default function Workout() {
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
 
-    return { all: [...warmup, ...main, ...restoredJokers, ...fsl, ...extraFsl], main }
+    // Cross blocks come last, each computed from its movement lift's TM. Like
+    // the supplemental tail, a logged set's weight overrides the remaining
+    // planned sets of the same block (matched by movement liftId), and extra
+    // logged sets beyond the plan are restored.
+    const cross: CrossSet[] = crossBlocks().flatMap(block => {
+      const logged = loggedSets.filter(s => s.type === 'cross' && s.liftId === block.movementLiftId)
+      let sets: CrossSet[] = block.computed
+      if (logged.length > 0) {
+        const override = logged[logged.length - 1].weight
+        sets = sets.map((s, i) => i >= logged.length ? { ...s, weight: override } : s)
+      }
+      const extra: CrossSet[] = logged.slice(sets.length).map((s, i) => ({
+        setNumber: sets.length + i + 1, weight: s.weight, reps: s.reps, type: 'cross' as const, liftId: block.movementLiftId,
+      }))
+      return [...sets, ...extra]
+    })
+
+    return { all: [...warmup, ...main, ...restoredJokers, ...fsl, ...extraFsl, ...cross], main }
   }
 
   const loadData = async () => {
@@ -123,6 +158,35 @@ export default function Workout() {
 
     const template = settings.supplementalTemplate ?? 'fsl+bbb'
     setSupplementalTemplate(template)
+
+    // Load cross-lift supplemental blocks for this day before composing — the
+    // composition reads crossBlocks(). Cross work follows the same effective
+    // week as self-supplemental (deload may remap or skip it).
+    const crossWeek = effectiveSupplementalWeek(session.week, settings.deloadSupplemental)
+    if (crossWeek === null) {
+      setCrossBlocks([])
+    } else {
+      const blocks = (await db.liftSupplementals.where('liftId').equals(session.liftId).toArray())
+        .sort((a, b) => a.order - b.order)
+      const allLifts = await db.lifts.toArray()
+      const loaded: LoadedCrossBlock[] = []
+      for (const b of blocks) {
+        const mLift = allLifts.find(l => l.id === b.movementLiftId)
+        if (!mLift) continue
+        const mTm = await getCurrentTm(db, b.movementLiftId)
+        loaded.push({
+          movementLiftId: b.movementLiftId,
+          movementName: mLift.name,
+          weightMode: b.weightMode,
+          percent: b.percent,
+          sets: b.sets,
+          reps: b.reps,
+          computed: calcCrossSets(b, mTm, crossWeek, settings.barWeight),
+        })
+      }
+      setCrossBlocks(loaded)
+    }
+
     const { all, main } = composeAllSets(tm, session.week, template)
     setAllSets(all)
 
@@ -175,6 +239,7 @@ export default function Workout() {
       weight,
       reps,
       isAmrap: (s as MainSet).isAmrap ?? false,
+      ...(s.type === 'cross' ? { liftId: (s as CrossSet).liftId } : {}),
     }
     const prevAllSets = allSets()
     logSet(setData)
@@ -378,6 +443,19 @@ export default function Workout() {
   const mainSets = () => allSets().filter(s => s.type === 'main') as MainSet[]
   const jokerSetsRendered = () => allSets().filter(s => s.type === 'joker') as JokerSet[]
   const fslSets = () => allSets().filter(s => isSupplementalType(s.type)) as FslSet[]
+  const crossSetsAll = () => allSets().filter(s => s.type === 'cross') as CrossSet[]
+
+  // Each cross block rendered as its own section. Offsets continue past the
+  // supplemental tail; blocks are keyed by their (unique) movement liftId.
+  const crossSections = () => {
+    let running = warmupCount() + mainCount() + jokerCount() + fslSets().length
+    return crossBlocks().map(block => {
+      const sets = crossSetsAll().filter(s => s.liftId === block.movementLiftId)
+      const offset = running
+      running += sets.length
+      return { block, sets, offset }
+    })
+  }
   const warmupCount = () => warmupSets().length
   const mainCount = () => mainSets().length
   const jokerCount = () => jokerSetsRendered().length
@@ -403,7 +481,11 @@ export default function Workout() {
   const liftName = () => lift()?.name ?? '...'
 
   const supplementalLabel = () =>
-    getSupplementalLabel(supplementalTemplate(), fslSets(), workout.activeSession?.week ?? 1)
+    getSupplementalLabel(
+      supplementalTemplate(),
+      fslSets(),
+      effectiveSupplementalWeek(workout.activeSession?.week ?? 1, settings.deloadSupplemental) ?? 1,
+    )
 
   return (
     <Show
@@ -488,6 +570,31 @@ export default function Workout() {
             </div>
           </Show>
         </div>
+
+        <Show when={crossSections().length > 0}>
+          <div class="mb-6">
+            <Rule label="CROSS-LIFT SUPPLEMENTAL" class="text-muted mb-4" />
+            <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start">
+              <For each={crossSections()}>
+                {section => (
+                  <div class="mb-6 md:mb-0">
+                    <div class="text-muted uppercase text-xs tracking-widest mb-2">
+                      {getCrossLabel(section.block, section.block.movementName)}
+                    </div>
+                    <SetSection
+                      sets={() => section.sets}
+                      offset={() => section.offset}
+                      forceAmrapFalse
+                      onLog={handleLog}
+                      onEdit={handleEdit}
+                      onDelete={handleDeleteSet}
+                    />
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
 
         <Show when={workout.activeAccessories.length > 0}>
           <div class="mb-4">
