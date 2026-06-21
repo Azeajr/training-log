@@ -40,7 +40,10 @@ export default function Today() {
 
     const sessions = await db.sessions.where('cycleId').equals(next.cycleId).toArray()
     const statuses: WeekStatus[] = allLifts.map(l => {
-      const s = sessions.find(se => se.liftId === l.id && se.week === next.week)
+      // A reopened week keeps the old completed rows and adds a fresh pending
+      // one. The pending row is the work still owed, so it wins the display.
+      const liftSessions = sessions.filter(se => se.liftId === l.id && se.week === next.week)
+      const s = liftSessions.find(se => se.status === 'pending') ?? liftSessions[0]
       return { liftId: l.id!, name: l.name, status: s ? s.status : 'pending' }
     })
     setWeekStatuses(statuses)
