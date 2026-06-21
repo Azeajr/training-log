@@ -3,7 +3,7 @@ import { db } from '../db/index'
 import type { Lift, Exercise, LiftAccessory, SupplementalTemplate } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
-import { deloadTms, advanceCycleIfComplete } from '../lib/cycle'
+import { deloadTms, advanceCycleIfComplete, computeClosedThroughWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
 import { updateLift, archiveLift, unarchiveLift, moveLift } from '../lib/lift'
@@ -82,16 +82,14 @@ export default function Settings() {
 
     const latestCycle = await db.cycles.orderBy('number').last()
     if (latestCycle?.id) {
+      // Mirror getNextSessionAdvancingIfDone: derive the current week from the
+      // closedThroughWeek high-water mark, not a from-scratch session scan. A raw
+      // scan reopens finished weeks whenever the lift roster changes mid-cycle
+      // (issue #52) and ignores skip/reopen actions that move the mark.
       const cycleSessions = await db.sessions.where('cycleId').equals(latestCycle.id).toArray()
       const activeIds = allLifts.filter(l => !l.archived).map(l => l.id!)
-      const isWeekDone = (w: number) =>
-        activeIds.length > 0 &&
-        activeIds.every(id => cycleSessions.some(s => s.week === w && s.liftId === id && s.status !== 'pending'))
-      let week: 1 | 2 | 3 | 4 = 1
-      for (const w of [1, 2, 3, 4] as const) {
-        if (!isWeekDone(w)) { week = w; break }
-      }
-      setCurrentCycleWeek(week)
+      const closed = computeClosedThroughWeek(cycleSessions, activeIds, latestCycle.closedThroughWeek ?? 0)
+      setCurrentCycleWeek(Math.min(4, closed + 1) as 1 | 2 | 3 | 4)
       setCurrentCycleId(latestCycle.id)
     }
   }
@@ -263,6 +261,33 @@ export default function Settings() {
     })
     await load()
     showToast(`Advanced to week ${targetWeek}`)
+  }
+
+  // Backward nav: reopen a finished week so it can be redone. Lowering the
+  // stored high-water mark alone is not enough — computeClosedThroughWeek floors
+  // at it and would re-close instantly — so the target week's sessions are also
+  // reset to pending. Mid-cycle only (week < current ≤ 4), so no TM progression
+  // has fired; logged sets stay in the DB.
+  const handleReopenWeek = async (targetWeek: 1 | 2 | 3 | 4) => {
+    const week = currentCycleWeek()
+    const cycleId = currentCycleId()
+    if (!week || !cycleId || targetWeek >= week) return
+    if (!await confirm(
+      `Reopen week ${targetWeek}? Its sessions reset to not-done so you can redo them.`,
+      { destructive: true, confirmLabel: 'REOPEN' }
+    )) return
+
+    const activeIds = (await db.lifts.toArray()).filter(l => !l.archived).map(l => l.id!)
+    await db.transaction(async () => {
+      const weekSessions = await db.sessions.where('cycleId').equals(cycleId)
+        .filter(s => s.week === targetWeek && activeIds.includes(s.liftId)).toArray()
+      for (const s of weekSessions) {
+        if (s.status !== 'pending') await db.sessions.update(s.id!, { status: 'pending' })
+      }
+      await db.cycles.update(cycleId, { closedThroughWeek: targetWeek - 1 })
+    })
+    await load()
+    showToast(`Reopened week ${targetWeek}`)
   }
 
   const handleSkipDeload = async () => {
@@ -526,13 +551,17 @@ export default function Settings() {
               <For each={[1, 2, 3, 4] as Array<1 | 2 | 3 | 4>}>{(w) => (
                 <button
                   aria-label={`Week ${w}`}
-                  onClick={() => void handleSkipToWeek(w)}
-                  disabled={w <= (currentCycleWeek() ?? 5)}
+                  onClick={() => {
+                    const cur = currentCycleWeek()
+                    if (cur && w < cur) void handleReopenWeek(w)
+                    else void handleSkipToWeek(w)
+                  }}
+                  disabled={w === currentCycleWeek()}
                   class={`w-8 h-8 border font-mono text-sm ${
                     w === currentCycleWeek()
                       ? 'border-accent text-accent'
                       : w < (currentCycleWeek() ?? 5)
-                        ? 'border-border-dim text-faint'
+                        ? 'border-border-dim text-muted hover:border-warn hover:text-warn'
                         : 'border-border text-muted hover:border-warn hover:text-warn'
                   }`}
                 >
