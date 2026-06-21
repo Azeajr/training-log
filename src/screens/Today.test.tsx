@@ -40,6 +40,7 @@ beforeEach(async () => {
   await Promise.all([
     db.lifts.clear(), db.trainingMaxes.clear(),
     db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+    db.liftSupplementals.clear(),
   ])
   mockNavigate.mockClear()
   await db.lifts.bulkAdd(LIFTS)
@@ -147,6 +148,18 @@ describe('Today screen', () => {
     await db.sessions.add({ cycleId, liftId: 3, week: 1, date: new Date(), notes: null, status: 'skipped' })
     renderToday()
     await waitFor(() => expect(document.body.textContent).toContain('skip'))
+  })
+
+  it('renders a cross-supplemental preview block driven by the movement lift TM', async () => {
+    // OHP (id 1) is auto-selected. Give it an FSL cross block off Deadlift (id 2),
+    // which needs its own TM so calcCrossSets has a weight. Exercises the whole
+    // crossPreview resource + its render loop (previously unexercised).
+    await db.trainingMaxes.add({ liftId: 2, weight: 135, setAt: new Date() })
+    await db.liftSupplementals.add({
+      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 10, order: 1,
+    })
+    renderToday()
+    await screen.findByText(/DEADLIFT\s+5 × 10\s+FSL/)
   })
 
   it("shows '->' label for the selected lift", async () => {

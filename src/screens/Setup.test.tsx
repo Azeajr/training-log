@@ -213,4 +213,66 @@ describe('Setup screen — roster editing', () => {
     const restored = await screen.findByPlaceholderText('Lift name') as HTMLInputElement
     expect(restored.value).toBe('Front Squat')
   })
+
+  it('opening setup on an existing lift then cancelling closes the modal without an add form', async () => {
+    // Exercises the setupLiftId path (modal bound to a real lift, not a draft):
+    // onCancel must hit the `else → setSetupLiftId(null)` arm, not the draft arm.
+    renderSetup()
+    await screen.findByText('OHP')
+    fireEvent.click(screen.getAllByText('setup')[0])
+
+    await screen.findByText('DONE')
+    fireEvent.click(screen.getByText('CANCEL'))
+
+    await waitFor(() => expect(screen.queryByText('DONE')).not.toBeInTheDocument())
+    // No draft was in flight, so no add form should reopen.
+    expect(screen.queryByPlaceholderText('Lift name')).not.toBeInTheDocument()
+  })
+
+  it('shows an assistance-count badge for a lift with accessories', async () => {
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    await db.liftAccessories.add({ liftId: 1, exerciseId: exId, order: 1 })
+    renderSetup()
+    await screen.findByText('1 asst')
+  })
+
+  it('SAVE on a rename trimmed to empty is a no-op (keeps the original name)', async () => {
+    renderSetup()
+    await screen.findByText('OHP')
+    fireEvent.click(screen.getAllByText('rename')[0])
+
+    const input = await waitFor(() => screen.getByDisplayValue('OHP'))
+    fireEvent.input(input, { target: { value: '   ' } })
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await drain()
+    expect((await db.lifts.get(1))?.name).toBe('OHP')
+  })
+})
+
+describe('Setup screen — onboarding import', () => {
+  const fileInput = () => document.querySelector('input[type="file"]') as HTMLInputElement
+
+  it('imports a valid backup file and navigates to /today', async () => {
+    renderSetup()
+    await screen.findByText('OHP')
+    const backup = JSON.stringify({
+      lifts: [{ id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
+      trainingMaxes: [], cycles: [], sessions: [], sets: [], exercises: [], liftAccessories: [], settings: [],
+    })
+    const file = new File([backup], 'backup.json', { type: 'application/json' })
+    fireEvent.change(fileInput(), { target: { files: [file] } })
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today', { replace: true }))
+  })
+
+  it('surfaces a friendly error and does not navigate when the file is not valid JSON', async () => {
+    renderSetup()
+    await screen.findByText('OHP')
+    const file = new File(['{ not json'], 'bad.json', { type: 'application/json' })
+    fireEvent.change(fileInput(), { target: { files: [file] } })
+
+    await screen.findByText('Invalid JSON file')
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
 })
