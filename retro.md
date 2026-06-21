@@ -1,9 +1,0 @@
-- [531-log.pages.dev](https://531-log.pages.dev/)  
-    - Double check the default assistant exercises assignments  
-    - Import instead at the onboarding step should immediately start the file selection flow  
-    - If onboarding got skipped somehow and we land back on today so there is nothing setup yet then it should go to the onboarding screen  
-    - When a cross lift supplemental has been added in onboarding it would be nice to visually reflect that while in the onboarding screen 1  
-    - When setup a main lift it’s weird that there’s no cancel button  
-    - When clicking add lift in main lift workflow you should be able to cancel   
-    - Deleting an assistance exercise should of offer delete or cancel after clicking del  
-    - History should have the option to only show active main lifts instead of all present, that should also be the default   
