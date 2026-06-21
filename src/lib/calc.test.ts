@@ -86,6 +86,10 @@ describe('calcFslSets', () => {
     })
   })
 
+  it('numbers sets 1..5 in order (kills the buildFixedSets i+1 → i-1 mutant)', () => {
+    expect(calcFslSets(130).map(s => s.setNumber)).toEqual([1, 2, 3, 4, 5])
+  })
+
   it.each([1, 2, 3, 4] as const)('week %i: FSL weight matches first main set weight', (week) => {
     const main = calcMainSets(200, week)
     const fsl = calcFslSets(main[0].weight)
@@ -211,6 +215,10 @@ describe('calcAccessorySets', () => {
       expect(s.reps).toBe(10)
     })
   })
+
+  it('numbers sets 1..5 in order (kills the i+1 → i-1 setNumber mutant)', () => {
+    expect(calcAccessorySets(100).map(s => s.setNumber)).toEqual([1, 2, 3, 4, 5])
+  })
 })
 
 describe('calcWarmup', () => {
@@ -240,6 +248,13 @@ describe('calcWarmup', () => {
     // TM=200: 80×5, WW=75 → 80 ≥ 75, nothing qualifies
     const sets = calcWarmup(200, 75)
     expect(sets).toHaveLength(0)
+  })
+  it('drops a warmup that rounds to exactly the working weight (kills the >= → > break mutant)', () => {
+    // TM=300 → 40/50/60% = 120/150/180. WW=180 equals the 60% warmup exactly:
+    // `weight >= workingWeight` must break ON equality. A `>` mutant would emit a
+    // 180lb "warmup" identical to the work set.
+    const sets = calcWarmup(300, 180)
+    expect(sets.map(s => s.weight)).toEqual([120, 150])
   })
   it('deduplicates consecutive identical weights', () => {
     // TM=75: 40%=30→45, 50%=37.5→40→45 (dedup), 60%=45 (dedup); WW=200
@@ -543,6 +558,22 @@ describe('calcPlatesPerSide', () => {
     ]
     expect(calcPlatesPerSide(95, BAR, plates)).toEqual([
       { weight: 25, count: 1 },
+    ])
+  })
+
+  it('selects largest plates first even when the plate list is unsorted (kills the b-a sort mutant)', () => {
+    // Plates given ASCENDING. Greedy-from-smallest over-consumes the small plates
+    // (capped at 3 pairs each) and strands 2.5lb → null; largest-first makes 50/side
+    // cleanly as 45 + 5. Any non-descending order fails this exact breakdown.
+    const ascending = [
+      { weight: 2.5, count: 6 },
+      { weight: 5, count: 6 },
+      { weight: 25, count: 6 },
+      { weight: 45, count: 6 },
+    ]
+    expect(calcPlatesPerSide(145, BAR, ascending)).toEqual([
+      { weight: 45, count: 1 },
+      { weight: 5, count: 1 },
     ])
   })
 })
@@ -883,6 +914,12 @@ describe('calcCrossSets', () => {
   it('returns no sets when sets count is zero', () => {
     expect(calcCrossSets(block({ sets: 0 }), 200, 1)).toHaveLength(0)
   })
+
+  it('percent mode with a null percent degrades to the bar weight, not NaN (kills the ?? 0 fallback)', () => {
+    const sets = calcCrossSets(block({ weightMode: 'percent', percent: null, sets: 2 }), 200, 1, 45)
+    expect(sets).toHaveLength(2)
+    expect(sets.every(s => s.weight === 45)).toBe(true)
+  })
 })
 
 describe('getCrossLabel', () => {
@@ -892,6 +929,10 @@ describe('getCrossLabel', () => {
 
   it('percent mode labels with the rounded percentage', () => {
     expect(getCrossLabel({ sets: 3, reps: 10, weightMode: 'percent', percent: 0.75 }, 'Deadlift')).toBe('DEADLIFT  3 × 10  75% TM')
+  })
+
+  it('percent mode with a null percent labels 0% TM, not NaN% (kills the ?? 0 fallback)', () => {
+    expect(getCrossLabel({ sets: 3, reps: 10, weightMode: 'percent', percent: null }, 'Row')).toBe('ROW  3 × 10  0% TM')
   })
 })
 
