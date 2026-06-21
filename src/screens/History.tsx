@@ -181,6 +181,12 @@ export default function History() {
   const [searchParams] = useSearchParams()
   const [mode, setMode] = createSignal<ViewMode>('lift')
   const [lifts, setLifts] = createSignal<Lift[]>([])
+  const [showArchived, setShowArchived] = createSignal(false)
+  // Default the lift filter to active lifts only; archived ones still carry
+  // history and can be revealed on demand.
+  const visibleLifts = createMemo(() =>
+    showArchived() ? lifts() : lifts().filter(l => !l.archived)
+  )
   const rawLiftId = searchParams.liftId
   const [selectedLiftId, setSelectedLiftId] = createSignal<number | null>(
     rawLiftId ? parseInt(Array.isArray(rawLiftId) ? rawLiftId[0] : rawLiftId, 10) : null
@@ -281,7 +287,8 @@ export default function History() {
     setLifts(allLifts)
     if (!selId && allLifts.length > 0) {
       const stored = localStorage.getItem(HISTORY_LIFT_KEY)
-      setSelectedLiftId(stored ? parseInt(stored, 10) : allLifts[0].id!)
+      const firstActive = allLifts.find(l => !l.archived) ?? allLifts[0]
+      setSelectedLiftId(stored ? parseInt(stored, 10) : firstActive.id!)
       return
     }
 
@@ -356,7 +363,7 @@ export default function History() {
 
       <Show when={mode() === 'lift'}>
         <div class="flex gap-0 mb-4">
-          <For each={lifts()}>
+          <For each={visibleLifts()}>
             {l => (
               <button
                 onClick={() => { setSelectedLiftId(l.id!); localStorage.setItem(HISTORY_LIFT_KEY, String(l.id!)) }}
@@ -371,6 +378,14 @@ export default function History() {
             )}
           </For>
         </div>
+        <Show when={lifts().some(l => l.archived)}>
+          <button
+            onClick={() => setShowArchived(v => !v)}
+            class="text-muted text-xs uppercase tracking-widest mb-4 hover:text-accent"
+          >
+            {showArchived() ? '− hide archived' : '+ show archived'}
+          </button>
+        </Show>
         <Show when={tmHistory().length > 1 || e1rmHistory().length > 1}>
           <div class="mb-4">
             <div class="flex gap-4 text-xs font-mono mb-1">

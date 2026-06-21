@@ -11,7 +11,7 @@ const LIFTS = [
 const EXERCISES = [
   { name: 'Chinups',                      type: 'reps'     as const },
   { name: 'Lat Pulldowns',                type: 'reps'     as const },
-  { name: 'Curls',                        type: 'reps'     as const },
+  { name: 'Bicep Curls',                  type: 'reps'     as const },
   { name: 'Glute Ham Raise',              type: 'reps'     as const },
   { name: 'Bulgarian Split Squat',        type: 'reps'     as const },
   { name: 'Nordic Curls',                 type: 'reps'     as const },
@@ -27,6 +27,8 @@ const EXERCISES = [
   { name: 'Leg Press',                    type: 'reps'     as const },
   { name: 'Loaded Carry',                 type: 'distance' as const },
   { name: 'Plank',                        type: 'timed'    as const },
+  { name: 'Reverse Nordic',               type: 'reps'     as const },
+  { name: 'Pull Through',                 type: 'reps'     as const },
 ]
 
 let _seed: Promise<void> | null = null
@@ -45,12 +47,12 @@ async function _seedDatabase() {
     await db.lifts.bulkAdd(LIFTS)
   }
 
-  // Seed exercises — re-seed if count is less than expected
-  const exerciseCount = await db.exercises.count()
-  if (exerciseCount < EXERCISES.length) {
-    if (exerciseCount > 0) await db.exercises.clear()
-    await db.exercises.bulkAdd(EXERCISES)
-  }
+  // Seed exercises — add any missing by name. Additive (never clears) so a
+  // version bump that adds new defaults can't wipe a user's library or orphan
+  // the accessory rows that reference exercise ids.
+  const existingExNames = new Set((await db.exercises.toArray()).map(e => e.name))
+  const missingExercises = EXERCISES.filter(e => !existingExNames.has(e.name))
+  if (missingExercises.length > 0) await db.exercises.bulkAdd(missingExercises)
 
   // Seed lift accessories if missing — done separately so a partial first-run recovers
   const accessoryCount = await db.liftAccessories.count()
@@ -64,20 +66,16 @@ async function _seedDatabase() {
     await db.liftAccessories.bulkAdd([
       { liftId: liftId('OHP'), exerciseId: byName('Chinups'),       order: 1 },
       { liftId: liftId('OHP'), exerciseId: byName('Lat Pulldowns'), order: 2 },
-      { liftId: liftId('OHP'), exerciseId: byName('Curls'),         order: 3 },
-      { liftId: liftId('Deadlift'), exerciseId: byName('Glute Ham Raise'),       order: 1 },
+      { liftId: liftId('OHP'), exerciseId: byName('Bicep Curls'),   order: 3 },
+      { liftId: liftId('Deadlift'), exerciseId: byName('Nordic Curls'),          order: 1 },
       { liftId: liftId('Deadlift'), exerciseId: byName('Bulgarian Split Squat'), order: 2 },
-      { liftId: liftId('Deadlift'), exerciseId: byName('Nordic Curls'),          order: 3 },
-      { liftId: liftId('Deadlift'), exerciseId: byName('Hip Thrust'),            order: 4 },
+      { liftId: liftId('Deadlift'), exerciseId: byName('Leg Press'),             order: 3 },
       { liftId: liftId('Bench'), exerciseId: byName('Barbell Row'),  order: 1 },
-      { liftId: liftId('Bench'), exerciseId: byName('Dumbbell Row'), order: 2 },
-      { liftId: liftId('Bench'), exerciseId: byName('T Bar Row'),    order: 3 },
-      { liftId: liftId('Squat'), exerciseId: byName('Ab Wheel'),                     order: 1 },
+      { liftId: liftId('Bench'), exerciseId: byName('T Bar Row'),    order: 2 },
+      { liftId: liftId('Bench'), exerciseId: byName('Dumbbell Row'), order: 3 },
+      { liftId: liftId('Squat'), exerciseId: byName('Reverse Nordic'),                order: 1 },
       { liftId: liftId('Squat'), exerciseId: byName('Single Leg Romanian Deadlift'), order: 2 },
-      { liftId: liftId('Squat'), exerciseId: byName('Romanian Deadlift'),            order: 3 },
-      { liftId: liftId('Squat'), exerciseId: byName('Back Extension'),               order: 4 },
-      { liftId: liftId('Squat'), exerciseId: byName('Good Mornings'),                order: 5 },
-      { liftId: liftId('Squat'), exerciseId: byName('Leg Press'),                    order: 6 },
+      { liftId: liftId('Squat'), exerciseId: byName('Pull Through'),                  order: 3 },
     ])
   }
 
