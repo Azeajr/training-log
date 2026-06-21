@@ -1258,7 +1258,7 @@ describe('Settings — current week (issue #52) + reopen', () => {
     expect(screen.getByRole('button', { name: 'Week 1' })).not.toBeDisabled()
   })
 
-  it('reopen drops the high-water mark and resets only the target week to pending', async () => {
+  it('reopen drops the high-water mark and adds fresh pending sessions without editing history', async () => {
     // Weeks 1 and 2 complete → current week 3.
     const ids = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 2 })
@@ -1275,9 +1275,10 @@ describe('Settings — current week (issue #52) + reopen', () => {
       const cycle = await db.cycles.get(cycleId)
       expect(cycle?.closedThroughWeek).toBe(0)
     })
+    // Old completed history is untouched; a fresh pending row is added per lift.
     const week1 = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === 1).toArray()
-    expect(week1).toHaveLength(4)
-    expect(week1.every(s => s.status === 'pending')).toBe(true)
+    expect(week1.filter(s => s.status === 'completed')).toHaveLength(4)
+    expect(week1.filter(s => s.status === 'pending')).toHaveLength(4)
     // Week 2 is untouched, and the UI now sits on week 1.
     const week2 = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === 2).toArray()
     expect(week2.every(s => s.status === 'completed')).toBe(true)
