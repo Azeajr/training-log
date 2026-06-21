@@ -150,6 +150,23 @@ describe('Today screen', () => {
     await waitFor(() => expect(document.body.textContent).toContain('skip'))
   })
 
+  it('a reopened week shows lifts as still-to-do, not done, despite old completed rows', async () => {
+    // Simulate Settings reopen: every lift has an old completed week-1 row plus a
+    // fresh pending one. Today must read the pending row (work owed), not the
+    // stale completed one, so no lift shows "done".
+    await db.sessions.clear()
+    const cycleId = (await db.cycles.toArray())[0].id!
+    for (const lift of LIFTS) {
+      await db.sessions.add({ cycleId, liftId: lift.id!, week: 1, date: new Date(), notes: null, status: 'completed' })
+      await db.sessions.add({ cycleId, liftId: lift.id!, week: 1, date: new Date(), notes: null, status: 'pending' })
+    }
+    renderToday()
+    await waitFor(() => expect(document.body.textContent).toContain('WEEK 1'))
+    // OHP (id 1) is auto-selected (shows '->'); the rest are pending → no 'done'.
+    const liftButtons = screen.getAllByRole('button').filter(b => /OHP|Deadlift|Bench|Squat/.test(b.textContent ?? ''))
+    expect(liftButtons.some(b => b.textContent?.includes('done'))).toBe(false)
+  })
+
   it('renders a cross-supplemental preview block driven by the movement lift TM', async () => {
     // OHP (id 1) is auto-selected. Give it an FSL cross block off Deadlift (id 2),
     // which needs its own TM so calcCrossSets has a weight. Exercises the whole
