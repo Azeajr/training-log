@@ -183,6 +183,33 @@ describe('getNextSession', () => {
   })
 })
 
+// ─── getNextSession defensive guards ──────────────────────────────────────────
+
+describe('getNextSessionAdvancingIfDone — empty roster + persistence', () => {
+  it('throws when a fresh DB has no active lifts (covers the no-coverage throw on the create path)', async () => {
+    // No cycle, no lifts: it creates cycle 1, then has nothing to schedule.
+    await expect(getNextSessionAdvancingIfDone(db)).rejects.toThrow('No active lifts')
+  })
+
+  it('throws when a cycle exists but the active roster is empty (covers the no-coverage mid-function throw)', async () => {
+    // Cycle present, zero lifts → guard fires before the closed/advance block.
+    await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await expect(getNextSessionAdvancingIfDone(db)).rejects.toThrow('No active lifts')
+  })
+
+  it('persists the recomputed closedThroughWeek high-water mark to the cycle row (kills the diff-guard)', async () => {
+    // A `closed !== stored → false` mutant would skip the write; result.week alone
+    // can't catch it because week is computed from the local var, not the row.
+    const lifts = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 0 })
+    await addSessions(cycleId, 1, lifts)
+    await getNextSessionAdvancingIfDone(db)
+    const [cycle] = await db.cycles.toArray()
+    expect(cycle.id).toBe(cycleId)
+    expect(cycle.closedThroughWeek).toBe(1)
+  })
+})
+
 // ─── advanceCycleIfComplete ───────────────────────────────────────────────────
 
 describe('advanceCycleIfComplete', () => {
@@ -190,6 +217,19 @@ describe('advanceCycleIfComplete', () => {
     const result = await advanceCycleIfComplete(db)
     expect(result.advanced).toBe(false)
     expect(result.newTms).toHaveLength(0)
+  })
+
+  it('persists closedThroughWeek without advancing when only weeks 1–2 are complete (kills the diff-guard)', async () => {
+    // Runs the high-water update (line ~76) but returns before the week-4 advance.
+    // A `closed !== stored → false` mutant leaves closedThroughWeek at 0.
+    const lifts = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await addSessions(cycleId, 1, lifts)
+    await addSessions(cycleId, 2, lifts)
+    const result = await advanceCycleIfComplete(db)
+    expect(result.advanced).toBe(false)
+    const [cycle] = await db.cycles.toArray()
+    expect(cycle.closedThroughWeek).toBe(2)
   })
 
   it('returns advanced: false when week 4 incomplete', async () => {
