@@ -23,12 +23,19 @@ async function fillStepper(locator: Locator, value: number) {
 const TM_LIFT_NAMES = ['ohp', 'deadlift', 'bench', 'squat']
 
 export async function completeSetupWizard(page: Page, tms = [95, 95, 135, 135]) {
+  // Step 1: lift roster — just advance
   await expect(page.getByRole('heading', { name: /STEP 1/ })).toBeVisible()
+  await page.getByRole('button', { name: 'NEXT' }).click()
+
+  // Step 2: training maxes
+  await expect(page.getByRole('heading', { name: /STEP 2/ })).toBeVisible()
   for (let i = 0; i < tms.length; i++) {
     await fillStepper(page.getByTestId(`stepper-tm-${TM_LIFT_NAMES[i]}`), tms[i] ?? 100)
   }
   await page.getByRole('button', { name: 'NEXT' }).click()
-  await expect(page.getByRole('heading', { name: /STEP 2/ })).toBeVisible()
+
+  // Step 3: confirm
+  await expect(page.getByRole('heading', { name: /STEP 3/ })).toBeVisible()
   await page.getByRole('button', { name: 'START TRAINING' }).click()
   await expect(page.getByText('WEEK 1')).toBeVisible()
 }
