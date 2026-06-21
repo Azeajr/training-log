@@ -43,7 +43,7 @@ beforeEach(async () => {
     db.lifts.clear(), db.trainingMaxes.clear(),
     db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
     db.exercises.clear(), db.liftAccessories.clear(), db.accessorySets.clear(),
-    db.settings.clear(),
+    db.liftSupplementals.clear(), db.settings.clear(),
   ])
   mockNavigate.mockClear()
   await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
@@ -95,6 +95,23 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
     await screen.findByText('MAIN')
+  })
+
+  it('loads and renders a cross-lift supplemental section off the movement lift TM', async () => {
+    // Bench (id 1) is active. Add Squat as the movement lift with its own TM and
+    // attach an FSL cross block to Bench. Exercises loadData cross-block loading,
+    // crossSections offset math, and the CROSS-LIFT SUPPLEMENTAL render.
+    await db.lifts.add({ id: 2, name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+    await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
+    await db.liftSupplementals.add({
+      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1,
+    })
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/) // Rule wraps the label in dashes
+    // Label = getCrossLabel(movementName='Squat', fsl mode) → "SQUAT  5 × 5  FSL".
+    // Glyph-agnostic matcher: proves the block loaded (movement name) and composed as FSL.
+    await screen.findByText((t) => t.includes('SQUAT') && t.includes('FSL'))
   })
 
   it('renders EXIT button', async () => {
