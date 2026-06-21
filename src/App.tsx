@@ -1,5 +1,5 @@
 import { Router, Route, useNavigate, useLocation } from '@solidjs/router'
-import { lazy, Suspense, Show, onMount, type ParentProps } from 'solid-js'
+import { lazy, Suspense, Show, createEffect, type ParentProps } from 'solid-js'
 import { createConfirmation, ConfirmationContext } from './hooks/use-confirmation'
 import BottomNav from './components/layout/BottomNav'
 import Toast from './components/layout/Toast'
@@ -23,11 +23,15 @@ function AppShell(props: ParentProps) {
   const navigate = useNavigate()
   const location = useLocation()
 
-  onMount(async () => {
-    if (location.pathname !== '/setup') {
+  // Re-checked on every navigation, not just first mount: if the user lands
+  // anywhere with no training maxes — e.g. bailed out of onboarding via IMPORT
+  // INSTEAD without finishing — bounce them back to the setup wizard.
+  createEffect(() => {
+    if (location.pathname === '/setup') return
+    void (async () => {
       const count = await db.trainingMaxes.count()
       if (count === 0) navigate('/setup', { replace: true })
-    }
+    })()
   })
 
   return (

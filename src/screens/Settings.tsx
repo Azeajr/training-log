@@ -6,14 +6,14 @@ import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
-import { createLift, updateLift, archiveLift, unarchiveLift, moveLift } from '../lib/lift'
+import { updateLift, archiveLift, unarchiveLift, moveLift } from '../lib/lift'
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
 import { calcMainSets, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
-import LiftSetupModal from '../components/modals/LiftSetupModal'
+import LiftSetupModal, { type DraftLiftFields } from '../components/modals/LiftSetupModal'
 import Rule from '../components/layout/Rule'
 import Stepper from '../components/forms/Stepper'
 import ExerciseEditor from '../components/forms/ExerciseEditor'
@@ -46,6 +46,7 @@ export default function Settings() {
   const archivedLifts = () => lifts().filter(l => l.archived)
 
   const [setupLiftId, setSetupLiftId] = createSignal<number | null>(null)
+  const [draftLift, setDraftLift] = createSignal<DraftLiftFields | null>(null)
   const [showAddLift, setShowAddLift] = createSignal(false)
   const [newLiftName, setNewLiftName] = createSignal('')
   const [newLiftIncrement, setNewLiftIncrement] = createSignal(5)
@@ -103,23 +104,24 @@ export default function Settings() {
     await load()
   }
 
-  const handleAddLift = async () => {
-    const name = newLiftName().trim()
-    if (!name) return
-    const id = await createLift(db, {
-      name,
+  const resetAddForm = () => {
+    setNewLiftName('')
+    setNewLiftIncrement(5)
+    setNewLiftBase(95)
+    setNewLiftType('upper')
+  }
+
+  // Defer creation: open setup against a draft and persist the lift (with its
+  // training max) only on commit. Cancel returns to the add form, fields intact.
+  const handleAddLift = () => {
+    if (!newLiftName().trim()) return
+    setDraftLift({
+      name: newLiftName().trim(),
       progressionIncrement: newLiftIncrement(),
       baseWeight: newLiftBase(),
       liftType: newLiftType(),
     })
     setShowAddLift(false)
-    setNewLiftName('')
-    setNewLiftIncrement(5)
-    setNewLiftBase(95)
-    setNewLiftType('upper')
-    await load()
-    // New lift starts with empty assistance — open setup to assign it now.
-    setSetupLiftId(id)
   }
 
   const handleSaveLiftEdit = async (id: number) => {
@@ -415,7 +417,7 @@ export default function Settings() {
               )}</For>
             </div>
             <div class="flex gap-3">
-              <button onClick={() => void handleAddLift()} disabled={!newLiftName().trim()} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted">ADD</button>
+              <button onClick={handleAddLift} disabled={!newLiftName().trim()} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted">ADD</button>
               <button onClick={() => setShowAddLift(false)} class="text-muted text-lg sm:text-xl">cancel</button>
             </div>
           </div>
@@ -833,10 +835,25 @@ export default function Settings() {
         }}
       />
 
-      <Show when={setupLiftId() !== null}>
+      <Show when={setupLiftId() !== null || draftLift() !== null}>
         <LiftSetupModal
-          liftId={setupLiftId()!}
-          onClose={() => { setSetupLiftId(null); void load() }}
+          liftId={setupLiftId() ?? undefined}
+          draftLift={draftLift() ?? undefined}
+          collectTm={draftLift() !== null}
+          onCommit={() => { setSetupLiftId(null); setDraftLift(null); resetAddForm(); void load() }}
+          onCancel={() => {
+            const d = draftLift()
+            if (d) {
+              setNewLiftName(d.name)
+              setNewLiftIncrement(d.progressionIncrement)
+              setNewLiftBase(d.baseWeight)
+              setNewLiftType(d.liftType)
+              setShowAddLift(true)
+              setDraftLift(null)
+            } else {
+              setSetupLiftId(null)
+            }
+          }}
         />
       </Show>
     </div>

@@ -2,18 +2,53 @@ import { createSignal, createResource, createEffect, For, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import { BAR_WEIGHT } from '../lib/calc'
-import { createLift, updateLift, deleteLift, moveLift } from '../lib/lift'
+import { updateLift, deleteLift, moveLift } from '../lib/lift'
+import { importJson } from '../lib/export-import'
+import { loadSettings } from '../store/settings-store'
 import Rule from '../components/layout/Rule'
 import Stepper from '../components/forms/Stepper'
-import LiftSetupModal from '../components/modals/LiftSetupModal'
+import LiftSetupModal, { type DraftLiftFields } from '../components/modals/LiftSetupModal'
 
 export default function Setup() {
   const navigate = useNavigate()
   const [step, setStep] = createSignal<1 | 2 | 3>(1)
   const [tmValues, setTmValues] = createSignal<Record<number, number>>({})
   const [saving, setSaving] = createSignal(false)
+  const [importError, setImportError] = createSignal<string | null>(null)
+  // eslint-disable-next-line no-unassigned-vars -- Solid `ref={importInputRef}` reassigns at runtime
+  let importInputRef!: HTMLInputElement
 
-  const [lifts, { refetch }] = createResource(() => db.lifts.orderBy('order').toArray())
+  // Lifts enriched with assistance + cross-lift block counts so step 1 can show
+  // at a glance what's already been configured on each lift.
+  const [lifts, { refetch }] = createResource(async () => {
+    const [ls, accs, blocks] = await Promise.all([
+      db.lifts.orderBy('order').toArray(),
+      db.liftAccessories.toArray(),
+      db.liftSupplementals.toArray(),
+    ])
+    return ls.map(l => ({
+      ...l,
+      accCount: accs.filter(a => a.liftId === l.id).length,
+      crossCount: blocks.filter(b => b.liftId === l.id).length,
+    }))
+  })
+
+  // Onboarding import: jump straight into the OS file picker instead of routing
+  // through Settings. No "overwrite all data" confirm — onboarding only holds
+  // seed defaults, there is nothing of the user's to clobber.
+  const handleImportFile = async (e: Event & { currentTarget: HTMLInputElement }) => {
+    const file = e.currentTarget.files?.[0]
+    e.currentTarget.value = ''
+    if (!file) return
+    setImportError(null)
+    try {
+      await importJson(db, file)
+      await loadSettings()
+      navigate('/today', { replace: true })
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed')
+    }
+  }
 
   createEffect(() => {
     const ls = lifts()
@@ -31,6 +66,7 @@ export default function Setup() {
 
   // ── roster editing (step 1) ─────────────────────────────────────────────
   const [setupLiftId, setSetupLiftId] = createSignal<number | null>(null)
+  const [draftLift, setDraftLift] = createSignal<DraftLiftFields | null>(null)
   const [showAddLift, setShowAddLift] = createSignal(false)
   const [newLiftName, setNewLiftName] = createSignal('')
   const [newLiftIncrement, setNewLiftIncrement] = createSignal(5)
@@ -40,22 +76,25 @@ export default function Setup() {
   const [editLiftName, setEditLiftName] = createSignal('')
   const [editLiftIncrement, setEditLiftIncrement] = createSignal(5)
 
-  const handleAddLift = async () => {
-    const name = newLiftName().trim()
-    if (!name) return
-    const id = await createLift(db, {
-      name,
+  const resetAddForm = () => {
+    setNewLiftName('')
+    setNewLiftIncrement(5)
+    setNewLiftBase(95)
+    setNewLiftType('upper')
+  }
+
+  // Don't create the lift yet — stash the form values and open setup against a
+  // draft. The lift is persisted only if the user commits (DONE) in the modal;
+  // cancelling drops them back here with the fields intact.
+  const handleAddLift = () => {
+    if (!newLiftName().trim()) return
+    setDraftLift({
+      name: newLiftName().trim(),
       progressionIncrement: newLiftIncrement(),
       baseWeight: newLiftBase(),
       liftType: newLiftType(),
     })
     setShowAddLift(false)
-    setNewLiftName('')
-    setNewLiftIncrement(5)
-    setNewLiftBase(95)
-    setNewLiftType('upper')
-    await refetch()
-    setSetupLiftId(id) // new lift starts empty — assign assistance now
   }
 
   const handleSaveLiftEdit = async (id: number) => {
@@ -138,6 +177,14 @@ export default function Setup() {
                     >▼</button>
                   </div>
                   <span class="text-text uppercase tracking-widest text-sm flex-1">{l.name}</span>
+                  <Show when={l.accCount > 0 || l.crossCount > 0}>
+                    <span class="text-faint text-[10px] tracking-normal">
+                      {[
+                        l.accCount > 0 ? `${l.accCount} asst` : null,
+                        l.crossCount > 0 ? `${l.crossCount} cross` : null,
+                      ].filter(Boolean).join(' · ')}
+                    </span>
+                  </Show>
                   <span class="text-faint text-xs">+{l.progressionIncrement}</span>
                   <button onClick={() => setSetupLiftId(l.id!)} class="text-muted text-xs hover:text-accent">setup</button>
                   <button
@@ -206,7 +253,7 @@ export default function Setup() {
               )}</For>
             </div>
             <div class="flex gap-3">
-              <button onClick={() => void handleAddLift()} disabled={!newLiftName().trim()} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted">ADD</button>
+              <button onClick={handleAddLift} disabled={!newLiftName().trim()} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted">ADD</button>
               <button onClick={() => setShowAddLift(false)} class="text-muted text-lg sm:text-xl">cancel</button>
             </div>
           </div>
@@ -221,11 +268,21 @@ export default function Setup() {
             NEXT
           </button>
           <button
-            onClick={() => navigate('/settings')}
+            onClick={() => importInputRef.click()}
             class="text-muted text-xs uppercase tracking-widest py-2"
           >
             IMPORT INSTEAD
           </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json"
+            class="hidden"
+            onChange={e => void handleImportFile(e)}
+          />
+          <Show when={importError()}>
+            <div class="text-danger text-xs">{importError()}</div>
+          </Show>
         </div>
       </Show>
 
@@ -304,10 +361,24 @@ export default function Setup() {
         </div>
       </Show>
 
-      <Show when={setupLiftId() !== null}>
+      <Show when={setupLiftId() !== null || draftLift() !== null}>
         <LiftSetupModal
-          liftId={setupLiftId()!}
-          onClose={() => { setSetupLiftId(null); void refetch() }}
+          liftId={setupLiftId() ?? undefined}
+          draftLift={draftLift() ?? undefined}
+          onCommit={() => { setSetupLiftId(null); setDraftLift(null); resetAddForm(); void refetch() }}
+          onCancel={() => {
+            const d = draftLift()
+            if (d) {
+              setNewLiftName(d.name)
+              setNewLiftIncrement(d.progressionIncrement)
+              setNewLiftBase(d.baseWeight)
+              setNewLiftType(d.liftType)
+              setShowAddLift(true)
+              setDraftLift(null)
+            } else {
+              setSetupLiftId(null)
+            }
+          }}
         />
       </Show>
     </div>

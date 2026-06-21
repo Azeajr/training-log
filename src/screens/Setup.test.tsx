@@ -172,7 +172,7 @@ describe('Setup screen — roster editing', () => {
     })
   })
 
-  it('adding a lift creates it and opens the assistance setup modal', async () => {
+  it('adding a lift opens setup on a draft and persists it only on DONE', async () => {
     renderSetup()
     await screen.findByText('OHP')
     fireEvent.click(screen.getByText('+ ADD LIFT'))
@@ -181,15 +181,36 @@ describe('Setup screen — roster editing', () => {
     fireEvent.input(nameInput, { target: { value: 'Front Squat' } })
     fireEvent.click(screen.getByText('ADD'))
 
-    // New lift persisted...
-    await waitFor(async () => {
-      const lifts = await db.lifts.toArray()
-      expect(lifts.some(l => l.name === 'Front Squat')).toBe(true)
-    })
-    // ...and the setup modal opens for it (empty assistance).
+    // Setup modal opens against the draft, but nothing is written yet.
     await screen.findByText('DONE')
     expect(document.body.textContent).toContain('ASSISTANCE')
+    expect((await db.lifts.toArray()).some(l => l.name === 'Front Squat')).toBe(false)
+
+    // Commit creates the lift.
     fireEvent.click(screen.getByText('DONE'))
+    await waitFor(async () => {
+      expect((await db.lifts.toArray()).some(l => l.name === 'Front Squat')).toBe(true)
+    })
     await waitFor(() => expect(screen.queryByText('DONE')).not.toBeInTheDocument())
+  })
+
+  it('cancelling new-lift setup discards it and restores the add form', async () => {
+    renderSetup()
+    await screen.findByText('OHP')
+    fireEvent.click(screen.getByText('+ ADD LIFT'))
+
+    const nameInput = await screen.findByPlaceholderText('Lift name')
+    fireEvent.input(nameInput, { target: { value: 'Front Squat' } })
+    fireEvent.click(screen.getByText('ADD'))
+
+    await screen.findByText('DONE')
+    fireEvent.click(screen.getByText('CANCEL'))
+
+    // No lift created...
+    await waitFor(() => expect(screen.queryByText('DONE')).not.toBeInTheDocument())
+    expect((await db.lifts.toArray()).some(l => l.name === 'Front Squat')).toBe(false)
+    // ...and the add form is back with the entered name still populated.
+    const restored = await screen.findByPlaceholderText('Lift name') as HTMLInputElement
+    expect(restored.value).toBe('Front Squat')
   })
 })
