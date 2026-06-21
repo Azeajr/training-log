@@ -263,26 +263,30 @@ export default function Settings() {
     showToast(`Advanced to week ${targetWeek}`)
   }
 
-  // Backward nav: reopen a finished week so it can be redone. Lowering the
-  // stored high-water mark alone is not enough — computeClosedThroughWeek floors
-  // at it and would re-close instantly — so the target week's sessions are also
-  // reset to pending. Mid-cycle only (week < current ≤ 4), so no TM progression
-  // has fired; logged sets stay in the DB.
+  // Backward nav: reopen a finished week so it can be redone, without rewriting
+  // history. The old completed sessions stay untouched; a fresh pending session
+  // is added per active lift so the redo records new entries alongside the old
+  // ones. Lowering the high-water mark reopens the week, and weekComplete keeps
+  // it open until every active lift has a non-pending row again. Mid-cycle only
+  // (week < current ≤ 4), so no TM progression has fired.
   const handleReopenWeek = async (targetWeek: 1 | 2 | 3 | 4) => {
     const week = currentCycleWeek()
     const cycleId = currentCycleId()
     if (!week || !cycleId || targetWeek >= week) return
     if (!await confirm(
-      `Reopen week ${targetWeek}? Its sessions reset to not-done so you can redo them.`,
-      { destructive: true, confirmLabel: 'REOPEN' }
+      `Reopen week ${targetWeek}? Past entries are kept; you'll redo it as new sessions.`,
+      { confirmLabel: 'REOPEN' }
     )) return
 
     const activeIds = (await db.lifts.toArray()).filter(l => !l.archived).map(l => l.id!)
     await db.transaction(async () => {
       const weekSessions = await db.sessions.where('cycleId').equals(cycleId)
         .filter(s => s.week === targetWeek && activeIds.includes(s.liftId)).toArray()
-      for (const s of weekSessions) {
-        if (s.status !== 'pending') await db.sessions.update(s.id!, { status: 'pending' })
+      for (const liftId of activeIds) {
+        const hasPending = weekSessions.some(s => s.liftId === liftId && s.status === 'pending')
+        if (!hasPending) {
+          await db.sessions.add({ cycleId, liftId, week: targetWeek, date: new Date(), notes: null, status: 'pending' })
+        }
       }
       await db.cycles.update(cycleId, { closedThroughWeek: targetWeek - 1 })
     })

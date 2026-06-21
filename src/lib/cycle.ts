@@ -12,14 +12,20 @@ async function activeLiftsOrdered(db: TrainingDB): Promise<Lift[]> {
   return lifts.filter(l => !l.archived)
 }
 
+// A lift's week is complete only when it has at least one session and none are
+// still pending. Reopening a week (backward nav) adds a fresh pending row next
+// to the old completed history; requiring *no* pending row keeps that week open
+// until the redo is finished, instead of the stale completed row re-closing it.
 const weekComplete = (
   sessions: Array<{ week: number; liftId: number; status: string }>,
   week: number,
   activeLiftIds: number[],
 ): boolean =>
   activeLiftIds.length > 0 &&
-  activeLiftIds.every(id =>
-    sessions.some(s => s.week === week && s.liftId === id && s.status !== 'pending'))
+  activeLiftIds.every(id => {
+    const forLift = sessions.filter(s => s.week === week && s.liftId === id)
+    return forLift.length > 0 && forLift.every(s => s.status !== 'pending')
+  })
 
 // Highest contiguous fully-completed week, never dropping below the stored
 // high-water mark. Freezing closed weeks is what lets the lift roster change
