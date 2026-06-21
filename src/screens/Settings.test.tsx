@@ -1302,3 +1302,112 @@ describe('Settings — current week (issue #52) + reopen', () => {
     expect(week1.every(s => s.status === 'completed')).toBe(true)
   })
 })
+
+describe('Settings — lift roster', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.exercises.clear(), db.liftAccessories.clear(), db.accessoryTrainingMaxes.clear(),
+      db.accessorySets.clear(), db.sessions.clear(), db.lifts.clear(),
+      db.cycles.clear(), db.trainingMaxes.clear(), db.liftSupplementals.clear(),
+    ])
+    await loadSettings()
+  })
+
+  afterEach(drain)
+
+  it('renaming a lift updates its name in the DB', async () => {
+    const [squatId] = await seedLifts()
+    renderSettings()
+    await screen.findAllByText('rename')
+    fireEvent.click(screen.getAllByText('rename')[0])
+
+    const input = await waitFor(() => {
+      const el = screen.getAllByDisplayValue('Squat').find(e => e.tagName === 'INPUT')
+      if (!el) throw new Error('edit input not ready')
+      return el as HTMLInputElement
+    })
+    fireEvent.input(input, { target: { value: 'Front Squat' } })
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => expect((await db.lifts.get(squatId))?.name).toBe('Front Squat'))
+  })
+
+  it('archiving a lift (confirmed) marks it archived in the DB', async () => {
+    const ids = await seedLifts()
+    renderSettings()
+    await screen.findAllByText('archive')
+    fireEvent.click(screen.getAllByText('archive')[0])
+
+    await screen.findByText(/Archive this lift\?/)
+    fireEvent.click(screen.getByText('ARCHIVE'))
+
+    await waitFor(async () => expect((await db.lifts.get(ids[0]))?.archived).toBe(true))
+  })
+
+  it('archiving the last remaining active lift is blocked with a toast', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    renderSettings()
+    await screen.findByText('archive')
+    fireEvent.click(screen.getByText('archive'))
+
+    await waitFor(() => expect(toast()).toBe('Keep at least one active lift'))
+    expect((await db.lifts.get(liftId))?.archived).toBeFalsy()
+  })
+
+  it('moving a lift down swaps its order with the next lift', async () => {
+    const ids = await seedLifts() // Squat(0), Bench(1), Deadlift(2), OHP(3)
+    renderSettings()
+    const downBtns = await screen.findAllByLabelText('Move down')
+    fireEvent.click(downBtns[0]) // Squat down past Bench
+
+    await waitFor(async () => {
+      expect((await db.lifts.get(ids[0]))?.order).toBe(1)
+      expect((await db.lifts.get(ids[1]))?.order).toBe(0)
+    })
+  })
+
+  it('adding a lift opens the setup modal against a draft, persisting only on commit', async () => {
+    await seedLifts()
+    renderSettings()
+    await screen.findByText('+ ADD LIFT')
+    fireEvent.click(screen.getByText('+ ADD LIFT'))
+
+    const nameInput = await screen.findByPlaceholderText('Lift name')
+    fireEvent.input(nameInput, { target: { value: 'Row' } })
+    fireEvent.click(screen.getByText('ADD'))
+
+    // Draft modal opens; the lift is not written until DONE.
+    await screen.findByText('DONE')
+    expect((await db.lifts.toArray()).some(l => l.name === 'Row')).toBe(false)
+  })
+
+  it('cancelling the draft setup restores the add form with the entered name intact', async () => {
+    await seedLifts()
+    renderSettings()
+    await screen.findByText('+ ADD LIFT')
+    fireEvent.click(screen.getByText('+ ADD LIFT'))
+
+    const nameInput = await screen.findByPlaceholderText('Lift name')
+    fireEvent.input(nameInput, { target: { value: 'Row' } })
+    fireEvent.click(screen.getByText('ADD'))
+
+    await screen.findByText('DONE')
+    fireEvent.click(screen.getByText('CANCEL'))
+
+    await waitFor(() => expect(screen.queryByText('DONE')).not.toBeInTheDocument())
+    const restored = await screen.findByPlaceholderText('Lift name') as HTMLInputElement
+    expect(restored.value).toBe('Row')
+  })
+
+  it('opening setup on an existing lift then cancelling closes the modal', async () => {
+    await seedLifts()
+    renderSettings()
+    await screen.findAllByText('setup')
+    fireEvent.click(screen.getAllByText('setup')[0])
+
+    await screen.findByText('DONE')
+    fireEvent.click(screen.getByText('CANCEL'))
+
+    await waitFor(() => expect(screen.queryByText('DONE')).not.toBeInTheDocument())
+  })
+})
