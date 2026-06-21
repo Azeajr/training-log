@@ -428,7 +428,7 @@ export default function History() {
                   aria-label={cell.date.toDateString()}
                   onClick={() => cell.isCurrentMonth && setSelectedDay(cell.date)}
                   disabled={!cell.isCurrentMonth}
-                  class={`aspect-square flex flex-col items-center justify-center font-mono text-xs ${dayCellClass(cell)} ${isSelected(cell.date) ? 'ring-2 ring-accent' : ''} ${isToday(cell.date) && cell.isCurrentMonth ? 'font-bold' : ''}`}
+                  class={`aspect-square flex flex-col items-center justify-center font-mono text-xs ${dayCellClass(cell)} ${isSelected(cell.date) ? 'ring-2 ring-accent' : ''} ${isToday(cell.date) && cell.isCurrentMonth ? 'font-bold outline outline-2 -outline-offset-2 outline-warn' : ''}`}
                 >
                   <span>{cell.date.getDate()}</span>
                   <Show when={cell.sessions.length > 0}>

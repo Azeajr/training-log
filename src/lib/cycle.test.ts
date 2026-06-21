@@ -7,6 +7,7 @@ import {
   advanceCycleIfComplete,
   applyTmProgression,
   applyAccessoryTmProgression,
+  computeClosedThroughWeek,
   deloadTms,
   getNextSessionAdvancingIfDone,
   getAmrapTargets,
@@ -46,6 +47,39 @@ async function addSessions(
     await db.sessions.add({ cycleId, liftId: lift.id!, week, date: new Date(), notes: null, status })
   }
 }
+
+// ─── computeClosedThroughWeek ───────────────────────────────────────────────────
+
+describe('computeClosedThroughWeek', () => {
+  const done = (week: number, ...liftIds: number[]) =>
+    liftIds.map(liftId => ({ week, liftId, status: 'completed' }))
+
+  it('never drops below the stored high-water mark', () => {
+    expect(computeClosedThroughWeek([], [1, 2], 2)).toBe(2)
+  })
+
+  it('advances over contiguous fully-completed weeks', () => {
+    expect(computeClosedThroughWeek([...done(1, 1, 2), ...done(2, 1, 2)], [1, 2], 0)).toBe(2)
+  })
+
+  it('stops at the first incomplete week', () => {
+    // lift 2 has no week-2 session
+    expect(computeClosedThroughWeek([...done(1, 1, 2), ...done(2, 1)], [1, 2], 0)).toBe(1)
+  })
+
+  it('counts skipped sessions as closing a week', () => {
+    const sessions = [
+      { week: 1, liftId: 1, status: 'skipped' },
+      { week: 1, liftId: 2, status: 'skipped' },
+    ]
+    expect(computeClosedThroughWeek(sessions, [1, 2], 0)).toBe(1)
+  })
+
+  it('does not reopen a closed week when a new lift joins owing only later weeks (issue #52)', () => {
+    // Week 1 closed for {1,2}; lift 3 added mid-cycle. The mark holds at 1.
+    expect(computeClosedThroughWeek([...done(1, 1, 2)], [1, 2, 3], 1)).toBe(1)
+  })
+})
 
 // ─── getNextSession ───────────────────────────────────────────────────────────
 

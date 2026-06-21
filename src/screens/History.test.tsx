@@ -448,6 +448,20 @@ describe('History — calendar', () => {
     await waitFor(() => expect(screen.getByText(label)).toBeInTheDocument())
   })
 
+  it('marks today with the warn outline, not other current-month days (issue #53)', async () => {
+    await seedLift()
+    renderHistory()
+    fireEvent.click(screen.getByText('Calendar'))
+
+    const today = new Date()
+    await waitFor(() => expect(screen.queryByLabelText(today.toDateString())).toBeInTheDocument())
+    expect(screen.getByLabelText(today.toDateString()).className).toContain('outline-warn')
+
+    // A different current-month day must not carry the today marker.
+    const otherDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() === 1 ? 2 : 1)
+    expect(screen.getByLabelText(otherDay.toDateString()).className).not.toContain('outline-warn')
+  })
+
   it('shows session count badge on the day when a session exists', async () => {
     const liftId = await seedLift()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })

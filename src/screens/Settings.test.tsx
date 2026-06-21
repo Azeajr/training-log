@@ -1219,3 +1219,86 @@ describe('Settings — skip deload', () => {
     await waitFor(() => expect(screen.queryByText('+10 LBS')).toBeNull())
   })
 })
+
+describe('Settings — current week (issue #52) + reopen', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.exercises.clear(),
+      db.liftAccessories.clear(),
+      db.accessoryTrainingMaxes.clear(),
+      db.accessorySets.clear(),
+      db.sessions.clear(),
+      db.lifts.clear(),
+      db.cycles.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  const completeWeek = async (cycleId: number, liftIds: number[], week: 1 | 2 | 3 | 4) => {
+    for (const liftId of liftIds) {
+      await db.sessions.add({ cycleId, liftId, week, date: new Date(), notes: null, status: 'completed' })
+    }
+  }
+
+  it('holds current week at the closed high-water mark after a lift is swapped mid-cycle', async () => {
+    // Week 1 done for all four lifts; cycle closed through week 1.
+    const ids = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 1 })
+    await completeWeek(cycleId, ids, 1)
+
+    // Archive OHP, add a lift that owes no week-1 session. The old from-scratch
+    // scan snapped back to week 1 here; the high-water mark must not.
+    await db.lifts.update(ids[3], { archived: true })
+    await db.lifts.add({ name: 'Row', order: 4, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+
+    renderSettings()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 2' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Week 1' })).not.toBeDisabled()
+  })
+
+  it('reopen drops the high-water mark and resets only the target week to pending', async () => {
+    // Weeks 1 and 2 complete → current week 3.
+    const ids = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 2 })
+    await completeWeek(cycleId, ids, 1)
+    await completeWeek(cycleId, ids, 2)
+
+    renderSettings()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 3' })).toBeDisabled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Week 1' }))
+    fireEvent.click(await screen.findByText('REOPEN'))
+
+    await waitFor(async () => {
+      const cycle = await db.cycles.get(cycleId)
+      expect(cycle?.closedThroughWeek).toBe(0)
+    })
+    const week1 = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === 1).toArray()
+    expect(week1).toHaveLength(4)
+    expect(week1.every(s => s.status === 'pending')).toBe(true)
+    // Week 2 is untouched, and the UI now sits on week 1.
+    const week2 = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === 2).toArray()
+    expect(week2.every(s => s.status === 'completed')).toBe(true)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 1' })).toBeDisabled())
+  })
+
+  it('cancelling reopen leaves data unchanged', async () => {
+    const ids = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 2 })
+    await completeWeek(cycleId, ids, 1)
+    await completeWeek(cycleId, ids, 2)
+
+    renderSettings()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 3' })).toBeDisabled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Week 1' }))
+    fireEvent.click(await screen.findByText('CANCEL'))
+
+    const cycle = await db.cycles.get(cycleId)
+    expect(cycle?.closedThroughWeek).toBe(2)
+    const week1 = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === 1).toArray()
+    expect(week1.every(s => s.status === 'completed')).toBe(true)
+  })
+})

@@ -25,7 +25,7 @@ const weekComplete = (
 // high-water mark. Freezing closed weeks is what lets the lift roster change
 // mid-cycle without reopening finished weeks (added lifts only owe later weeks)
 // or prematurely completing them (archived lifts drop out of the active set).
-const computeClosedThroughWeek = (
+export const computeClosedThroughWeek = (
   sessions: Array<{ week: number; liftId: number; status: string }>,
   activeLiftIds: number[],
   prevClosed: number,
