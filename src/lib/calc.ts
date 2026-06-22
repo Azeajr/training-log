@@ -398,9 +398,10 @@ export const calcPlatesPerSide = (
   if (perSide < 0) return null
   if (perSide === 0) return []
 
-  const sorted = [...plates]
-    .filter(p => p.count >= 2)
-    .sort((a, b) => b.weight - a.weight)
+  // Copy before sorting so we never mutate the caller's plate list. A count < 2
+  // plate needs no filtering here: Math.floor(count / 2) below yields 0 pairs,
+  // so it can never be selected.
+  const sorted = [...plates].sort((a, b) => b.weight - a.weight)
 
   const result: PlateConfig[] = []
   let remaining = perSide
