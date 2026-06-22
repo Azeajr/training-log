@@ -126,6 +126,15 @@ describe('importFromRawData', () => {
     expect(await db.accessoryTrainingMaxes.count()).toBe(0)
   })
 
+  it('imports without crashing when the lifts key is absent (kills L130 optional-chaining mutant)', async () => {
+    await seedBase()
+    // No `lifts` key at all. A `d.lifts.length` / `if (true)` mutant would call
+    // pickCols(undefined) and throw; the optional chain must skip the table.
+    await importFromRawData(db, { exercises: [{ id: 1, name: 'Chinup', type: 'reps' }] })
+    expect(await db.lifts.count()).toBe(0)
+    expect(await db.exercises.count()).toBe(1)
+  })
+
   it('imports liftSupplementals (cross-lift blocks) with fields intact', async () => {
     await importFromRawData(db, {
       lifts: [
@@ -328,6 +337,18 @@ describe('exportCsv', () => {
     // 1 header + 1 main set (s1) + 1 accessory (s1) + 1 main set (s2) = 4 lines
     // With unfiltered sets: each session would accumulate all sets → more rows
     expect(lines).toHaveLength(4)
+  })
+
+  it('escapes embedded double-quotes by doubling them (kills L195 quote-escape mutant)', async () => {
+    const cycleId = await seedBase()
+    await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date(2026, 0, 6),
+      notes: 'felt "strong" today', status: 'completed',
+    })
+    await exportCsv(db)
+    const text = await capturedBlob!.text()
+    // RFC-4180 escaping: a literal " inside a quoted field becomes "".
+    expect(text).toContain('felt ""strong"" today')
   })
 
   it('accessory non-null weight and reps write exact values in CSV (kills L151 col 66 String mutant)', async () => {

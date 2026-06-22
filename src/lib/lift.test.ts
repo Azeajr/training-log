@@ -87,6 +87,20 @@ describe('moveLift', () => {
     expect((await db.lifts.get(b))?.order).toBe(bOrder)
   })
 
+  it('swaps across an archived lift in the middle (kills L49 active-filter mutant)', async () => {
+    const a = await createLift(db, { name: 'A', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const mid = await createLift(db, { name: 'Mid', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const c = await createLift(db, { name: 'C', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await archiveLift(db, mid)
+    const aOrder = (await db.lifts.get(a))!.order
+    const cOrder = (await db.lifts.get(c))!.order
+    // Active roster is [A, C]; moving A down must swap with C, not the archived
+    // Mid that sits between them by order.
+    await moveLift(db, a, 'down')
+    expect((await db.lifts.get(a))?.order).toBe(cOrder)
+    expect((await db.lifts.get(c))?.order).toBe(aOrder)
+  })
+
   it('is a no-op when the lift id is not in the active roster', async () => {
     const a = await createLift(db, { name: 'A', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const before = (await db.lifts.get(a))!.order

@@ -79,6 +79,14 @@ describe('computeClosedThroughWeek', () => {
     // Week 1 closed for {1,2}; lift 3 added mid-cycle. The mark holds at 1.
     expect(computeClosedThroughWeek([...done(1, 1, 2)], [1, 2, 3], 1)).toBe(1)
   })
+
+  it('closes no week when the active roster is empty (kills L24 length-guard mutant)', () => {
+    // every() over an empty activeLiftIds is vacuously true. Without the
+    // `length > 0` guard, an empty roster would "complete" every week and the
+    // mark would jump to 4 — the guard must keep it at the prior high-water mark.
+    expect(computeClosedThroughWeek([], [], 0)).toBe(0)
+    expect(computeClosedThroughWeek([...done(1)], [], 2)).toBe(2)
+  })
 })
 
 // ─── getNextSession ───────────────────────────────────────────────────────────

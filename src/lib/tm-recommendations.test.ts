@@ -121,6 +121,35 @@ describe('getSessionTmRecommendation', () => {
     expect(result!.suggestedTm).toBe(230)
   })
 
+  it('a 0-rep AMRAP at a high weight still returns null (kills L31 reps-guard mutant)', async () => {
+    // weight=300, currentTm=200: if the reps<1 guard were dropped, e1RM=300 →
+    // suggestedTm=270 → 35% delta would wrongly recommend a bump. A failed
+    // (0-rep) set must never trigger one.
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+    const { sessionId } = await seedSessionWithAmrap({ liftId, week: 3, weight: 300, reps: 0 })
+    expect(await getSessionTmRecommendation(db, sessionId, liftId, lifts[0].name)).toBeNull()
+  })
+
+  it('uses the main AMRAP set, not the first set in the session (kills L30 type/amrap mutant)', async () => {
+    // A light non-AMRAP set precedes the AMRAP. A `s => true` mutant would pick
+    // the light set and under-recommend; the recommendation must come from the
+    // tagged AMRAP set (260 × 1 → suggestedTm 235).
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 3, date: new Date(), notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 260, reps: 1, isAmrap: true })
+    const result = await getSessionTmRecommendation(db, sessionId, liftId, lifts[0].name)
+    expect(result).not.toBeNull()
+    expect(result!.suggestedTm).toBe(235)
+  })
+
   it('reps=1 AMRAP is valid — reps < 1 guard, not <= 1 (kills L31 EqualityOperator mutant)', async () => {
     // estimated1RM(w, 1) = w (exact, not Epley). weight=260: e1RM=260, suggestedTm=235, delta=17.5%>15%
     const lifts = await seedLifts()
