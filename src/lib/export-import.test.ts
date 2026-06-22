@@ -201,7 +201,7 @@ describe('exportCsv', () => {
   it('produces header row plus one row per completed set', async () => {
     const cycleId = await seedBase()
     const sessionId = await db.sessions.add({
-      cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed',
+      cycleId, liftId: 1, week: 1, date: new Date(2026, 0, 6), notes: null, status: 'completed',
     })
     await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
     await exportCsv(db)
