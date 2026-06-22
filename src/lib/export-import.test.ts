@@ -126,6 +126,24 @@ describe('importFromRawData', () => {
     expect(await db.accessoryTrainingMaxes.count()).toBe(0)
   })
 
+  it('imports liftSupplementals (cross-lift blocks) with fields intact', async () => {
+    await importFromRawData(db, {
+      lifts: [
+        { id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+        { id: 2, name: 'OHP',   order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+      ],
+      liftSupplementals: [
+        { id: 1, liftId: 1, movementLiftId: 2, weightMode: 'percent', percent: 0.7, sets: 5, reps: 10, order: 0 },
+      ],
+      trainingMaxes: [], cycles: [], sessions: [], sets: [], exercises: [], liftAccessories: [], settings: [],
+    })
+    const blocks = await db.liftSupplementals.toArray()
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].movementLiftId).toBe(2)
+    expect(blocks[0].weightMode).toBe('percent')
+    expect(blocks[0].percent).toBe(0.7)
+  })
+
   it('imports sessions with parsed date', async () => {
     await importFromRawData(db, {
       lifts: [{ id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
