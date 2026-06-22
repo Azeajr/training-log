@@ -158,6 +158,31 @@ describe('getNextSession', () => {
     expect(result.liftId).toBe(lifts[3].id)
   })
 
+  it('reopened week highlights the first lift by order, not a new mid-cycle lift', async () => {
+    // Repro of the on-device glitch: week 1 done for the original lifts, then a
+    // new lift is added *mid-order* (Hip Thrust between OHP and Bench) which owes
+    // no old week-1 row. Reopening week 1 adds a fresh pending row per lift. The
+    // old selection picked the lift without a completed row (the new one); it
+    // must instead follow lift order and land on the first lift (OHP).
+    const ohp   = await db.lifts.add({ name: 'OHP' as const,   order: 1, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' as const })
+    const bench = await db.lifts.add({ name: 'Bench' as const, order: 3, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' as const })
+    const squat = await db.lifts.add({ name: 'Squat' as const, order: 4, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' as const })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 0 })
+    // Old completed history for the original three lifts only.
+    for (const liftId of [ohp, bench, squat]) {
+      await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    }
+    // New lift inserted mid-order, owing no old week-1 row.
+    const hipThrust = await db.lifts.add({ name: 'Hip Thrust' as const, order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'lower' as const })
+    // Reopen: a fresh pending row per active lift.
+    for (const liftId of [ohp, hipThrust, bench, squat]) {
+      await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'pending' })
+    }
+    const result = await getNextSessionAdvancingIfDone(db)
+    expect(result.week).toBe(1)
+    expect(result.liftId).toBe(ohp)
+  })
+
   it('ignores other-week completions when picking the next lift mid-week (kills L137 week-conjunct mutant)', async () => {
     const lifts = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })

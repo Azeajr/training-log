@@ -175,11 +175,17 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
 
   const currentWeek = Math.min(4, closed + 1) as 1 | 2 | 3 | 4
 
-  const completedLiftIds = sessions
-    .filter(s => s.week === currentWeek && s.status !== 'pending')
-    .map(s => s.liftId)
+  // A lift still owes this week if it has a pending session or no session yet.
+  // Mirrors weekComplete: after a reopen the old completed row coexists with a
+  // fresh pending one, so checking "has any non-pending row" would wrongly skip
+  // it and land the highlight on whichever lift lacks old history (issue: new
+  // mid-cycle lifts). Selecting by lift order keeps the first owed lift first.
+  const owesWork = (liftId: number) => {
+    const forLift = sessions.filter(s => s.week === currentWeek && s.liftId === liftId)
+    return forLift.length === 0 || forLift.some(s => s.status === 'pending')
+  }
 
-  const nextLift = lifts.find(l => !completedLiftIds.includes(l.id!))
+  const nextLift = lifts.find(l => owesWork(l.id!))
 
   return {
     liftId: nextLift?.id ?? lifts[0].id!,
