@@ -70,10 +70,27 @@ describe('moveLift', () => {
     expect((await db.lifts.get(b))?.order).toBe(aOrder)
   })
 
-  it('is a no-op at the boundary', async () => {
+  it('is a no-op at the top boundary (first lift, up)', async () => {
     const a = await createLift(db, { name: 'A', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const before = (await db.lifts.get(a))!.order
     await moveLift(db, a, 'up')
+    expect((await db.lifts.get(a))?.order).toBe(before)
+  })
+
+  it('is a no-op at the bottom boundary (last lift, down)', async () => {
+    const a = await createLift(db, { name: 'A', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const b = await createLift(db, { name: 'B', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const aOrder = (await db.lifts.get(a))!.order
+    const bOrder = (await db.lifts.get(b))!.order
+    await moveLift(db, b, 'down') // swapIdx === active.length → return
+    expect((await db.lifts.get(a))?.order).toBe(aOrder)
+    expect((await db.lifts.get(b))?.order).toBe(bOrder)
+  })
+
+  it('is a no-op when the lift id is not in the active roster', async () => {
+    const a = await createLift(db, { name: 'A', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const before = (await db.lifts.get(a))!.order
+    await moveLift(db, 9999, 'up') // idx === -1 → return, leaves roster untouched
     expect((await db.lifts.get(a))?.order).toBe(before)
   })
 })
