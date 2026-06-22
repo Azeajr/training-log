@@ -561,6 +561,17 @@ describe('calcPlatesPerSide', () => {
     ])
   })
 
+  it('does not mutate the caller plate list (sorts a copy)', () => {
+    const plates = [
+      { weight: 25, count: 4 },
+      { weight: 45, count: 4 },
+      { weight: 10, count: 4 },
+    ]
+    const snapshot = plates.map(p => ({ ...p }))
+    calcPlatesPerSide(185, BAR, plates)
+    expect(plates).toEqual(snapshot) // order + contents unchanged
+  })
+
   it('selects largest plates first even when the plate list is unsorted (kills the b-a sort mutant)', () => {
     // Plates given ASCENDING. Greedy-from-smallest over-consumes the small plates
     // (capped at 3 pairs each) and strands 2.5lb → null; largest-first makes 50/side
