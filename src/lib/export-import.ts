@@ -1,8 +1,4 @@
 import type { TrainingDB } from '../db/index'
-import type {
-  Lift, TrainingMax, AccessoryTrainingMax, Cycle, Session,
-  Set, Exercise, LiftAccessory, LiftSupplemental, AccessorySet, Settings,
-} from '../types/domain'
 import { formatDateIso } from './format'
 
 const PENDING_EXPORT_KEY = 'pending-export'
@@ -110,47 +106,47 @@ function validateImportShape(d: Record<string, unknown>): void {
   }
 }
 
+// One row per importable table: the destination table, its column allowlist,
+// and which of those columns are date strings to revive. Driving clear() and
+// bulkAdd() off this single list keeps the destructive wipe and the restore in
+// lockstep — adding a table is one entry here, not three edits across a clear
+// block, an if-chain, and COLS that can silently drift apart.
+// bulkAdd takes any[] so the heterogeneous SQLiteTable<T> instances (each with a
+// concrete row type) all satisfy one spec entry shape under strict variance.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ImportTable = { clear(): Promise<void>; bulkAdd(items: any[]): Promise<void> }
+interface ImportTableSpec { key: keyof typeof COLS; table: ImportTable; dates: readonly string[] }
+
+function importSpec(db: TrainingDB): ImportTableSpec[] {
+  return [
+    { key: 'lifts',                  table: db.lifts,                  dates: [] },
+    { key: 'trainingMaxes',          table: db.trainingMaxes,          dates: ['setAt'] },
+    { key: 'cycles',                 table: db.cycles,                 dates: ['startDate', 'endDate'] },
+    { key: 'sessions',               table: db.sessions,               dates: ['date'] },
+    { key: 'sets',                   table: db.sets,                   dates: [] },
+    { key: 'exercises',              table: db.exercises,              dates: [] },
+    { key: 'liftAccessories',        table: db.liftAccessories,        dates: [] },
+    { key: 'liftSupplementals',      table: db.liftSupplementals,      dates: [] },
+    { key: 'accessoryTrainingMaxes', table: db.accessoryTrainingMaxes, dates: ['setAt'] },
+    { key: 'accessorySets',          table: db.accessorySets,          dates: [] },
+    { key: 'settings',               table: db.settings,               dates: [] },
+  ]
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function importFromRawData(db: TrainingDB, d: Record<string, any>): Promise<void> {
   validateImportShape(d)
-  await db.transaction(
-    async () => {
-      await db.lifts.clear()
-      await db.trainingMaxes.clear()
-      await db.cycles.clear()
-      await db.sessions.clear()
-      await db.sets.clear()
-      await db.exercises.clear()
-      await db.liftAccessories.clear()
-      await db.liftSupplementals.clear()
-      await db.accessoryTrainingMaxes.clear()
-      await db.accessorySets.clear()
-      await db.settings.clear()
-
-      if (d.lifts?.length)
-        await db.lifts.bulkAdd(pickCols<Lift>(d.lifts, COLS.lifts))
-      if (d.trainingMaxes?.length)
-        await db.trainingMaxes.bulkAdd(parseDates<TrainingMax>(pickCols(d.trainingMaxes, COLS.trainingMaxes), ['setAt']))
-      if (d.cycles?.length)
-        await db.cycles.bulkAdd(parseDates<Cycle>(pickCols(d.cycles, COLS.cycles), ['startDate', 'endDate']))
-      if (d.sessions?.length)
-        await db.sessions.bulkAdd(parseDates<Session>(pickCols(d.sessions, COLS.sessions), ['date']))
-      if (d.sets?.length)
-        await db.sets.bulkAdd(pickCols<Set>(d.sets, COLS.sets))
-      if (d.exercises?.length)
-        await db.exercises.bulkAdd(pickCols<Exercise>(d.exercises, COLS.exercises))
-      if (d.liftAccessories?.length)
-        await db.liftAccessories.bulkAdd(pickCols<LiftAccessory>(d.liftAccessories, COLS.liftAccessories))
-      if (d.liftSupplementals?.length)
-        await db.liftSupplementals.bulkAdd(pickCols<LiftSupplemental>(d.liftSupplementals, COLS.liftSupplementals))
-      if (d.settings?.length)
-        await db.settings.bulkAdd(pickCols<Settings>(d.settings, COLS.settings))
-      if (d.accessoryTrainingMaxes?.length)
-        await db.accessoryTrainingMaxes.bulkAdd(parseDates<AccessoryTrainingMax>(pickCols(d.accessoryTrainingMaxes, COLS.accessoryTrainingMaxes), ['setAt']))
-      if (d.accessorySets?.length)
-        await db.accessorySets.bulkAdd(pickCols<AccessorySet>(d.accessorySets, COLS.accessorySets))
+  const spec = importSpec(db)
+  await db.transaction(async () => {
+    // Clear every table first — the import is destructive regardless of which
+    // tables the payload includes.
+    for (const { table } of spec) await table.clear()
+    // Then restore only the tables present in the payload.
+    for (const { key, table, dates } of spec) {
+      const rows = d[key]
+      if (rows?.length) await table.bulkAdd(parseDates<Record<string, unknown>>(pickCols(rows, COLS[key]), dates))
     }
-  )
+  })
 }
 
 export async function exportCsv(db: TrainingDB): Promise<void> {

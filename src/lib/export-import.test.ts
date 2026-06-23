@@ -441,6 +441,94 @@ describe('importFromRawData — full payload', () => {
   })
 })
 
+// ─── export → import round-trip (pins every table's clear+restore + field coercion) ──
+
+describe('exportJson → importFromRawData round-trip', () => {
+  it('restores every table verbatim through a real export payload', async () => {
+    // Seed all 11 tables with the tricky shapes a refactor could drop or mangle:
+    // bool fields (archived/isAmrap), date fields incl. a null endDate, json
+    // (plates), the liftSupplementals table, and nullable accessory columns.
+    await db.lifts.bulkAdd([
+      { id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+      { id: 2, name: 'OHP', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', archived: true },
+    ])
+    await db.trainingMaxes.add({ id: 1, liftId: 1, weight: 200, setAt: new Date('2026-01-01T00:00:00.000Z') })
+    await db.cycles.bulkAdd([
+      { id: 1, number: 1, startDate: new Date('2026-01-01T00:00:00.000Z'), endDate: new Date('2026-04-01T00:00:00.000Z'), closedThroughWeek: 4 },
+      { id: 2, number: 2, startDate: new Date('2026-04-08T00:00:00.000Z'), endDate: null, closedThroughWeek: 0 },
+    ])
+    await db.sessions.add({ id: 1, cycleId: 1, liftId: 1, week: 1, date: new Date('2026-01-06T00:00:00.000Z'), notes: 'felt strong', status: 'completed' })
+    await db.sets.bulkAdd([
+      { id: 1, sessionId: 1, type: 'main', setNumber: 1, weight: 130, reps: 5, isAmrap: false },
+      { id: 2, sessionId: 1, type: 'main', setNumber: 3, weight: 170, reps: 8, isAmrap: true },
+      { id: 3, sessionId: 1, type: 'cross', setNumber: 1, weight: 150, reps: 5, isAmrap: false, liftId: 2 },
+    ])
+    await db.exercises.bulkAdd([
+      { id: 1, name: 'Chinup', type: 'reps' },
+      { id: 2, name: 'Plank', type: 'timed', archived: true },
+    ])
+    await db.liftAccessories.add({ id: 1, liftId: 1, exerciseId: 1, order: 0 })
+    await db.liftSupplementals.add({ id: 1, liftId: 1, movementLiftId: 2, weightMode: 'percent', percent: 0.7, sets: 5, reps: 10, order: 0 })
+    await db.accessoryTrainingMaxes.add({ id: 1, exerciseId: 1, weight: 50, incrementLb: 5, setAt: new Date('2026-01-01T00:00:00.000Z') })
+    await db.accessorySets.add({ id: 1, sessionId: 1, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    await db.settings.add({ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, theme: 'mocha', barWeight: 45, plates: [{ weight: 45, count: 4 }, { weight: 25, count: 2 }], supplementalTemplate: 'fsl+bbb', deloadSupplemental: 'normal' })
+
+    await exportJson(db)
+    const payload = JSON.parse(await capturedBlob!.text())
+    expect(payload.version).toBe(2)
+
+    // Wipe and restore strictly from the exported JSON — the user's real path.
+    await __resetForTest()
+    await importFromRawData(db, payload)
+
+    // Every table is back with the same row count.
+    expect(await db.lifts.count()).toBe(2)
+    expect(await db.trainingMaxes.count()).toBe(1)
+    expect(await db.cycles.count()).toBe(2)
+    expect(await db.sessions.count()).toBe(1)
+    expect(await db.sets.count()).toBe(3)
+    expect(await db.exercises.count()).toBe(2)
+    expect(await db.liftAccessories.count()).toBe(1)
+    expect(await db.liftSupplementals.count()).toBe(1)
+    expect(await db.accessoryTrainingMaxes.count()).toBe(1)
+    expect(await db.accessorySets.count()).toBe(1)
+    expect(await db.settings.count()).toBe(1)
+
+    // Bool fields survive as booleans.
+    const lifts = await db.lifts.toArray()
+    expect(lifts.find(l => l.id === 2)?.archived).toBe(true)
+    expect(lifts.find(l => l.id === 1)?.archived).toBeFalsy()
+    const sets = await db.sets.toArray()
+    expect(sets.find(s => s.id === 2)?.isAmrap).toBe(true)
+    expect(sets.find(s => s.id === 1)?.isAmrap).toBe(false)
+    expect(sets.find(s => s.id === 3)?.liftId).toBe(2)
+    expect((await db.exercises.toArray()).find(e => e.id === 2)?.archived).toBe(true)
+
+    // Date fields are Date instances; a null endDate stays null (not epoch).
+    const cycles = await db.cycles.toArray()
+    const c1 = cycles.find(c => c.id === 1)!
+    const c2 = cycles.find(c => c.id === 2)!
+    expect(c1.startDate).toBeInstanceOf(Date)
+    expect(c1.endDate).toBeInstanceOf(Date)
+    expect((c1.endDate as Date).getFullYear()).toBe(2026)
+    expect(c2.endDate).toBeNull()
+    expect((await db.sessions.toArray())[0].date).toBeInstanceOf(Date)
+    expect((await db.trainingMaxes.toArray())[0].setAt).toBeInstanceOf(Date)
+    expect((await db.accessoryTrainingMaxes.toArray())[0].setAt).toBeInstanceOf(Date)
+
+    // Json field round-trips to a real array; liftSupplementals + nullable
+    // accessory columns intact.
+    const settings = (await db.settings.toArray())[0]
+    expect(settings.plates).toEqual([{ weight: 45, count: 4 }, { weight: 25, count: 2 }])
+    expect(settings.theme).toBe('mocha')
+    const block = (await db.liftSupplementals.toArray())[0]
+    expect(block).toMatchObject({ liftId: 1, movementLiftId: 2, weightMode: 'percent', percent: 0.7, sets: 5, reps: 10 })
+    const accSet = (await db.accessorySets.toArray())[0]
+    expect(accSet.duration).toBeNull()
+    expect(accSet.distance).toBeNull()
+  })
+})
+
 // ─── importFromRawData — malformed table payloads fail safe ──────────────────
 
 describe('importFromRawData — malformed table payloads', () => {
