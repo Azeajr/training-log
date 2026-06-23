@@ -2,7 +2,7 @@ import { createSignal, createEffect, on, For, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, Exercise } from '../types/domain'
-import { workout, logSet, editSet, advanceSet, deleteLastSet, startRest, clearSession, setNotes } from '../store/workout-store'
+import { workout, logSet, editSet, advanceSet, deleteLastSet, logCrossSet, editCrossSet, deleteLastCrossSetFor, startRest, clearSession, setNotes } from '../store/workout-store'
 import {
   calcMainSets, calcWarmup, calcAmrapTargets, calcSupplementalSets, getSupplementalLabel,
   calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
@@ -22,6 +22,7 @@ import { showToast } from '../store/toast-store'
 import SetRow from '../components/workout/SetRow'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
 import AccessoryLog from '../components/workout/AccessoryLog'
+import CrossBlockLog from '../components/workout/CrossBlockLog'
 import RestTimer from '../components/workout/RestTimer'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
@@ -79,7 +80,8 @@ export default function Workout() {
 
   const [lift, setLift] = createSignal<Lift | null>(null)
   const [supplementalTemplate, setSupplementalTemplate] = createSignal<SupplementalTemplate>('fsl')
-  const [allSets, setAllSets] = createSignal<(WarmupSet | MainSet | FslSet | JokerSet | CrossSet)[]>([])
+  const [allSets, setAllSets] = createSignal<(WarmupSet | MainSet | FslSet | JokerSet)[]>([])
+  const [crossSets, setCrossSets] = createSignal<CrossSet[]>([])
   const [crossBlocks, setCrossBlocks] = createSignal<LoadedCrossBlock[]>([])
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
   const [showPicker, setShowPicker] = createSignal(false)
@@ -126,12 +128,13 @@ export default function Workout() {
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
 
-    // Cross blocks come last, each computed from its movement lift's TM. Like
-    // the supplemental tail, a logged set's weight overrides the remaining
-    // planned sets of the same block (matched by movement liftId), and extra
-    // logged sets beyond the plan are restored.
+    // Cross blocks are independent of the linear list — each computed from its
+    // movement lift's TM and restored from its own logged store. Like the
+    // supplemental tail, a logged set's weight overrides the remaining planned
+    // sets of the same block (matched by movement liftId), and extra logged
+    // sets beyond the plan are restored.
     const cross: CrossSet[] = crossBlocks().flatMap(block => {
-      const logged = loggedSets.filter(s => s.type === 'cross' && s.liftId === block.movementLiftId)
+      const logged = workout.loggedCrossSets.filter(s => s.liftId === block.movementLiftId)
       let sets: CrossSet[] = block.computed
       if (logged.length > 0) {
         const override = logged[logged.length - 1].weight
@@ -143,7 +146,7 @@ export default function Workout() {
       return [...sets, ...extra]
     })
 
-    return { all: [...warmup, ...main, ...restoredJokers, ...fsl, ...extraFsl, ...cross], main }
+    return { all: [...warmup, ...main, ...restoredJokers, ...fsl, ...extraFsl], cross, main }
   }
 
   const loadData = async () => {
@@ -187,8 +190,9 @@ export default function Workout() {
       setCrossBlocks(loaded)
     }
 
-    const { all, main } = composeAllSets(tm, session.week, template)
+    const { all, cross, main } = composeAllSets(tm, session.week, template)
     setAllSets(all)
+    setCrossSets(cross)
 
     if (session.week !== 4) {
       const amrapSet = main.find(s => s.isAmrap)
@@ -204,8 +208,9 @@ export default function Workout() {
   const rebuildAllSets = () => {
     const session = workout.activeSession
     if (!session) return
-    const { all } = composeAllSets(tmWeight(), session.week, supplementalTemplate())
+    const { all, cross } = composeAllSets(tmWeight(), session.week, supplementalTemplate())
     setAllSets(all)
+    setCrossSets(cross)
   }
 
   // Targets for today's AMRAP at a given weight: beat the matching previous
@@ -239,7 +244,6 @@ export default function Workout() {
       weight,
       reps,
       isAmrap: (s as MainSet).isAmrap ?? false,
-      ...(s.type === 'cross' ? { liftId: (s as CrossSet).liftId } : {}),
     }
     const prevAllSets = allSets()
     logSet(setData)
@@ -316,6 +320,71 @@ export default function Workout() {
         s.type === 'joker' && s.setNumber > loggedJokerCount ? { ...s, weight: pendingJokerWeight } : s,
       ))
     }
+  }
+
+  // Cross-lift supplemental logs independently of the linear set cursor: it
+  // writes to its own store array and the same db.sets table (type 'cross'),
+  // never touching currentSetIndex. Mirrors handleLog's optimistic add + rollback.
+  const handleLogCross = async (
+    section: { block: LoadedCrossBlock; sets: CrossSet[] },
+    localIdx: number, reps: number, weight: number,
+  ) => {
+    const s = section.sets[localIdx]
+    const setData = {
+      sessionId: workout.activeSession!.id!,
+      type: 'cross' as const,
+      setNumber: s.setNumber,
+      weight,
+      reps,
+      isAmrap: false,
+      liftId: section.block.movementLiftId,
+    }
+    const prevCross = crossSets()
+    logCrossSet(setData)
+    rebuildAllSets()
+    const idx = workout.loggedCrossSets.length - 1
+    try {
+      const dbId = await db.sets.add(setData)
+      editCrossSet(idx, { id: dbId })
+    } catch (err) {
+      deleteLastCrossSetFor(section.block.movementLiftId)
+      setCrossSets(prevCross)
+      showToast(`Failed to save set: ${err instanceof Error ? err.message : 'unknown error'}`)
+      return
+    }
+    const nextS = section.sets[localIdx + 1]
+    startRest(reps < s.reps ? 'fail' : !nextS ? 'transition' : 'normal')
+  }
+
+  const handleEditCross = async (
+    section: { block: LoadedCrossBlock }, localIdx: number, reps: number, weight: number,
+  ) => {
+    const liftId = section.block.movementLiftId
+    const matches: number[] = []
+    workout.loggedCrossSets.forEach((s, i) => { if (s.liftId === liftId) matches.push(i) })
+    const absIdx = matches[localIdx]
+    if (absIdx == null) return
+    const { id, reps: prevReps, weight: prevWeight } = workout.loggedCrossSets[absIdx]
+    editCrossSet(absIdx, { reps, weight })
+    rebuildAllSets()
+    if (!id) return
+    try {
+      await db.sets.update(id, { reps, weight })
+    } catch (err) {
+      editCrossSet(absIdx, { reps: prevReps, weight: prevWeight })
+      rebuildAllSets()
+      showToast(`Failed to save edit: ${err instanceof Error ? err.message : 'unknown error'}`)
+    }
+  }
+
+  const handleDeleteCross = async (section: { block: LoadedCrossBlock }) => {
+    const liftId = section.block.movementLiftId
+    const logged = workout.loggedCrossSets.filter(s => s.liftId === liftId)
+    const last = logged[logged.length - 1]
+    if (!last) return
+    if (last.id) await db.sets.delete(last.id)
+    deleteLastCrossSetFor(liftId)
+    rebuildAllSets()
   }
 
   const handleAddJoker = () => {
@@ -443,19 +512,14 @@ export default function Workout() {
   const mainSets = () => allSets().filter(s => s.type === 'main') as MainSet[]
   const jokerSetsRendered = () => allSets().filter(s => s.type === 'joker') as JokerSet[]
   const fslSets = () => allSets().filter(s => isSupplementalType(s.type)) as FslSet[]
-  const crossSetsAll = () => allSets().filter(s => s.type === 'cross') as CrossSet[]
-
-  // Each cross block rendered as its own section. Offsets continue past the
-  // supplemental tail; blocks are keyed by their (unique) movement liftId.
-  const crossSections = () => {
-    let running = warmupCount() + mainCount() + jokerCount() + fslSets().length
-    return crossBlocks().map(block => {
-      const sets = crossSetsAll().filter(s => s.liftId === block.movementLiftId)
-      const offset = running
-      running += sets.length
-      return { block, sets, offset }
-    })
-  }
+  // Each cross block rendered as its own section with its own cursor, keyed by
+  // its (unique) movement liftId. Independent of the linear currentSetIndex —
+  // a block's next set is just how many of its sets are already logged.
+  const crossSections = () => crossBlocks().map(block => {
+    const sets = crossSets().filter(s => s.liftId === block.movementLiftId)
+    const logged = workout.loggedCrossSets.filter(s => s.liftId === block.movementLiftId)
+    return { block, sets, logged, cursor: logged.length }
+  })
   const warmupCount = () => warmupSets().length
   const mainCount = () => mainSets().length
   const jokerCount = () => jokerSetsRendered().length
@@ -577,19 +641,15 @@ export default function Workout() {
             <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start">
               <For each={crossSections()}>
                 {section => (
-                  <div class="mb-6 md:mb-0">
-                    <div class="text-muted uppercase text-xs tracking-widest mb-2">
-                      {getCrossLabel(section.block, section.block.movementName)}
-                    </div>
-                    <SetSection
-                      sets={() => section.sets}
-                      offset={() => section.offset}
-                      forceAmrapFalse
-                      onLog={handleLog}
-                      onEdit={handleEdit}
-                      onDelete={handleDeleteSet}
-                    />
-                  </div>
+                  <CrossBlockLog
+                    label={getCrossLabel(section.block, section.block.movementName)}
+                    sets={section.sets}
+                    cursor={section.cursor}
+                    logged={section.logged}
+                    onLog={(li, reps, weight) => void handleLogCross(section, li, reps, weight)}
+                    onEdit={(li, reps, weight) => void handleEditCross(section, li, reps, weight)}
+                    onDelete={() => void handleDeleteCross(section)}
+                  />
                 )}
               </For>
             </div>
