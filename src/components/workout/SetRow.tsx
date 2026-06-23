@@ -18,11 +18,13 @@ interface Props {
   onEdit: (reps: number, weight: number) => void
   onWeightChange?: (weight: number) => void
   onDelete?: () => void
-  // Cross-lift blocks log independently, so several of their rows are "active"
-  // from session start. Letting each scroll itself into view yanks focus to the
-  // last-rendered block (bottom of page) before the lifter has touched warmups.
-  // Independent sections opt out; the linear flow keeps the follow-the-cursor scroll.
-  disableAutoScroll?: boolean
+  // Called with this row's element when it becomes the active set. Scroll-to-
+  // active is a page concern (there's one current set on the page), so the row
+  // only reports its element — Workout owns the scroll. Only the linear flow
+  // wires this; independent sections (cross, accessories) pass nothing and so
+  // never grab focus. Opt-in by default means a new section can't reintroduce
+  // the multi-active-row scroll fight.
+  activeRef?: (el: HTMLDivElement) => void
 }
 
 export default function SetRow(props: Props) {
@@ -32,14 +34,8 @@ export default function SetRow(props: Props) {
   const [editing, setEditing] = createSignal(false)
   const [editReps, setEditReps] = createSignal(props.loggedReps ?? props.set.reps)
   const [editWeight, setEditWeight] = createSignal(props.loggedWeight ?? props.set.weight)
-  // eslint-disable-next-line no-unassigned-vars -- Solid `ref={rowEl}` reassigns at runtime
-  let rowEl!: HTMLDivElement
 
   const isAmrap = () => props.set.isAmrap ?? false
-
-  createEffect(() => {
-    if (props.isActive && !props.disableAutoScroll) rowEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  })
 
   createEffect(() => {
     const newWeight = props.set.weight
@@ -56,7 +52,7 @@ export default function SetRow(props: Props) {
     <Switch>
       {/* Active set — input form */}
       <Match when={!props.isCompleted && props.isActive}>
-        <div ref={rowEl} class="border-l-4 border-accent pl-3 py-3 mb-1">
+        <div ref={props.activeRef} class="border-l-4 border-accent pl-3 py-3 mb-1">
           <div class="flex items-baseline gap-3">
             <button
               onClick={() => setWeightEditing(w => !w)}

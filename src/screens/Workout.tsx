@@ -50,6 +50,8 @@ function SetSection(props: {
   onLog: (idx: number, reps: number, weight: number) => void
   onEdit: (idx: number, reps: number, weight: number) => void
   onDelete: () => void
+  // Reports the active row's element up to the page so Workout can scroll to it.
+  onActiveRef?: (el: HTMLDivElement) => void
 }) {
   return (
     <For each={props.sets()}>
@@ -67,6 +69,7 @@ function SetSection(props: {
             onEdit={(reps, weight) => props.onEdit(globalIdx(), reps, weight)}
             onWeightChange={(s as MainSet).isAmrap ? props.onWeightChange : undefined}
             onDelete={globalIdx() === workout.currentSetIndex - 1 ? props.onDelete : undefined}
+            activeRef={props.onActiveRef}
           />
         )
       }}
@@ -91,6 +94,15 @@ export default function Workout() {
 
   const [prevAmrapSets, setPrevAmrapSets] = createSignal<Array<{ weight: number; reps: number; label: string }>>([])
   const [tmWeight, setTmWeight] = createSignal(0)
+
+  // The page owns scroll-to-active: there is one current set on the page (the
+  // linear cursor), and the active SetRow reports its element here. Centering it
+  // whenever it changes follows the cursor as you log. Independent sections
+  // (cross, accessories) don't report, so they never pull focus.
+  const [activeRowEl, setActiveRowEl] = createSignal<HTMLDivElement>()
+  createEffect(on(activeRowEl, el => {
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }))
 
   createEffect(on(() => workout.activeSession, (session) => {
     if (!session) return
@@ -576,6 +588,7 @@ export default function Workout() {
               onLog={handleLog}
               onEdit={handleEdit}
               onDelete={handleDeleteSet}
+              onActiveRef={el => setActiveRowEl(el)}
             />
           </div>
 
@@ -589,6 +602,7 @@ export default function Workout() {
               onLog={handleLog}
               onEdit={handleEdit}
               onDelete={handleDeleteSet}
+              onActiveRef={el => setActiveRowEl(el)}
             />
             <Show when={jokerSetsRendered().length > 0}>
               <div class="mt-4">
@@ -599,6 +613,7 @@ export default function Workout() {
                   onLog={handleLog}
                   onEdit={handleEdit}
                   onDelete={handleDeleteSet}
+                  onActiveRef={el => setActiveRowEl(el)}
                 />
               </div>
             </Show>
@@ -622,6 +637,7 @@ export default function Workout() {
                 onLog={handleLog}
                 onEdit={handleEdit}
                 onDelete={handleDeleteSet}
+                onActiveRef={el => setActiveRowEl(el)}
               />
               <Show when={workout.loggedSets.filter(s => isSupplementalType(s.type)).length >= fslSets().length}>
                 <button
