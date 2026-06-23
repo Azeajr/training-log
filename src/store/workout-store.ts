@@ -15,6 +15,10 @@ interface ActiveAccessory {
 interface WorkoutState {
   activeSession: Session | null
   loggedSets: Set[]
+  // Cross-lift supplemental sets live apart from loggedSets so they can be
+  // logged independently (any block, any time) without disturbing the linear
+  // currentSetIndex/loggedSets positional model the own-lift sets rely on.
+  loggedCrossSets: Set[]
   currentSetIndex: number
   isResting: boolean
   restStartedAt: number | null
@@ -32,6 +36,7 @@ const STORAGE_VERSION = 1
 const PERSISTED_KEYS = [
   'activeSession',
   'loggedSets',
+  'loggedCrossSets',
   'currentSetIndex',
   'isResting',
   'restStartedAt',
@@ -49,6 +54,7 @@ const isPlainObject = (v: unknown): boolean =>
 const PERSISTED_VALIDATORS: Record<(typeof PERSISTED_KEYS)[number], (v: unknown) => boolean> = {
   activeSession: v => v === null || isPlainObject(v),
   loggedSets: Array.isArray,
+  loggedCrossSets: Array.isArray,
   currentSetIndex: v => Number.isInteger(v) && (v as number) >= 0,
   isResting: v => typeof v === 'boolean',
   restStartedAt: v => v === null || typeof v === 'number',
@@ -81,6 +87,7 @@ function loadFromStorage(): Partial<WorkoutState> {
 const emptyState = (): WorkoutState => ({
   activeSession: null,
   loggedSets: [],
+  loggedCrossSets: [],
   currentSetIndex: 0,
   isResting: false,
   restStartedAt: null,
@@ -103,6 +110,7 @@ export function setupWorkoutPersistence() {
       state: {
         activeSession:    workout.activeSession,
         loggedSets:       workout.loggedSets,
+        loggedCrossSets:  workout.loggedCrossSets,
         currentSetIndex:  workout.currentSetIndex,
         isResting:        workout.isResting,
         restStartedAt:    workout.restStartedAt,
@@ -135,6 +143,28 @@ export function deleteLastSet() {
   setWorkout(produce((s) => {
     s.loggedSets.pop()
     s.currentSetIndex = Math.max(0, s.currentSetIndex - 1)
+  }))
+}
+
+// Cross-lift supplemental sets are tracked separately from the linear loggedSets
+// so each block can be logged out of order, like accessories. No shared cursor:
+// a block's "next set" is derived from how many of its sets are already logged.
+export function logCrossSet(set: Set) {
+  setWorkout('loggedCrossSets', (prev) => [...prev, set])
+}
+
+export function editCrossSet(index: number, updates: Partial<Set>) {
+  setWorkout('loggedCrossSets', index, updates)
+}
+
+export function deleteLastCrossSetFor(liftId: number) {
+  setWorkout(produce((s) => {
+    for (let i = s.loggedCrossSets.length - 1; i >= 0; i--) {
+      if (s.loggedCrossSets[i].liftId === liftId) {
+        s.loggedCrossSets.splice(i, 1)
+        return
+      }
+    }
   }))
 }
 

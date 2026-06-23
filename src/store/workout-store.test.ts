@@ -3,6 +3,7 @@ import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { createRoot } from 'solid-js'
 import {
   workout, startSession, logSet, editSet, advanceSet, deleteLastSet,
+  logCrossSet, editCrossSet, deleteLastCrossSetFor,
   startRest, stopRest,
   addAccessory, logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory,
   clearSession, setNotes, setupWorkoutPersistence,
@@ -31,6 +32,7 @@ describe('startSession', () => {
     startSession(SESSION)
     expect(workout.activeSession).toMatchObject({ id: 42 })
     expect(workout.loggedSets).toHaveLength(0)
+    expect(workout.loggedCrossSets).toHaveLength(0)
     expect(workout.currentSetIndex).toBe(0)
     expect(workout.isResting).toBe(false)
     expect(workout.restStartedAt).toBeNull()
@@ -104,6 +106,53 @@ describe('deleteLastSet', () => {
     logSet({ sessionId: 42, type: 'warmup', setNumber: 1, weight: 45, reps: 5, isAmrap: false })
     deleteLastSet()
     expect(workout.currentSetIndex).toBe(0)
+  })
+})
+
+// ─── cross-lift supplemental ─────────────────────────────────────────────────
+
+const crossSet = (liftId: number, setNumber: number, extra: Partial<import('../types/domain').Set> = {}) => ({
+  sessionId: 42, type: 'cross' as const, liftId, setNumber, weight: 150, reps: 5, isAmrap: false, ...extra,
+})
+
+describe('logCrossSet', () => {
+  it('appends to loggedCrossSets without touching loggedSets or currentSetIndex', () => {
+    startSession(SESSION)
+    logCrossSet(crossSet(2, 1))
+    expect(workout.loggedCrossSets).toHaveLength(1)
+    expect(workout.loggedCrossSets[0]).toMatchObject({ liftId: 2, weight: 150 })
+    expect(workout.loggedSets).toHaveLength(0)
+    expect(workout.currentSetIndex).toBe(0)
+  })
+})
+
+describe('editCrossSet', () => {
+  it('updates the set at the given index', () => {
+    startSession(SESSION)
+    logCrossSet(crossSet(2, 1))
+    editCrossSet(0, { reps: 8 })
+    expect(workout.loggedCrossSets[0]).toMatchObject({ reps: 8, weight: 150 })
+  })
+})
+
+describe('deleteLastCrossSetFor', () => {
+  it('pops the last set of the given lift, leaving other lifts intact', () => {
+    startSession(SESSION)
+    logCrossSet(crossSet(2, 1))
+    logCrossSet(crossSet(3, 1))
+    logCrossSet(crossSet(2, 2))
+    deleteLastCrossSetFor(2)
+    const lift2 = workout.loggedCrossSets.filter(s => s.liftId === 2)
+    expect(lift2).toHaveLength(1)
+    expect(lift2[0].setNumber).toBe(1)
+    expect(workout.loggedCrossSets.filter(s => s.liftId === 3)).toHaveLength(1)
+  })
+
+  it('does nothing when the lift has no logged sets', () => {
+    startSession(SESSION)
+    logCrossSet(crossSet(2, 1))
+    deleteLastCrossSetFor(99)
+    expect(workout.loggedCrossSets).toHaveLength(1)
   })
 })
 
@@ -213,6 +262,7 @@ describe('clearSession', () => {
   it('resets all workout state to defaults', () => {
     startSession(SESSION)
     logSet({ sessionId: 42, type: 'warmup', setNumber: 1, weight: 45, reps: 5, isAmrap: false })
+    logCrossSet(crossSet(2, 1))
     advanceSet()
     startRest('fail')
     addAccessory(makeAcc())
@@ -220,6 +270,7 @@ describe('clearSession', () => {
     clearSession()
     expect(workout.activeSession).toBeNull()
     expect(workout.loggedSets).toHaveLength(0)
+    expect(workout.loggedCrossSets).toHaveLength(0)
     expect(workout.currentSetIndex).toBe(0)
     expect(workout.isResting).toBe(false)
     expect(workout.restStartedAt).toBeNull()

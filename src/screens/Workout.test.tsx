@@ -114,6 +114,60 @@ describe('Workout screen — with active session', () => {
     await screen.findByText((t) => t.includes('SQUAT') && t.includes('FSL'))
   })
 
+  it('logs a cross-lift set before any own-lift set, without touching currentSetIndex', async () => {
+    // Cross supplemental must be loggable independently of the linear cursor
+    // (issue #54) — like assistance exercises, no waiting for warmup/main.
+    await db.lifts.add({ id: 2, name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+    await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
+    await db.liftSupplementals.add({
+      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1,
+    })
+    startSession(BENCH)
+    renderWorkout()
+
+    // Two active LOG buttons appear: the warmup set 0 (linear) and the cross
+    // block's set 0. The cross block renders after the main grid, so it's last.
+    await screen.findByText((t) => t.includes('SQUAT') && t.includes('FSL'))
+    const logButtons = await screen.findAllByText('LOG')
+    fireEvent.click(logButtons[logButtons.length - 1])
+
+    await waitFor(async () => {
+      const crossSets = (await db.sets.toArray()).filter(s => s.type === 'cross')
+      expect(crossSets).toHaveLength(1)
+      expect(crossSets[0].liftId).toBe(2)
+    })
+    // The linear cursor is untouched — no own-lift set was logged.
+    expect(workout.currentSetIndex).toBe(0)
+    expect(workout.loggedCrossSets).toHaveLength(1)
+    expect(workout.loggedSets).toHaveLength(0)
+  })
+
+  it('undo removes the last logged cross-lift set from the store and DB', async () => {
+    await db.lifts.add({ id: 2, name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+    await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
+    await db.liftSupplementals.add({
+      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1,
+    })
+    startSession(BENCH)
+    renderWorkout()
+
+    await screen.findByText((t) => t.includes('SQUAT') && t.includes('FSL'))
+    const logButtons = await screen.findAllByText('LOG')
+    fireEvent.click(logButtons[logButtons.length - 1])
+    await waitFor(() => expect(workout.loggedCrossSets).toHaveLength(1))
+
+    // The just-logged set shows an "undo" affordance; confirm it.
+    fireEvent.click(await screen.findByText('undo'))
+    await screen.findByText('undo set?')
+    fireEvent.click(screen.getByText('yes'))
+
+    await waitFor(async () => {
+      const crossSets = (await db.sets.toArray()).filter(s => s.type === 'cross')
+      expect(crossSets).toHaveLength(0)
+    })
+    expect(workout.loggedCrossSets).toHaveLength(0)
+  })
+
   it('renders EXIT button', async () => {
     startSession(BENCH)
     renderWorkout()
