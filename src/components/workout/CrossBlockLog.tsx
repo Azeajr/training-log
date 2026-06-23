@@ -27,7 +27,6 @@ export default function CrossBlockLog(props: Props) {
             set={{ ...s, isAmrap: false }}
             isActive={props.cursor === i()}
             isCompleted={i() < props.cursor}
-            disableAutoScroll
             loggedReps={props.logged[i()]?.reps}
             loggedWeight={props.logged[i()]?.weight}
             onLog={(reps, weight) => props.onLog(i(), reps, weight)}
