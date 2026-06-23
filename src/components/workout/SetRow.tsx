@@ -18,6 +18,11 @@ interface Props {
   onEdit: (reps: number, weight: number) => void
   onWeightChange?: (weight: number) => void
   onDelete?: () => void
+  // Cross-lift blocks log independently, so several of their rows are "active"
+  // from session start. Letting each scroll itself into view yanks focus to the
+  // last-rendered block (bottom of page) before the lifter has touched warmups.
+  // Independent sections opt out; the linear flow keeps the follow-the-cursor scroll.
+  disableAutoScroll?: boolean
 }
 
 export default function SetRow(props: Props) {
@@ -33,7 +38,7 @@ export default function SetRow(props: Props) {
   const isAmrap = () => props.set.isAmrap ?? false
 
   createEffect(() => {
-    if (props.isActive) rowEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (props.isActive && !props.disableAutoScroll) rowEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   })
 
   createEffect(() => {
