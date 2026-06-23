@@ -584,6 +584,13 @@ describe('importJson', () => {
     expect(lifts[0].name).toBe('OHP')
   })
 
+  it('caps imports at exactly 50 MiB (pins the constant against a fat-fingered arithmetic edit)', () => {
+    // The boundary tests derive their threshold from MAX_IMPORT_BYTES, so they'd
+    // pass even if the constant were mangled (e.g. 50/1024*1024 ≈ 51 KB, which
+    // would silently reject every real backup). Pin the literal value.
+    expect(MAX_IMPORT_BYTES).toBe(50 * 1024 * 1024)
+  })
+
   it('rejects files larger than the import cap before parsing', async () => {
     const oversize = new File(['x'], 'big.json', { type: 'application/json' })
     Object.defineProperty(oversize, 'size', { value: MAX_IMPORT_BYTES + 1 })
