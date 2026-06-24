@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from 'solid-js'
+import { createSignal, onMount, For, Index, Show } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Exercise, LiftAccessory } from '../types/domain'
@@ -302,18 +302,18 @@ export default function HistoryEdit() {
                     <div class="text-muted uppercase text-xs tracking-widest mb-2">
                       {type.toUpperCase()}
                     </div>
-                    <For each={rows()}>
-                      {({ s, i }) => (
+                    <Index each={rows()}>
+                      {row => (
                         <div class="flex items-center gap-2 py-1.5 flex-wrap">
-                          <Stepper value={s.weight} onChange={v => updateSet(i, 'weight', v)} step={2.5} min={0} />
+                          <Stepper value={row().s.weight} onChange={v => updateSet(row().i, 'weight', v)} step={2.5} min={0} />
                           <span class="text-muted text-xs">lb ×</span>
-                          <Stepper value={s.reps} onChange={v => updateSet(i, 'reps', v)} step={1} min={0} />
-                          <Show when={s.isAmrap}>
+                          <Stepper value={row().s.reps} onChange={v => updateSet(row().i, 'reps', v)} step={1} min={0} />
+                          <Show when={row().s.isAmrap}>
                             <span class="text-warn text-xs tracking-widest">AMRAP</span>
                           </Show>
                         </div>
                       )}
-                    </For>
+                    </Index>
                   </div>
                 </Show>
               )
@@ -322,60 +322,60 @@ export default function HistoryEdit() {
 
           <div class="mb-6">
             <Rule label="ACCESSORIES" class="text-muted mb-2" />
-            <For each={editAccessories()}>
-              {(acc, ai) => (
+            <Index each={editAccessories()}>
+              {(accAcc, ai) => (
                 <div class="border border-border p-3 mb-3">
                   <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
-                      <span class="text-text text-sm uppercase tracking-widest">{acc.exerciseName}</span>
+                      <span class="text-text text-sm uppercase tracking-widest">{accAcc().exerciseName}</span>
                       <button
-                        onClick={() => setPicker({ kind: 'swap', accIdx: ai() })}
+                        onClick={() => setPicker({ kind: 'swap', accIdx: ai })}
                         class="text-muted text-xs hover:text-accent"
                       >
                         swap
                       </button>
                     </div>
                     <button
-                      onClick={() => deleteAccessory(ai())}
+                      onClick={() => deleteAccessory(ai)}
                       class="text-muted hover:text-danger text-xs font-mono px-1"
                     >
                       ✕
                     </button>
                   </div>
-                  <For each={acc.sets}>
-                    {(s, si) => (
+                  <Index each={accAcc().sets}>
+                    {(setRow, si) => (
                       <div class="flex items-center flex-wrap gap-2 py-1 pl-2">
-                        <span class="text-muted text-xs w-10">Set {s.setNumber}</span>
-                        <Show when={acc.exerciseType === 'reps'}>
+                        <span class="text-muted text-xs w-10">Set {setRow().setNumber}</span>
+                        <Show when={accAcc().exerciseType === 'reps'}>
                           <>
-                            <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai(), si(), 'weight', v)} step={2.5} min={0} />
+                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} />
                             <span class="text-muted text-xs">lb ×</span>
-                            <Stepper value={s.reps ?? 0} onChange={v => updateAccSet(ai(), si(), 'reps', v)} step={1} min={0} />
+                            <Stepper value={setRow().reps ?? 0} onChange={v => updateAccSet(ai, si, 'reps', v)} step={1} min={0} />
                           </>
                         </Show>
-                        <Show when={acc.exerciseType === 'timed'}>
+                        <Show when={accAcc().exerciseType === 'timed'}>
                           <>
-                            <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai(), si(), 'weight', v)} step={2.5} min={0} />
+                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} />
                             <span class="text-muted text-xs">lb ×</span>
                             <DurationInput
-                              value={s.duration}
-                              onChange={val => updateAccSet(ai(), si(), 'duration', val)}
+                              value={setRow().duration}
+                              onChange={val => updateAccSet(ai, si, 'duration', val)}
                             />
                           </>
                         </Show>
-                        <Show when={acc.exerciseType === 'distance'}>
+                        <Show when={accAcc().exerciseType === 'distance'}>
                           <>
-                            <Stepper value={s.weight ?? 0} onChange={v => updateAccSet(ai(), si(), 'weight', v)} step={2.5} min={0} />
+                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} />
                             <span class="text-muted text-xs">lb ×</span>
-                            <Stepper value={s.distance ?? 0} onChange={v => updateAccSet(ai(), si(), 'distance', v)} step={1} min={0} />
+                            <Stepper value={setRow().distance ?? 0} onChange={v => updateAccSet(ai, si, 'distance', v)} step={1} min={0} />
                           </>
                         </Show>
                       </div>
                     )}
-                  </For>
+                  </Index>
                 </div>
               )}
-            </For>
+            </Index>
             <button
               onClick={() => setPicker({ kind: 'add' })}
               class="w-full border border-border py-2 text-muted text-xs tracking-widest hover:border-accent hover:text-accent"
