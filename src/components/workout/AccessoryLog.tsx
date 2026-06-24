@@ -7,6 +7,15 @@ import { showToast } from '../../store/toast-store'
 import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
 import SetLogControls, { FieldRow } from '../forms/SetLogControls'
+import SetReadout from '../forms/SetReadout'
+
+// Pre-format an accessory set's value for the readout: reps, time (s), or
+// distance (ft) — whichever the exercise type uses.
+const fmtSetValue = (s: { reps?: number | null; duration?: number | null; distance?: number | null }) =>
+  s.reps != null ? `${s.reps}`
+    : s.duration != null ? `${s.duration}s`
+    : s.distance != null ? `${s.distance}ft`
+    : ''
 import InlineConfirm from '../ui/InlineConfirm'
 
 interface ActiveAccessory {
@@ -37,6 +46,11 @@ export default function AccessoryLog(props: Props) {
   const [reps, setReps] = createSignal(ACCESSORY_REPS)
   const [duration, setDuration] = createSignal<number | null>(null)
   const [distance, setDistance] = createSignal(0)
+  // Live value for the active-set headline, mirroring the stepper being edited.
+  const activeValue = () =>
+    type() === 'reps' ? `${reps()}`
+      : type() === 'timed' ? (duration() != null ? `${duration()}s` : '')
+      : `${distance()}ft`
   const [editingSetIdx, setEditingSetIdx] = createSignal<number | null>(null)
   const [editWeight, setEditWeight] = createSignal(0)
   const [editReps, setEditReps] = createSignal(0)
@@ -119,24 +133,24 @@ export default function AccessoryLog(props: Props) {
             <Show
               when={editingSetIdx() === i()}
               fallback={
-                <div class="flex items-center gap-1 text-muted text-xs pl-2 py-0.5">
-                  <span onClick={() => startEditSet(i())} class="cursor-pointer hover:text-text-dim">
-                    Set {i() + 1}:
-                    <Show when={s.weight != null}> {s.weight}lb</Show>
-                    <Show when={s.reps != null}> × {s.reps}</Show>
-                    <Show when={s.duration != null}> {s.duration}s</Show>
-                    <Show when={s.distance != null}> {s.distance}ft</Show>
-                  </span>
-                  <span class="text-accent ml-1">done</span>
-                  <Show when={isLast()}>
-                    <InlineConfirm
-                      label="undo"
-                      confirmText="undo set?"
-                      onConfirm={() => deleteLastAccessorySet(props.accessory.exerciseId)}
-                      class="ml-auto"
-                    />
-                  </Show>
-                </div>
+                <SetReadout
+                  weight={s.weight}
+                  value={fmtSetValue(s)}
+                  leading={<span class="text-muted">Set {i() + 1}:</span>}
+                  onClick={() => startEditSet(i())}
+                  class="pl-2 py-0.5"
+                  badges={<span class="text-accent ml-1">done</span>}
+                  trailing={
+                    <Show when={isLast()}>
+                      <InlineConfirm
+                        label="undo"
+                        confirmText="undo set?"
+                        onConfirm={() => deleteLastAccessorySet(props.accessory.exerciseId)}
+                        class="ml-auto"
+                      />
+                    </Show>
+                  }
+                />
               }
             >
               <div class="flex items-center gap-2 pl-2 py-1 flex-wrap">
@@ -161,7 +175,11 @@ export default function AccessoryLog(props: Props) {
       </For>
       <Show when={!done()}>
         <div class="mt-2 pl-2">
-          <div class="text-warn text-xs">Set {nextSet()}</div>
+          <SetReadout
+            weight={weight()}
+            value={activeValue()}
+            leading={<span class="text-warn">Set {nextSet()}</span>}
+          />
           <SetLogControls
             weight={weight()}
             onWeightChange={setWeight}
