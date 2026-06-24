@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from 'solid-js'
+import { createSignal, onMount, For, Index, Show } from 'solid-js'
 import { db } from '../../db/index'
 import type { Lift, Exercise } from '../../types/domain'
 import { createExercise } from '../../lib/exercise'
@@ -254,42 +254,42 @@ export default function LiftSetupModal(props: Props) {
         <Show when={blocks().length === 0}>
           <div class="text-faint text-xs py-1">none</div>
         </Show>
-        <For each={blocks()}>
-          {(b, i) => (
+        <Index each={blocks()}>
+          {(block, i) => (
             <div class="border border-border-dim p-2 mb-2">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-text text-xs uppercase tracking-widest">{liftName(b.movementLiftId)}</span>
-                <button onClick={() => handleRemoveBlock(i())} class="text-muted text-xs hover:text-danger">del</button>
+                <span class="text-text text-xs uppercase tracking-widest">{liftName(block().movementLiftId)}</span>
+                <button onClick={() => handleRemoveBlock(i)} class="text-muted text-xs hover:text-danger">del</button>
               </div>
               <div class="flex gap-2 mb-2">
                 <For each={(['fsl', 'percent'] as const)}>
                   {mode => (
                     <button
-                      onClick={() => patchBlock(i(), { weightMode: mode, percent: mode === 'percent' ? (b.percent ?? 0.75) : null })}
-                      class={`px-2 py-0.5 text-xs border ${b.weightMode === mode ? 'border-accent text-accent' : 'border-border text-muted'}`}
+                      onClick={() => patchBlock(i, { weightMode: mode, percent: mode === 'percent' ? (block().percent ?? 0.75) : null })}
+                      class={`px-2 py-0.5 text-xs border ${block().weightMode === mode ? 'border-accent text-accent' : 'border-border text-muted'}`}
                     >
                       {mode === 'fsl' ? 'FSL' : '% TM'}
                     </button>
                   )}
                 </For>
               </div>
-              <Show when={b.weightMode === 'percent'}>
+              <Show when={block().weightMode === 'percent'}>
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-muted text-xs w-12">%TM</span>
-                  <Stepper value={Math.round((b.percent ?? 0) * 100)} onChange={v => patchBlock(i(), { percent: v / 100 })} step={5} min={0} max={120} />
+                  <Stepper value={Math.round((block().percent ?? 0) * 100)} onChange={v => patchBlock(i, { percent: v / 100 })} step={5} min={0} max={120} />
                 </div>
               </Show>
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-muted text-xs w-12">sets</span>
-                <Stepper value={b.sets} onChange={v => patchBlock(i(), { sets: v })} step={1} min={1} max={20} />
+                <Stepper value={block().sets} onChange={v => patchBlock(i, { sets: v })} step={1} min={1} max={20} />
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-muted text-xs w-12">reps</span>
-                <Stepper value={b.reps} onChange={v => patchBlock(i(), { reps: v })} step={1} min={1} max={50} />
+                <Stepper value={block().reps} onChange={v => patchBlock(i, { reps: v })} step={1} min={1} max={50} />
               </div>
             </div>
           )}
-        </For>
+        </Index>
 
         <Show when={movementOptions().length > 0} fallback={
           <Show when={blocks().length === 0}>
