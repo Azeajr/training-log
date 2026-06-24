@@ -5,6 +5,7 @@ import type { AmrapTarget } from '../../lib/calc'
 import { estimated1RM } from '../../lib/calc'
 import Stepper from '../forms/Stepper'
 import SetLogControls, { FieldRow } from '../forms/SetLogControls'
+import SetReadout from '../forms/SetReadout'
 import PlateDisplay from '../forms/PlateDisplay'
 import InlineConfirm from '../ui/InlineConfirm'
 
@@ -57,18 +58,22 @@ export default function SetRow(props: Props) {
       {/* Active set — input form */}
       <Match when={!props.isCompleted && props.isActive}>
         <div ref={props.activeRef} class="border-l-4 border-accent pl-3 py-3 mb-1">
-          <div class="flex items-baseline gap-3">
-            <span data-testid="active-weight" class="text-2xl font-mono text-text">
-              {weight()}<span class="text-base ml-1">lb</span>
-            </span>
-            <span class="text-xl text-text">x {reps()}{isAmrap() ? '+' : ''}</span>
-            <Show when={isAmrap()}>
-              <span class="text-warn text-xs tracking-widest">AMRAP</span>
-            </Show>
-            <Show when={props.set.type === 'joker'}>
-              <span class="text-warn text-xs tracking-widest">JOKER</span>
-            </Show>
-          </div>
+          <SetReadout
+            size="lg"
+            weight={weight()}
+            value={`${reps()}${isAmrap() ? '+' : ''}`}
+            weightTestId="active-weight"
+            badges={
+              <>
+                <Show when={isAmrap()}>
+                  <span class="text-warn text-xs tracking-widest">AMRAP</span>
+                </Show>
+                <Show when={props.set.type === 'joker'}>
+                  <span class="text-warn text-xs tracking-widest">JOKER</span>
+                </Show>
+              </>
+            }
+          />
           <PlateDisplay weight={weight()} />
           <Show when={isAmrap() && props.amrapTargets && props.amrapTargets.length > 0}>
             <AmrapTargets targets={props.amrapTargets!} />
@@ -87,19 +92,27 @@ export default function SetRow(props: Props) {
 
       {/* Upcoming set — read-only preview */}
       <Match when={!props.isCompleted}>
-        <div class="flex items-center gap-3 py-2.5 pl-3 text-sm text-muted border-l-4 border-transparent">
-          <span class="w-16 text-right font-mono">{props.set.weight}lb</span>
-          <span>x {props.set.reps}{isAmrap() ? '+' : ''}</span>
-          <Show when={isAmrap()}>
-            <span class="text-xs text-faint tracking-widest">AMRAP</span>
-          </Show>
-          <Show when={props.set.type === 'joker'}>
-            <span class="text-xs text-faint tracking-widest">JOKER</span>
-          </Show>
-          <span class="text-faint text-xs font-mono ml-auto">
-            {estimated1RM(props.set.weight, props.set.reps).toFixed(0)}lb e1RM
-          </span>
-        </div>
+        <SetReadout
+          weight={props.set.weight}
+          value={`${props.set.reps}${isAmrap() ? '+' : ''}`}
+          alignWeight
+          class="py-2.5 pl-3 border-l-4 border-transparent"
+          badges={
+            <>
+              <Show when={isAmrap()}>
+                <span class="text-xs text-faint tracking-widest">AMRAP</span>
+              </Show>
+              <Show when={props.set.type === 'joker'}>
+                <span class="text-xs text-faint tracking-widest">JOKER</span>
+              </Show>
+            </>
+          }
+          trailing={
+            <span class="text-faint text-xs font-mono ml-auto">
+              {estimated1RM(props.set.weight, props.set.reps).toFixed(0)}lb e1RM
+            </span>
+          }
+        />
       </Match>
 
       {/* Completed — inline edit form */}
@@ -120,31 +133,39 @@ export default function SetRow(props: Props) {
 
       {/* Completed — read-only view */}
       <Match when={true}>
-        <div
-          class="flex items-center gap-3 py-3 pl-3 text-sm text-muted border-l-4 border-transparent"
+        <SetReadout
+          weight={props.loggedWeight ?? props.set.weight}
+          value={`${props.loggedReps ?? ''}`}
+          alignWeight
           onClick={startEdit}
-        >
-          <span class="w-16 text-right font-mono cursor-pointer hover:text-text-dim">{props.loggedWeight ?? props.set.weight}lb</span>
-          <span class="cursor-pointer hover:text-text-dim">x {props.loggedReps}</span>
-          <Show when={isAmrap()}>
-            <span class="text-xs tracking-widest">AMRAP</span>
-          </Show>
-          <span class="text-accent text-xs tracking-widest">done</span>
-          <Show when={props.loggedReps != null && props.loggedReps > 0}>
-            <span class="text-faint text-xs font-mono ml-auto">
-              {estimated1RM(props.loggedWeight ?? props.set.weight, props.loggedReps!).toFixed(0)}lb e1RM
-            </span>
-          </Show>
-          <Show when={!!props.onDelete}>
-            <InlineConfirm
-              label="undo"
-              confirmText="undo set?"
-              onConfirm={() => props.onDelete!()}
-              class="ml-auto"
-              stopPropagation
-            />
-          </Show>
-        </div>
+          class="py-3 pl-3 border-l-4 border-transparent"
+          badges={
+            <>
+              <Show when={isAmrap()}>
+                <span class="text-xs tracking-widest">AMRAP</span>
+              </Show>
+              <span class="text-accent text-xs tracking-widest">done</span>
+            </>
+          }
+          trailing={
+            <>
+              <Show when={props.loggedReps != null && props.loggedReps > 0}>
+                <span class="text-faint text-xs font-mono ml-auto">
+                  {estimated1RM(props.loggedWeight ?? props.set.weight, props.loggedReps!).toFixed(0)}lb e1RM
+                </span>
+              </Show>
+              <Show when={!!props.onDelete}>
+                <InlineConfirm
+                  label="undo"
+                  confirmText="undo set?"
+                  onConfirm={() => props.onDelete!()}
+                  class="ml-auto"
+                  stopPropagation
+                />
+              </Show>
+            </>
+          }
+        />
       </Match>
     </Switch>
   )

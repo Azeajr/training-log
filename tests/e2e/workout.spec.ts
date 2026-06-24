@@ -40,7 +40,7 @@ test.describe('workout flow', () => {
   test('logged set appears as completed row', async ({ page }) => {
     await startWorkout(page)
     await logSet(page, 8)
-    await expect(page.getByText('x 8')).toBeVisible()
+    await expect(page.getByText('× 8')).toBeVisible()
     await expect(page.getByText('done')).toBeVisible()
   })
 })
@@ -58,7 +58,7 @@ test.describe('session persistence across refresh', () => {
     await startWorkout(page)
     await logSet(page, 8)
     await page.reload()
-    await expect(page.getByText('x 8')).toBeVisible()
+    await expect(page.getByText('× 8')).toBeVisible()
     await expect(page.getByText('done')).toBeVisible()
   })
 
@@ -150,7 +150,7 @@ test.describe('resume banner and abandon dialog', () => {
 
     // Should be back on the workout screen with the logged set still there
     await expect(page.getByRole('button', { name: 'COMPLETE SESSION' })).toBeVisible()
-    await expect(page.getByText('x 8')).toBeVisible()
+    await expect(page.getByText('× 8')).toBeVisible()
     await expect(page.getByText('done')).toBeVisible()
   })
 })
