@@ -479,12 +479,11 @@ describe('Workout screen — rest types', () => {
     startSession(BENCH)
     renderWorkout()
 
-    // Wait for the first active set (warmup — only reps Stepper visible)
+    // Wait for the first active set (warmup — weight + reps Steppers visible)
     await screen.findByText('LOG')
 
-    // Click − to decrease reps below default (5 → 4)
-    const minusBtn = screen.getByText('−')
-    fireEvent.click(minusBtn)
+    // Click reps − (2nd stepper; weight is 1st) to decrease below default (5 → 4)
+    fireEvent.click(screen.getAllByText('−')[1])
 
     fireEvent.click(screen.getByText('LOG'))
     await waitFor(() => expect(workout.currentSetIndex).toBe(1))
@@ -738,9 +737,9 @@ describe('Workout screen — joker sets', () => {
     fireEvent.blur(input)
   }
 
-  // Weight shown on the active set row (the big "<n>lb" button).
+  // Weight shown on the active set row (the big "<n>lb" readout).
   const activeRowWeight = () =>
-    screen.getAllByRole('button').find(b => /^\d+(\.\d+)?lb$/.test(b.textContent ?? ''))?.textContent
+    screen.queryAllByTestId('active-weight')[0]?.textContent?.replace(/\s+/g, '')
 
   // TM 200, week 1: AMRAP logged at 170×5 → joker prescription 170×1.05 → 180.
   it('editing the logged AMRAP weight re-derives a pending joker', async () => {
@@ -866,19 +865,10 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
     // Log 3 warmup sets to reach main set 1 (globalIdx=3)
     await logNSets(3)
 
-    // main set 1 is now active — toggle weight editing
+    // main set 1 is now active; weight stepper is always visible (1st −)
     await screen.findByText('LOG')
-    const weightBtn = await waitFor(() => {
-      const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => /\d+/.test(b.textContent ?? '') && (b.textContent ?? '').includes('lb'))
-      expect(btn).toBeTruthy()
-      return btn!
-    })
-    fireEvent.click(weightBtn) // enable weight editing
-
-    // Two Steppers visible (weight + reps); click weight − to decrease (step=2.5)
     await waitFor(() => expect(screen.getAllByText('−').length).toBeGreaterThanOrEqual(2))
-    fireEvent.click(screen.getAllByText('−')[0])
+    fireEvent.click(screen.getAllByText('−')[0]) // weight − to decrease (step=2.5)
 
     // LOG — weight !== s.weight → FSL propagation branch fires
     fireEvent.click(screen.getByText('LOG'))
@@ -893,15 +883,7 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
     await logNSets(5)
 
     await screen.findByText('LOG') // AMRAP active
-    const weightBtn = await waitFor(() => {
-      const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => /\d+/.test(b.textContent ?? '') && (b.textContent ?? '').includes('lb'))
-      expect(btn).toBeTruthy()
-      return btn!
-    })
-    fireEvent.click(weightBtn) // enable weight editing
-
-    // Weight Stepper now visible; click + to increase weight → onWeightChange → handleAmrapWeightChange
+    // weight stepper always visible; + increases weight → onWeightChange → handleAmrapWeightChange
     await waitFor(() => expect(screen.getAllByText('+').length).toBeGreaterThanOrEqual(2))
     fireEvent.click(screen.getAllByText('+')[0])
 
@@ -923,16 +905,8 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
     await logNSets(5) // reach AMRAP set
 
     await screen.findByText('LOG')
-    const weightBtn = await waitFor(() => {
-      const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => /\d+/.test(b.textContent ?? '') && (b.textContent ?? '').includes('lb'))
-      expect(btn).toBeTruthy()
-      return btn!
-    })
-    fireEvent.click(weightBtn)
-
     await waitFor(() => expect(screen.getAllByText('+').length).toBeGreaterThanOrEqual(2))
-    fireEvent.click(screen.getAllByText('+')[0]) // triggers calcAmrapTargets path
+    fireEvent.click(screen.getAllByText('+')[0]) // weight + triggers calcAmrapTargets path
 
     await waitFor(() => expect(workout.currentSetIndex).toBe(5))
   })
@@ -945,16 +919,7 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
     await logNSets(6)
 
     await screen.findByText('LOG')
-    const weightBtn = await waitFor(() => {
-      const btns = screen.getAllByRole('button')
-      // Weight button text is exactly "<digits>lb"; joker button is "+ JOKER SET <n>lb"
-      const btn = btns.find(b => /^\d+lb$/.test((b.textContent ?? '').replace(/\s+/g, '')))
-      expect(btn).toBeTruthy()
-      return btn!
-    })
-    fireEvent.click(weightBtn) // enable weight editing — weight Stepper appears
-
-    // After weightEditing() is true, both weight and reps Steppers are visible → 2 '+' buttons
+    // weight + reps Steppers always visible → weight is the 1st '+' button
     await waitFor(() => expect(screen.getAllByText('+').length).toBeGreaterThanOrEqual(2))
     fireEvent.click(screen.getAllByText('+')[0])
 
@@ -997,16 +962,8 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
     await logNSets(2) // 0 warmup + 2 main → AMRAP (index 2) is active
 
     await screen.findByText('LOG')
-    const weightBtn = await waitFor(() => {
-      const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => /\d+/.test(b.textContent ?? '') && (b.textContent ?? '').includes('lb'))
-      expect(btn).toBeTruthy()
-      return btn!
-    })
-    fireEvent.click(weightBtn) // enable weight editing
-
     await waitFor(() => expect(screen.getAllByText('+').length).toBeGreaterThanOrEqual(2))
-    fireEvent.click(screen.getAllByText('+')[0]) // handleAmrapWeightChange → else-if (tmWeight > 0) false
+    fireEvent.click(screen.getAllByText('+')[0]) // weight + → handleAmrapWeightChange → else-if (tmWeight > 0) false
 
     await waitFor(() => expect(workout.currentSetIndex).toBe(2))
   })
@@ -1368,22 +1325,14 @@ describe('Workout screen — DB error handling', () => {
 // precalculated plan — and that the chain survives a mid-session remount.
 
 describe('Workout screen — logged-weight cascade regressions', () => {
-  const findWeightButton = () => waitFor(() => {
-    const btns = screen.getAllByRole('button')
-    const btn = btns.find(b => /^\d+(\.\d+)?lb$/.test((b.textContent ?? '').replace(/\s+/g, '')))
-    expect(btn).toBeTruthy()
-    return btn!
-  })
-
   const findJokerButton = () => waitFor(() => {
     const btn = screen.getAllByRole('button').find(b => b.textContent?.includes('JOKER SET'))
     expect(btn).toBeTruthy()
     return btn!
   })
 
-  // Enable weight editing on the active set and click the weight Stepper's + twice (2 × 2.5lb)
+  // Click the always-visible weight Stepper's + twice (2 × 2.5lb)
   const bumpActiveWeightBy5 = async () => {
-    fireEvent.click(await findWeightButton())
     await waitFor(() => expect(screen.getAllByText('+').length).toBeGreaterThanOrEqual(2))
     fireEvent.click(screen.getAllByText('+')[0])
     fireEvent.click(screen.getAllByText('+')[0])
