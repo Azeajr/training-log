@@ -6,6 +6,7 @@ import { ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY
 import { showToast } from '../../store/toast-store'
 import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
+import SetLogControls, { FieldRow } from '../forms/SetLogControls'
 import InlineConfirm from '../ui/InlineConfirm'
 
 interface ActiveAccessory {
@@ -33,7 +34,6 @@ export default function AccessoryLog(props: Props) {
   }
 
   const [weight, setWeight] = createSignal(initWeight())
-  const [weightEditing, setWeightEditing] = createSignal(false)
   const [reps, setReps] = createSignal(ACCESSORY_REPS)
   const [duration, setDuration] = createSignal<number | null>(null)
   const [distance, setDistance] = createSignal(0)
@@ -94,7 +94,6 @@ export default function AccessoryLog(props: Props) {
     setReps(ACCESSORY_REPS)
     setDuration(null)
     setDistance(0)
-    setWeightEditing(false)
   }
 
   return (
@@ -103,12 +102,7 @@ export default function AccessoryLog(props: Props) {
         <span class="flex-1">
           {props.accessory.exerciseName}
           <span class="text-muted ml-2 text-xs">{ACCESSORY_SETS}x{ACCESSORY_REPS} @</span>
-          <button
-            onClick={() => setWeightEditing(w => !w)}
-            class={`text-xs font-mono ml-1 border-b ${weightEditing() ? 'text-accent border-accent' : 'text-muted border-muted border-dashed'}`}
-          >
-            {weight()}lb
-          </button>
+          <span class="text-muted text-xs font-mono ml-1">{weight()}lb</span>
         </span>
         <InlineConfirm
           label="✕"
@@ -118,12 +112,6 @@ export default function AccessoryLog(props: Props) {
           strong
         />
       </div>
-      <Show when={weightEditing()}>
-        <div class="flex items-center gap-2 pl-2 mb-2">
-          <span class="text-xs text-faint uppercase tracking-widest w-8">wt</span>
-          <Stepper value={weight()} onChange={setWeight} step={2.5} min={0} />
-        </div>
-      </Show>
       <For each={props.accessory.loggedSets}>
         {(s, i) => {
           const isLast = () => i() === props.accessory.loggedSets.length - 1
@@ -172,21 +160,29 @@ export default function AccessoryLog(props: Props) {
         }}
       </For>
       <Show when={!done()}>
-        <div class="flex items-center gap-2 mt-2 pl-2">
-          <span class="text-warn text-xs">Set {nextSet()}:</span>
-          <span class="text-muted font-mono text-xs">{weight()}lb ×</span>
-          <Show when={type() === 'reps'}>
-            <Stepper value={reps()} onChange={setReps} step={1} min={0} />
-          </Show>
-          <Show when={type() === 'timed'}>
-            <DurationInput value={duration()} onChange={setDuration} />
-          </Show>
-          <Show when={type() === 'distance'}>
-            <Stepper value={distance()} onChange={setDistance} step={1} min={0} />
-          </Show>
-          <button onClick={() => { void handleLog(); setAddingExtra(false) }} class="border border-accent text-accent px-3 py-1 font-mono text-xs">
-            LOG
-          </button>
+        <div class="mt-2 pl-2">
+          <div class="text-warn text-xs">Set {nextSet()}</div>
+          <SetLogControls
+            weight={weight()}
+            onWeightChange={setWeight}
+            onLog={() => { void handleLog(); setAddingExtra(false) }}
+          >
+            <Show when={type() === 'reps'}>
+              <FieldRow label="reps">
+                <Stepper value={reps()} onChange={setReps} step={1} min={0} />
+              </FieldRow>
+            </Show>
+            <Show when={type() === 'timed'}>
+              <FieldRow label="time">
+                <DurationInput value={duration()} onChange={setDuration} />
+              </FieldRow>
+            </Show>
+            <Show when={type() === 'distance'}>
+              <FieldRow label="dist">
+                <Stepper value={distance()} onChange={setDistance} step={1} min={0} />
+              </FieldRow>
+            </Show>
+          </SetLogControls>
         </div>
       </Show>
       <Show when={props.accessory.loggedSets.length >= ACCESSORY_SETS && !addingExtra()}>

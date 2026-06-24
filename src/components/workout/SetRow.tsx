@@ -4,6 +4,7 @@ import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../../lib/calc'
 import { estimated1RM } from '../../lib/calc'
 import Stepper from '../forms/Stepper'
+import SetLogControls, { FieldRow } from '../forms/SetLogControls'
 import PlateDisplay from '../forms/PlateDisplay'
 import InlineConfirm from '../ui/InlineConfirm'
 
@@ -30,7 +31,10 @@ interface Props {
 export default function SetRow(props: Props) {
   const [reps, setReps] = createSignal(props.set.reps)
   const [weight, setWeight] = createSignal(props.set.weight)
-  const [weightEditing, setWeightEditing] = createSignal(false)
+  // Once the user dials the weight, stop syncing it to the (cascading)
+  // prescription so their edit isn't clobbered. The weight stepper is always
+  // visible, so there's no edit toggle to gate on — track "touched" instead.
+  const [weightTouched, setWeightTouched] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
   const [editReps, setEditReps] = createSignal(props.loggedReps ?? props.set.reps)
   const [editWeight, setEditWeight] = createSignal(props.loggedWeight ?? props.set.weight)
@@ -39,7 +43,7 @@ export default function SetRow(props: Props) {
 
   createEffect(() => {
     const newWeight = props.set.weight
-    if (!props.isCompleted && !weightEditing()) setWeight(newWeight)
+    if (!props.isCompleted && !weightTouched()) setWeight(newWeight)
   })
 
   const startEdit = () => {
@@ -54,13 +58,10 @@ export default function SetRow(props: Props) {
       <Match when={!props.isCompleted && props.isActive}>
         <div ref={props.activeRef} class="border-l-4 border-accent pl-3 py-3 mb-1">
           <div class="flex items-baseline gap-3">
-            <button
-              onClick={() => setWeightEditing(w => !w)}
-              class={`text-2xl font-mono border-b-2 ${weightEditing() ? 'text-accent border-accent' : 'text-text border-muted border-dashed'}`}
-            >
+            <span data-testid="active-weight" class="text-2xl font-mono text-text">
               {weight()}<span class="text-base ml-1">lb</span>
-            </button>
-            <span class="text-xl text-text">x {props.set.reps}{isAmrap() ? '+' : ''}</span>
+            </span>
+            <span class="text-xl text-text">x {reps()}{isAmrap() ? '+' : ''}</span>
             <Show when={isAmrap()}>
               <span class="text-warn text-xs tracking-widest">AMRAP</span>
             </Show>
@@ -72,24 +73,15 @@ export default function SetRow(props: Props) {
           <Show when={isAmrap() && props.amrapTargets && props.amrapTargets.length > 0}>
             <AmrapTargets targets={props.amrapTargets!} />
           </Show>
-          <div class="mt-3 flex flex-col gap-2">
-            <Show when={weightEditing()}>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-faint uppercase tracking-widest w-8">wt</span>
-                <Stepper value={weight()} onChange={v => { setWeight(v); props.onWeightChange?.(v) }} step={2.5} min={0} label="weight" />
-              </div>
-            </Show>
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-faint uppercase tracking-widest w-8">reps</span>
+          <SetLogControls
+            weight={weight()}
+            onWeightChange={v => { setWeightTouched(true); setWeight(v); props.onWeightChange?.(v) }}
+            onLog={() => { props.onLog(reps(), weight()); setReps(props.set.reps); setWeightTouched(false) }}
+          >
+            <FieldRow label="reps">
               <Stepper value={reps()} onChange={setReps} step={1} min={0} label="reps" />
-            </div>
-            <button
-              onClick={() => { props.onLog(reps(), weight()); setReps(props.set.reps); setWeightEditing(false) }}
-              class="w-full border border-accent text-accent py-4 font-mono text-base tracking-widest"
-            >
-              LOG
-            </button>
-          </div>
+            </FieldRow>
+          </SetLogControls>
         </div>
       </Match>
 
