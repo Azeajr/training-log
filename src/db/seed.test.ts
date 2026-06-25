@@ -132,6 +132,19 @@ describe('seedDatabase — partial recovery', () => {
     expect(await db.exercises.count()).toBe(24)
   })
 
+  it('backfills the category onto default exercises that predate the column', async () => {
+    const { db, seedDatabase } = await freshContext()
+    // A default exercise inserted before the category column existed (NULL).
+    const chinId = await db.exercises.add({ name: 'Chinups', type: 'reps' as const })
+    // A user-set category must survive the backfill untouched.
+    const curlId = await db.exercises.add({ name: 'Bicep Curls', type: 'reps' as const, category: 'core' as const })
+
+    await seedDatabase()
+
+    expect((await db.exercises.get(chinId))?.category).toBe('pull')
+    expect((await db.exercises.get(curlId))?.category).toBe('core')
+  })
+
   it('does not seed accessories when any already exist', async () => {
     const { db, seedDatabase } = await freshContext()
     // Full lifts + exercises so those branches are skipped
