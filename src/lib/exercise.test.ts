@@ -3,7 +3,7 @@ import { beforeEach, describe, it, expect } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import {
-  createExercise, renameExercise,
+  createExercise, renameExercise, setExerciseCategory,
   archiveExercise, unarchiveExercise,
   addExerciseToLift, removeExerciseFromLift,
 } from './exercise'
@@ -29,6 +29,24 @@ describe('createExercise', () => {
     expect((await db.exercises.get(repId))?.type).toBe('reps')
     expect((await db.exercises.get(timedId))?.type).toBe('timed')
     expect((await db.exercises.get(distId))?.type).toBe('distance')
+  })
+
+  it('stores the assistance category when provided', async () => {
+    const id = await createExercise(db, 'Dips', 'reps', 'push')
+    expect((await db.exercises.get(id))?.category).toBe('push')
+  })
+
+  it('leaves category null when omitted', async () => {
+    const id = await createExercise(db, 'Mystery', 'reps')
+    expect((await db.exercises.get(id))?.category).toBeNull()
+  })
+})
+
+describe('setExerciseCategory', () => {
+  it('updates the category of an existing exercise', async () => {
+    const id = await createExercise(db, 'Row', 'reps', 'push')
+    await setExerciseCategory(db, id, 'pull')
+    expect((await db.exercises.get(id))?.category).toBe('pull')
   })
 })
 

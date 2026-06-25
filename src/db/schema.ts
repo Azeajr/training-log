@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS exercises (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   type TEXT NOT NULL,
+  category TEXT,
   archived INTEGER
 );
 CREATE TABLE IF NOT EXISTS liftAccessories (
@@ -102,6 +103,7 @@ export const ADDITIVE_MIGRATIONS = [
   `ALTER TABLE cycles ADD COLUMN closedThroughWeek INTEGER`,
   `ALTER TABLE sets ADD COLUMN liftId INTEGER`,
   `ALTER TABLE settings ADD COLUMN deloadSupplemental TEXT`,
+  `ALTER TABLE exercises ADD COLUMN category TEXT`,
 ] as const
 
 export const ALL_TABLES = [

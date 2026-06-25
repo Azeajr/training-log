@@ -73,7 +73,7 @@ const COLS = {
   cycles: ['id', 'number', 'startDate', 'endDate', 'closedThroughWeek'],
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
   sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId'],
-  exercises: ['id', 'name', 'type', 'archived'],
+  exercises: ['id', 'name', 'type', 'category', 'archived'],
   liftAccessories: ['id', 'liftId', 'exerciseId', 'order'],
   liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order'],
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],

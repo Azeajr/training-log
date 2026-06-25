@@ -72,10 +72,15 @@ export interface Set {
   liftId?: number | null
 }
 
+// Wendler assistance buckets. The accessory picker groups these into three
+// sections: push, pull, and single-leg/core (single_leg + core merged).
+export type ExerciseCategory = 'push' | 'pull' | 'single_leg' | 'core'
+
 export interface Exercise {
   id?: number
   name: string
   type: 'reps' | 'timed' | 'distance'
+  category?: ExerciseCategory
   archived?: boolean
 }
 

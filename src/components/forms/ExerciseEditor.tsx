@@ -1,11 +1,15 @@
-import { Show } from 'solid-js'
+import { Show, For } from 'solid-js'
 import Stepper from './Stepper'
+import type { ExerciseCategory } from '../../types/domain'
+import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../../lib/assistance'
 
 interface Props {
   name: string
   onNameChange: (v: string) => void
   increment: number | null
   onIncrementChange: (v: number) => void
+  category?: ExerciseCategory
+  onCategoryChange?: (v: ExerciseCategory) => void
   onSave: () => void
   onCancel: () => void
   fullWidth?: boolean
@@ -22,6 +26,20 @@ export default function ExerciseEditor(props: Props) {
         class="bg-surface border border-accent text-text px-2 py-0.5 w-full focus:outline-none text-base font-mono"
         autofocus
       />
+      <Show when={props.onCategoryChange}>
+        <div class="flex items-center gap-2">
+          <span class="text-muted text-xs uppercase tracking-widest w-20">Category</span>
+          <select
+            value={props.category ?? 'push'}
+            onChange={e => props.onCategoryChange!(e.currentTarget.value as ExerciseCategory)}
+            class="bg-surface border border-border text-text px-2 py-0.5 text-xs focus:outline-none"
+          >
+            <For each={EXERCISE_CATEGORIES}>{(c) => (
+              <option value={c}>{CATEGORY_LABEL[c]}</option>
+            )}</For>
+          </select>
+        </div>
+      </Show>
       <Show when={props.increment !== null}>
         <div class="flex items-center gap-2">
           <span class="text-muted text-xs uppercase tracking-widest w-20">Increment</span>

@@ -3,6 +3,7 @@ import { db } from '../../db/index'
 import type { Exercise, LiftAccessory } from '../../types/domain'
 import { workout, addAccessory } from '../../store/workout-store'
 import { roundToNearest5, ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
+import { groupByAssistanceSection, ASSISTANCE_SECTIONS, SECTION_LABEL } from '../../lib/assistance'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
 
@@ -53,6 +54,25 @@ export default function AccessoryPicker(props: Props) {
     setRows(result)
   }
 
+  const grouped = () => groupByAssistanceSection(rows())
+
+  const renderRow = (row: PickerRow) => (
+    <button
+      onClick={() => handleSelect(row)}
+      disabled={row.alreadyAdded}
+      class={`w-full text-left px-3 py-2 border font-mono text-sm flex justify-between ${
+        row.alreadyAdded
+          ? 'border-border-dim text-muted'
+          : 'border-border text-text hover:border-accent hover:text-accent'
+      }`}
+    >
+      <span>{row.exercise.name}{row.alreadyAdded ? ' ✓' : ''}</span>
+      <span class="text-muted">
+        {row.calculatedWeight != null ? `${ACCESSORY_SETS}x${ACCESSORY_REPS} @ ${row.calculatedWeight}lb` : 'NOT SET'}
+      </span>
+    </button>
+  )
+
   const handleSelect = (row: PickerRow) => {
     if (row.alreadyAdded) return
     if (row.tm == null) {
@@ -98,25 +118,23 @@ export default function AccessoryPicker(props: Props) {
             <Rule label="SELECT ASSISTANCE EXERCISE" class="text-muted" />
             <div class="w-14" />
           </div>
-          <div class="space-y-1">
-            <For each={rows()}>
-              {row => (
-                <button
-                  onClick={() => handleSelect(row)}
-                  disabled={row.alreadyAdded}
-                  class={`w-full text-left px-3 py-2 border font-mono text-sm flex justify-between ${
-                    row.alreadyAdded
-                      ? 'border-border-dim text-muted'
-                      : 'border-border text-text hover:border-accent hover:text-accent'
-                  }`}
-                >
-                  <span>{row.exercise.name}{row.alreadyAdded ? ' ✓' : ''}</span>
-                  <span class="text-muted">
-                    {row.calculatedWeight != null ? `${ACCESSORY_SETS}x${ACCESSORY_REPS} @ ${row.calculatedWeight}lb` : 'NOT SET'}
-                  </span>
-                </button>
+          <div class="space-y-4">
+            <For each={ASSISTANCE_SECTIONS}>
+              {section => (
+                <Show when={grouped()[section].length > 0}>
+                  <div class="space-y-1">
+                    <div class="text-muted text-xs uppercase tracking-widest">{SECTION_LABEL[section]}</div>
+                    <For each={grouped()[section]}>{row => renderRow(row)}</For>
+                  </div>
+                </Show>
               )}
             </For>
+            <Show when={grouped().uncategorized.length > 0}>
+              <div class="space-y-1">
+                <div class="text-faint text-xs uppercase tracking-widest">UNCATEGORIZED</div>
+                <For each={grouped().uncategorized}>{row => renderRow(row)}</For>
+              </div>
+            </Show>
           </div>
         </div>
       }
