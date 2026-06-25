@@ -21,7 +21,7 @@ export const BBB_PCT = 0.50
 export const BBS_PERCENTAGES = { 1: 0.60, 2: 0.70, 3: 0.80, 4: null } as const
 
 export const ACCESSORY_PERCENTAGE = 0.75
-export const ACCESSORY_SETS = 5
+export const ACCESSORY_SETS = 3
 export const ACCESSORY_REPS = 10
 
 export const BAR_WEIGHT = 45

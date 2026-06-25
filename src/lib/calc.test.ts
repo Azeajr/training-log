@@ -207,17 +207,17 @@ describe('calcBbsSets', () => {
 })
 
 describe('calcAccessorySets', () => {
-  it('returns 5 sets at 75% TM x 10 reps', () => {
+  it('returns 3 sets at 75% TM x 10 reps', () => {
     const sets = calcAccessorySets(100)
-    expect(sets).toHaveLength(5)
+    expect(sets).toHaveLength(3)
     sets.forEach(s => {
       expect(s.weight).toBe(75)
       expect(s.reps).toBe(10)
     })
   })
 
-  it('numbers sets 1..5 in order (kills the i+1 → i-1 setNumber mutant)', () => {
-    expect(calcAccessorySets(100).map(s => s.setNumber)).toEqual([1, 2, 3, 4, 5])
+  it('numbers sets 1..3 in order (kills the i+1 → i-1 setNumber mutant)', () => {
+    expect(calcAccessorySets(100).map(s => s.setNumber)).toEqual([1, 2, 3])
   })
 })
 
