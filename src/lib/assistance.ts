@@ -37,6 +37,26 @@ export const sectionForCategory = (category?: ExerciseCategory): AssistanceSecti
   }
 }
 
+// Rank accessory exercises by how recently they were logged for a main lift.
+// `sessionsNewestFirst` is that lift's sessions ordered newest→oldest; the
+// returned map gives each accessory exercise its best (lowest) 0-based session
+// index, i.e. 0 = used in the most recent session. Exercises never logged for
+// the lift are absent. Used to float prior picks above the alphabetical rest.
+export const accessoryRecencyRanks = (
+  sessionsNewestFirst: Array<{ id?: number }>,
+  accSets: Array<{ sessionId: number; exerciseId: number }>,
+): Map<number, number> => {
+  const recencyBySession = new Map(sessionsNewestFirst.map((s, i) => [s.id, i]))
+  const best = new Map<number, number>()
+  for (const s of accSets) {
+    const ri = recencyBySession.get(s.sessionId)
+    if (ri == null) continue
+    const cur = best.get(s.exerciseId)
+    if (cur == null || ri < cur) best.set(s.exerciseId, ri)
+  }
+  return best
+}
+
 // Bucket items by their exercise's category into the three assistance sections,
 // plus an `uncategorized` catch-all so untagged exercises stay reachable.
 // Preserves input order within each bucket.

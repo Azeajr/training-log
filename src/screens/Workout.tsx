@@ -758,9 +758,10 @@ export default function Workout() {
           </button>
         </div>
 
-        <Show when={pickerSlot() !== null}>
+        <Show when={pickerSlot() !== null && lift()}>
           <AccessoryPicker
             slot={pickerSlot()!}
+            liftId={lift()!.id!}
             onClose={() => { setPickerSlot(null); void loadData() }}
           />
         </Show>

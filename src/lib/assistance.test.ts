@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Exercise } from '../types/domain'
-import { sectionForCategory, groupByAssistanceSection } from './assistance'
+import { sectionForCategory, groupByAssistanceSection, accessoryRecencyRanks } from './assistance'
 
 const ex = (name: string, category?: Exercise['category']): { exercise: Exercise } => ({
   exercise: { name, type: 'reps', category },
@@ -40,5 +40,31 @@ describe('groupByAssistanceSection', () => {
   it('preserves input order within a bucket', () => {
     const groups = groupByAssistanceSection([ex('A', 'pull'), ex('B', 'pull'), ex('C', 'pull')])
     expect(groups.pull.map(i => i.exercise.name)).toEqual(['A', 'B', 'C'])
+  })
+})
+
+describe('accessoryRecencyRanks', () => {
+  // sessions are passed newest-first; rank 0 = most recent session.
+  const sessions = [{ id: 30 }, { id: 20 }, { id: 10 }]
+
+  it('ranks each accessory by its most recent session', () => {
+    const ranks = accessoryRecencyRanks(sessions, [
+      { sessionId: 10, exerciseId: 1 }, // oldest only
+      { sessionId: 30, exerciseId: 2 }, // newest
+      { sessionId: 20, exerciseId: 1 }, // exercise 1 also in middle → best (lower) wins
+    ])
+    expect(ranks.get(2)).toBe(0)
+    expect(ranks.get(1)).toBe(1)
+  })
+
+  it('omits exercises never logged for the lift', () => {
+    const ranks = accessoryRecencyRanks(sessions, [{ sessionId: 10, exerciseId: 5 }])
+    expect(ranks.has(99)).toBe(false)
+    expect(ranks.get(5)).toBe(2)
+  })
+
+  it('ignores accessory sets from unrelated sessions', () => {
+    const ranks = accessoryRecencyRanks(sessions, [{ sessionId: 999, exerciseId: 7 }])
+    expect(ranks.has(7)).toBe(false)
   })
 })
