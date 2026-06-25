@@ -189,6 +189,50 @@ describe('Settings — skip to week', () => {
     })
   })
 
+  it('skip advances the current week', async () => {
+    await seedLifts()
+    await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+
+    renderSettings()
+    fireEvent.click(await screen.findByRole('button', { name: 'Week 2' }))
+    fireEvent.click(await screen.findByText('SKIP'))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 2' })).toBeDisabled())
+  })
+
+  // Regression: a lift can own >1 row in a week (a completed set plus a stray
+  // pending one left over from doing the first day). Skip must clear *every*
+  // pending row, else weekComplete stays false and the cycle never advances —
+  // the user-reported "jumping to a new week does not work" bug.
+  it('skip clears a leftover pending row so the week still advances', async () => {
+    const [liftId] = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'pending' })
+
+    renderSettings()
+    fireEvent.click(await screen.findByRole('button', { name: 'Week 2' }))
+    fireEvent.click(await screen.findByText('SKIP'))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 2' })).toBeDisabled())
+    const week1 = (await db.sessions.where('cycleId').equals(cycleId).toArray()).filter(s => s.week === 1)
+    expect(week1.some(s => s.status === 'pending')).toBe(false)
+  })
+
+  it('skip persists closedThroughWeek so the stored mark matches the UI', async () => {
+    await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+
+    renderSettings()
+    fireEvent.click(await screen.findByRole('button', { name: 'Week 3' }))
+    fireEvent.click(await screen.findByText('SKIP'))
+
+    await waitFor(async () => {
+      const cycle = await db.cycles.get(cycleId)
+      expect(cycle?.closedThroughWeek).toBe(2)
+    })
+  })
+
   it('skip marks existing pending session as skipped', async () => {
     const [liftId] = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
