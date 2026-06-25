@@ -219,7 +219,7 @@ describe('addAccessory', () => {
     startSession(SESSION)
     addAccessory({ ...makeAcc(), exerciseId: 1, slot: 'push' })
     addAccessory({ ...makeAcc(), exerciseId: 2, slot: 'pull' })
-    addAccessory({ ...makeAcc(), exerciseId: 3, slot: 'single_leg_core' })
+    addAccessory({ ...makeAcc(), exerciseId: 3, slot: 'legs_core' })
     expect(workout.activeAccessories).toHaveLength(3)
   })
 

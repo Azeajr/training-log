@@ -144,7 +144,14 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
     // Then restore only the tables present in the payload.
     for (const { key, table, dates } of spec) {
       const rows = d[key]
-      if (rows?.length) await table.bulkAdd(parseDates<Record<string, unknown>>(pickCols(rows, COLS[key]), dates))
+      if (!rows?.length) continue
+      let parsed = parseDates<Record<string, unknown>>(pickCols(rows, COLS[key]), dates)
+      // Migrate the legacy 'single_leg' category to 'legs' so importing an old
+      // backup lands on the current tag set (mirrors the boot-time seed migration).
+      if (key === 'exercises') {
+        parsed = parsed.map(r => r.category === 'single_leg' ? { ...r, category: 'legs' } : r)
+      }
+      await table.bulkAdd(parsed)
     }
   })
 }

@@ -89,8 +89,12 @@ export default function Workout() {
   const [crossBlocks, setCrossBlocks] = createSignal<LoadedCrossBlock[]>([])
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
   const [pickerSlot, setPickerSlot] = createSignal<AssistanceSlot | null>(null)
-  // Extras = anything not in a fixed slot (incl. legacy rows with no slot).
-  const extraAccessories = () => workout.activeAccessories.filter(a => a.slot === 'extra' || a.slot == null)
+  // Extras = anything not in one of the three fixed slots. Catches 'extra',
+  // missing slots, and any legacy/renamed slot value (e.g. a pre-rename
+  // 'single_leg_core' left in an in-progress session) so nothing is orphaned.
+  const extraAccessories = () => workout.activeAccessories.filter(
+    a => !ASSISTANCE_SECTIONS.includes(a.slot as typeof ASSISTANCE_SECTIONS[number])
+  )
   const [exercises, setExercises] = createSignal<Exercise[]>([])
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
   const [tmRecommendation, setTmRecommendation] = createSignal<SessionTmRecommendation | null>(null)

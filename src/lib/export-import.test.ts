@@ -135,6 +135,20 @@ describe('importFromRawData', () => {
     expect(await db.exercises.count()).toBe(1)
   })
 
+  it("migrates legacy 'single_leg' exercise category to 'legs' on import", async () => {
+    await importFromRawData(db, {
+      exercises: [
+        { id: 1, name: 'Leg Press', type: 'reps', category: 'single_leg' },
+        { id: 2, name: 'Chinup',    type: 'reps', category: 'pull' },
+        { id: 3, name: 'Plank',     type: 'timed', category: 'core' },
+      ],
+    })
+    const byId = Object.fromEntries((await db.exercises.toArray()).map(e => [e.id!, e.category]))
+    expect(byId[1]).toBe('legs')
+    expect(byId[2]).toBe('pull')
+    expect(byId[3]).toBe('core')
+  })
+
   it('imports liftSupplementals (cross-lift blocks) with fields intact', async () => {
     await importFromRawData(db, {
       lifts: [

@@ -12,23 +12,23 @@ const EXERCISES = [
   { name: 'Chinups',                      type: 'reps'     as const, category: 'pull'        as const },
   { name: 'Lat Pulldowns',                type: 'reps'     as const, category: 'pull'        as const },
   { name: 'Bicep Curls',                  type: 'reps'     as const, category: 'pull'        as const },
-  { name: 'Glute Ham Raise',              type: 'reps'     as const, category: 'core'        as const },
-  { name: 'Bulgarian Split Squat',        type: 'reps'     as const, category: 'single_leg'  as const },
-  { name: 'Nordic Curls',                 type: 'reps'     as const, category: 'single_leg'  as const },
-  { name: 'Hip Thrust',                   type: 'reps'     as const, category: 'single_leg'  as const },
+  { name: 'Glute Ham Raise',              type: 'reps'     as const, category: 'legs'        as const },
+  { name: 'Bulgarian Split Squat',        type: 'reps'     as const, category: 'legs'        as const },
+  { name: 'Nordic Curls',                 type: 'reps'     as const, category: 'legs'        as const },
+  { name: 'Hip Thrust',                   type: 'reps'     as const, category: 'legs'        as const },
   { name: 'Barbell Row',                  type: 'reps'     as const, category: 'pull'        as const },
   { name: 'Dumbbell Row',                 type: 'reps'     as const, category: 'pull'        as const },
   { name: 'T Bar Row',                    type: 'reps'     as const, category: 'pull'        as const },
   { name: 'Ab Wheel',                     type: 'reps'     as const, category: 'core'        as const },
-  { name: 'Single Leg Romanian Deadlift', type: 'reps'     as const, category: 'single_leg'  as const },
-  { name: 'Romanian Deadlift',            type: 'reps'     as const, category: 'single_leg'  as const },
+  { name: 'Single Leg Romanian Deadlift', type: 'reps'     as const, category: 'legs'        as const },
+  { name: 'Romanian Deadlift',            type: 'reps'     as const, category: 'legs'        as const },
   { name: 'Back Extension',               type: 'reps'     as const, category: 'core'        as const },
-  { name: 'Good Mornings',                type: 'reps'     as const, category: 'core'        as const },
-  { name: 'Leg Press',                    type: 'reps'     as const, category: 'single_leg'  as const },
+  { name: 'Good Mornings',                type: 'reps'     as const, category: 'legs'        as const },
+  { name: 'Leg Press',                    type: 'reps'     as const, category: 'legs'        as const },
   { name: 'Loaded Carry',                 type: 'distance' as const, category: 'core'        as const },
   { name: 'Plank',                        type: 'timed'    as const, category: 'core'        as const },
-  { name: 'Reverse Nordic',               type: 'reps'     as const, category: 'single_leg'  as const },
-  { name: 'Pull Through',                 type: 'reps'     as const, category: 'single_leg'  as const },
+  { name: 'Reverse Nordic',               type: 'reps'     as const, category: 'legs'        as const },
+  { name: 'Pull Through',                 type: 'reps'     as const, category: 'legs'        as const },
   { name: 'Dips',                         type: 'reps'     as const, category: 'push'        as const },
   { name: 'Close-Grip Bench Press',       type: 'reps'     as const, category: 'push'        as const },
   { name: 'Tricep Pushdown',              type: 'reps'     as const, category: 'push'        as const },
@@ -59,12 +59,17 @@ async function _seedDatabase() {
   const missingExercises = EXERCISES.filter(e => !existingExNames.has(e.name))
   if (missingExercises.length > 0) await db.exercises.bulkAdd(missingExercises)
 
-  // Backfill the assistance category onto default exercises that predate the
-  // category column (added by additive migration as NULL). Only touches rows
-  // still missing a category, so user-set categories are never overwritten.
+  // Migrate + backfill assistance categories on existing rows:
+  //  - the legacy 'single_leg' tag was renamed to 'legs' (covers all rows,
+  //    including user-created ones);
+  //  - default exercises that predate the category column (added by additive
+  //    migration as NULL) get their category by name. Only touches NULLs, so
+  //    user-set categories are never overwritten.
   const categoryByName = new Map(EXERCISES.map(e => [e.name, e.category]))
   for (const ex of existingEx) {
-    if (ex.category == null) {
+    if ((ex.category as string) === 'single_leg') {
+      await db.exercises.update(ex.id!, { category: 'legs' })
+    } else if (ex.category == null) {
       const category = categoryByName.get(ex.name)
       if (category) await db.exercises.update(ex.id!, { category })
     }

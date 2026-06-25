@@ -12,9 +12,9 @@ describe('sectionForCategory', () => {
     expect(sectionForCategory('pull')).toBe('pull')
   })
 
-  it('merges single_leg and core into one section', () => {
-    expect(sectionForCategory('single_leg')).toBe('single_leg_core')
-    expect(sectionForCategory('core')).toBe('single_leg_core')
+  it('merges legs and core into one section', () => {
+    expect(sectionForCategory('legs')).toBe('legs_core')
+    expect(sectionForCategory('core')).toBe('legs_core')
   })
 
   it('returns null for an untagged exercise', () => {
@@ -23,17 +23,17 @@ describe('sectionForCategory', () => {
 })
 
 describe('groupByAssistanceSection', () => {
-  it('buckets items into push / pull / single_leg_core / uncategorized', () => {
+  it('buckets items into push / pull / legs_core / uncategorized', () => {
     const groups = groupByAssistanceSection([
       ex('Dips', 'push'),
       ex('Chinups', 'pull'),
-      ex('Bulgarian Split Squat', 'single_leg'),
+      ex('Bulgarian Split Squat', 'legs'),
       ex('Plank', 'core'),
       ex('Mystery'),
     ])
     expect(groups.push.map(i => i.exercise.name)).toEqual(['Dips'])
     expect(groups.pull.map(i => i.exercise.name)).toEqual(['Chinups'])
-    expect(groups.single_leg_core.map(i => i.exercise.name)).toEqual(['Bulgarian Split Squat', 'Plank'])
+    expect(groups.legs_core.map(i => i.exercise.name)).toEqual(['Bulgarian Split Squat', 'Plank'])
     expect(groups.uncategorized.map(i => i.exercise.name)).toEqual(['Mystery'])
   })
 
