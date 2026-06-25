@@ -50,9 +50,13 @@ export default function AccessoryPicker(props: Props) {
     for (const atm of allAtms) latestAtmByExercise.set(atm.exerciseId, atm.weight)
 
     // Recency of accessory use for this main lift, limited to the last few
-    // sessions so suggestions reflect the current rotation. Sessions newest
-    // first; rank by the most recent session each accessory appears in.
+    // sessions so suggestions reflect the current rotation. Only completed
+    // sessions have persisted accessory rows — the in-progress (pending)
+    // session and any skipped ones are dropped first, so they can't burn a
+    // window slot and shrink the effective history below the cap. Sessions
+    // newest first; rank by the most recent session each accessory appears in.
     const liftSessions = (await db.sessions.where('liftId').equals(props.liftId).toArray())
+      .filter(s => s.status === 'completed')
       .sort((a, b) => b.date.getTime() - a.date.getTime())
       .slice(0, ASSISTANCE_SUGGESTION_SESSIONS)
     const accSets = liftSessions.length > 0
