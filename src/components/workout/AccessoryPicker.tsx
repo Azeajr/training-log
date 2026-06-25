@@ -1,20 +1,22 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../../db/index'
-import type { Exercise, LiftAccessory } from '../../types/domain'
+import type { Exercise } from '../../types/domain'
 import { workout, addAccessory } from '../../store/workout-store'
 import { roundToNearest5, ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
-import { groupByAssistanceSection, ASSISTANCE_SECTIONS, SECTION_LABEL } from '../../lib/assistance'
+import { groupByAssistanceSection, sectionForCategory, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
 
 interface Props {
-  liftId: number
+  // The slot being filled. A fixed section ('push'|'pull'|'single_leg_core')
+  // shows only that section's exercises; 'extra' shows the whole library
+  // grouped into sections.
+  slot: AssistanceSlot
   onClose: () => void
 }
 
 interface PickerRow {
   exercise: Exercise
-  liftAccessory: LiftAccessory
   tm: number | null
   calculatedWeight: number | null
   alreadyAdded: boolean
@@ -28,33 +30,31 @@ export default function AccessoryPicker(props: Props) {
 
   onMount(() => { void load() })
 
+  // Draws from the whole exercise library (not per-lift) so any session can
+  // pick a push/pull/single-leg/core. Alphabetical; grouped into sections below.
   const load = async () => {
-    const accessories = await db.liftAccessories.where('liftId').equals(props.liftId).toArray()
-    const exerciseIds = accessories.map(a => a.exerciseId)
-    const exercises = await db.exercises.where('id').anyOf(exerciseIds).toArray()
+    const exercises = (await db.exercises.toArray())
+      .filter(e => !e.archived)
+      .sort((a, b) => a.name.localeCompare(b.name))
 
-    const activeExerciseIds = exercises.filter(e => !e.archived).map(e => e.id!)
-    const allAtms = await db.accessoryTrainingMaxes.where('exerciseId').anyOf(activeExerciseIds).sortBy('setAt')
+    const allAtms = await db.accessoryTrainingMaxes.where('exerciseId').anyOf(exercises.map(e => e.id!)).sortBy('setAt')
     const latestAtmByExercise = new Map<number, number>()
     for (const atm of allAtms) latestAtmByExercise.set(atm.exerciseId, atm.weight)
 
-    const result: PickerRow[] = []
-    for (const la of [...accessories].sort((a, b) => a.order - b.order)) {
-      const ex = exercises.find(e => e.id === la.exerciseId)
-      if (!ex || ex.archived) continue
+    setRows(exercises.map(ex => {
       const tmWeight = latestAtmByExercise.get(ex.id!) ?? null
-      result.push({
+      return {
         exercise: ex,
-        liftAccessory: la,
         tm: tmWeight,
         calculatedWeight: tmWeight != null ? roundToNearest5(tmWeight * ACCESSORY_PERCENTAGE) : null,
         alreadyAdded: workout.activeAccessories.some(a => a.exerciseId === ex.id),
-      })
-    }
-    setRows(result)
+      }
+    }))
   }
 
   const grouped = () => groupByAssistanceSection(rows())
+  // For a fixed-slot pick, only that section's exercises are offered.
+  const slotRows = () => props.slot === 'extra' ? [] : rows().filter(r => sectionForCategory(r.exercise.category) === props.slot)
 
   const renderRow = (row: PickerRow) => (
     <button
@@ -85,6 +85,7 @@ export default function AccessoryPicker(props: Props) {
       tm: row.tm,
       calculatedWeight: row.calculatedWeight!,
       loggedSets: [],
+      slot: props.slot,
     })
     props.onClose()
   }
@@ -104,6 +105,7 @@ export default function AccessoryPicker(props: Props) {
       tm: tmWeight(),
       calculatedWeight: roundToNearest5(tmWeight() * ACCESSORY_PERCENTAGE),
       loggedSets: [],
+      slot: props.slot,
     })
     props.onClose()
   }
@@ -115,27 +117,39 @@ export default function AccessoryPicker(props: Props) {
         <div class="fixed inset-0 bg-bg z-50 px-4 pb-4 overflow-y-auto" style={{ 'padding-top': 'max(1rem, env(safe-area-inset-top, 0px))' }}>
           <div class="flex items-center justify-between mb-4">
             <button onClick={props.onClose} class="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
-            <Rule label="SELECT ASSISTANCE EXERCISE" class="text-muted" />
+            <Rule label={props.slot === 'extra' ? 'SELECT ASSISTANCE EXERCISE' : `CHOOSE ${SECTION_LABEL[props.slot]}`} class="text-muted" />
             <div class="w-14" />
           </div>
-          <div class="space-y-4">
-            <For each={ASSISTANCE_SECTIONS}>
-              {section => (
-                <Show when={grouped()[section].length > 0}>
-                  <div class="space-y-1">
-                    <div class="text-muted text-xs uppercase tracking-widest">{SECTION_LABEL[section]}</div>
-                    <For each={grouped()[section]}>{row => renderRow(row)}</For>
-                  </div>
-                </Show>
-              )}
-            </For>
-            <Show when={grouped().uncategorized.length > 0}>
+          <Show
+            when={props.slot === 'extra'}
+            fallback={
               <div class="space-y-1">
-                <div class="text-faint text-xs uppercase tracking-widest">UNCATEGORIZED</div>
-                <For each={grouped().uncategorized}>{row => renderRow(row)}</For>
+                <Show when={slotRows().length === 0}>
+                  <div class="text-faint text-xs py-2">No {SECTION_LABEL[props.slot as Exclude<AssistanceSlot, 'extra'>]} exercises. Tag one in Settings.</div>
+                </Show>
+                <For each={slotRows()}>{row => renderRow(row)}</For>
               </div>
-            </Show>
-          </div>
+            }
+          >
+            <div class="space-y-4">
+              <For each={ASSISTANCE_SECTIONS}>
+                {section => (
+                  <Show when={grouped()[section].length > 0}>
+                    <div class="space-y-1">
+                      <div class="text-muted text-xs uppercase tracking-widest">{SECTION_LABEL[section]}</div>
+                      <For each={grouped()[section]}>{row => renderRow(row)}</For>
+                    </div>
+                  </Show>
+                )}
+              </For>
+              <Show when={grouped().uncategorized.length > 0}>
+                <div class="space-y-1">
+                  <div class="text-faint text-xs uppercase tracking-widest">UNCATEGORIZED</div>
+                  <For each={grouped().uncategorized}>{row => renderRow(row)}</For>
+                </div>
+              </Show>
+            </div>
+          </Show>
         </div>
       }
     >

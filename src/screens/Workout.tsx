@@ -30,6 +30,7 @@ import TmRecommendationModal from '../components/modals/TmRecommendationModal'
 import { getSessionTmRecommendation } from '../lib/tm-recommendations'
 import type { SessionTmRecommendation } from '../lib/tm-recommendations'
 import Rule from '../components/layout/Rule'
+import { ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../lib/assistance'
 
 interface LoadedCrossBlock {
   movementLiftId: number
@@ -87,7 +88,9 @@ export default function Workout() {
   const [crossSets, setCrossSets] = createSignal<CrossSet[]>([])
   const [crossBlocks, setCrossBlocks] = createSignal<LoadedCrossBlock[]>([])
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
-  const [showPicker, setShowPicker] = createSignal(false)
+  const [pickerSlot, setPickerSlot] = createSignal<AssistanceSlot | null>(null)
+  // Extras = anything not in a fixed slot (incl. legacy rows with no slot).
+  const extraAccessories = () => workout.activeAccessories.filter(a => a.slot === 'extra' || a.slot == null)
   const [exercises, setExercises] = createSignal<Exercise[]>([])
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
   const [tmRecommendation, setTmRecommendation] = createSignal<SessionTmRecommendation | null>(null)
@@ -672,26 +675,53 @@ export default function Workout() {
           </div>
         </Show>
 
-        <Show when={workout.activeAccessories.length > 0}>
-          <div class="mb-4">
-            <Rule label="ACCESSORIES" class="text-muted mb-2" />
-            <For each={workout.activeAccessories}>
-              {acc => (
-                <AccessoryLog
-                  accessory={acc}
-                  exercise={exercises().find(e => e.id === acc.exerciseId)}
-                />
-              )}
-            </For>
-          </div>
-        </Show>
+        <div class="mb-6">
+          <Rule label="ASSISTANCE" class="text-muted mb-2" />
+          <For each={ASSISTANCE_SECTIONS}>
+            {section => {
+              const acc = () => workout.activeAccessories.find(a => a.slot === section)
+              return (
+                <div class="mb-3">
+                  <div class="text-muted text-xs uppercase tracking-widest mb-1">{SECTION_LABEL[section]}</div>
+                  <Show
+                    when={acc()}
+                    fallback={
+                      <button
+                        onClick={() => setPickerSlot(section)}
+                        class="w-full border border-border py-2 text-muted text-xs tracking-widest hover:border-accent hover:text-accent"
+                      >
+                        + CHOOSE {SECTION_LABEL[section]}
+                      </button>
+                    }
+                  >
+                    <AccessoryLog accessory={acc()!} exercise={exercises().find(e => e.id === acc()!.exerciseId)} />
+                    <button
+                      onClick={() => setPickerSlot(section)}
+                      class="text-faint text-xs font-mono hover:text-accent tracking-widest pl-2"
+                    >
+                      swap
+                    </button>
+                  </Show>
+                </div>
+              )
+            }}
+          </For>
 
-        <button
-          onClick={() => setShowPicker(true)}
-          class="w-full border border-border py-3 text-muted text-xs tracking-widest hover:border-accent hover:text-accent mb-6"
-        >
-          + SELECT ASSISTANCE EXERCISE
-        </button>
+          <Show when={extraAccessories().length > 0}>
+            <div class="mb-2">
+              <div class="text-faint text-xs uppercase tracking-widest mb-1">EXTRA</div>
+              <For each={extraAccessories()}>
+                {acc => <AccessoryLog accessory={acc} exercise={exercises().find(e => e.id === acc.exerciseId)} />}
+              </For>
+            </div>
+          </Show>
+          <button
+            onClick={() => setPickerSlot('extra')}
+            class="w-full border border-border py-2 text-muted text-xs tracking-widest hover:border-accent hover:text-accent"
+          >
+            + ADD EXTRA ASSISTANCE
+          </button>
+        </div>
 
         <div class="mb-6">
           <Rule label="NOTES" class="text-muted mb-2" />
@@ -728,10 +758,10 @@ export default function Workout() {
           </button>
         </div>
 
-        <Show when={showPicker() && lift()}>
+        <Show when={pickerSlot() !== null}>
           <AccessoryPicker
-            liftId={lift()!.id!}
-            onClose={() => { setShowPicker(false); void loadData() }}
+            slot={pickerSlot()!}
+            onClose={() => { setPickerSlot(null); void loadData() }}
           />
         </Show>
 

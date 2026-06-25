@@ -1,6 +1,7 @@
 import { createStore, produce } from 'solid-js/store'
 import { createEffect } from 'solid-js'
 import type { Session, Set, AccessorySet } from '../types/domain'
+import type { AssistanceSlot } from '../lib/assistance'
 
 export type RestType = 'normal' | 'transition' | 'fail'
 
@@ -10,6 +11,9 @@ interface ActiveAccessory {
   tm: number
   calculatedWeight: number
   loggedSets: Partial<AccessorySet>[]
+  // Which assistance slot this fills. Absent (legacy/extra) accessories append
+  // freely; the three fixed slots hold one exercise each.
+  slot?: AssistanceSlot
 }
 
 interface WorkoutState {
@@ -177,7 +181,14 @@ export function stopRest() {
 }
 
 export function addAccessory(accessory: ActiveAccessory) {
-  setWorkout('activeAccessories', (prev) => [...prev, accessory])
+  setWorkout('activeAccessories', (prev) => {
+    // A fixed slot (push/pull/single_leg_core) holds exactly one exercise:
+    // picking again replaces the current occupant. Extras (and legacy rows with
+    // no slot) just append.
+    const isFixedSlot = accessory.slot != null && accessory.slot !== 'extra'
+    const kept = isFixedSlot ? prev.filter((a) => a.slot !== accessory.slot) : prev
+    return [...kept, accessory]
+  })
 }
 
 export function logAccessorySet(exerciseId: number, set: Partial<AccessorySet>) {

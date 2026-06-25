@@ -354,12 +354,12 @@ describe('Workout screen — with active session', () => {
     expect(screen.queryByText(/JOKER SET/)).toBeNull()
   })
 
-  it('SELECT ASSISTANCE EXERCISE button shows accessory picker', async () => {
+  it('ADD EXTRA ASSISTANCE button shows accessory picker', async () => {
     startSession(BENCH)
     renderWorkout()
     await screen.findByText('WARM UP')
 
-    fireEvent.click(await screen.findByText('+ SELECT ASSISTANCE EXERCISE'))
+    fireEvent.click(await screen.findByText('+ ADD EXTRA ASSISTANCE'))
 
     // AccessoryPicker should appear — wait for it to render
     await waitFor(() => {
@@ -991,11 +991,11 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
     renderWorkout()
     await screen.findByText('WARM UP')
 
-    fireEvent.click(await screen.findByText('+ SELECT ASSISTANCE EXERCISE'))
+    fireEvent.click(await screen.findByText('+ ADD EXTRA ASSISTANCE'))
     // Picker opens
     await screen.findByText('← BACK')
 
-    // ← BACK calls props.onClose() → setShowPicker(false), loadData()
+    // ← BACK calls props.onClose() → setPickerSlot(null), loadData()
     fireEvent.click(screen.getByText('← BACK'))
 
     // No navigation happened — just verified the branch ran without crashing
