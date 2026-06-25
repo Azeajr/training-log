@@ -44,6 +44,24 @@ export const computeClosedThroughWeek = (
   return closed
 }
 
+// Recompute the high-water mark from sessions and persist it back when it has
+// moved. Sessions are the source of truth; the stored closedThroughWeek is a
+// cache. Routing every read (workout + Settings) through this keeps the cache
+// self-healing, so a handler that mutates sessions without updating the mark
+// (or a roster change that re-opens completion math) can't leave the two out
+// of sync. Returns the resolved mark.
+export const syncClosedThroughWeek = async (
+  db: TrainingDB,
+  cycleId: number,
+  sessions: Array<{ week: number; liftId: number; status: string }>,
+  activeLiftIds: number[],
+  prevClosed: number,
+): Promise<number> => {
+  const closed = computeClosedThroughWeek(sessions, activeLiftIds, prevClosed)
+  if (closed !== prevClosed) await db.cycles.update(cycleId, { closedThroughWeek: closed })
+  return closed
+}
+
 export interface TmChange {
   liftName: string
   oldWeight: number
@@ -158,10 +176,7 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
   let lifts = await activeLiftsOrdered(db)
   if (lifts.length === 0) throw new Error('No active lifts')
   const activeLiftIds = lifts.map(l => l.id!)
-  let closed = computeClosedThroughWeek(sessions, activeLiftIds, cycle.closedThroughWeek ?? 0)
-  if (closed !== (cycle.closedThroughWeek ?? 0)) {
-    await db.cycles.update(cycle.id, { closedThroughWeek: closed })
-  }
+  let closed = await syncClosedThroughWeek(db, cycle.id, sessions, activeLiftIds, cycle.closedThroughWeek ?? 0)
 
   if (closed >= 4) {
     await advanceCycleIfComplete(db)

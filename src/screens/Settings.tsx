@@ -3,7 +3,7 @@ import { db } from '../db/index'
 import type { Lift, Exercise, LiftAccessory, SupplementalTemplate } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
-import { deloadTms, advanceCycleIfComplete, computeClosedThroughWeek } from '../lib/cycle'
+import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
 import { updateLift, archiveLift, unarchiveLift, moveLift } from '../lib/lift'
@@ -88,7 +88,7 @@ export default function Settings() {
       // (issue #52) and ignores skip/reopen actions that move the mark.
       const cycleSessions = await db.sessions.where('cycleId').equals(latestCycle.id).toArray()
       const activeIds = allLifts.filter(l => !l.archived).map(l => l.id!)
-      const closed = computeClosedThroughWeek(cycleSessions, activeIds, latestCycle.closedThroughWeek ?? 0)
+      const closed = await syncClosedThroughWeek(db, latestCycle.id, cycleSessions, activeIds, latestCycle.closedThroughWeek ?? 0)
       setCurrentCycleWeek(Math.min(4, closed + 1) as 1 | 2 | 3 | 4)
       setCurrentCycleId(latestCycle.id)
     }
@@ -250,9 +250,14 @@ export default function Settings() {
         const wk = w as 1 | 2 | 3 | 4
         const weekSessions = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === wk).toArray()
         for (const lift of allLifts) {
-          const existing = weekSessions.find(s => s.liftId === lift.id)
-          if (existing) {
-            if (existing.status === 'pending') await db.sessions.update(existing.id!, { status: 'skipped' })
+          // A lift can own >1 row in a week (e.g. a completed set plus a stray
+          // pending one after the first day). Skip *every* pending row, else the
+          // leftover keeps weekComplete false and the cycle never advances.
+          const existing = weekSessions.filter(s => s.liftId === lift.id)
+          if (existing.length) {
+            for (const s of existing) {
+              if (s.status === 'pending') await db.sessions.update(s.id!, { status: 'skipped' })
+            }
           } else {
             await db.sessions.add({ cycleId, liftId: lift.id!, week: wk, date: new Date(), notes: null, status: 'skipped' })
           }
@@ -306,9 +311,13 @@ export default function Settings() {
         const wk = w as 1 | 2 | 3 | 4
         const weekSessions = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === wk).toArray()
         for (const lift of allLifts) {
-          const existing = weekSessions.find(s => s.liftId === lift.id)
-          if (existing) {
-            if (existing.status === 'pending') await db.sessions.update(existing.id!, { status: 'skipped' })
+          // Skip every pending row per lift (see handleSkipToWeek) — a leftover
+          // pending row would block the week-4 advance below.
+          const existing = weekSessions.filter(s => s.liftId === lift.id)
+          if (existing.length) {
+            for (const s of existing) {
+              if (s.status === 'pending') await db.sessions.update(s.id!, { status: 'skipped' })
+            }
           } else {
             await db.sessions.add({ cycleId, liftId: lift.id!, week: wk, date: new Date(), notes: null, status: 'skipped' })
           }
