@@ -38,10 +38,10 @@ describe('seedDatabase — fresh DB', () => {
     expect(inc['Squat']).toBe(10)
   })
 
-  it('inserts 24 exercises', async () => {
+  it('inserts 27 exercises', async () => {
     const { db, seedDatabase } = await freshContext()
     await seedDatabase()
-    expect(await db.exercises.count()).toBe(24)
+    expect(await db.exercises.count()).toBe(27)
   })
 
   it('every seeded exercise has an assistance category', async () => {
@@ -97,7 +97,7 @@ describe('seedDatabase — idempotency', () => {
     await seedDatabase()
     await seedDatabase() // cached _seed promise — no DB changes
     expect(await db.lifts.count()).toBe(4)
-    expect(await db.exercises.count()).toBe(24)
+    expect(await db.exercises.count()).toBe(27)
     expect(await db.liftAccessories.count()).toBe(12)
     expect(await db.settings.count()).toBe(1)
   })
@@ -129,7 +129,7 @@ describe('seedDatabase — partial recovery', () => {
     ])
     expect(await db.exercises.count()).toBe(2)
     await seedDatabase()
-    expect(await db.exercises.count()).toBe(24)
+    expect(await db.exercises.count()).toBe(27)
   })
 
   it('force-resets default exercises to their canonical category', async () => {
