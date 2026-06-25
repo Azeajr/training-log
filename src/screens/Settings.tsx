@@ -1,12 +1,12 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../db/index'
-import type { Lift, Exercise, LiftAccessory, SupplementalTemplate, ExerciseCategory } from '../types/domain'
+import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
-import { createExercise, renameExercise, setExerciseCategory, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
+import { createExercise, renameExercise, setExerciseCategory, archiveExercise, unarchiveExercise } from '../lib/exercise'
 import { updateLift, archiveLift, unarchiveLift, moveLift } from '../lib/lift'
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -27,7 +27,6 @@ export default function Settings() {
   const [editingTm, setEditingTm] = createSignal<number | null>(null)
   const [tmInput, setTmInput] = createSignal(0)
   const [exercises, setExercises] = createSignal<Exercise[]>([])
-  const [liftAccessories, setLiftAccessories] = createSignal<LiftAccessory[]>([])
   const [newExName, setNewExName] = createSignal('')
   const [newExType, setNewExType] = createSignal<'reps' | 'timed' | 'distance'>('reps')
   const [newExCategory, setNewExCategory] = createSignal<ExerciseCategory>('push')
@@ -41,8 +40,6 @@ export default function Settings() {
   const [currentCycleId, setCurrentCycleId] = createSignal<number | null>(null)
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
 
-  const [addToLift, setAddToLift] = createSignal<number | null>(null)
-  const [addToLiftExId, setAddToLiftExId] = createSignal<number | null>(null)
   const [importError, setImportError] = createSignal<string | null>(null)
 
   const activeLifts = () => lifts().filter(l => !l.archived)
@@ -73,7 +70,6 @@ export default function Settings() {
     }))
     setTms(tmMap)
     setExercises(await db.exercises.toArray())
-    setLiftAccessories(await db.liftAccessories.toArray())
     const allAtms = await db.accessoryTrainingMaxes.toArray()
     const increments: Record<number, { tmId: number; incrementLb: number }> = {}
     for (const atm of [...allAtms].sort((a, b) => b.setAt.getTime() - a.setAt.getTime())) {
@@ -182,18 +178,6 @@ export default function Settings() {
 
   const handleUnarchiveExercise = async (id: number) => {
     await unarchiveExercise(db, id)
-    await load()
-  }
-
-  const handleAddToLift = async (liftId: number, exerciseId: number) => {
-    await addExerciseToLift(db, liftId, exerciseId)
-    setAddToLift(null)
-    setAddToLiftExId(null)
-    await load()
-  }
-
-  const handleRemoveFromLift = async (laId: number) => {
-    await removeExerciseFromLift(db, laId)
     await load()
   }
 
@@ -646,86 +630,6 @@ export default function Settings() {
       <div class="mb-6">
         <Rule label="EXERCISES" class="text-muted mb-2" />
 
-        <For each={activeLifts()}>{(lift) => {
-          const assigned = () => liftAccessories()
-            .filter(la => la.liftId === lift.id)
-            .sort((a, b) => a.order - b.order)
-          const assignedIds = () => new Set(assigned().map(la => la.exerciseId))
-          const available = () => exercises().filter(ex => !assignedIds().has(ex.id!) && !ex.archived)
-          return (
-            <div class="mb-3">
-              <div class="text-muted text-xs uppercase tracking-widest mb-1">{lift.name}</div>
-              <Show when={assigned().length === 0}>
-                <div class="text-faint text-xs pl-2 py-1">no exercises</div>
-              </Show>
-              <For each={assigned()}>{(la) => {
-                const ex = () => exercises().find(e => e.id === la.exerciseId)
-                return (
-                  <Show when={ex()}>
-                    <div class="flex items-center justify-between py-0.5 pl-2 border-b border-border-dim">
-                      <Show when={editingEx() === ex()!.id} fallback={
-                        <>
-                          <span class="text-text text-xs">{ex()!.name}</span>
-                          <div class="flex items-center gap-4">
-                            <button onClick={() => { setEditingEx(ex()!.id!); setEditExName(ex()!.name); setEditExCategory(ex()!.category ?? 'push'); setEditExIncrement(accessoryIncrements()[ex()!.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
-                            <button onClick={() => handleRemoveFromLift(la.id!)} class="text-muted text-xs hover:text-danger">del</button>
-                          </div>
-                        </>
-                      }>
-                        <ExerciseEditor
-                          fullWidth
-                          name={editExName()}
-                          onNameChange={setEditExName}
-                          category={editExCategory()}
-                          onCategoryChange={setEditExCategory}
-                          increment={accessoryIncrements()[ex()!.id!] ? editExIncrement() : null}
-                          onIncrementChange={setEditExIncrement}
-                          onSave={() => handleRenameExercise(ex()!.id!)}
-                          onCancel={() => setEditingEx(null)}
-                        />
-                      </Show>
-                    </div>
-                  </Show>
-                )
-              }}</For>
-              <Show when={addToLift() === lift.id} fallback={
-                <Show when={available().length > 0}>
-                  <button
-                    onClick={() => { setAddToLift(lift.id!); setAddToLiftExId(null) }}
-                    class="mt-1 pl-2 text-faint text-lg sm:text-xl hover:text-accent"
-                  >
-                    + assign
-                  </button>
-                </Show>
-              }>
-                <div class="flex flex-col gap-2 mt-1 pl-2">
-                  <select
-                    value={addToLiftExId() ?? ''}
-                    onChange={e => setAddToLiftExId(Number(e.currentTarget.value) || null)}
-                    class="bg-surface border border-border text-text px-2 py-0.5 text-xs focus:outline-none w-full"
-                  >
-                    <option value="">pick exercise</option>
-                    <For each={available()}>{(ex) => (
-                      <option value={ex.id}>{ex.name}</option>
-                    )}</For>
-                  </select>
-                  <div class="flex gap-3">
-                    <button
-                      onClick={() => { const id = addToLiftExId(); if (id) void handleAddToLift(lift.id!, id) }}
-                      disabled={!addToLiftExId()}
-                      class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted"
-                    >
-                      ADD
-                    </button>
-                    <button onClick={() => { setAddToLift(null); setAddToLiftExId(null) }} class="text-muted text-lg sm:text-xl">cancel</button>
-                  </div>
-                </div>
-              </Show>
-            </div>
-          )
-        }}</For>
-
-        <Rule label="ALL EXERCISES" class="text-muted mt-4 mb-2" />
         <For each={exercises().filter(ex => !ex.archived)}>{(ex) => (
           <div class="py-1 border-b border-border-dim">
             <Show when={editingEx() === ex.id} fallback={

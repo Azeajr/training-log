@@ -558,51 +558,6 @@ describe('Settings — exercises', () => {
     })
   })
 
-  it('+ assign shows dropdown and cancel hides it', async () => {
-    await seedLifts()
-    await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    renderSettings()
-
-    // Multiple lifts each show a + assign button (one per lift with available exercises)
-    const assignBtns = await screen.findAllByText('+ assign')
-    fireEvent.click(assignBtns[0]) // click first lift's + assign
-
-    // Dropdown appears
-    await waitFor(() => expect(screen.getByText('pick exercise')).toBeInTheDocument())
-
-    // Cancel hides it
-    fireEvent.click(screen.getByText('cancel'))
-    await waitFor(() => expect(screen.queryByText('pick exercise')).not.toBeInTheDocument())
-  })
-
-  it('+ assign → select exercise → ADD assigns exercise to lift', async () => {
-    await seedLifts()
-    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    renderSettings()
-
-    const assignBtns = await screen.findAllByText('+ assign')
-    fireEvent.click(assignBtns[0])
-    await waitFor(() => expect(screen.getByText('pick exercise')).toBeInTheDocument())
-
-    // Select Chinup from dropdown
-    const select = screen.getByRole('combobox')
-    fireEvent.change(select, { target: { value: String(exId) } })
-
-    // Click ADD (enabled after selection)
-    const addBtn = await waitFor(() => {
-      const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.trim() === 'ADD' && !b.hasAttribute('disabled'))
-      expect(btn).toBeTruthy()
-      return btn!
-    })
-    fireEvent.click(addBtn)
-
-    await waitFor(async () => {
-      const las = await db.liftAccessories.toArray()
-      expect(las.some(la => la.exerciseId === exId)).toBe(true)
-    })
-  })
-
   it('renaming exercise with changed increment updates ATM increment in DB', async () => {
     const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
     const tmId = await db.accessoryTrainingMaxes.add({ exerciseId: exId, weight: 50, incrementLb: 2.5, setAt: new Date() })
@@ -628,23 +583,6 @@ describe('Settings — exercises', () => {
     await waitFor(async () => {
       const atm = await db.accessoryTrainingMaxes.get(tmId)
       expect(atm?.incrementLb).toBe(7.5)
-    })
-  })
-
-  it('lift with 2+ accessories triggers sort comparator', async () => {
-    const [liftId] = await seedLifts()
-    const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    const exId2 = await db.exercises.add({ name: 'Dip',    type: 'reps' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 1 })
-    await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 0 })
-
-    renderSettings()
-
-    // Both exercises render — sort callback was invoked
-    await waitFor(() => {
-      const text = document.body.textContent ?? ''
-      expect(text).toContain('Chinup')
-      expect(text).toContain('Dip')
     })
   })
 
@@ -678,102 +616,6 @@ describe('Settings — exercises', () => {
     expect(ex?.name).toBe('OldName')
   })
 
-  it('pressing Enter in per-lift rename input saves the exercise name', async () => {
-    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
-    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
-    renderSettings()
-
-    // wait for per-lift section (del button only appears there)
-    await screen.findByText('del')
-    const editBtns = screen.getAllByText('edit')
-    // [0] = TM edit, [1] = per-lift edit, [2] = ALL EXERCISES edit
-    fireEvent.click(editBtns[1])
-
-    // both per-lift and ALL EXERCISES sections show the same input (shared editExName())
-    const inputs = await waitFor(() => screen.getAllByDisplayValue('Chinup'))
-    fireEvent.input(inputs[0], { target: { value: 'Pull-up' } })
-    fireEvent.keyDown(inputs[0], { key: 'Enter' })
-
-    await waitFor(async () => {
-      const ex = await db.exercises.get(exId)
-      expect(ex?.name).toBe('Pull-up')
-    })
-  })
-
-  it('pressing Escape in per-lift rename input cancels editing', async () => {
-    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
-    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
-    renderSettings()
-
-    await screen.findByText('del')
-    const editBtns = screen.getAllByText('edit')
-    fireEvent.click(editBtns[1]) // per-lift edit
-
-    const inputs = await waitFor(() => screen.getAllByDisplayValue('Chinup'))
-    fireEvent.keyDown(inputs[0], { key: 'Escape' })
-
-    await waitFor(() => expect(screen.queryByText('SAVE')).not.toBeInTheDocument())
-    const ex = await db.exercises.get(exId)
-    expect(ex?.name).toBe('Chinup')
-  })
-
-  it('ADD button without exercise selection does nothing', async () => {
-    await seedLifts()
-    await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    renderSettings()
-
-    const assignBtns = await screen.findAllByText('+ assign')
-    fireEvent.click(assignBtns[0])
-    await waitFor(() => expect(screen.getByText('pick exercise')).toBeInTheDocument())
-
-    // Click ADD without selecting — addToLiftExId() is null → if (id) false
-    const addBtn = await waitFor(() => {
-      const btns = screen.getAllByRole('button')
-      return btns.find(b => b.textContent?.trim() === 'ADD')!
-    })
-    // SolidJS checks node.disabled before calling onClick; clear it to force handler execution
-    ;(addBtn as HTMLButtonElement).disabled = false
-    fireEvent.click(addBtn)
-
-    const las = await db.liftAccessories.toArray()
-    expect(las).toHaveLength(0)
-  })
-
-  it('selecting empty option in assign dropdown sets addToLiftExId to null', async () => {
-    await seedLifts()
-    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    renderSettings()
-
-    const assignBtns = await screen.findAllByText('+ assign')
-    fireEvent.click(assignBtns[0])
-
-    const select = await waitFor(() => screen.getByRole('combobox'))
-    // Select a real exercise first
-    fireEvent.change(select, { target: { value: String(exId) } })
-    // Then revert to empty → Number('') || null = null → branch 1
-    fireEvent.change(select, { target: { value: '' } })
-
-    // ADD button still disabled (no selection), no crash
-    await waitFor(() => expect(screen.getByText('pick exercise')).toBeInTheDocument())
-  })
-
-  it('del button removes exercise from lift', async () => {
-    const [liftId] = await seedLifts()
-    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    const laId = await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
-    renderSettings()
-
-    // Wait for 'del' button to appear in the per-lift assignment section
-    await screen.findByText('del')
-    fireEvent.click(screen.getByText('del'))
-
-    await waitFor(async () => {
-      const la = await db.liftAccessories.get(laId)
-      expect(la).toBeUndefined()
-    })
-  })
 })
 
 // ─── Settings — rest timers ───────────────────────────────────────────────────
@@ -938,19 +780,14 @@ describe('Settings — exercise increment stepper', () => {
     await waitFor(() => expect(document.body.textContent).toContain('Increment'))
   })
 
-  it('editing per-lift exercise with an accessory TM shows Increment stepper', async () => {
-    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+  it('editing an exercise with an accessory TM shows Increment stepper', async () => {
     const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
     await db.accessoryTrainingMaxes.add({ exerciseId: exId, weight: 50, incrementLb: 2.5, setAt: new Date() })
 
     renderSettings()
-    // Wait for OHP section and Chinup to appear in per-lift section
     await screen.findByText('Chinup')
 
-    // DOM order: [0] = TM section OHP edit, [1] = per-lift OHP section edit, [2] = ALL EXERCISES edit
-    const editBtns = await screen.findAllByText('edit')
-    fireEvent.click(editBtns[1]) // per-lift section edit
+    fireEvent.click(screen.getByText('edit')) // the exercise's edit (ALL EXERCISES list)
 
     await waitFor(() => expect(document.body.textContent).toContain('Increment'))
   })
