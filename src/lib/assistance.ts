@@ -38,16 +38,23 @@ export const sectionForCategory = (category?: ExerciseCategory): AssistanceSecti
   }
 }
 
+// How many of a lift's most recent sessions seed the "used for this lift"
+// suggestions. Keeps the top picks to your current rotation instead of dredging
+// up something done once months ago.
+export const ASSISTANCE_SUGGESTION_SESSIONS = 3
+
 // Rank accessory exercises by how recently they were logged for a main lift.
-// `sessionsNewestFirst` is that lift's sessions ordered newest→oldest; the
-// returned map gives each accessory exercise its best (lowest) 0-based session
-// index, i.e. 0 = used in the most recent session. Exercises never logged for
-// the lift are absent. Used to float prior picks above the alphabetical rest.
+// `sessionsNewestFirst` is that lift's sessions ordered newest→oldest; only the
+// first `maxSessions` are considered. The returned map gives each accessory
+// exercise its best (lowest) 0-based session index, i.e. 0 = used in the most
+// recent session. Exercises never logged in that window are absent. Used to
+// float prior picks above the alphabetical rest.
 export const accessoryRecencyRanks = (
   sessionsNewestFirst: Array<{ id?: number }>,
   accSets: Array<{ sessionId: number; exerciseId: number }>,
+  maxSessions: number = Infinity,
 ): Map<number, number> => {
-  const recencyBySession = new Map(sessionsNewestFirst.map((s, i) => [s.id, i]))
+  const recencyBySession = new Map(sessionsNewestFirst.slice(0, maxSessions).map((s, i) => [s.id, i]))
   const best = new Map<number, number>()
   for (const s of accSets) {
     const ri = recencyBySession.get(s.sessionId)

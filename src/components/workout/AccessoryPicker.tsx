@@ -3,7 +3,7 @@ import { db } from '../../db/index'
 import type { Exercise } from '../../types/domain'
 import { workout, addAccessory } from '../../store/workout-store'
 import { roundToNearest5, ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
-import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
+import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, ASSISTANCE_SECTIONS, ASSISTANCE_SUGGESTION_SESSIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
 
@@ -49,10 +49,12 @@ export default function AccessoryPicker(props: Props) {
     const latestAtmByExercise = new Map<number, number>()
     for (const atm of allAtms) latestAtmByExercise.set(atm.exerciseId, atm.weight)
 
-    // Recency of accessory use for this main lift: sessions newest-first, then
-    // the earliest (most recent) session each accessory exercise appears in.
+    // Recency of accessory use for this main lift, limited to the last few
+    // sessions so suggestions reflect the current rotation. Sessions newest
+    // first; rank by the most recent session each accessory appears in.
     const liftSessions = (await db.sessions.where('liftId').equals(props.liftId).toArray())
       .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, ASSISTANCE_SUGGESTION_SESSIONS)
     const accSets = liftSessions.length > 0
       ? await db.accessorySets.where('sessionId').anyOf(liftSessions.map(s => s.id!)).toArray()
       : []
