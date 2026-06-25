@@ -67,4 +67,15 @@ describe('accessoryRecencyRanks', () => {
     const ranks = accessoryRecencyRanks(sessions, [{ sessionId: 999, exerciseId: 7 }])
     expect(ranks.has(7)).toBe(false)
   })
+
+  it('only considers the most recent maxSessions sessions', () => {
+    // exercise 8 lives only in the 3rd-newest session → excluded when capped at 2.
+    const accSets = [
+      { sessionId: 30, exerciseId: 1 }, // newest
+      { sessionId: 10, exerciseId: 8 }, // oldest, beyond the cap
+    ]
+    const ranks = accessoryRecencyRanks(sessions, accSets, 2)
+    expect(ranks.get(1)).toBe(0)
+    expect(ranks.has(8)).toBe(false)
+  })
 })
