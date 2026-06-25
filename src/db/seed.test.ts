@@ -145,6 +145,18 @@ describe('seedDatabase — partial recovery', () => {
     expect((await db.exercises.get(curlId))?.category).toBe('core')
   })
 
+  it("migrates the legacy 'single_leg' tag to 'legs' on any exercise", async () => {
+    const { db, seedDatabase } = await freshContext()
+    // Legacy default + a user-created custom, both tagged with the old value.
+    const legId = await db.exercises.add({ name: 'Leg Press', type: 'reps' as const, category: 'single_leg' as unknown as 'legs' })
+    const customId = await db.exercises.add({ name: 'Sissy Squat', type: 'reps' as const, category: 'single_leg' as unknown as 'legs' })
+
+    await seedDatabase()
+
+    expect((await db.exercises.get(legId))?.category).toBe('legs')
+    expect((await db.exercises.get(customId))?.category).toBe('legs')
+  })
+
   it('does not seed accessories when any already exist', async () => {
     const { db, seedDatabase } = await freshContext()
     // Full lifts + exercises so those branches are skipped

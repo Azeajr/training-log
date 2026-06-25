@@ -73,8 +73,9 @@ export interface Set {
 }
 
 // Wendler assistance buckets. The accessory picker groups these into three
-// sections: push, pull, and single-leg/core (single_leg + core merged).
-export type ExerciseCategory = 'push' | 'pull' | 'single_leg' | 'core'
+// sections: push, pull, and legs/core (legs + core merged into the lower-body
+// + midsection slot).
+export type ExerciseCategory = 'push' | 'pull' | 'legs' | 'core'
 
 export interface Exercise {
   id?: number

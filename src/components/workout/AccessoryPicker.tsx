@@ -8,7 +8,7 @@ import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
 
 interface Props {
-  // The slot being filled. A fixed section ('push'|'pull'|'single_leg_core')
+  // The slot being filled. A fixed section ('push'|'pull'|'legs_core')
   // shows only that section's exercises; 'extra' shows the whole library
   // grouped into sections.
   slot: AssistanceSlot

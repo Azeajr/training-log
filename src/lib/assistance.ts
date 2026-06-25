@@ -1,29 +1,30 @@
 import type { Exercise, ExerciseCategory } from '../types/domain'
 
 // Wendler assistance is organised into three slots per session: one push, one
-// pull, and one single-leg/core. The four exercise categories collapse onto
-// these three sections — single_leg and core share the last slot.
-export type AssistanceSection = 'push' | 'pull' | 'single_leg_core'
+// pull, and one legs/core (lower-body + midsection). The four exercise
+// categories collapse onto these three sections — legs and core share the last
+// slot.
+export type AssistanceSection = 'push' | 'pull' | 'legs_core'
 
 // A live accessory either fills one of the three fixed section slots (exactly
 // one exercise each, picking replaces) or is an unconstrained 'extra'.
 export type AssistanceSlot = AssistanceSection | 'extra'
 
-export const ASSISTANCE_SECTIONS: readonly AssistanceSection[] = ['push', 'pull', 'single_leg_core']
+export const ASSISTANCE_SECTIONS: readonly AssistanceSection[] = ['push', 'pull', 'legs_core']
 
 export const SECTION_LABEL: Record<AssistanceSection, string> = {
   push: 'PUSH',
   pull: 'PULL',
-  single_leg_core: 'SINGLE-LEG / CORE',
+  legs_core: 'LEGS / CORE',
 }
 
 // The four taggable categories, with display labels, for exercise editors.
-export const EXERCISE_CATEGORIES: readonly ExerciseCategory[] = ['push', 'pull', 'single_leg', 'core']
+export const EXERCISE_CATEGORIES: readonly ExerciseCategory[] = ['push', 'pull', 'legs', 'core']
 
 export const CATEGORY_LABEL: Record<ExerciseCategory, string> = {
   push: 'Push',
   pull: 'Pull',
-  single_leg: 'Single-leg',
+  legs: 'Legs',
   core: 'Core',
 }
 
@@ -31,8 +32,8 @@ export const sectionForCategory = (category?: ExerciseCategory): AssistanceSecti
   switch (category) {
     case 'push': return 'push'
     case 'pull': return 'pull'
-    case 'single_leg':
-    case 'core': return 'single_leg_core'
+    case 'legs':
+    case 'core': return 'legs_core'
     default: return null
   }
 }
@@ -66,7 +67,7 @@ export const groupByAssistanceSection = <T extends { exercise: Exercise }>(
   const groups: Record<AssistanceSection | 'uncategorized', T[]> = {
     push: [],
     pull: [],
-    single_leg_core: [],
+    legs_core: [],
     uncategorized: [],
   }
   for (const item of items) {

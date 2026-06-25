@@ -182,7 +182,7 @@ export function stopRest() {
 
 export function addAccessory(accessory: ActiveAccessory) {
   setWorkout('activeAccessories', (prev) => {
-    // A fixed slot (push/pull/single_leg_core) holds exactly one exercise:
+    // A fixed slot (push/pull/legs_core) holds exactly one exercise:
     // picking again replaces the current occupant. Extras (and legacy rows with
     // no slot) just append.
     const isFixedSlot = accessory.slot != null && accessory.slot !== 'extra'
