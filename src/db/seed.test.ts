@@ -132,22 +132,22 @@ describe('seedDatabase — partial recovery', () => {
     expect(await db.exercises.count()).toBe(24)
   })
 
-  it('backfills the category onto default exercises that predate the column', async () => {
+  it('force-resets default exercises to their canonical category', async () => {
     const { db, seedDatabase } = await freshContext()
     // A default exercise inserted before the category column existed (NULL).
     const chinId = await db.exercises.add({ name: 'Chinups', type: 'reps' as const })
-    // A user-set category must survive the backfill untouched.
+    // A default whose category drifted to a wrong value — force-reset wins.
     const curlId = await db.exercises.add({ name: 'Bicep Curls', type: 'reps' as const, category: 'core' as const })
 
     await seedDatabase()
 
     expect((await db.exercises.get(chinId))?.category).toBe('pull')
-    expect((await db.exercises.get(curlId))?.category).toBe('core')
+    expect((await db.exercises.get(curlId))?.category).toBe('pull')
   })
 
-  it("migrates the legacy 'single_leg' tag to 'legs' on any exercise", async () => {
+  it("renames the legacy 'single_leg' tag to 'legs', defaults and customs alike", async () => {
     const { db, seedDatabase } = await freshContext()
-    // Legacy default + a user-created custom, both tagged with the old value.
+    // Legacy default (force-reset to canonical 'legs') + a custom on the old tag.
     const legId = await db.exercises.add({ name: 'Leg Press', type: 'reps' as const, category: 'single_leg' as unknown as 'legs' })
     const customId = await db.exercises.add({ name: 'Sissy Squat', type: 'reps' as const, category: 'single_leg' as unknown as 'legs' })
 
@@ -155,6 +155,15 @@ describe('seedDatabase — partial recovery', () => {
 
     expect((await db.exercises.get(legId))?.category).toBe('legs')
     expect((await db.exercises.get(customId))?.category).toBe('legs')
+  })
+
+  it('preserves a custom exercise category that is not the legacy tag', async () => {
+    const { db, seedDatabase } = await freshContext()
+    const customId = await db.exercises.add({ name: 'Cable Fly', type: 'reps' as const, category: 'push' as const })
+
+    await seedDatabase()
+
+    expect((await db.exercises.get(customId))?.category).toBe('push')
   })
 
   it('does not seed accessories when any already exist', async () => {

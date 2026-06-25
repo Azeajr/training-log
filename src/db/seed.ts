@@ -59,19 +59,19 @@ async function _seedDatabase() {
   const missingExercises = EXERCISES.filter(e => !existingExNames.has(e.name))
   if (missingExercises.length > 0) await db.exercises.bulkAdd(missingExercises)
 
-  // Migrate + backfill assistance categories on existing rows:
-  //  - the legacy 'single_leg' tag was renamed to 'legs' (covers all rows,
-  //    including user-created ones);
-  //  - default exercises that predate the category column (added by additive
-  //    migration as NULL) get their category by name. Only touches NULLs, so
-  //    user-set categories are never overwritten.
+  // Normalise assistance categories on existing rows:
+  //  - default exercises (matched by name) are force-reset to their canonical
+  //    category, so a library that drifted over earlier tagging iterations
+  //    snaps back to the intended scheme;
+  //  - custom (non-default) exercises keep their category, except the legacy
+  //    'single_leg' tag, which is renamed to 'legs' everywhere.
   const categoryByName = new Map(EXERCISES.map(e => [e.name, e.category]))
   for (const ex of existingEx) {
-    if ((ex.category as string) === 'single_leg') {
+    const canonical = categoryByName.get(ex.name)
+    if (canonical != null) {
+      if (ex.category !== canonical) await db.exercises.update(ex.id!, { category: canonical })
+    } else if ((ex.category as string) === 'single_leg') {
       await db.exercises.update(ex.id!, { category: 'legs' })
-    } else if (ex.category == null) {
-      const category = categoryByName.get(ex.name)
-      if (category) await db.exercises.update(ex.id!, { category })
     }
   }
 
