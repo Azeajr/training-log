@@ -54,9 +54,21 @@ async function _seedDatabase() {
   // Seed exercises — add any missing by name. Additive (never clears) so a
   // version bump that adds new defaults can't wipe a user's library or orphan
   // the accessory rows that reference exercise ids.
-  const existingExNames = new Set((await db.exercises.toArray()).map(e => e.name))
+  const existingEx = await db.exercises.toArray()
+  const existingExNames = new Set(existingEx.map(e => e.name))
   const missingExercises = EXERCISES.filter(e => !existingExNames.has(e.name))
   if (missingExercises.length > 0) await db.exercises.bulkAdd(missingExercises)
+
+  // Backfill the assistance category onto default exercises that predate the
+  // category column (added by additive migration as NULL). Only touches rows
+  // still missing a category, so user-set categories are never overwritten.
+  const categoryByName = new Map(EXERCISES.map(e => [e.name, e.category]))
+  for (const ex of existingEx) {
+    if (ex.category == null) {
+      const category = categoryByName.get(ex.name)
+      if (category) await db.exercises.update(ex.id!, { category })
+    }
+  }
 
   // Seed lift accessories if missing — done separately so a partial first-run recovers
   const accessoryCount = await db.liftAccessories.count()
