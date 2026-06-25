@@ -1,11 +1,12 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../db/index'
-import type { Lift, Exercise, LiftAccessory, SupplementalTemplate } from '../types/domain'
+import type { Lift, Exercise, LiftAccessory, SupplementalTemplate, ExerciseCategory } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
-import { createExercise, renameExercise, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
+import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
+import { createExercise, renameExercise, setExerciseCategory, archiveExercise, unarchiveExercise, addExerciseToLift, removeExerciseFromLift } from '../lib/exercise'
 import { updateLift, archiveLift, unarchiveLift, moveLift } from '../lib/lift'
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -29,10 +30,12 @@ export default function Settings() {
   const [liftAccessories, setLiftAccessories] = createSignal<LiftAccessory[]>([])
   const [newExName, setNewExName] = createSignal('')
   const [newExType, setNewExType] = createSignal<'reps' | 'timed' | 'distance'>('reps')
+  const [newExCategory, setNewExCategory] = createSignal<ExerciseCategory>('push')
   const [showAddEx, setShowAddEx] = createSignal(false)
   const [editingEx, setEditingEx] = createSignal<number | null>(null)
   const [editExName, setEditExName] = createSignal('')
   const [editExIncrement, setEditExIncrement] = createSignal(5)
+  const [editExCategory, setEditExCategory] = createSignal<ExerciseCategory>('push')
   const [accessoryIncrements, setAccessoryIncrements] = createSignal<Record<number, { tmId: number; incrementLb: number }>>({})
   const [currentCycleWeek, setCurrentCycleWeek] = createSignal<1 | 2 | 3 | 4 | null>(null)
   const [currentCycleId, setCurrentCycleId] = createSignal<number | null>(null)
@@ -152,7 +155,7 @@ export default function Settings() {
 
   const handleAddExercise = async () => {
     if (!newExName().trim()) return
-    await createExercise(db, newExName().trim(), newExType())
+    await createExercise(db, newExName().trim(), newExType(), newExCategory())
     setNewExName('')
     setShowAddEx(false)
     await load()
@@ -161,6 +164,7 @@ export default function Settings() {
   const handleRenameExercise = async (id: number) => {
     if (!editExName().trim()) return
     await renameExercise(db, id, editExName().trim())
+    await setExerciseCategory(db, id, editExCategory())
     const tmEntry = accessoryIncrements()[id]
     if (tmEntry && editExIncrement() !== tmEntry.incrementLb) {
       await db.accessoryTrainingMaxes.update(tmEntry.tmId, { incrementLb: editExIncrement() })
@@ -663,7 +667,7 @@ export default function Settings() {
                         <>
                           <span class="text-text text-xs">{ex()!.name}</span>
                           <div class="flex items-center gap-4">
-                            <button onClick={() => { setEditingEx(ex()!.id!); setEditExName(ex()!.name); setEditExIncrement(accessoryIncrements()[ex()!.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
+                            <button onClick={() => { setEditingEx(ex()!.id!); setEditExName(ex()!.name); setEditExCategory(ex()!.category ?? 'push'); setEditExIncrement(accessoryIncrements()[ex()!.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
                             <button onClick={() => handleRemoveFromLift(la.id!)} class="text-muted text-xs hover:text-danger">del</button>
                           </div>
                         </>
@@ -672,6 +676,8 @@ export default function Settings() {
                           fullWidth
                           name={editExName()}
                           onNameChange={setEditExName}
+                          category={editExCategory()}
+                          onCategoryChange={setEditExCategory}
                           increment={accessoryIncrements()[ex()!.id!] ? editExIncrement() : null}
                           onIncrementChange={setEditExIncrement}
                           onSave={() => handleRenameExercise(ex()!.id!)}
@@ -724,9 +730,14 @@ export default function Settings() {
           <div class="py-1 border-b border-border-dim">
             <Show when={editingEx() === ex.id} fallback={
               <div class="flex items-center justify-between">
-                <span class="text-text">{ex.name}</span>
+                <span class="text-text">
+                  {ex.name}
+                  <Show when={ex.category}>
+                    <span class="text-faint text-xs ml-2">{CATEGORY_LABEL[ex.category!]}</span>
+                  </Show>
+                </span>
                 <div class="flex items-center gap-4">
-                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
+                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExCategory(ex.category ?? 'push'); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
                   <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
                 </div>
               </div>
@@ -734,6 +745,8 @@ export default function Settings() {
               <ExerciseEditor
                 name={editExName()}
                 onNameChange={setEditExName}
+                category={editExCategory()}
+                onCategoryChange={setEditExCategory}
                 increment={accessoryIncrements()[ex.id!] ? editExIncrement() : null}
                 onIncrementChange={setEditExIncrement}
                 onSave={() => handleRenameExercise(ex.id!)}
@@ -782,6 +795,15 @@ export default function Settings() {
                 <option value="distance">distance</option>
               </select>
             </div>
+            <select
+              value={newExCategory()}
+              onChange={e => setNewExCategory(e.currentTarget.value as ExerciseCategory)}
+              class="bg-surface border border-border text-text px-2 py-1 focus:outline-none w-full"
+            >
+              <For each={EXERCISE_CATEGORIES}>{(c) => (
+                <option value={c}>{CATEGORY_LABEL[c]}</option>
+              )}</For>
+            </select>
             <div class="flex gap-3">
               <button onClick={handleAddExercise} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">ADD</button>
               <button onClick={() => setShowAddEx(false)} class="text-muted text-lg sm:text-xl">cancel</button>

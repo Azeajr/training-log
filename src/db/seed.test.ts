@@ -38,10 +38,18 @@ describe('seedDatabase — fresh DB', () => {
     expect(inc['Squat']).toBe(10)
   })
 
-  it('inserts 20 exercises', async () => {
+  it('inserts 24 exercises', async () => {
     const { db, seedDatabase } = await freshContext()
     await seedDatabase()
-    expect(await db.exercises.count()).toBe(20)
+    expect(await db.exercises.count()).toBe(24)
+  })
+
+  it('every seeded exercise has an assistance category', async () => {
+    const { db, seedDatabase } = await freshContext()
+    await seedDatabase()
+    const exercises = await db.exercises.toArray()
+    expect(exercises.every(e => e.category != null)).toBe(true)
+    expect(exercises.some(e => e.category === 'push')).toBe(true)
   })
 
   it('inserts 12 lift accessories', async () => {
@@ -89,7 +97,7 @@ describe('seedDatabase — idempotency', () => {
     await seedDatabase()
     await seedDatabase() // cached _seed promise — no DB changes
     expect(await db.lifts.count()).toBe(4)
-    expect(await db.exercises.count()).toBe(20)
+    expect(await db.exercises.count()).toBe(24)
     expect(await db.liftAccessories.count()).toBe(12)
     expect(await db.settings.count()).toBe(1)
   })
@@ -107,7 +115,7 @@ describe('seedDatabase — partial recovery', () => {
     expect(await db.lifts.count()).toBe(4)
   })
 
-  it('re-seeds exercises when fewer than 20 exist', async () => {
+  it('re-seeds exercises when fewer than the full set exist', async () => {
     const { db, seedDatabase } = await freshContext()
     await db.lifts.bulkAdd([
       { name: 'OHP' as const,      order: 1, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' as const },
@@ -121,7 +129,7 @@ describe('seedDatabase — partial recovery', () => {
     ])
     expect(await db.exercises.count()).toBe(2)
     await seedDatabase()
-    expect(await db.exercises.count()).toBe(20)
+    expect(await db.exercises.count()).toBe(24)
   })
 
   it('does not seed accessories when any already exist', async () => {
