@@ -3,7 +3,7 @@ import { db } from '../../db/index'
 import type { Exercise } from '../../types/domain'
 import { workout, addAccessory } from '../../store/workout-store'
 import { roundToNearest5, ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
-import { groupByAssistanceSection, sectionForCategory, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
+import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
 
@@ -12,6 +12,9 @@ interface Props {
   // shows only that section's exercises; 'extra' shows the whole library
   // grouped into sections.
   slot: AssistanceSlot
+  // The session's main lift — used to rank exercises previously run for this
+  // lift to the top of a slot picker.
+  liftId: number
   onClose: () => void
 }
 
@@ -20,6 +23,9 @@ interface PickerRow {
   tm: number | null
   calculatedWeight: number | null
   alreadyAdded: boolean
+  // 0-based recency rank among accessories previously logged for this main
+  // lift (0 = most recent). null = never used here.
+  usedRank: number | null
 }
 
 export default function AccessoryPicker(props: Props) {
@@ -32,6 +38,8 @@ export default function AccessoryPicker(props: Props) {
 
   // Draws from the whole exercise library (not per-lift) so any session can
   // pick a push/pull/single-leg/core. Alphabetical; grouped into sections below.
+  // Accessories previously logged for this main lift are ranked by recency so
+  // the slot picker can float them above the alphabetical rest.
   const load = async () => {
     const exercises = (await db.exercises.toArray())
       .filter(e => !e.archived)
@@ -41,6 +49,15 @@ export default function AccessoryPicker(props: Props) {
     const latestAtmByExercise = new Map<number, number>()
     for (const atm of allAtms) latestAtmByExercise.set(atm.exerciseId, atm.weight)
 
+    // Recency of accessory use for this main lift: sessions newest-first, then
+    // the earliest (most recent) session each accessory exercise appears in.
+    const liftSessions = (await db.sessions.where('liftId').equals(props.liftId).toArray())
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+    const accSets = liftSessions.length > 0
+      ? await db.accessorySets.where('sessionId').anyOf(liftSessions.map(s => s.id!)).toArray()
+      : []
+    const bestRecency = accessoryRecencyRanks(liftSessions, accSets as Array<{ sessionId: number; exerciseId: number }>)
+
     setRows(exercises.map(ex => {
       const tmWeight = latestAtmByExercise.get(ex.id!) ?? null
       return {
@@ -48,13 +65,17 @@ export default function AccessoryPicker(props: Props) {
         tm: tmWeight,
         calculatedWeight: tmWeight != null ? roundToNearest5(tmWeight * ACCESSORY_PERCENTAGE) : null,
         alreadyAdded: workout.activeAccessories.some(a => a.exerciseId === ex.id),
+        usedRank: bestRecency.get(ex.id!) ?? null,
       }
     }))
   }
 
   const grouped = () => groupByAssistanceSection(rows())
-  // For a fixed-slot pick, only that section's exercises are offered.
+  // For a fixed-slot pick, only that section's exercises are offered. Previously
+  // used ones float to the top by recency; the rest stay alphabetical.
   const slotRows = () => props.slot === 'extra' ? [] : rows().filter(r => sectionForCategory(r.exercise.category) === props.slot)
+  const usedSlotRows = () => slotRows().filter(r => r.usedRank != null).sort((a, b) => a.usedRank! - b.usedRank!)
+  const restSlotRows = () => slotRows().filter(r => r.usedRank == null)
 
   const renderRow = (row: PickerRow) => (
     <button
@@ -127,7 +148,18 @@ export default function AccessoryPicker(props: Props) {
                 <Show when={slotRows().length === 0}>
                   <div class="text-faint text-xs py-2">No {SECTION_LABEL[props.slot as Exclude<AssistanceSlot, 'extra'>]} exercises. Tag one in Settings.</div>
                 </Show>
-                <For each={slotRows()}>{row => renderRow(row)}</For>
+                <Show when={usedSlotRows().length > 0}>
+                  <div class="text-faint text-[10px] uppercase tracking-widest pb-0.5">Used for this lift</div>
+                  <For each={usedSlotRows()}>{row => renderRow(row)}</For>
+                  <Show when={restSlotRows().length > 0}>
+                    <div class="flex items-center gap-2 py-2">
+                      <div class="flex-1 border-t border-border-dim" />
+                      <span class="text-faint text-[10px] uppercase tracking-widest">all</span>
+                      <div class="flex-1 border-t border-border-dim" />
+                    </div>
+                  </Show>
+                </Show>
+                <For each={restSlotRows()}>{row => renderRow(row)}</For>
               </div>
             }
           >
