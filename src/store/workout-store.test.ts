@@ -205,6 +205,30 @@ describe('addAccessory', () => {
     expect(workout.activeAccessories).toHaveLength(1)
     expect(workout.activeAccessories[0].exerciseId).toBe(99)
   })
+
+  it('replaces the current occupant of a fixed slot', () => {
+    startSession(SESSION)
+    addAccessory({ ...makeAcc(), exerciseId: 1, exerciseName: 'Dips', slot: 'push' })
+    addAccessory({ ...makeAcc(), exerciseId: 2, exerciseName: 'Close-Grip Bench', slot: 'push' })
+    const push = workout.activeAccessories.filter(a => a.slot === 'push')
+    expect(push).toHaveLength(1)
+    expect(push[0].exerciseId).toBe(2)
+  })
+
+  it('keeps different fixed slots independent', () => {
+    startSession(SESSION)
+    addAccessory({ ...makeAcc(), exerciseId: 1, slot: 'push' })
+    addAccessory({ ...makeAcc(), exerciseId: 2, slot: 'pull' })
+    addAccessory({ ...makeAcc(), exerciseId: 3, slot: 'single_leg_core' })
+    expect(workout.activeAccessories).toHaveLength(3)
+  })
+
+  it('appends extras without replacing', () => {
+    startSession(SESSION)
+    addAccessory({ ...makeAcc(), exerciseId: 1, slot: 'extra' })
+    addAccessory({ ...makeAcc(), exerciseId: 2, slot: 'extra' })
+    expect(workout.activeAccessories.filter(a => a.slot === 'extra')).toHaveLength(2)
+  })
 })
 
 describe('logAccessorySet', () => {

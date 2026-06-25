@@ -5,6 +5,10 @@ import type { Exercise, ExerciseCategory } from '../types/domain'
 // these three sections — single_leg and core share the last slot.
 export type AssistanceSection = 'push' | 'pull' | 'single_leg_core'
 
+// A live accessory either fills one of the three fixed section slots (exactly
+// one exercise each, picking replaces) or is an unconstrained 'extra'.
+export type AssistanceSlot = AssistanceSection | 'extra'
+
 export const ASSISTANCE_SECTIONS: readonly AssistanceSection[] = ['push', 'pull', 'single_leg_core']
 
 export const SECTION_LABEL: Record<AssistanceSection, string> = {
