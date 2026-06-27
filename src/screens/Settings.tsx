@@ -525,22 +525,46 @@ export default function Settings() {
 
         <div class="text-muted text-xs uppercase tracking-widest mt-3 mb-1">Deload week</div>
         <div class="flex gap-1 flex-wrap">
-          <For each={([['skip', 'SKIP IT'], ['deload', 'DELOAD %'], ['normal', 'NORMAL']] as const)}>{([m, label]) => (
+          <For each={([[true, '4-WEEK'], [false, '3-WEEK']] as const)}>{([on, label]) => (
             <button
               class={`px-2 py-1 text-xs font-mono tracking-widest border ${
-                (settings.deloadSupplemental ?? 'normal') === m
+                settings.hasDeloadWeek === on
                   ? 'border-accent text-accent'
                   : 'border-border text-muted hover:border-accent hover:text-accent'
               }`}
-              onClick={() => void updateSettings({ deloadSupplemental: m })}
+              onClick={() => void updateSettings({ hasDeloadWeek: on })}
             >
               {label}
             </button>
           )}</For>
         </div>
-        <p class="text-faint text-xs mt-1">
-          Supplemental + cross-lift work on the week-4 deload: skip it, run it at deload %, or at normal (~65%) weights.
-        </p>
+        <Show
+          when={settings.hasDeloadWeek}
+          fallback={
+            <p class="text-faint text-xs mt-1">
+              3-week cycle: TMs progress after week 3 — no deload week.
+            </p>
+          }
+        >
+          <div class="text-muted text-xs uppercase tracking-widest mt-3 mb-1">Deload supplemental</div>
+          <div class="flex gap-1 flex-wrap">
+            <For each={([['skip', 'SKIP IT'], ['deload', 'DELOAD %'], ['normal', 'NORMAL']] as const)}>{([m, label]) => (
+              <button
+                class={`px-2 py-1 text-xs font-mono tracking-widest border ${
+                  (settings.deloadSupplemental ?? 'normal') === m
+                    ? 'border-accent text-accent'
+                    : 'border-border text-muted hover:border-accent hover:text-accent'
+                }`}
+                onClick={() => void updateSettings({ deloadSupplemental: m })}
+              >
+                {label}
+              </button>
+            )}</For>
+          </div>
+          <p class="text-faint text-xs mt-1">
+            Supplemental + cross-lift work on the week-4 deload: skip it, run it at deload %, or at normal (~65%) weights.
+          </p>
+        </Show>
       </div>
 
       <Show when={currentCycleWeek() !== null}>
@@ -549,7 +573,7 @@ export default function Settings() {
           <div class="flex items-center gap-4 py-1">
             <span class="text-muted text-xs uppercase tracking-widest w-20">Week</span>
             <div class="flex gap-2">
-              <For each={[1, 2, 3, 4] as Array<1 | 2 | 3 | 4>}>{(w) => (
+              <For each={(settings.hasDeloadWeek ? [1, 2, 3, 4] : [1, 2, 3]) as Array<1 | 2 | 3 | 4>}>{(w) => (
                 <button
                   aria-label={`Week ${w}`}
                   onClick={() => {

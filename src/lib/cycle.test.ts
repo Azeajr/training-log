@@ -10,7 +10,7 @@ import {
   computeClosedThroughWeek,
   deloadTms,
   getNextSessionAdvancingIfDone,
-  getAmrapTargets,
+  getRecentAmraps,
 } from './cycle'
 import { archiveLift } from './lift'
 
@@ -572,9 +572,9 @@ describe('flexible roster completion', () => {
   })
 })
 
-// ─── getAmrapTargets ─────────────────────────────────────────────────────────
+// ─── getRecentAmraps ─────────────────────────────────────────────────────────
 
-describe('getAmrapTargets', () => {
+describe('getRecentAmraps', () => {
   async function seedAmrapSession(opts: {
     cycleId: number; liftId: number; week: 1 | 2 | 3 | 4
     status?: 'completed' | 'pending' | 'skipped'
@@ -596,99 +596,72 @@ describe('getAmrapTargets', () => {
   it('returns [] when no prior completed sessions', async () => {
     const lifts = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycleId)
+    await seedAmrapSession({ cycleId, liftId: lifts[0].id!, week: 1, status: 'pending', amrapWeight: 205 })
+    const result = await getRecentAmraps(db, lifts[0].id!)
     expect(result).toEqual([])
   })
 
-  it('returns Last session from most recent completed session', async () => {
+  it('returns recent AMRAPs most-recent-first', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
-    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 205, amrapReps: 9 })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ weight: 205, reps: 9, label: 'Last session' })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 195, amrapReps: 6, date: new Date('2026-01-10') })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 210, amrapReps: 10, date: new Date('2026-01-20') })
+    const result = await getRecentAmraps(db, lifts[0].id!)
+    expect(result).toEqual([
+      { weight: 210, reps: 10 },
+      { weight: 195, reps: 6 },
+    ])
   })
 
-  it('returns both Last session and Last cycle when both exist', async () => {
+  it('caps at the window (default 3), dropping the oldest', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
-    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 200, amrapReps: 7, date: new Date('2026-01-10') })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
-    await seedAmrapSession({ cycleId: cycle2, liftId: lifts[0].id!, week: 2, amrapWeight: 205, amrapReps: 9, date: new Date('2026-02-15') })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
-    expect(result.map(r => r.label)).toContain('Last session')
-    expect(result.map(r => r.label)).toContain('Last cycle')
+    for (let i = 0; i < 5; i++) {
+      await seedAmrapSession({
+        cycleId: cycle1, liftId: lifts[0].id!, week: 1,
+        amrapWeight: 200 + i, amrapReps: 5, date: new Date(2026, 0, 10 + i),
+      })
+    }
+    const result = await getRecentAmraps(db, lifts[0].id!)
+    expect(result).toHaveLength(3)
+    expect(result.map(r => r.weight)).toEqual([204, 203, 202])
+  })
+
+  it('honors an explicit window argument', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 195, amrapReps: 6, date: new Date('2026-01-10') })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 210, amrapReps: 10, date: new Date('2026-01-20') })
+    const result = await getRecentAmraps(db, lifts[0].id!, 1)
+    expect(result).toEqual([{ weight: 210, reps: 10 }])
   })
 
   it('ignores pending sessions', async () => {
     const lifts = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await seedAmrapSession({ cycleId, liftId: lifts[0].id!, week: 1, status: 'pending', amrapWeight: 205 })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date(), endDate: null })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
+    const result = await getRecentAmraps(db, lifts[0].id!)
     expect(result).toEqual([])
   })
 
-  it('ignores week-4 sessions', async () => {
+  it('ignores week-4 deload sessions', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 4, amrapWeight: 205 })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date(), endDate: null })
-    const result = await getAmrapTargets(db, lifts[0].id!, 4, cycle2)
+    const result = await getRecentAmraps(db, lifts[0].id!)
     expect(result).toEqual([])
   })
 
-  it('returns empty when completed session has no AMRAP set', async () => {
-    const lifts = await seedLifts()
-    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
-    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1 })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date(), endDate: null })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
-    expect(result).toEqual([])
-  })
-
-  it('does not duplicate the target when the last session IS the prev-cycle same-week session', async () => {
+  it('skips completed sessions that have no AMRAP set', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
-    // Only week 1 completed in cycle 1 (weeks 2-3 skipped) — the most recent
-    // completed session and the prev-cycle week-1 session are the same row.
-    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 200, amrapReps: 7 })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ weight: 200, reps: 7, label: 'Last session' })
-  })
-
-  it('omits Last cycle when prev-cycle same-week session has no AMRAP set', async () => {
-    const lifts = await seedLifts()
-    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
-    // Prev-cycle week-1 session completed but without an AMRAP set logged
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, date: new Date('2026-01-05') })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
-    await seedAmrapSession({ cycleId: cycle2, liftId: lifts[0].id!, week: 2, amrapWeight: 205, amrapReps: 9, date: new Date('2026-02-15') })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ weight: 205, reps: 9, label: 'Last session' })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 205, amrapReps: 9, date: new Date('2026-01-15') })
+    const result = await getRecentAmraps(db, lifts[0].id!)
+    expect(result).toEqual([{ weight: 205, reps: 9 }])
   })
 
-  it('Last cycle is the prev-cycle SAME-week session — newer other-week and current-cycle sessions skipped (kills L180 find-condition mutants)', async () => {
-    const lifts = await seedLifts()
-    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
-    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 200, amrapReps: 7, date: new Date('2026-01-10') })
-    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 3, amrapWeight: 230, amrapReps: 3, date: new Date('2026-01-20') })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
-    // Current-cycle week-1 redo, most recent overall — becomes Last session,
-    // and must NOT be re-found as the prev-cycle match (week-only condition);
-    // the c1 week-3 session must not match either (cycle-only condition).
-    await seedAmrapSession({ cycleId: cycle2, liftId: lifts[0].id!, week: 1, amrapWeight: 215, amrapReps: 8, date: new Date('2026-02-20') })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
-    expect(result).toHaveLength(2)
-    expect(result[0]).toMatchObject({ weight: 215, reps: 8, label: 'Last session' })
-    expect(result[1]).toMatchObject({ weight: 200, reps: 7, label: 'Last cycle' })
-  })
-
-  it('target uses the AMRAP set, not the first logged set of the session (kills L168 filter-removal mutant)', async () => {
+  it('uses the AMRAP set, not the first logged set of the session', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
     const sessionId = await db.sessions.add({
@@ -697,20 +670,59 @@ describe('getAmrapTargets', () => {
     // Non-AMRAP set inserted first — without the isAmrap filter, .first() returns it
     await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 130, reps: 5, isAmrap: false })
     await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 205, reps: 9, isAmrap: true })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ weight: 205, reps: 9 })
+    const result = await getRecentAmraps(db, lifts[0].id!)
+    expect(result).toEqual([{ weight: 205, reps: 9 }])
+  })
+})
+
+// ─── 3-week cycle (hasDeloadWeek = false) ─────────────────────────────────────
+
+describe('3-week cycle (hasDeloadWeek = false)', () => {
+  const setNoDeload = () =>
+    db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, hasDeloadWeek: false })
+
+  it('advanceCycleIfComplete advances after week 3 — no deload week needed', async () => {
+    await setNoDeload()
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (let w = 1; w <= 3; w++) await addSessions(cycleId, w as 1 | 2 | 3, lifts)
+    const { advanced, newTms } = await advanceCycleIfComplete(db)
+    expect(advanced).toBe(true)
+    expect(newTms).toHaveLength(4)
+    const cycles = await db.cycles.toArray()
+    expect(cycles).toHaveLength(2)
   })
 
-  it('picks most recent session as Last session when multiple exist', async () => {
+  it('does not advance with only weeks 1–2 complete', async () => {
+    await setNoDeload()
     const lifts = await seedLifts()
-    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
-    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 195, amrapReps: 6, date: new Date('2026-01-10') })
-    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 210, amrapReps: 10, date: new Date('2026-01-20') })
-    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
-    const result = await getAmrapTargets(db, lifts[0].id!, 1, cycle2)
-    expect(result[0]).toMatchObject({ weight: 210, reps: 10, label: 'Last session' })
+    await seedTms(lifts)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await addSessions(cycleId, 1, lifts)
+    await addSessions(cycleId, 2, lifts)
+    const { advanced } = await advanceCycleIfComplete(db)
+    expect(advanced).toBe(false)
+  })
+
+  it('getNextSessionAdvancingIfDone rolls into a new cycle once week 3 is done', async () => {
+    await setNoDeload()
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (let w = 1; w <= 3; w++) await addSessions(cycleId, w as 1 | 2 | 3, lifts)
+    const next = await getNextSessionAdvancingIfDone(db)
+    expect(next.week).toBe(1)
+    expect(await db.cycles.toArray()).toHaveLength(2)
+  })
+
+  it('default settings (deload on): week 3 complete does NOT advance — still owes week 4', async () => {
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (let w = 1; w <= 3; w++) await addSessions(cycleId, w as 1 | 2 | 3, lifts)
+    const { advanced } = await advanceCycleIfComplete(db)
+    expect(advanced).toBe(false)
   })
 })
 

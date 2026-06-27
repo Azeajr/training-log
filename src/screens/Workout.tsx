@@ -4,7 +4,7 @@ import { db } from '../db/index'
 import type { Lift, Exercise } from '../types/domain'
 import { workout, logSet, editSet, advanceSet, deleteLastSet, logCrossSet, editCrossSet, deleteLastCrossSetFor, startRest, clearSession, setNotes } from '../store/workout-store'
 import {
-  calcMainSets, calcWarmup, calcAmrapTargets, calcSupplementalSets, getSupplementalLabel,
+  calcMainSets, calcWarmup, calcAmrapTarget, calcSupplementalSets, getSupplementalLabel,
   calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
   targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType, jokerChainBaseWeight,
   applyMainCascadeToSupplemental, applySupplementalOverride, supplementalSourceSetNumber, roundToNearest5,
@@ -13,7 +13,7 @@ import {
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
-import { advanceCycleIfComplete, getAmrapTargets, deloadTms } from '../lib/cycle'
+import { advanceCycleIfComplete, getRecentAmraps, deloadTms } from '../lib/cycle'
 import { detectAmrapPRs } from '../lib/pr'
 import { getCurrentTm, setTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
@@ -99,7 +99,7 @@ export default function Workout() {
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
   const [tmRecommendation, setTmRecommendation] = createSignal<SessionTmRecommendation | null>(null)
 
-  const [prevAmrapSets, setPrevAmrapSets] = createSignal<Array<{ weight: number; reps: number; label: string }>>([])
+  const [recentAmraps, setRecentAmraps] = createSignal<Array<{ weight: number; reps: number }>>([])
   const [tmWeight, setTmWeight] = createSignal(0)
 
   // The page owns scroll-to-active: there is one current set on the page (the
@@ -216,7 +216,7 @@ export default function Workout() {
     if (session.week !== 4) {
       const amrapSet = main.find(s => s.isAmrap)
       if (amrapSet) {
-        setPrevAmrapSets(await getAmrapTargets(db, session.liftId, session.week, session.cycleId))
+        setRecentAmraps(await getRecentAmraps(db, session.liftId))
         setAmrapTargets(amrapTargetsFor(amrapSet.weight))
       }
     }
@@ -235,8 +235,8 @@ export default function Workout() {
   // Targets for today's AMRAP at a given weight: beat the matching previous
   // AMRAP sets when history exists, otherwise the e1RM implied by the TM.
   const amrapTargetsFor = (weight: number): AmrapTarget[] => {
-    const prev = prevAmrapSets()
-    if (prev.length > 0) return calcAmrapTargets(prev, weight)
+    const target = calcAmrapTarget(recentAmraps(), weight)
+    if (target) return [target]
     const tm = tmWeight()
     if (tm <= 0) return []
     const est1RM = est1RMFromTm(tm)

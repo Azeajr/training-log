@@ -29,7 +29,7 @@ class TrainingSQLiteDB {
     dateFields: ['setAt'],
   })
   accessorySets = new SQLiteTable<AccessorySet>('accessorySets')
-  settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'] })
+  settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'], boolFields: ['hasDeloadWeek'] })
 
   transaction(fn: () => Promise<void>): Promise<void> {
     return sqliteClient.transaction(fn)

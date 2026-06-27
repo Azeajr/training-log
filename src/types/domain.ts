@@ -126,4 +126,8 @@ export interface Settings {
   plates?: PlateConfig[]
   supplementalTemplate?: SupplementalTemplate
   deloadSupplemental?: DeloadSupplemental
+  // Whether cycles include a week-4 deload. false = 3-week cycle: after week 3
+  // completes, TMs progress and the next cycle begins, with no light week. When
+  // false the deloadSupplemental setting is moot (no deload week to govern).
+  hasDeloadWeek?: boolean
 }

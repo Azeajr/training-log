@@ -1,6 +1,6 @@
 import type { TrainingDB } from '../db/index'
 import type { Lift, TrainingMax } from '../types/domain'
-import { roundToNearest5 } from './calc'
+import { roundToNearest5, SEED_WINDOW, cycleFinalWeek } from './calc'
 import { getCycleDoublingCandidates } from './tm-recommendations'
 import type { DoublingCandidate } from './tm-recommendations'
 
@@ -10,6 +10,13 @@ import type { DoublingCandidate } from './tm-recommendations'
 async function activeLiftsOrdered(db: TrainingDB): Promise<Lift[]> {
   const lifts = await db.lifts.orderBy('order').toArray()
   return lifts.filter(l => !l.archived)
+}
+
+// The cycle's terminal week, from the global deload setting. Undefined/missing
+// settings default to a 4-week cycle (deload on), preserving prior behavior.
+async function getFinalWeek(db: TrainingDB): Promise<3 | 4> {
+  const row = await db.settings.toCollection().first()
+  return cycleFinalWeek(row?.hasDeloadWeek ?? true)
 }
 
 // A lift's week is complete only when it has at least one session and none are
@@ -35,9 +42,10 @@ export const computeClosedThroughWeek = (
   sessions: Array<{ week: number; liftId: number; status: string }>,
   activeLiftIds: number[],
   prevClosed: number,
+  finalWeek = 4,
 ): number => {
   let closed = prevClosed
-  for (let w = closed + 1; w <= 4; w++) {
+  for (let w = closed + 1; w <= finalWeek; w++) {
     if (weekComplete(sessions, w, activeLiftIds)) closed = w
     else break
   }
@@ -56,8 +64,9 @@ export const syncClosedThroughWeek = async (
   sessions: Array<{ week: number; liftId: number; status: string }>,
   activeLiftIds: number[],
   prevClosed: number,
+  finalWeek = 4,
 ): Promise<number> => {
-  const closed = computeClosedThroughWeek(sessions, activeLiftIds, prevClosed)
+  const closed = computeClosedThroughWeek(sessions, activeLiftIds, prevClosed, finalWeek)
   if (closed !== prevClosed) await db.cycles.update(cycleId, { closedThroughWeek: closed })
   return closed
 }
@@ -93,15 +102,17 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   const cycle = await db.cycles.orderBy('number').last()
   if (!cycle?.id) return { advanced: false, doublingCandidates: [], newTms: [] }
 
+  const finalWeek = await getFinalWeek(db)
   const sessions = await db.sessions.where('cycleId').equals(cycle.id).toArray()
   const activeLiftIds = (await activeLiftsOrdered(db)).map(l => l.id!)
-  const closed = computeClosedThroughWeek(sessions, activeLiftIds, cycle.closedThroughWeek ?? 0)
+  const closed = computeClosedThroughWeek(sessions, activeLiftIds, cycle.closedThroughWeek ?? 0, finalWeek)
 
   if (closed !== (cycle.closedThroughWeek ?? 0)) {
     await db.cycles.update(cycle.id, { closedThroughWeek: closed })
   }
-  // A cycle ends when its final week is complete for every active lift.
-  if (!weekComplete(sessions, 4, activeLiftIds)) return { advanced: false, doublingCandidates: [], newTms: [] }
+  // A cycle ends when its final week (3 without a deload, 4 with) is complete
+  // for every active lift.
+  if (!weekComplete(sessions, finalWeek, activeLiftIds)) return { advanced: false, doublingCandidates: [], newTms: [] }
 
   // Compute before progression fires so TM bump detection sees pre-progression state
   const doublingCandidates = await getCycleDoublingCandidates(db, cycle)
@@ -173,12 +184,13 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
     .where('cycleId').equals(cycle.id)
     .toArray()
 
+  const finalWeek = await getFinalWeek(db)
   let lifts = await activeLiftsOrdered(db)
   if (lifts.length === 0) throw new Error('No active lifts')
   const activeLiftIds = lifts.map(l => l.id!)
-  let closed = await syncClosedThroughWeek(db, cycle.id, sessions, activeLiftIds, cycle.closedThroughWeek ?? 0)
+  let closed = await syncClosedThroughWeek(db, cycle.id, sessions, activeLiftIds, cycle.closedThroughWeek ?? 0, finalWeek)
 
-  if (closed >= 4) {
+  if (closed >= finalWeek) {
     await advanceCycleIfComplete(db)
     cycle = await db.cycles.orderBy('number').last()
     if (!cycle?.id) throw new Error('Cycle advance failed')
@@ -188,7 +200,7 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
     closed = 0
   }
 
-  const currentWeek = Math.min(4, closed + 1) as 1 | 2 | 3 | 4
+  const currentWeek = Math.min(finalWeek, closed + 1) as 1 | 2 | 3 | 4
 
   // A lift still owes this week if it has a pending session or no session yet.
   // Mirrors weekComplete: after a reopen the old completed row coexists with a
@@ -209,44 +221,33 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
   }
 }
 
-export async function getAmrapTargets(
+// Most-recent-first AMRAP performances for a lift, used to seed a robust e1RM
+// (median over the window — see calc.seedE1Rm). Only completed, non-deload
+// sessions count: a deload or in-progress session is not a real top-set effort
+// and would drag the estimate. Returns at most `window` entries.
+export async function getRecentAmraps(
   db: TrainingDB,
   liftId: number,
-  currentWeek: number,
-  currentCycleId: number,
-): Promise<Array<{ weight: number; reps: number; label: string }>> {
-  const allSessions = await db.sessions
+  window = SEED_WINDOW,
+): Promise<Array<{ weight: number; reps: number }>> {
+  const sessions = await db.sessions
     .where('liftId').equals(liftId)
     .filter(s => s.status === 'completed' && s.week !== 4)
     .toArray()
 
-  allSessions.sort((a, b) =>
+  sessions.sort((a, b) =>
     new Date(b.date).getTime() - new Date(a.date).getTime()
   )
 
-  const getAmrapSet = (sessionId: number) =>
-    db.sets
-      .where('sessionId').equals(sessionId)
+  const recent: Array<{ weight: number; reps: number }> = []
+  for (const session of sessions) {
+    if (recent.length >= window) break
+    if (!session.id) continue
+    const amrap = await db.sets
+      .where('sessionId').equals(session.id)
       .filter(s => s.isAmrap)
       .first()
-
-  const targets: Array<{ weight: number; reps: number; label: string }> = []
-
-  const lastSession = allSessions[0]
-  if (lastSession?.id) {
-    const amrap = await getAmrapSet(lastSession.id)
-    if (amrap) targets.push({ weight: amrap.weight, reps: amrap.reps, label: 'Last session' })
+    if (amrap) recent.push({ weight: amrap.weight, reps: amrap.reps })
   }
-
-  const prevCycleSession = allSessions.find(s =>
-    s.cycleId !== currentCycleId && s.week === currentWeek
-  )
-  // Skip when it's the same session already shown as "Last session" — otherwise
-  // the targets list shows the identical set twice under two labels.
-  if (prevCycleSession?.id && prevCycleSession.id !== lastSession?.id) {
-    const amrap = await getAmrapSet(prevCycleSession.id)
-    if (amrap) targets.push({ weight: amrap.weight, reps: amrap.reps, label: 'Last cycle' })
-  }
-
-  return targets
+  return recent
 }
