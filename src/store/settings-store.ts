@@ -123,6 +123,7 @@ export const SETTINGS_DEFAULTS = {
   plates: DEFAULT_PLATES,
   supplementalTemplate: 'fsl+bbb' as SupplementalTemplate,
   deloadSupplemental: 'normal' as DeloadSupplemental,
+  hasDeloadWeek: true,
 }
 
 export function applyTheme(key: string) {
@@ -142,6 +143,7 @@ interface SettingsState {
   plates: PlateConfig[]
   supplementalTemplate: SupplementalTemplate
   deloadSupplemental: DeloadSupplemental
+  hasDeloadWeek: boolean
 }
 
 export const [settings, setSettings] = createStore<SettingsState>({ ...SETTINGS_DEFAULTS })
@@ -158,6 +160,7 @@ export async function loadSettings() {
     plates: row.plates ?? DEFAULT_PLATES,
     supplementalTemplate: row.supplementalTemplate ?? 'fsl+bbb',
     deloadSupplemental: row.deloadSupplemental ?? 'normal',
+    hasDeloadWeek: row.hasDeloadWeek ?? true,
   })
 }
 

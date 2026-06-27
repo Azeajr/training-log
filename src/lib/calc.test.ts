@@ -12,7 +12,9 @@ import {
   calcWarmup,
   estimated1RM,
   targetReps,
-  calcAmrapTargets,
+  calcAmrapTarget,
+  median,
+  seedE1Rm,
   toSeconds,
   fromSeconds,
   formatDuration,
@@ -298,22 +300,63 @@ describe('targetReps', () => {
   })
 })
 
-describe('calcAmrapTargets', () => {
-  it('returns labeled targets with est1RM', () => {
-    const targets = calcAmrapTargets(
-      [{ weight: 160, reps: 17, label: 'Last session' }],
-      170
-    )
-    expect(targets).toHaveLength(1)
-    expect(targets[0].label).toBe('Last session')
-    expect(targets[0].reps).toBe(15)
-    expect(targets[0].est1RM).toBeCloseTo(250.67, 1)
+describe('median', () => {
+  it('empty -> 0', () => expect(median([])).toBe(0))
+  it('odd count picks middle', () => expect(median([3, 1, 2])).toBe(2))
+  it('even count averages middle two', () => expect(median([1, 2, 3, 4])).toBe(2.5))
+})
+
+describe('seedE1Rm', () => {
+  it('empty -> 0', () => expect(seedE1Rm([])).toBe(0))
+
+  it('is the median e1RM over the window, ignoring a single inflated set', () => {
+    // most-recent-first. A lone high-rep crater/spike in the middle can't drag
+    // the seed: 100×10 (133.3), 95×10 (126.7), 60×20 (100.0) -> median 126.7.
+    const est = seedE1Rm([
+      { weight: 100, reps: 10 },
+      { weight: 95, reps: 10 },
+      { weight: 60, reps: 20 },
+    ])
+    expect(est).toBeCloseTo(126.67, 1)
   })
 
-  it('clamps the rep target to 1 when today weight is above the previous e1RM', () => {
-    // 200×5 → e1RM 233.33; today's AMRAP overridden to 245 — the raw back-calc is negative
-    const targets = calcAmrapTargets([{ weight: 200, reps: 5, label: 'Last session' }], 245)
-    expect(targets[0].reps).toBe(1)
+  it('only considers the most recent `window` sets', () => {
+    // 4th (oldest) set is ignored; median of the first three is taken.
+    const est = seedE1Rm([
+      { weight: 100, reps: 5 },
+      { weight: 110, reps: 5 },
+      { weight: 120, reps: 5 },
+      { weight: 999, reps: 5 },
+    ])
+    expect(est).toBeCloseTo(estimated1RM(110, 5), 5)
+  })
+})
+
+describe('calcAmrapTarget', () => {
+  it('null when there is no history', () => {
+    expect(calcAmrapTarget([], 170)).toBeNull()
+  })
+
+  it('seeds reps from the median e1RM of recent AMRAPs', () => {
+    // e1RMs: 250.67 (160×17), 232.5 (155×15), 220.0 (150×14) -> median 232.5.
+    // The high outlier (250.67) does not drive the seed.
+    const target = calcAmrapTarget(
+      [
+        { weight: 160, reps: 17 },
+        { weight: 155, reps: 15 },
+        { weight: 150, reps: 14 },
+      ],
+      170,
+    )!
+    expect(target.label).toBe('target')
+    expect(target.est1RM).toBeCloseTo(232.5, 1)
+    expect(target.reps).toBe(targetReps(target.est1RM, 170))
+  })
+
+  it('clamps the rep target to 1 when today weight is above the seed e1RM', () => {
+    // 200×5 -> e1RM 233.33; today's AMRAP overridden to 245 -> raw back-calc negative
+    const target = calcAmrapTarget([{ weight: 200, reps: 5 }], 245)!
+    expect(target.reps).toBe(1)
   })
 })
 

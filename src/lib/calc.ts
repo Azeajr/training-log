@@ -258,21 +258,53 @@ export interface AmrapTarget {
   est1RM: number
 }
 
-export const calcAmrapTargets = (
-  prevSets: Array<{ weight: number; reps: number; label: string }>,
-  todayAmrapWeight: number
-): AmrapTarget[] =>
-  prevSets.map(({ weight, reps, label }) => {
-    const est = estimated1RM(weight, reps)
-    return {
-      label,
-      reps: targetReps(est, todayAmrapWeight),
-      est1RM: Math.round(est * 100) / 100,
-    }
-  })
+export const median = (xs: readonly number[]): number => {
+  if (xs.length === 0) return 0
+  const s = [...xs].sort((a, b) => a - b)
+  const m = Math.floor(s.length / 2)
+  return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2
+}
+
+// How many recent AMRAPs feed the seed estimate. Taking the median over this
+// window is the robust replacement for back-calcing a single set: one stray
+// high-rep AMRAP can no longer inflate the target, and old sets fall out of the
+// window so the estimate still tracks strength drift — no stateful estimator
+// needed. Deload sets are excluded upstream (see getRecentAmraps).
+export const SEED_WINDOW = 3
+
+// Robust seed e1RM from recent AMRAPs given most-recent-first. Median of the
+// per-set Epley estimates over the window. Returns 0 for an empty list.
+export const seedE1Rm = (
+  recentAmraps: ReadonlyArray<{ weight: number; reps: number }>,
+  window = SEED_WINDOW,
+): number =>
+  median(recentAmraps.slice(0, window).map(s => estimated1RM(s.weight, s.reps)))
+
+// Single AMRAP rep target for today's weight, seeded from the robust e1RM of the
+// most recent AMRAPs (median over SEED_WINDOW). Null when there is no history —
+// callers fall back to the TM-implied e1RM.
+export const calcAmrapTarget = (
+  recentAmraps: ReadonlyArray<{ weight: number; reps: number }>,
+  todayAmrapWeight: number,
+): AmrapTarget | null => {
+  if (recentAmraps.length === 0) return null
+  const est = seedE1Rm(recentAmraps)
+  return {
+    label: 'target',
+    reps: targetReps(est, todayAmrapWeight),
+    est1RM: Math.round(est * 100) / 100,
+  }
+}
 
 export const canAdvanceWeek = (completedOrSkipped: number): boolean =>
   completedOrSkipped >= 4
+
+// Terminal week of a cycle. With a deload the cycle runs 1-4 (week 4 = deload);
+// without one it stops at week 3, after which TMs progress and the next cycle
+// starts. This is the single source for "how long is a cycle" — cycle
+// progression keys off it instead of a hardcoded 4.
+export const cycleFinalWeek = (hasDeloadWeek: boolean): 3 | 4 =>
+  hasDeloadWeek ? 4 : 3
 
 export const toSeconds = (mm: number, ss: number): number => mm * 60 + ss
 

@@ -104,6 +104,7 @@ export const ADDITIVE_MIGRATIONS = [
   `ALTER TABLE sets ADD COLUMN liftId INTEGER`,
   `ALTER TABLE settings ADD COLUMN deloadSupplemental TEXT`,
   `ALTER TABLE exercises ADD COLUMN category TEXT`,
+  `ALTER TABLE settings ADD COLUMN hasDeloadWeek INTEGER`,
 ] as const
 
 export const ALL_TABLES = [
