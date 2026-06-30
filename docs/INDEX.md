@@ -16,6 +16,12 @@ Load these files at every session start:
 
 Add your topic files in `docs/learnings/` and list them here with token estimates.
 
+## Design Notes
+
+- `docs/design/plate-loading-model.md` — v2 generalization of `usesBarbell` into
+  `{ plateMode: none|paired|total, implementBase }` (belt squat, dip belt, plate
+  cable, hex bar). Proposal, not implemented.
+
 ---
 
 **Last Updated**: YYYY-MM-DD
