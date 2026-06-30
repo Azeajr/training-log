@@ -37,6 +37,7 @@ Repo shape the prompts assume:
 | [3. High-Signal Testing](#3-high-signal-testing) | Coverage is thin or vanity; you want behavior tests that make refactoring safe. |
 | [4. Mutation-Hardening Loop](#4-mutation-hardening-loop) | Run Stryker against `src/lib`, find tests that pass but don't actually pin behavior, kill survivors, ship. Repeat to ratchet the suite. |
 | [5. Bug Hunting](#5-bug-hunting) | You suspect real defects ship silently — wrong weights, mis-classified cycles, missed PRs, crashes on bad input. Find, confirm, fix, and pin them; no refactoring, no coverage-chasing, no security work. |
+| [6. Design System & UI](#6-design-system--ui) | Visual/UX refinement *within* the existing terminal-brutalist aesthetic — restyle a screen, refactor one-off styles into tokens/primitives, or build a new screen in-style. Centralize tokens, kill theme-breaking hardcoded colors, reuse primitives; no behavior change. |
 
 Verification commands referenced by every pass (this repo):
 
@@ -278,4 +279,50 @@ EXECUTION WORKFLOW (run in order; do not stop until green):
 5. Test: `npm test`. If a fix broke an existing assertion, decide whether the old assertion pinned the BUG (update it, and say so) or whether your fix is wrong (revert). For a path the unit suite can't reach (real Worker/OPFS), spot-check with `npm run test:e2e` or `npm run debug:browser`.
 6. Commit each fix (or a tight cluster of related fixes) with a message stating the concrete defect and the input that triggered it — WHY it was wrong, with the expected-vs-actual values. No Co-Authored-By trailer.
 7. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `npm test` is the regression gate.
+```
+
+---
+
+## 6. Design System & UI
+
+Unlike the logic-focused passes, this one is purely visual/UX — and unlike a typical "integrate a design system" task, training-log already HAS one: a dense terminal/brutalist monospace aesthetic, driven by 13 CSS-variable tokens, with five swappable themes (Dark, Light, Rosé Pine, Mocha, Latte). So the job is never to invent or import a look — it's consistency *within* the system that exists. The cardinal rule is the one that bites: every color is a token, because a hardcoded hex or arbitrary palette class looks fine in dark mode and is silently wrong in the other four themes. Use this pass to restyle a screen, refactor accumulated one-off styles into tokens/primitives, or build a new screen in-style — never to change computed output or schema.
+
+```text
+Act as an expert frontend engineer, UI/UX designer, and typography specialist working on training-log: a Solid.js + Tailwind CSS v4 + SQLite-Wasm offline-first PWA for 5/3/1 strength training. The app ALREADY has a complete, coherent design system — a dense terminal/brutalist monospace aesthetic, token-driven, with five swappable themes. Your job is NOT to invent a look or import one; it is to make changes that are visually consistent with, and idiomatic to, the system that exists — and to leave the UI cleaner and more coherent than you found it.
+
+BUILD THE MENTAL MODEL FIRST (before proposing or writing anything):
+- Stack: Solid.js (NOT React — `<Show>/<For>/<Index>` + signals, no hooks, no Framer Motion), @solidjs/router (`<A>` with activeClass/inactiveClass), Tailwind CSS v4 configured via `@theme` in src/index.css (NOT a tailwind.config.js theme.extend), Vite, TypeScript. No shadcn/ui, no component kit, no animation/marquee library.
+- Tokens (the DNA): there are exactly 13 design tokens, all CSS custom properties — `--color-{bg,surface,surface-high,border-dim,border,text,text-dim,muted,faint,on-accent,accent,warn,danger}`. They are declared TWICE and must stay in lockstep: the `@theme` block in src/index.css (Tailwind's default = the dark theme; this is what generates the utilities `bg-bg`, `bg-surface`, `text-text`, `text-muted`, `text-faint`, `border-border`, `text-accent`, `text-warn`, `text-danger`, `text-on-accent`, …) AND the THEMES map in src/store/settings-store.ts, where all FIVE themes (dark, light, rosepine, mocha, latte) override every var at runtime via applyTheme() (document.documentElement.style.setProperty). Consume tokens ONLY through those Tailwind utilities.
+- Primitives: reuse, don't reinvent. Rule (the `--- LABEL ---` divider), Stepper, SetReadout, SetLogControls/FieldRow, PlateDisplay, DurationInput, ExerciseEditor (forms); BottomNav, Toast, AppShell (layout); ConfirmationDialog + useConfirmation, LiftSetupModal, CycleCompleteModal, TmRecommendationModal (modals); InlineConfirm (ui); SetRow, CrossBlockLog, AccessoryLog, AccessoryPicker (workout). Match their idiom: monospace (`font-mono`), UPPERCASE + `tracking-widest` for labels/buttons, normal case for body, sharp corners (0 radius; rare `rounded-sm`), `border`/`border-2` structure with NO drop shadows (depth comes from surface/border layering, not elevation), accent for active/focus/primary, hard hover flips (border/bg → accent).
+
+UNDERSTAND THE SCOPE before coding — confirm with the user whether they want: (a) a specific component/screen restyled, (b) existing one-off styles refactored into tokens/primitives, or (c) a new screen built in-style. Then propose a concise plan that centralizes tokens, maximizes primitive reuse, and removes duplication. Explain your reasoning briefly as you go.
+
+LEVERAGE THE FRONTEND-DESIGN SKILL: at the planning stage, invoke Anthropic's frontend-design plugin skill (`/frontend-design`, or the fully-qualified `frontend-design:frontend-design`; from `claude-plugins-official` — install via `/plugin install frontend-design@claude-plugins-official` if missing) for the craft layer — distinctive typographic rhythm, visual hierarchy, composition, interaction polish, and avoiding templated/generic-AI-default UI. Then translate its direction through THIS repo's hard constraints: its palette ideas become token choices (never new hexes), its type ideas live within monospace, its motion ideas become CSS transitions (never a new dependency), and every choice must survive all five themes + the CSP. Where the skill's general advice conflicts with a SCOPE GUARD below, the guard wins — the skill sharpens taste *within* the system; it does not override the system.
+
+THE CARDINAL RULE (this project's real design-system law):
+Every color and surface is one of the 13 tokens, used via its Tailwind utility. NEVER hardcode a color — not a hex (`text-[#4ade80]`), not an arbitrary palette class (`bg-zinc-800`, `text-green-400`), not an inline `style={{ color }}`. A hardcoded color looks fine in the dark theme you're testing and is silently WRONG in the other four — it won't recolor when the user switches to Light / Latte / Mocha / Rosé Pine. If you genuinely need a new token, add it to BOTH src/index.css `@theme` AND all five THEMES entries in the same change, with a per-theme value that holds contrast — never just the dark value. (The one legitimate inline-color site is the Settings theme-swatch preview, which renders t.vars['--color-…'] on purpose; don't "fix" it.)
+
+EVALUATE AND MODIFY against these criteria:
+1. Token discipline & centralization: collapse one-off colors/spacings into tokens + utilities. An existing hardcoded color is a bug (it breaks themes) — tokenize it.
+2. Primitive reuse over duplication: a bordered section is a Rule + the standard card idiom, not a bespoke div; a number-with-label is SetReadout; a +/- control is Stepper. Extend a primitive's props before forking it.
+3. Idiomatic Solid + Tailwind v4: control flow via `<Show>/<For>/<Index>` and signals (not React patterns, not ternary soup where a `<Show>` reads better); styling via utilities + `@theme` tokens (no tailwind.config, no CSS-in-JS).
+4. Accessibility across ALL FIVE themes, not just dark: contrast must hold in Light and Latte too — the accent flips from lime to dark-green/purple by theme, so verify, don't assume. Keep ≥44px touch targets, visible accent focus rings (never strip focus styles), and BottomNav's env(safe-area-inset-bottom) handling. Decorative numerals/icons get aria-hidden.
+5. Motion — idiomatic and sparse: CSS only — `transition-colors`/`transition-all`, `hover:scale-*`, `duration-200/300`; snappy and flat. Do NOT add Framer Motion, a marquee lib, or any animation dependency — offline-first + CSP + bundle budget forbid it. Any motion you add must be wrapped for prefers-reduced-motion (the app currently doesn't guard it — adding the guard is an improvement).
+6. Typography stays monospace: `font-mono` is the house typeface. Do NOT introduce a webfont — the CSP is `style-src 'self'` with no external font-src, so a Google-Fonts `<link>` is blocked at runtime; a custom face would have to be self-hosted and bundled (don't, unless explicitly asked). Uppercase + tracking-widest for display/labels; left-align body; tighter tracking on large numerals.
+7. Responsive, mobile-first: this is a phone-first PWA. Base styles target mobile; layer `md:`/`lg:`. Keep content clear of the fixed BottomNav (it shares the bottom strip with the rest-timer card and Toast — see Toast.tsx's bottom calc). Test 320 / 768 / 1024.
+8. Express the system's personality: make deliberate choices (scale, density, the `--- LABEL ---` rules, hard accent flips) that read as this terminal/brutalist app — not a generic dark-mode default. Then leave it cleaner: fewer one-offs, more shared primitives, screens stay thin (no business logic moved into the view).
+
+SCOPE GUARDS (a change that needs any of these is out of scope — stop and note it):
+- NO change to computed 5/3/1 output, DB schema (COMMON_MISTAKES #1), or the persisted workout-store shape (without bumping STORAGE_VERSION). This is a visual/UX pass — logic in src/lib, src/store, src/db stays put.
+- NO hardcoded colors / arbitrary palette classes / inline color styles. NO new token unless added across index.css `@theme` + all five THEMES together.
+- NO new runtime dependency (animation lib, font, icon set, UI kit). NO external CDN/font/inline `<style>`/`<script>` — CSP forbids it; keep index.html + public/_headers + the vite preview headers mirrored (see Pass 2).
+- NO removal of focus styles, touch-target size, or safe-area handling for the sake of looks.
+
+EXECUTION WORKFLOW (run in order; do not stop until green):
+1. Build/typecheck: `npm run build`.
+2. Lint: `npm run lint`.
+3. Test: `npm test`. Component tests render the real DOM — assert on structure, token classes, and ARIA, not exact copy that's allowed to be reworded. If you restyled a component whose test pinned a brittle string, re-point the test at the meaningful structure.
+4. Visual verification (this pass's real gate — a green unit run does NOT prove it looks right): drive the actual app against a real OPFS DB with `npm run debug:browser` (or `npm run test:e2e`) and LOOK. Screenshot the changed screen and — critically — toggle through all five themes in Settings (Dark, Light, Rosé Pine, Mocha, Latte) to confirm no hardcoded color leaked and contrast holds everywhere. Spot-check a mobile width and prefers-reduced-motion.
+5. Commit with a concise message explaining the design intent / what was tokenized or unified (WHY), not a list of class diffs. No Co-Authored-By trailer.
+6. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local build + test + the visual check are the gate.
 ```
