@@ -421,31 +421,47 @@ export const getCrossLabel = (
   return `${movementName.toUpperCase()}  ${block.sets} × ${block.reps}  ${mode}`
 }
 
-export const calcPlatesPerSide = (
+export type PlateLoadMode = 'paired' | 'total'
+
+// Plates to load for a target weight given an implement `base` (bar/carriage).
+//   paired — split across two ends: (target − base)/2 per side, plates in pairs.
+//   total  — a single stack: target − base, plates as singles (no pairing).
+// Returns the per-side list (paired) or single-stack list (total); [] = base only
+// (no plates); null = target below base, or not achievable with the plate set.
+export const calcPlates = (
   targetWeight: number,
-  barWeight: number,
+  base: number,
+  mode: PlateLoadMode,
   plates: PlateConfig[]
 ): PlateConfig[] | null => {
-  const perSide = Math.round(((targetWeight - barWeight) / 2) * 100) / 100
-  if (perSide < 0) return null
-  if (perSide === 0) return []
+  const load = mode === 'paired'
+    ? Math.round(((targetWeight - base) / 2) * 100) / 100
+    : Math.round((targetWeight - base) * 100) / 100
+  if (load < 0) return null
+  if (load === 0) return []
 
-  // Copy before sorting so we never mutate the caller's plate list. A count < 2
-  // plate needs no filtering here: Math.floor(count / 2) below yields 0 pairs,
-  // so it can never be selected.
+  // Copy before sorting so we never mutate the caller's plate list.
   const sorted = [...plates].sort((a, b) => b.weight - a.weight)
 
   const result: PlateConfig[] = []
-  let remaining = perSide
+  let remaining = load
   for (const plate of sorted) {
     if (remaining <= 0) break
-    const maxPairs = Math.floor(plate.count / 2)
-    const pairsNeeded = Math.floor(remaining / plate.weight)
-    const pairsToUse = Math.min(maxPairs, pairsNeeded)
-    if (pairsToUse > 0) {
-      result.push({ weight: plate.weight, count: pairsToUse })
-      remaining = Math.round((remaining - pairsToUse * plate.weight) * 100) / 100
+    // paired uses pairs (one per side); total can use a lone plate.
+    const available = mode === 'paired' ? Math.floor(plate.count / 2) : plate.count
+    const needed = Math.floor(remaining / plate.weight)
+    const use = Math.min(available, needed)
+    if (use > 0) {
+      result.push({ weight: plate.weight, count: use })
+      remaining = Math.round((remaining - use * plate.weight) * 100) / 100
     }
   }
   return Math.abs(remaining) < 0.01 ? result : null
 }
+
+// Backward-compatible barbell helper: per-side plates over a bar.
+export const calcPlatesPerSide = (
+  targetWeight: number,
+  barWeight: number,
+  plates: PlateConfig[]
+): PlateConfig[] | null => calcPlates(targetWeight, barWeight, 'paired', plates)

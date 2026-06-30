@@ -1,6 +1,7 @@
 import { For } from 'solid-js'
 import type { CrossSet } from '../../lib/calc'
 import type { Set } from '../../types/domain'
+import type { PlateLoading } from '../../lib/plate-loading'
 import SetRow from './SetRow'
 
 // Cross-lift supplemental block. Same render shape as Workout's linear
@@ -15,7 +16,7 @@ interface Props {
   onLog: (localIdx: number, reps: number, weight: number) => void
   onEdit: (localIdx: number, reps: number, weight: number) => void
   onDelete: () => void
-  showPlates?: boolean
+  loading?: PlateLoading | null
 }
 
 export default function CrossBlockLog(props: Props) {
@@ -33,7 +34,7 @@ export default function CrossBlockLog(props: Props) {
             onLog={(reps, weight) => props.onLog(i(), reps, weight)}
             onEdit={(reps, weight) => props.onEdit(i(), reps, weight)}
             onDelete={i() === props.cursor - 1 ? props.onDelete : undefined}
-            showPlates={props.showPlates}
+            loading={props.loading}
           />
         )}
       </For>

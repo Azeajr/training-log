@@ -23,6 +23,7 @@ import SetRow from '../components/workout/SetRow'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
 import AccessoryLog from '../components/workout/AccessoryLog'
 import CrossBlockLog from '../components/workout/CrossBlockLog'
+import { resolveLiftLoading, type PlateLoading } from '../lib/plate-loading'
 import RestTimer from '../components/workout/RestTimer'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
@@ -35,7 +36,7 @@ import { ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../lib/
 interface LoadedCrossBlock {
   movementLiftId: number
   movementName: string
-  movementUsesBarbell: boolean
+  movementLoading: PlateLoading | null
   weightMode: 'fsl' | 'percent'
   percent: number | null
   sets: number
@@ -52,7 +53,7 @@ function SetSection(props: {
   onLog: (idx: number, reps: number, weight: number) => void
   onEdit: (idx: number, reps: number, weight: number) => void
   onDelete: () => void
-  showPlates?: boolean
+  loading?: PlateLoading | null
   // Reports the active row's element up to the page so Workout can scroll to it.
   onActiveRef?: (el: HTMLDivElement) => void
 }) {
@@ -72,7 +73,7 @@ function SetSection(props: {
             onEdit={(reps, weight) => props.onEdit(globalIdx(), reps, weight)}
             onWeightChange={(s as MainSet).isAmrap ? props.onWeightChange : undefined}
             onDelete={globalIdx() === workout.currentSetIndex - 1 ? props.onDelete : undefined}
-            showPlates={props.showPlates}
+            loading={props.loading}
             activeRef={props.onActiveRef}
           />
         )
@@ -113,6 +114,12 @@ export default function Workout() {
   createEffect(on(activeRowEl, el => {
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }))
+
+  // Plate-loading for the session's own lift (warmup/main/joker/supplemental).
+  const ownLoading = (): PlateLoading | null => {
+    const l = lift()
+    return l ? resolveLiftLoading(l, settings.barWeight) : null
+  }
 
   createEffect(on(() => workout.activeSession, (session) => {
     if (!session) return
@@ -202,7 +209,7 @@ export default function Workout() {
         loaded.push({
           movementLiftId: b.movementLiftId,
           movementName: mLift.name,
-          movementUsesBarbell: mLift.usesBarbell !== false,
+          movementLoading: resolveLiftLoading(mLift, settings.barWeight),
           weightMode: b.weightMode,
           percent: b.percent,
           sets: b.sets,
@@ -595,7 +602,7 @@ export default function Workout() {
             <SetSection
               sets={warmupSets}
               offset={() => 0}
-              showPlates={lift()?.usesBarbell !== false}
+              loading={ownLoading()}
               forceAmrapFalse
               onLog={handleLog}
               onEdit={handleEdit}
@@ -609,7 +616,7 @@ export default function Workout() {
             <SetSection
               sets={mainSets}
               offset={() => setOffset('main')}
-              showPlates={lift()?.usesBarbell !== false}
+              loading={ownLoading()}
               amrapTargets={amrapTargets}
               onWeightChange={handleAmrapWeightChange}
               onLog={handleLog}
@@ -623,7 +630,7 @@ export default function Workout() {
                 <SetSection
                   sets={jokerSetsRendered}
                   offset={() => setOffset('joker')}
-                  showPlates={lift()?.usesBarbell !== false}
+                  loading={ownLoading()}
                   onLog={handleLog}
                   onEdit={handleEdit}
                   onDelete={handleDeleteSet}
@@ -647,7 +654,7 @@ export default function Workout() {
               <SetSection
                 sets={fslSets}
                 offset={() => setOffset('fsl')}
-                showPlates={lift()?.usesBarbell !== false}
+                loading={ownLoading()}
                 forceAmrapFalse
                 onLog={handleLog}
                 onEdit={handleEdit}
@@ -674,7 +681,7 @@ export default function Workout() {
                 {section => (
                   <CrossBlockLog
                     label={getCrossLabel(section.block, section.block.movementName)}
-                    showPlates={section.block.movementUsesBarbell}
+                    loading={section.block.movementLoading}
                     sets={section.sets}
                     cursor={section.cursor}
                     logged={section.logged}

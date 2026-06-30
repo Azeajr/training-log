@@ -8,6 +8,7 @@ import SetLogControls, { FieldRow } from '../forms/SetLogControls'
 import SetReadout from '../forms/SetReadout'
 import PlateDisplay from '../forms/PlateDisplay'
 import InlineConfirm from '../ui/InlineConfirm'
+import type { PlateLoading } from '../../lib/plate-loading'
 
 interface Props {
   set: Omit<Set, 'id' | 'sessionId'> & { isAmrap?: boolean }
@@ -20,9 +21,9 @@ interface Props {
   onEdit: (reps: number, weight: number) => void
   onWeightChange?: (weight: number) => void
   onDelete?: () => void
-  // Whether to show the plate-loading breakdown for this set. Defaults true;
-  // pass false for non-barbell movements where plate math is meaningless.
-  showPlates?: boolean
+  // Resolved plate-loading for this set, or null/undefined for no readout
+  // (non-plate-loaded movements).
+  loading?: PlateLoading | null
   // Called with this row's element when it becomes the active set. Scroll-to-
   // active is a page concern (there's one current set on the page), so the row
   // only reports its element — Workout owns the scroll. Only the linear flow
@@ -77,8 +78,8 @@ export default function SetRow(props: Props) {
               </>
             }
           />
-          <Show when={props.showPlates ?? true}>
-            <PlateDisplay weight={weight()} />
+          <Show when={props.loading}>
+            <PlateDisplay weight={weight()} loading={props.loading!} />
           </Show>
           <Show when={isAmrap() && props.amrapTargets && props.amrapTargets.length > 0}>
             <AmrapTargets targets={props.amrapTargets!} />
