@@ -422,7 +422,7 @@ describe('importFromRawData — mutation precision', () => {
 // ─── importFromRawData — full payload (covers all bulkAdd branches) ───────────
 
 describe('importFromRawData — full payload', () => {
-  it('imports all table types including sets, exercises, liftAccessories, settings, accessoryTrainingMaxes, accessorySets', async () => {
+  it('imports all table types including sets, exercises, settings, accessoryTrainingMaxes, accessorySets', async () => {
     await importFromRawData(db, {
       lifts: [{ id: 1, name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
       trainingMaxes: [{ id: 1, liftId: 1, weight: 100, setAt: '2026-01-01T00:00:00.000Z' }],
@@ -430,7 +430,6 @@ describe('importFromRawData — full payload', () => {
       sessions: [{ id: 1, cycleId: 1, liftId: 1, week: 1, date: '2026-01-06T00:00:00.000Z', notes: null, status: 'completed' }],
       sets: [{ id: 1, sessionId: 1, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false }],
       exercises: [{ id: 1, name: 'Chinup', type: 'reps' }],
-      liftAccessories: [{ id: 1, liftId: 1, exerciseId: 1, order: 0 }],
       settings: [{ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, theme: 'dark', barWeight: 45, plates: [] }],
       accessoryTrainingMaxes: [{ id: 1, exerciseId: 1, weight: 50, incrementLb: 5, setAt: '2026-01-01T00:00:00.000Z' }],
       accessorySets: [{ id: 1, sessionId: 1, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null }],
@@ -442,7 +441,6 @@ describe('importFromRawData — full payload', () => {
     expect(await db.sessions.count()).toBe(1)
     expect(await db.sets.count()).toBe(1)
     expect(await db.exercises.count()).toBe(1)
-    expect(await db.liftAccessories.count()).toBe(1)
     expect(await db.settings.count()).toBe(1)
     expect(await db.accessoryTrainingMaxes.count()).toBe(1)
     expect(await db.accessorySets.count()).toBe(1)
@@ -459,11 +457,11 @@ describe('importFromRawData — full payload', () => {
 
 describe('exportJson → importFromRawData round-trip', () => {
   it('restores every table verbatim through a real export payload', async () => {
-    // Seed all 11 tables with the tricky shapes a refactor could drop or mangle:
+    // Seed all tables with the tricky shapes a refactor could drop or mangle:
     // bool fields (archived/isAmrap), date fields incl. a null endDate, json
     // (plates), the liftSupplementals table, and nullable accessory columns.
     await db.lifts.bulkAdd([
-      { id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+      { id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', usesBarbell: false },
       { id: 2, name: 'OHP', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', archived: true },
     ])
     await db.trainingMaxes.add({ id: 1, liftId: 1, weight: 200, setAt: new Date('2026-01-01T00:00:00.000Z') })
@@ -478,10 +476,9 @@ describe('exportJson → importFromRawData round-trip', () => {
       { id: 3, sessionId: 1, type: 'cross', setNumber: 1, weight: 150, reps: 5, isAmrap: false, liftId: 2 },
     ])
     await db.exercises.bulkAdd([
-      { id: 1, name: 'Chinup', type: 'reps' },
+      { id: 1, name: 'Chinup', type: 'reps', usesBarbell: true },
       { id: 2, name: 'Plank', type: 'timed', archived: true },
     ])
-    await db.liftAccessories.add({ id: 1, liftId: 1, exerciseId: 1, order: 0 })
     await db.liftSupplementals.add({ id: 1, liftId: 1, movementLiftId: 2, weightMode: 'percent', percent: 0.7, sets: 5, reps: 10, order: 0 })
     await db.accessoryTrainingMaxes.add({ id: 1, exerciseId: 1, weight: 50, incrementLb: 5, setAt: new Date('2026-01-01T00:00:00.000Z') })
     await db.accessorySets.add({ id: 1, sessionId: 1, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
@@ -502,7 +499,6 @@ describe('exportJson → importFromRawData round-trip', () => {
     expect(await db.sessions.count()).toBe(1)
     expect(await db.sets.count()).toBe(3)
     expect(await db.exercises.count()).toBe(2)
-    expect(await db.liftAccessories.count()).toBe(1)
     expect(await db.liftSupplementals.count()).toBe(1)
     expect(await db.accessoryTrainingMaxes.count()).toBe(1)
     expect(await db.accessorySets.count()).toBe(1)
@@ -516,7 +512,10 @@ describe('exportJson → importFromRawData round-trip', () => {
     expect(sets.find(s => s.id === 2)?.isAmrap).toBe(true)
     expect(sets.find(s => s.id === 1)?.isAmrap).toBe(false)
     expect(sets.find(s => s.id === 3)?.liftId).toBe(2)
+    // Equipment flags survive as booleans on both entities.
+    expect(lifts.find(l => l.id === 1)?.usesBarbell).toBe(false)
     expect((await db.exercises.toArray()).find(e => e.id === 2)?.archived).toBe(true)
+    expect((await db.exercises.toArray()).find(e => e.id === 1)?.usesBarbell).toBe(true)
 
     // Date fields are Date instances; a null endDate stays null (not epoch).
     const cycles = await db.cycles.toArray()

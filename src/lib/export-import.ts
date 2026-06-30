@@ -30,7 +30,6 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     sessions: await db.sessions.toArray(),
     sets: await db.sets.toArray(),
     exercises: await db.exercises.toArray(),
-    liftAccessories: await db.liftAccessories.toArray(),
     liftSupplementals: await db.liftSupplementals.toArray(),
     accessorySets: await db.accessorySets.toArray(),
     settings: await db.settings.toArray(),
@@ -68,13 +67,12 @@ export async function importJson(db: TrainingDB, file: File): Promise<void> {
 // the guard prevents bad keys from reaching the INSERT, this layer just
 // gives a friendlier "ignore unknown column" experience for legacy backups.
 const COLS = {
-  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived'],
+  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived', 'usesBarbell'],
   trainingMaxes: ['id', 'liftId', 'weight', 'setAt'],
   cycles: ['id', 'number', 'startDate', 'endDate', 'closedThroughWeek'],
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
   sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId'],
-  exercises: ['id', 'name', 'type', 'category', 'archived'],
-  liftAccessories: ['id', 'liftId', 'exerciseId', 'order'],
+  exercises: ['id', 'name', 'type', 'category', 'archived', 'usesBarbell'],
   liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order'],
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],
@@ -125,7 +123,6 @@ function importSpec(db: TrainingDB): ImportTableSpec[] {
     { key: 'sessions',               table: db.sessions,               dates: ['date'] },
     { key: 'sets',                   table: db.sets,                   dates: [] },
     { key: 'exercises',              table: db.exercises,              dates: [] },
-    { key: 'liftAccessories',        table: db.liftAccessories,        dates: [] },
     { key: 'liftSupplementals',      table: db.liftSupplementals,      dates: [] },
     { key: 'accessoryTrainingMaxes', table: db.accessoryTrainingMaxes, dates: ['setAt'] },
     { key: 'accessorySets',          table: db.accessorySets,          dates: [] },

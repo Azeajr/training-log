@@ -39,7 +39,7 @@ function renderHistoryEdit(sessionId: number) {
 beforeEach(async () => {
   await Promise.all([
     db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
-    db.sets.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+    db.sets.clear(), db.exercises.clear(),
     db.accessorySets.clear(),
   ])
   mockNavigate.mockClear()
@@ -185,7 +185,6 @@ async function seedSessionWithExercise() {
   const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
   const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
   const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-  await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
   const sessionId = await db.sessions.add({
     cycleId, liftId, week: 1, date: new Date('2026-03-15'), notes: null, status: 'completed',
   })
@@ -196,7 +195,6 @@ async function seedSessionWithAccessorySets() {
   const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
   const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
   const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-  await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
   const sessionId = await db.sessions.add({
     cycleId, liftId, week: 1, date: new Date('2026-03-15'), notes: null, status: 'completed',
   })
@@ -211,7 +209,7 @@ describe('HistoryEdit — accessory picker', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
-      db.sets.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sets.clear(), db.exercises.clear(),
       db.accessorySets.clear(),
     ])
     mockNavigate.mockClear()
@@ -340,8 +338,6 @@ describe('HistoryEdit — accessory picker', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
     const exId2 = await db.exercises.add({ name: 'Dips',   type: 'reps' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 0 })
-    await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 1 })
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.accessorySets.bulkAdd([
       { sessionId, exerciseId: exId1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null },
@@ -371,10 +367,7 @@ describe('HistoryEdit — accessory picker', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
     const exId2 = await db.exercises.add({ name: 'Dips',   type: 'reps' })
-    const exId3 = await db.exercises.add({ name: 'Row',    type: 'reps' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 0 })
-    await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 1 })
-    await db.liftAccessories.add({ liftId, exerciseId: exId3, order: 2 })
+    await db.exercises.add({ name: 'Row', type: 'reps' })
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.accessorySets.bulkAdd([
       { sessionId, exerciseId: exId1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null },
@@ -454,8 +447,6 @@ async function seedSessionWithTwoExercises() {
   const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
   const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
   const exId2 = await db.exercises.add({ name: 'Dips',   type: 'reps' })
-  await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 0 })
-  await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 1 })
   const sessionId = await db.sessions.add({
     cycleId, liftId, week: 1, date: new Date('2026-03-15'), notes: null, status: 'completed',
   })
@@ -482,7 +473,7 @@ describe('HistoryEdit — set type rendering', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
-      db.sets.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sets.clear(), db.exercises.clear(),
       db.accessorySets.clear(),
     ])
     mockNavigate.mockClear()
@@ -509,7 +500,7 @@ describe('HistoryEdit — accessory exercise types', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
-      db.sets.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sets.clear(), db.exercises.clear(),
       db.accessorySets.clear(),
     ])
     mockNavigate.mockClear()
@@ -521,7 +512,6 @@ describe('HistoryEdit — accessory exercise types', () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     const exId = await db.exercises.add({ name: 'Plank', type: 'timed' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 0, reps: null, duration: 60, distance: null })
 
@@ -536,7 +526,6 @@ describe('HistoryEdit — accessory exercise types', () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     const exId = await db.exercises.add({ name: 'Sled Push', type: 'distance' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 0, reps: null, duration: null, distance: 50 })
 
@@ -566,7 +555,6 @@ describe('HistoryEdit — accessory exercise types', () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     const exId = await db.exercises.add({ name: 'Sled Push', type: 'distance' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 50, reps: null, duration: null, distance: 100 })
 
@@ -587,9 +575,7 @@ describe('HistoryEdit — accessory exercise types', () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     const exId1 = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    const exId2 = await db.exercises.add({ name: 'Plank', type: 'timed' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId1, order: 0 })
-    await db.liftAccessories.add({ liftId, exerciseId: exId2, order: 1 })
+    await db.exercises.add({ name: 'Plank', type: 'timed' })
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date('2026-03-15'), notes: null, status: 'completed' })
     await db.accessorySets.add({ sessionId, exerciseId: exId1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
 
@@ -610,7 +596,6 @@ describe('HistoryEdit — accessory exercise types', () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     const exId = await db.exercises.add({ name: 'Sled Push', type: 'distance' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: null, reps: null, duration: null, distance: null })
 
@@ -624,7 +609,6 @@ describe('HistoryEdit — accessory exercise types', () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    await db.liftAccessories.add({ liftId, exerciseId: exId, order: 0 })
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
     await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
 

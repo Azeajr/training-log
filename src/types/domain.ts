@@ -15,6 +15,10 @@ export interface Lift {
   baseWeight: number
   liftType: 'upper' | 'lower'
   archived?: boolean
+  // Whether this lift's sets load a barbell. undefined/true ⇒ barbell, so plate
+  // math is shown (matches existing behaviour); explicit false hides plate math
+  // for a non-barbell main lift (machine, dumbbell, weighted bodyweight).
+  usesBarbell?: boolean
 }
 
 // A cross-lift supplemental block: after the day's main + self-supplemental,
@@ -83,13 +87,10 @@ export interface Exercise {
   type: 'reps' | 'timed' | 'distance'
   category?: ExerciseCategory
   archived?: boolean
-}
-
-export interface LiftAccessory {
-  id?: number
-  liftId: number
-  exerciseId: number
-  order: number
+  // Whether this assistance exercise loads a barbell. undefined/false ⇒ not a
+  // barbell, so no plate math (matches existing behaviour); explicit true opts a
+  // barbell accessory (e.g. Barbell Row, RDL) into the plate-math readout.
+  usesBarbell?: boolean
 }
 
 export interface AccessoryTrainingMax {

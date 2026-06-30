@@ -18,27 +18,14 @@ export async function setExerciseCategory(db: TrainingDB, id: number, category: 
   await db.exercises.update(id, { category })
 }
 
+export async function setExerciseUsesBarbell(db: TrainingDB, id: number, usesBarbell: boolean): Promise<void> {
+  await db.exercises.update(id, { usesBarbell })
+}
+
 export async function archiveExercise(db: TrainingDB, id: number): Promise<void> {
-  await db.transaction(async () => {
-    await db.exercises.update(id, { archived: true })
-    await db.liftAccessories.where('exerciseId').equals(id).delete()
-  })
+  await db.exercises.update(id, { archived: true })
 }
 
 export async function unarchiveExercise(db: TrainingDB, id: number): Promise<void> {
   await db.exercises.update(id, { archived: false })
-}
-
-export async function addExerciseToLift(
-  db: TrainingDB,
-  liftId: number,
-  exerciseId: number
-): Promise<void> {
-  const existing = await db.liftAccessories.where('liftId').equals(liftId).toArray()
-  const nextOrder = existing.reduce((m, la) => Math.max(m, la.order), -1) + 1
-  await db.liftAccessories.add({ liftId, exerciseId, order: nextOrder })
-}
-
-export async function removeExerciseFromLift(db: TrainingDB, liftAccessoryId: number): Promise<void> {
-  await db.liftAccessories.delete(liftAccessoryId)
 }

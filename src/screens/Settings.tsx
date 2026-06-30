@@ -6,8 +6,8 @@ import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
-import { createExercise, renameExercise, setExerciseCategory, archiveExercise, unarchiveExercise } from '../lib/exercise'
-import { updateLift, archiveLift, unarchiveLift, moveLift } from '../lib/lift'
+import { createExercise, renameExercise, setExerciseCategory, setExerciseUsesBarbell, archiveExercise, unarchiveExercise } from '../lib/exercise'
+import { updateLift, archiveLift, unarchiveLift, moveLift, liftsCrossReferencing } from '../lib/lift'
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
@@ -20,7 +20,7 @@ import Stepper from '../components/forms/Stepper'
 import ExerciseEditor from '../components/forms/ExerciseEditor'
 
 export default function Settings() {
-  const { confirm } = useConfirmation()
+  const { confirm, confirmWithChoice } = useConfirmation()
 
   const [lifts, setLifts] = createSignal<Lift[]>([])
   const [tms, setTms] = createSignal<Record<number, number>>({})
@@ -35,6 +35,7 @@ export default function Settings() {
   const [editExName, setEditExName] = createSignal('')
   const [editExIncrement, setEditExIncrement] = createSignal(5)
   const [editExCategory, setEditExCategory] = createSignal<ExerciseCategory>('push')
+  const [editExUsesBarbell, setEditExUsesBarbell] = createSignal(false)
   const [accessoryIncrements, setAccessoryIncrements] = createSignal<Record<number, { tmId: number; incrementLb: number }>>({})
   const [currentCycleWeek, setCurrentCycleWeek] = createSignal<1 | 2 | 3 | 4 | null>(null)
   const [currentCycleId, setCurrentCycleId] = createSignal<number | null>(null)
@@ -134,8 +135,20 @@ export default function Settings() {
       showToast('Keep at least one active lift')
       return
     }
-    if (!await confirm('Archive this lift? History is kept; it leaves the active roster next.', { destructive: true, confirmLabel: 'ARCHIVE' })) return
-    await archiveLift(db, id)
+    const crossDays = await liftsCrossReferencing(db, id)
+    if (crossDays.length > 0) {
+      // This lift backs cross work on other active days. Let the user keep those
+      // blocks (they run off its frozen TM) or remove them — archive stays reversible.
+      const choice = await confirmWithChoice(
+        `This lift is the cross-lift movement for ${crossDays.join(', ')}. Archive it?`,
+        { title: 'ARCHIVE LIFT', confirmLabel: 'KEEP CROSS', secondaryLabel: 'REMOVE CROSS', cancelLabel: 'CANCEL' },
+      )
+      if (choice === 'cancel') return
+      await archiveLift(db, id, { removeCrossRefs: choice === 'secondary' })
+    } else {
+      if (!await confirm('Archive this lift? History is kept; it leaves the active roster next.', { destructive: true, confirmLabel: 'ARCHIVE' })) return
+      await archiveLift(db, id)
+    }
     await load()
   }
 
@@ -161,6 +174,7 @@ export default function Settings() {
     if (!editExName().trim()) return
     await renameExercise(db, id, editExName().trim())
     await setExerciseCategory(db, id, editExCategory())
+    await setExerciseUsesBarbell(db, id, editExUsesBarbell())
     const tmEntry = accessoryIncrements()[id]
     if (tmEntry && editExIncrement() !== tmEntry.incrementLb) {
       await db.accessoryTrainingMaxes.update(tmEntry.tmId, { incrementLb: editExIncrement() })
@@ -187,9 +201,8 @@ export default function Settings() {
       { destructive: true, confirmLabel: 'CLEANUP' }
     )) return
 
-    const [allExercises, allLas, allAtms, allSets, allSessions] = await Promise.all([
+    const [allExercises, allAtms, allSets, allSessions] = await Promise.all([
       db.exercises.toArray(),
-      db.liftAccessories.toArray(),
       db.accessoryTrainingMaxes.toArray(),
       db.accessorySets.toArray(),
       db.sessions.toArray(),
@@ -197,20 +210,18 @@ export default function Settings() {
 
     const plan = buildCleanupPlan(
       allExercises.map(ex => ({ id: ex.id!, archived: ex.archived })),
-      allLas.map(la => ({ id: la.id!, exerciseId: la.exerciseId })),
       allAtms.map(atm => ({ id: atm.id!, exerciseId: atm.exerciseId })),
       allSets.map(s => ({ id: s.id!, sessionId: s.sessionId, exerciseId: s.exerciseId })),
       allSessions.map(s => ({ id: s.id! })),
     )
 
     await db.transaction(async () => {
-      if (plan.orphanLaIds.length > 0) await db.liftAccessories.where('id').anyOf(plan.orphanLaIds).delete()
       if (plan.orphanAtmIds.length > 0) await db.accessoryTrainingMaxes.where('id').anyOf(plan.orphanAtmIds).delete()
       if (plan.orphanSetIds.length > 0) await db.accessorySets.where('id').anyOf(plan.orphanSetIds).delete()
       for (const id of plan.exercisesToArchive) await archiveExercise(db, id)
     })
 
-    const orphanCount = plan.orphanLaIds.length + plan.orphanAtmIds.length + plan.orphanSetIds.length
+    const orphanCount = plan.orphanAtmIds.length + plan.orphanSetIds.length
     await load()
     showToast(
       orphanCount === 0 && plan.exercisesToArchive.length === 0
@@ -665,7 +676,7 @@ export default function Settings() {
                   </Show>
                 </span>
                 <div class="flex items-center gap-4">
-                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExCategory(ex.category ?? 'push'); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
+                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExCategory(ex.category ?? 'push'); setEditExUsesBarbell(ex.usesBarbell === true); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
                   <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
                 </div>
               </div>
@@ -675,6 +686,8 @@ export default function Settings() {
                 onNameChange={setEditExName}
                 category={editExCategory()}
                 onCategoryChange={setEditExCategory}
+                usesBarbell={editExUsesBarbell()}
+                onUsesBarbellChange={setEditExUsesBarbell}
                 increment={accessoryIncrements()[ex.id!] ? editExIncrement() : null}
                 onIncrementChange={setEditExIncrement}
                 onSave={() => handleRenameExercise(ex.id!)}

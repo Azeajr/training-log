@@ -35,6 +35,7 @@ import { ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../lib/
 interface LoadedCrossBlock {
   movementLiftId: number
   movementName: string
+  movementUsesBarbell: boolean
   weightMode: 'fsl' | 'percent'
   percent: number | null
   sets: number
@@ -51,6 +52,7 @@ function SetSection(props: {
   onLog: (idx: number, reps: number, weight: number) => void
   onEdit: (idx: number, reps: number, weight: number) => void
   onDelete: () => void
+  showPlates?: boolean
   // Reports the active row's element up to the page so Workout can scroll to it.
   onActiveRef?: (el: HTMLDivElement) => void
 }) {
@@ -70,6 +72,7 @@ function SetSection(props: {
             onEdit={(reps, weight) => props.onEdit(globalIdx(), reps, weight)}
             onWeightChange={(s as MainSet).isAmrap ? props.onWeightChange : undefined}
             onDelete={globalIdx() === workout.currentSetIndex - 1 ? props.onDelete : undefined}
+            showPlates={props.showPlates}
             activeRef={props.onActiveRef}
           />
         )
@@ -199,6 +202,7 @@ export default function Workout() {
         loaded.push({
           movementLiftId: b.movementLiftId,
           movementName: mLift.name,
+          movementUsesBarbell: mLift.usesBarbell !== false,
           weightMode: b.weightMode,
           percent: b.percent,
           sets: b.sets,
@@ -591,6 +595,7 @@ export default function Workout() {
             <SetSection
               sets={warmupSets}
               offset={() => 0}
+              showPlates={lift()?.usesBarbell !== false}
               forceAmrapFalse
               onLog={handleLog}
               onEdit={handleEdit}
@@ -604,6 +609,7 @@ export default function Workout() {
             <SetSection
               sets={mainSets}
               offset={() => setOffset('main')}
+              showPlates={lift()?.usesBarbell !== false}
               amrapTargets={amrapTargets}
               onWeightChange={handleAmrapWeightChange}
               onLog={handleLog}
@@ -617,6 +623,7 @@ export default function Workout() {
                 <SetSection
                   sets={jokerSetsRendered}
                   offset={() => setOffset('joker')}
+                  showPlates={lift()?.usesBarbell !== false}
                   onLog={handleLog}
                   onEdit={handleEdit}
                   onDelete={handleDeleteSet}
@@ -640,6 +647,7 @@ export default function Workout() {
               <SetSection
                 sets={fslSets}
                 offset={() => setOffset('fsl')}
+                showPlates={lift()?.usesBarbell !== false}
                 forceAmrapFalse
                 onLog={handleLog}
                 onEdit={handleEdit}
@@ -666,6 +674,7 @@ export default function Workout() {
                 {section => (
                   <CrossBlockLog
                     label={getCrossLabel(section.block, section.block.movementName)}
+                    showPlates={section.block.movementUsesBarbell}
                     sets={section.sets}
                     cursor={section.cursor}
                     logged={section.logged}

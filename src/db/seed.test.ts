@@ -52,43 +52,12 @@ describe('seedDatabase — fresh DB', () => {
     expect(exercises.some(e => e.category === 'push')).toBe(true)
   })
 
-  it('inserts 12 lift accessories', async () => {
-    const { db, seedDatabase } = await freshContext()
-    await seedDatabase()
-    expect(await db.liftAccessories.count()).toBe(12)
-  })
-
   it('inserts 1 settings row', async () => {
     const { db, seedDatabase } = await freshContext()
     await seedDatabase()
     expect(await db.settings.count()).toBe(1)
   })
 
-  it('all lift accessories reference valid lift and exercise IDs', async () => {
-    const { db, seedDatabase } = await freshContext()
-    await seedDatabase()
-    const liftIds = new Set((await db.lifts.toArray()).map(l => l.id!))
-    const exIds   = new Set((await db.exercises.toArray()).map(e => e.id!))
-    const accessories = await db.liftAccessories.toArray()
-    for (const acc of accessories) {
-      expect(liftIds.has(acc.liftId)).toBe(true)
-      expect(exIds.has(acc.exerciseId)).toBe(true)
-    }
-  })
-
-  it('OHP gets Chinups, Lat Pulldowns, and Bicep Curls accessories', async () => {
-    const { db, seedDatabase } = await freshContext()
-    await seedDatabase()
-    const lifts = await db.lifts.orderBy('order').toArray()
-    const ohp = lifts.find(l => l.name === 'OHP')!
-    const accessories = await db.liftAccessories
-      .where('liftId').equals(ohp.id!)
-      .toArray()
-    const exercises = await db.exercises.toArray()
-    const exMap = Object.fromEntries(exercises.map(e => [e.id!, e.name]))
-    const names = accessories.map(a => exMap[a.exerciseId]).sort()
-    expect(names).toEqual(['Bicep Curls', 'Chinups', 'Lat Pulldowns'])
-  })
 })
 
 describe('seedDatabase — idempotency', () => {
@@ -98,7 +67,6 @@ describe('seedDatabase — idempotency', () => {
     await seedDatabase() // cached _seed promise — no DB changes
     expect(await db.lifts.count()).toBe(4)
     expect(await db.exercises.count()).toBe(27)
-    expect(await db.liftAccessories.count()).toBe(12)
     expect(await db.settings.count()).toBe(1)
   })
 })
@@ -164,28 +132,6 @@ describe('seedDatabase — partial recovery', () => {
     await seedDatabase()
 
     expect((await db.exercises.get(customId))?.category).toBe('push')
-  })
-
-  it('does not seed accessories when any already exist', async () => {
-    const { db, seedDatabase } = await freshContext()
-    // Full lifts + exercises so those branches are skipped
-    await db.lifts.bulkAdd([
-      { name: 'OHP' as const,      order: 1, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' as const },
-      { name: 'Deadlift' as const, order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' as const },
-      { name: 'Bench' as const,    order: 3, progressionIncrement: 5,  baseWeight: 95,  liftType: 'upper' as const },
-      { name: 'Squat' as const,    order: 4, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' as const },
-    ])
-    await db.exercises.bulkAdd(
-      Array.from({ length: 18 }, (_, i) => ({ name: `Ex${i}`, type: 'reps' as const }))
-    )
-    const [lift]     = await db.lifts.toArray()
-    const [exercise] = await db.exercises.toArray()
-    await db.liftAccessories.add({ liftId: lift.id!, exerciseId: exercise.id!, order: 1 })
-
-    await seedDatabase()
-
-    // accessoryCount was 1 (> 0) so seed skipped accessories
-    expect(await db.liftAccessories.count()).toBe(1)
   })
 
   it('does not overwrite existing settings', async () => {

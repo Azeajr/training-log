@@ -5,18 +5,18 @@ import { __resetForTest } from '../db/sqlite-client'
 import {
   createLift, updateLift, archiveLift, unarchiveLift, moveLift,
   addLiftSupplemental, updateLiftSupplemental, removeLiftSupplemental,
+  liftsCrossReferencing,
 } from './lift'
 
 beforeEach(async () => { await __resetForTest() })
 
 describe('createLift', () => {
-  it('creates an active lift with the next order and no assistance', async () => {
+  it('creates an active lift with the next order', async () => {
     await db.lifts.add({ name: 'A', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const id = await createLift(db, { name: 'B', progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
     const lift = await db.lifts.get(id)
     expect(lift?.order).toBe(2)
     expect(lift?.archived).toBe(false)
-    expect(await db.liftAccessories.where('liftId').equals(id).toArray()).toHaveLength(0)
   })
 
   it('orders the first lift at 1', async () => {
@@ -54,6 +54,50 @@ describe('archiveLift', () => {
     await archiveLift(db, id)
     await unarchiveLift(db, id)
     expect((await db.lifts.get(id))?.archived).toBe(false)
+  })
+
+  it('keeps cross blocks that use the lift as movement by default', async () => {
+    const day = await createLift(db, { name: 'Bench', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const mov = await createLift(db, { name: 'OHP', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await addLiftSupplemental(db, { liftId: day, movementLiftId: mov, weightMode: 'fsl', percent: null, sets: 5, reps: 10 })
+
+    await archiveLift(db, mov)
+
+    expect(await db.liftSupplementals.where('movementLiftId').equals(mov).toArray()).toHaveLength(1)
+  })
+
+  it('removes cross blocks pointing at the lift when removeCrossRefs is set', async () => {
+    const day = await createLift(db, { name: 'Bench', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const mov = await createLift(db, { name: 'OHP', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await addLiftSupplemental(db, { liftId: day, movementLiftId: mov, weightMode: 'fsl', percent: null, sets: 5, reps: 10 })
+
+    await archiveLift(db, mov, { removeCrossRefs: true })
+
+    expect(await db.liftSupplementals.where('movementLiftId').equals(mov).toArray()).toHaveLength(0)
+  })
+})
+
+describe('liftsCrossReferencing', () => {
+  it('returns active day names that use the lift as their cross movement', async () => {
+    const day = await createLift(db, { name: 'Bench', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const mov = await createLift(db, { name: 'OHP', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await addLiftSupplemental(db, { liftId: day, movementLiftId: mov, weightMode: 'fsl', percent: null, sets: 5, reps: 10 })
+
+    expect(await liftsCrossReferencing(db, mov)).toEqual(['Bench'])
+  })
+
+  it('returns empty when nothing references the lift', async () => {
+    const mov = await createLift(db, { name: 'OHP', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    expect(await liftsCrossReferencing(db, mov)).toEqual([])
+  })
+
+  it('ignores archived days', async () => {
+    const day = await createLift(db, { name: 'Bench', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const mov = await createLift(db, { name: 'OHP', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await addLiftSupplemental(db, { liftId: day, movementLiftId: mov, weightMode: 'fsl', percent: null, sets: 5, reps: 10 })
+    await archiveLift(db, day)
+
+    expect(await liftsCrossReferencing(db, mov)).toEqual([])
   })
 })
 

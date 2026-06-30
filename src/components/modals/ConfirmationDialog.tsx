@@ -13,23 +13,33 @@ export default function ConfirmationDialog() {
               <div class="text-text uppercase tracking-widest text-sm mb-2">{req().opts.title}</div>
             </Show>
             <div class="text-text-dim text-sm mb-6">{req().message}</div>
-            <div class="flex gap-3">
-              <button
-                onClick={() => respond(true)}
-                class={`flex-1 border py-3 text-xs tracking-widest font-mono ${
-                  req().opts.destructive
-                    ? 'border-danger text-danger'
-                    : 'border-accent text-accent'
-                }`}
-              >
-                {req().opts.confirmLabel ?? 'CONFIRM'}
-              </button>
-              <button
-                onClick={() => respond(false)}
-                class="flex-1 border border-border text-muted py-3 text-xs tracking-widest font-mono"
-              >
-                {req().opts.cancelLabel ?? 'CANCEL'}
-              </button>
+            <div class="flex flex-col gap-3">
+              <div class="flex gap-3">
+                <button
+                  onClick={() => respond('confirm')}
+                  class={`flex-1 border py-3 text-xs tracking-widest font-mono ${
+                    req().opts.destructive
+                      ? 'border-danger text-danger'
+                      : 'border-accent text-accent'
+                  }`}
+                >
+                  {req().opts.confirmLabel ?? 'CONFIRM'}
+                </button>
+                <button
+                  onClick={() => respond('cancel')}
+                  class="flex-1 border border-border text-muted py-3 text-xs tracking-widest font-mono"
+                >
+                  {req().opts.cancelLabel ?? 'CANCEL'}
+                </button>
+              </div>
+              <Show when={req().opts.secondaryLabel}>
+                <button
+                  onClick={() => respond('secondary')}
+                  class="w-full border border-danger text-danger py-3 text-xs tracking-widest font-mono"
+                >
+                  {req().opts.secondaryLabel}
+                </button>
+              </Show>
             </div>
           </div>
         </div>

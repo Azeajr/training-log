@@ -1,7 +1,6 @@
 import { createSignal, onMount, For, Index, Show } from 'solid-js'
 import { db } from '../../db/index'
-import type { Lift, Exercise } from '../../types/domain'
-import { createExercise } from '../../lib/exercise'
+import type { Lift } from '../../types/domain'
 import { createLift } from '../../lib/lift'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
@@ -37,18 +36,15 @@ interface Props {
 }
 
 export default function LiftSetupModal(props: Props) {
-  const [exercises, setExercises] = createSignal<Exercise[]>([])
   const [activeLifts, setActiveLifts] = createSignal<Lift[]>([])
+  // All lifts incl. archived — only for resolving cross-block movement names.
+  const [allLifts, setAllLifts] = createSignal<Lift[]>([])
 
   // ── buffered working state — nothing here touches the db until DONE ──────
-  const [accExIds, setAccExIds] = createSignal<number[]>([])
   const [blocks, setBlocks] = createSignal<DraftBlock[]>([])
   const [tmInput, setTmInput] = createSignal(props.draftLift?.baseWeight ?? 95)
+  const [usesBarbell, setUsesBarbell] = createSignal(true)
   const [saving, setSaving] = createSignal(false)
-
-  const [pickExId, setPickExId] = createSignal<number | null>(null)
-  const [newExName, setNewExName] = createSignal('')
-  const [newExType, setNewExType] = createSignal<'reps' | 'timed' | 'distance'>('reps')
 
   const [newMovementId, setNewMovementId] = createSignal<number | null>(null)
   const [newMode, setNewMode] = createSignal<'fsl' | 'percent'>('fsl')
@@ -62,21 +58,24 @@ export default function LiftSetupModal(props: Props) {
   onMount(load)
 
   async function load() {
-    setExercises(await db.exercises.toArray())
-    setActiveLifts((await db.lifts.orderBy('order').toArray()).filter(x => !x.archived))
+    const lifts = await db.lifts.orderBy('order').toArray()
+    setAllLifts(lifts)
+    setActiveLifts(lifts.filter(x => !x.archived))
     if (props.liftId != null) {
-      const accs = (await db.liftAccessories.where('liftId').equals(props.liftId).toArray()).sort((a, b) => a.order - b.order)
-      setAccExIds(accs.map(a => a.exerciseId))
+      const self = lifts.find(l => l.id === props.liftId)
+      if (self) setUsesBarbell(self.usesBarbell !== false)
       const bs = (await db.liftSupplementals.where('liftId').equals(props.liftId).toArray()).sort((a, b) => a.order - b.order)
       setBlocks(bs.map(b => ({ id: b.id, movementLiftId: b.movementLiftId, weightMode: b.weightMode, percent: b.percent, sets: b.sets, reps: b.reps })))
     }
   }
 
-  const exName = (id: number) => exercises().find(e => e.id === id)?.name ?? '?'
-  const liftName = (id: number) => activeLifts().find(l => l.id === id)?.name ?? '?'
-
-  const assignedIds = () => new Set(accExIds())
-  const availableExercises = () => exercises().filter(e => !e.archived && !assignedIds().has(e.id!))
+  // Resolve against all lifts (incl. archived) so a cross block whose movement
+  // lift was archived after the fact still shows its name, tagged, not "?".
+  const liftName = (id: number) => {
+    const l = allLifts().find(x => x.id === id)
+    if (!l) return '?'
+    return l.archived ? `${l.name} (archived)` : l.name
+  }
 
   // Each other lift may back at most one cross block per day, keeping override
   // and offset bookkeeping unambiguous.
@@ -84,29 +83,6 @@ export default function LiftSetupModal(props: Props) {
   const movementOptions = () => activeLifts().filter(l => l.id !== props.liftId && !usedMovementIds().has(l.id!))
 
   // ── buffer mutations (no db writes) ─────────────────────────────────────
-  const handleAddExisting = () => {
-    const id = pickExId()
-    if (!id || assignedIds().has(id)) return
-    setAccExIds(prev => [...prev, id])
-    setPickExId(null)
-  }
-
-  const handleCreateAndAdd = async () => {
-    const name = newExName().trim()
-    if (!name) return
-    // Exercises live in a shared library, so create the library entry now; only
-    // the *assignment* to this lift is buffered until commit.
-    const id = await createExercise(db, name, newExType())
-    setExercises(await db.exercises.toArray())
-    setAccExIds(prev => [...prev, id])
-    setNewExName('')
-    setNewExType('reps')
-  }
-
-  const handleRemoveAccessory = (exId: number) => {
-    setAccExIds(prev => prev.filter(x => x !== exId))
-  }
-
   const handleAddBlock = () => {
     const movementLiftId = newMovementId()
     if (!movementLiftId) return
@@ -145,18 +121,8 @@ export default function LiftSetupModal(props: Props) {
           }
         }
 
-        // Assistance: make db rows match accExIds() (membership + order).
-        const current = await db.liftAccessories.where('liftId').equals(liftId).toArray()
-        const target = accExIds()
-        const targetSet = new Set(target)
-        for (const a of current) {
-          if (!targetSet.has(a.exerciseId)) await db.liftAccessories.delete(a.id!)
-        }
-        for (let i = 0; i < target.length; i++) {
-          const existing = current.find(a => a.exerciseId === target[i])
-          if (!existing) await db.liftAccessories.add({ liftId, exerciseId: target[i], order: i })
-          else if (existing.order !== i) await db.liftAccessories.update(existing.id!, { order: i })
-        }
+        // Persist the barbell flag (gates plate math on this lift's sets).
+        await db.lifts.update(liftId, { usesBarbell: usesBarbell() })
 
         // Cross blocks: drop removed, add new (no id), update kept.
         const curBlocks = await db.liftSupplementals.where('liftId').equals(liftId).toArray()
@@ -193,64 +159,16 @@ export default function LiftSetupModal(props: Props) {
           </div>
         </Show>
 
-        <Rule label="ASSISTANCE" class="text-muted mb-2" />
-        <Show when={accExIds().length === 0}>
-          <div class="text-faint text-xs py-1">no assistance exercises yet</div>
-        </Show>
-        <For each={accExIds()}>
-          {exId => (
-            <div class="flex items-center justify-between py-0.5 border-b border-border-dim">
-              <span class="text-text text-xs">{exName(exId)}</span>
-              <button onClick={() => handleRemoveAccessory(exId)} class="text-muted text-xs hover:text-danger">del</button>
-            </div>
-          )}
-        </For>
+        <Rule label="EQUIPMENT" class="text-muted mb-2" />
+        <button
+          onClick={() => setUsesBarbell(v => !v)}
+          class={`w-full flex items-center justify-between px-3 py-2 border mb-6 text-xs ${usesBarbell() ? 'border-accent text-accent' : 'border-border text-muted'}`}
+        >
+          <span class="uppercase tracking-widest">uses barbell</span>
+          <span>{usesBarbell() ? 'ON · plate math' : 'OFF'}</span>
+        </button>
 
-        <div class="flex gap-2 mt-2">
-          <select
-            value={pickExId() ?? ''}
-            onChange={e => setPickExId(Number(e.currentTarget.value) || null)}
-            class="bg-surface border border-border text-text px-2 py-1 text-xs flex-1 focus:outline-none"
-          >
-            <option value="">add existing…</option>
-            <For each={availableExercises()}>{ex => <option value={ex.id}>{ex.name}</option>}</For>
-          </select>
-          <button
-            onClick={handleAddExisting}
-            disabled={!pickExId()}
-            class="border border-accent text-accent px-2 py-1 text-xs disabled:border-border disabled:text-muted"
-          >
-            ADD
-          </button>
-        </div>
-
-        <div class="flex gap-2 mt-2">
-          <input
-            type="text"
-            value={newExName()}
-            onInput={e => setNewExName(e.currentTarget.value)}
-            placeholder="new exercise"
-            class="bg-surface border border-border text-text px-2 py-1 text-xs flex-1 focus:outline-none focus:border-accent"
-          />
-          <select
-            value={newExType()}
-            onChange={e => setNewExType(e.currentTarget.value as 'reps' | 'timed' | 'distance')}
-            class="bg-surface border border-border text-text px-2 py-1 text-xs focus:outline-none"
-          >
-            <option value="reps">reps</option>
-            <option value="timed">timed</option>
-            <option value="distance">distance</option>
-          </select>
-          <button
-            onClick={() => void handleCreateAndAdd()}
-            disabled={!newExName().trim()}
-            class="border border-accent text-accent px-2 py-1 text-xs disabled:border-border disabled:text-muted"
-          >
-            NEW
-          </button>
-        </div>
-
-        <Rule label="CROSS-LIFT SUPPLEMENTAL" class="text-muted mt-6 mb-2" />
+        <Rule label="CROSS-LIFT SUPPLEMENTAL" class="text-muted mb-2" />
         <Show when={blocks().length === 0}>
           <div class="text-faint text-xs py-1">none</div>
         </Show>
