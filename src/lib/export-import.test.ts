@@ -461,7 +461,7 @@ describe('exportJson → importFromRawData round-trip', () => {
     // bool fields (archived/isAmrap), date fields incl. a null endDate, json
     // (plates), the liftSupplementals table, and nullable accessory columns.
     await db.lifts.bulkAdd([
-      { id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', usesBarbell: false },
+      { id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', usesBarbell: false, plateMode: 'paired', implementBase: 55 },
       { id: 2, name: 'OHP', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper', archived: true },
     ])
     await db.trainingMaxes.add({ id: 1, liftId: 1, weight: 200, setAt: new Date('2026-01-01T00:00:00.000Z') })
@@ -476,7 +476,7 @@ describe('exportJson → importFromRawData round-trip', () => {
       { id: 3, sessionId: 1, type: 'cross', setNumber: 1, weight: 150, reps: 5, isAmrap: false, liftId: 2 },
     ])
     await db.exercises.bulkAdd([
-      { id: 1, name: 'Chinup', type: 'reps', usesBarbell: true },
+      { id: 1, name: 'Chinup', type: 'reps', usesBarbell: true, plateMode: 'total', implementBase: 0 },
       { id: 2, name: 'Plank', type: 'timed', archived: true },
     ])
     await db.liftSupplementals.add({ id: 1, liftId: 1, movementLiftId: 2, weightMode: 'percent', percent: 0.7, sets: 5, reps: 10, order: 0 })
@@ -512,10 +512,15 @@ describe('exportJson → importFromRawData round-trip', () => {
     expect(sets.find(s => s.id === 2)?.isAmrap).toBe(true)
     expect(sets.find(s => s.id === 1)?.isAmrap).toBe(false)
     expect(sets.find(s => s.id === 3)?.liftId).toBe(2)
-    // Equipment flags survive as booleans on both entities.
+    // Equipment flags survive on both entities — incl. the v2 plate-loading
+    // columns and an implementBase of 0 (belt squat), which must not coerce to null.
     expect(lifts.find(l => l.id === 1)?.usesBarbell).toBe(false)
+    expect(lifts.find(l => l.id === 1)?.plateMode).toBe('paired')
+    expect(lifts.find(l => l.id === 1)?.implementBase).toBe(55)
     expect((await db.exercises.toArray()).find(e => e.id === 2)?.archived).toBe(true)
     expect((await db.exercises.toArray()).find(e => e.id === 1)?.usesBarbell).toBe(true)
+    expect((await db.exercises.toArray()).find(e => e.id === 1)?.plateMode).toBe('total')
+    expect((await db.exercises.toArray()).find(e => e.id === 1)?.implementBase).toBe(0)
 
     // Date fields are Date instances; a null endDate stays null (not epoch).
     const cycles = await db.cycles.toArray()

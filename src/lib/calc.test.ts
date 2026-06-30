@@ -20,6 +20,7 @@ import {
   formatDuration,
   canAdvanceWeek,
   calcPlatesPerSide,
+  calcPlates,
   calcNextJokerWeight,
   calcJokerSet,
   calcJokerIncrement,
@@ -629,6 +630,32 @@ describe('calcPlatesPerSide', () => {
       { weight: 45, count: 1 },
       { weight: 5, count: 1 },
     ])
+  })
+})
+
+describe('calcPlates — total mode (single stack)', () => {
+  it('subtracts base then loads singles, no pairing — 90 over base 0 → 2×45', () => {
+    expect(calcPlates(90, 0, 'total', DEFAULT_PLATES)).toEqual([{ weight: 45, count: 2 }])
+  })
+
+  it('allows a lone plate (paired could not) — 25 over base 0 → 1×25', () => {
+    expect(calcPlates(25, 0, 'total', DEFAULT_PLATES)).toEqual([{ weight: 25, count: 1 }])
+  })
+
+  it('honours a non-zero base (machine carriage) — 100 over base 10 → 2×45', () => {
+    expect(calcPlates(100, 10, 'total', DEFAULT_PLATES)).toEqual([{ weight: 45, count: 2 }])
+  })
+
+  it('returns [] when target equals base (no added plates)', () => {
+    expect(calcPlates(0, 0, 'total', DEFAULT_PLATES)).toEqual([])
+  })
+
+  it('returns null below base', () => {
+    expect(calcPlates(5, 10, 'total', DEFAULT_PLATES)).toBeNull()
+  })
+
+  it('paired mode equals calcPlatesPerSide', () => {
+    expect(calcPlates(185, 45, 'paired', DEFAULT_PLATES)).toEqual(calcPlatesPerSide(185, 45, DEFAULT_PLATES))
   })
 })
 

@@ -1,5 +1,5 @@
 import type { TrainingDB } from '../db/index'
-import type { ExerciseCategory } from '../types/domain'
+import type { ExerciseCategory, PlateMode } from '../types/domain'
 
 export async function createExercise(
   db: TrainingDB,
@@ -18,8 +18,13 @@ export async function setExerciseCategory(db: TrainingDB, id: number, category: 
   await db.exercises.update(id, { category })
 }
 
-export async function setExerciseUsesBarbell(db: TrainingDB, id: number, usesBarbell: boolean): Promise<void> {
-  await db.exercises.update(id, { usesBarbell })
+export async function setExercisePlateLoading(
+  db: TrainingDB,
+  id: number,
+  plateMode: PlateMode,
+  implementBase: number | null,
+): Promise<void> {
+  await db.exercises.update(id, { plateMode, implementBase })
 }
 
 export async function archiveExercise(db: TrainingDB, id: number): Promise<void> {

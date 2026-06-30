@@ -1,7 +1,8 @@
 import { Show, For } from 'solid-js'
 import Stepper from './Stepper'
-import type { ExerciseCategory } from '../../types/domain'
+import type { ExerciseCategory, PlateMode } from '../../types/domain'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../../lib/assistance'
+import { PLATE_MODE_LABEL, PLATE_MODES } from '../../lib/plate-loading'
 
 interface Props {
   name: string
@@ -10,8 +11,10 @@ interface Props {
   onIncrementChange: (v: number) => void
   category?: ExerciseCategory
   onCategoryChange?: (v: ExerciseCategory) => void
-  usesBarbell?: boolean
-  onUsesBarbellChange?: (v: boolean) => void
+  plateMode?: PlateMode
+  onPlateModeChange?: (v: PlateMode) => void
+  implementBase?: number
+  onImplementBaseChange?: (v: number) => void
   onSave: () => void
   onCancel: () => void
   fullWidth?: boolean
@@ -42,16 +45,28 @@ export default function ExerciseEditor(props: Props) {
           </select>
         </div>
       </Show>
-      <Show when={props.onUsesBarbellChange}>
+      <Show when={props.onPlateModeChange}>
         <div class="flex items-center gap-2">
-          <span class="text-muted text-xs uppercase tracking-widest w-20">Barbell</span>
-          <button
-            onClick={() => props.onUsesBarbellChange!(!props.usesBarbell)}
-            class={`px-2 py-0.5 text-xs border ${props.usesBarbell ? 'border-accent text-accent' : 'border-border text-muted'}`}
-          >
-            {props.usesBarbell ? 'YES · plate math' : 'NO'}
-          </button>
+          <span class="text-muted text-xs uppercase tracking-widest w-20">Plates</span>
+          <div class="flex gap-1">
+            <For each={PLATE_MODES}>
+              {m => (
+                <button
+                  onClick={() => props.onPlateModeChange!(m)}
+                  class={`px-2 py-0.5 text-xs border ${(props.plateMode ?? 'none') === m ? 'border-accent text-accent' : 'border-border text-muted'}`}
+                >
+                  {PLATE_MODE_LABEL[m]}
+                </button>
+              )}
+            </For>
+          </div>
         </div>
+        <Show when={(props.plateMode ?? 'none') !== 'none' && props.onImplementBaseChange}>
+          <div class="flex items-center gap-2">
+            <span class="text-muted text-xs uppercase tracking-widest w-20">Base lb</span>
+            <Stepper value={props.implementBase ?? 0} onChange={props.onImplementBaseChange!} step={5} min={0} max={200} />
+          </div>
+        </Show>
       </Show>
       <Show when={props.increment !== null}>
         <div class="flex items-center gap-2">

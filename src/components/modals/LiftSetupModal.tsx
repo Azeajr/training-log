@@ -1,7 +1,9 @@
 import { createSignal, onMount, For, Index, Show } from 'solid-js'
 import { db } from '../../db/index'
-import type { Lift } from '../../types/domain'
+import type { Lift, PlateMode } from '../../types/domain'
 import { createLift } from '../../lib/lift'
+import { PLATE_MODE_LABEL, PLATE_MODES } from '../../lib/plate-loading'
+import { settings } from '../../store/settings-store'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
 
@@ -43,7 +45,8 @@ export default function LiftSetupModal(props: Props) {
   // ── buffered working state — nothing here touches the db until DONE ──────
   const [blocks, setBlocks] = createSignal<DraftBlock[]>([])
   const [tmInput, setTmInput] = createSignal(props.draftLift?.baseWeight ?? 95)
-  const [usesBarbell, setUsesBarbell] = createSignal(true)
+  const [plateMode, setPlateMode] = createSignal<PlateMode>('paired')
+  const [implementBase, setImplementBase] = createSignal(settings.barWeight)
   const [saving, setSaving] = createSignal(false)
 
   const [newMovementId, setNewMovementId] = createSignal<number | null>(null)
@@ -63,7 +66,11 @@ export default function LiftSetupModal(props: Props) {
     setActiveLifts(lifts.filter(x => !x.archived))
     if (props.liftId != null) {
       const self = lifts.find(l => l.id === props.liftId)
-      if (self) setUsesBarbell(self.usesBarbell !== false)
+      if (self) {
+        const m = self.plateMode ?? (self.usesBarbell === false ? 'none' : 'paired')
+        setPlateMode(m)
+        setImplementBase(self.implementBase ?? (m === 'total' ? 0 : settings.barWeight))
+      }
       const bs = (await db.liftSupplementals.where('liftId').equals(props.liftId).toArray()).sort((a, b) => a.order - b.order)
       setBlocks(bs.map(b => ({ id: b.id, movementLiftId: b.movementLiftId, weightMode: b.weightMode, percent: b.percent, sets: b.sets, reps: b.reps })))
     }
@@ -121,8 +128,14 @@ export default function LiftSetupModal(props: Props) {
           }
         }
 
-        // Persist the barbell flag (gates plate math on this lift's sets).
-        await db.lifts.update(liftId, { usesBarbell: usesBarbell() })
+        // Persist plate-loading. Store base as null when it equals the mode
+        // default so standard-bar lifts keep tracking the global bar setting.
+        const m = plateMode()
+        const defBase = m === 'paired' ? settings.barWeight : 0
+        await db.lifts.update(liftId, {
+          plateMode: m,
+          implementBase: m === 'none' || implementBase() === defBase ? null : implementBase(),
+        })
 
         // Cross blocks: drop removed, add new (no id), update kept.
         const curBlocks = await db.liftSupplementals.where('liftId').equals(liftId).toArray()
@@ -160,13 +173,28 @@ export default function LiftSetupModal(props: Props) {
         </Show>
 
         <Rule label="EQUIPMENT" class="text-muted mb-2" />
-        <button
-          onClick={() => setUsesBarbell(v => !v)}
-          class={`w-full flex items-center justify-between px-3 py-2 border mb-6 text-xs ${usesBarbell() ? 'border-accent text-accent' : 'border-border text-muted'}`}
+        <div class="flex gap-2 mb-2">
+          <For each={PLATE_MODES}>
+            {m => (
+              <button
+                onClick={() => { setPlateMode(m); if (m !== 'none') setImplementBase(m === 'paired' ? settings.barWeight : 0) }}
+                class={`flex-1 px-2 py-1 text-xs border ${plateMode() === m ? 'border-accent text-accent' : 'border-border text-muted'}`}
+              >
+                {PLATE_MODE_LABEL[m]}
+              </button>
+            )}
+          </For>
+        </div>
+        <Show
+          when={plateMode() !== 'none'}
+          fallback={<div class="text-faint text-xs mb-6">no plate readout</div>}
         >
-          <span class="uppercase tracking-widest">uses barbell</span>
-          <span>{usesBarbell() ? 'ON · plate math' : 'OFF'}</span>
-        </button>
+          <div class="flex items-center gap-2 mb-6">
+            <span class="text-muted text-xs w-16">base lb</span>
+            <Stepper value={implementBase()} onChange={setImplementBase} step={5} min={0} max={200} label="implement-base" />
+            <span class="text-faint text-[10px]">{plateMode() === 'paired' ? 'bar weight' : '0 = belt/dip'}</span>
+          </div>
+        </Show>
 
         <Rule label="CROSS-LIFT SUPPLEMENTAL" class="text-muted mb-2" />
         <Show when={blocks().length === 0}>

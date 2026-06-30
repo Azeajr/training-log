@@ -9,6 +9,8 @@ import Stepper from '../forms/Stepper'
 import SetLogControls, { FieldRow } from '../forms/SetLogControls'
 import SetReadout from '../forms/SetReadout'
 import PlateDisplay from '../forms/PlateDisplay'
+import { settings } from '../../store/settings-store'
+import { resolveExerciseLoading } from '../../lib/plate-loading'
 
 // Pre-format an accessory set's value for the readout: reps, time (s), or
 // distance (ft) — whichever the exercise type uses.
@@ -34,6 +36,7 @@ interface Props {
 
 export default function AccessoryLog(props: Props) {
   const type = () => props.exercise?.type ?? 'reps'
+  const loading = () => (props.exercise ? resolveExerciseLoading(props.exercise, settings.barWeight) : null)
   const nextSet = createMemo(() => props.accessory.loggedSets.length + 1)
   const [addingExtra, setAddingExtra] = createSignal(false)
   const done = createMemo(() => props.accessory.loggedSets.length >= ACCESSORY_SETS && !addingExtra())
@@ -181,8 +184,8 @@ export default function AccessoryLog(props: Props) {
             value={activeValue()}
             leading={<span class="text-warn">Set {nextSet()}</span>}
           />
-          <Show when={props.exercise?.usesBarbell === true}>
-            <PlateDisplay weight={weight()} />
+          <Show when={loading()}>
+            <PlateDisplay weight={weight()} loading={loading()!} />
           </Show>
           <SetLogControls
             weight={weight()}

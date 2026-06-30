@@ -7,6 +7,14 @@ export type SupplementalSetType = Exclude<SupplementalTemplate, 'none'>
 //   normal — computed at week-1 percentages (~65%), "it's already light"
 export type DeloadSupplemental = 'skip' | 'deload' | 'normal'
 
+// How a set's plate-loading readout is computed/displayed:
+//   none   — not plate-loaded (dumbbell/cable-stack/bodyweight): no readout
+//   paired — symmetric 2-end load (barbell, hex bar, two-sided plate cable):
+//            (target − base) / 2 per side, plates in pairs, "each side: …"
+//   total  — single stack, no sides (belt squat, dip belt, weighted pull-up,
+//            plate machine): target − base, plates as singles, "plates: …"
+export type PlateMode = 'none' | 'paired' | 'total'
+
 export interface Lift {
   id?: number
   name: string
@@ -15,9 +23,14 @@ export interface Lift {
   baseWeight: number
   liftType: 'upper' | 'lower'
   archived?: boolean
-  // Whether this lift's sets load a barbell. undefined/true ⇒ barbell, so plate
-  // math is shown (matches existing behaviour); explicit false hides plate math
-  // for a non-barbell main lift (machine, dumbbell, weighted bodyweight).
+  // Plate-loading model. `plateMode` undefined falls back to `usesBarbell`
+  // (see resolveLiftLoading). `implementBase` is the weight present before plates
+  // (bar/carriage); undefined ⇒ mode default (paired→global barWeight, total→0),
+  // which lets standard-bar lifts track the global bar setting.
+  plateMode?: PlateMode
+  implementBase?: number | null
+  // Legacy v1 flag, kept as the fallback source for `plateMode`. undefined/true ⇒
+  // barbell (paired); explicit false ⇒ none.
   usesBarbell?: boolean
 }
 
@@ -87,9 +100,12 @@ export interface Exercise {
   type: 'reps' | 'timed' | 'distance'
   category?: ExerciseCategory
   archived?: boolean
-  // Whether this assistance exercise loads a barbell. undefined/false ⇒ not a
-  // barbell, so no plate math (matches existing behaviour); explicit true opts a
-  // barbell accessory (e.g. Barbell Row, RDL) into the plate-math readout.
+  // Plate-loading model (see Lift). `plateMode` undefined falls back to
+  // `usesBarbell` via resolveExerciseLoading; default for an accessory is `none`.
+  plateMode?: PlateMode
+  implementBase?: number | null
+  // Legacy v1 flag, kept as the fallback source for `plateMode`. explicit true ⇒
+  // paired (barbell accessory); undefined/false ⇒ none.
   usesBarbell?: boolean
 }
 

@@ -67,12 +67,12 @@ export async function importJson(db: TrainingDB, file: File): Promise<void> {
 // the guard prevents bad keys from reaching the INSERT, this layer just
 // gives a friendlier "ignore unknown column" experience for legacy backups.
 const COLS = {
-  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived', 'usesBarbell'],
+  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived', 'usesBarbell', 'plateMode', 'implementBase'],
   trainingMaxes: ['id', 'liftId', 'weight', 'setAt'],
   cycles: ['id', 'number', 'startDate', 'endDate', 'closedThroughWeek'],
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
   sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId'],
-  exercises: ['id', 'name', 'type', 'category', 'archived', 'usesBarbell'],
+  exercises: ['id', 'name', 'type', 'category', 'archived', 'usesBarbell', 'plateMode', 'implementBase'],
   liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order'],
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],

@@ -1,12 +1,12 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../db/index'
-import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory } from '../types/domain'
+import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
-import { createExercise, renameExercise, setExerciseCategory, setExerciseUsesBarbell, archiveExercise, unarchiveExercise } from '../lib/exercise'
+import { createExercise, renameExercise, setExerciseCategory, setExercisePlateLoading, archiveExercise, unarchiveExercise } from '../lib/exercise'
 import { updateLift, archiveLift, unarchiveLift, moveLift, liftsCrossReferencing } from '../lib/lift'
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -35,7 +35,8 @@ export default function Settings() {
   const [editExName, setEditExName] = createSignal('')
   const [editExIncrement, setEditExIncrement] = createSignal(5)
   const [editExCategory, setEditExCategory] = createSignal<ExerciseCategory>('push')
-  const [editExUsesBarbell, setEditExUsesBarbell] = createSignal(false)
+  const [editExPlateMode, setEditExPlateMode] = createSignal<PlateMode>('none')
+  const [editExImplementBase, setEditExImplementBase] = createSignal(0)
   const [accessoryIncrements, setAccessoryIncrements] = createSignal<Record<number, { tmId: number; incrementLb: number }>>({})
   const [currentCycleWeek, setCurrentCycleWeek] = createSignal<1 | 2 | 3 | 4 | null>(null)
   const [currentCycleId, setCurrentCycleId] = createSignal<number | null>(null)
@@ -174,7 +175,9 @@ export default function Settings() {
     if (!editExName().trim()) return
     await renameExercise(db, id, editExName().trim())
     await setExerciseCategory(db, id, editExCategory())
-    await setExerciseUsesBarbell(db, id, editExUsesBarbell())
+    const exMode = editExPlateMode()
+    const exDefBase = exMode === 'paired' ? settings.barWeight : 0
+    await setExercisePlateLoading(db, id, exMode, exMode === 'none' || editExImplementBase() === exDefBase ? null : editExImplementBase())
     const tmEntry = accessoryIncrements()[id]
     if (tmEntry && editExIncrement() !== tmEntry.incrementLb) {
       await db.accessoryTrainingMaxes.update(tmEntry.tmId, { incrementLb: editExIncrement() })
@@ -676,7 +679,7 @@ export default function Settings() {
                   </Show>
                 </span>
                 <div class="flex items-center gap-4">
-                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExCategory(ex.category ?? 'push'); setEditExUsesBarbell(ex.usesBarbell === true); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
+                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExCategory(ex.category ?? 'push'); setEditExPlateMode(ex.plateMode ?? (ex.usesBarbell === true ? 'paired' : 'none')); setEditExImplementBase(ex.implementBase ?? (ex.plateMode === 'total' ? 0 : settings.barWeight)); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
                   <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
                 </div>
               </div>
@@ -686,8 +689,10 @@ export default function Settings() {
                 onNameChange={setEditExName}
                 category={editExCategory()}
                 onCategoryChange={setEditExCategory}
-                usesBarbell={editExUsesBarbell()}
-                onUsesBarbellChange={setEditExUsesBarbell}
+                plateMode={editExPlateMode()}
+                onPlateModeChange={setEditExPlateMode}
+                implementBase={editExImplementBase()}
+                onImplementBaseChange={setEditExImplementBase}
                 increment={accessoryIncrements()[ex.id!] ? editExIncrement() : null}
                 onIncrementChange={setEditExIncrement}
                 onSave={() => handleRenameExercise(ex.id!)}

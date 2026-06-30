@@ -103,6 +103,12 @@ export const ADDITIVE_MIGRATIONS = [
   // behaviour without backfilling existing rows.
   `ALTER TABLE lifts ADD COLUMN usesBarbell INTEGER`,
   `ALTER TABLE exercises ADD COLUMN usesBarbell INTEGER`,
+  // v2 plate-loading: paired/total mode + implement base weight (bar/carriage).
+  // Both NULL by default — resolver falls back to usesBarbell, so no backfill.
+  `ALTER TABLE lifts ADD COLUMN plateMode TEXT`,
+  `ALTER TABLE lifts ADD COLUMN implementBase REAL`,
+  `ALTER TABLE exercises ADD COLUMN plateMode TEXT`,
+  `ALTER TABLE exercises ADD COLUMN implementBase REAL`,
   // Roster concept removed: the per-lift assistance assignment table is unused.
   // First destructive migration — safe because nothing reads it and it held no
   // training history (only assignments; logged sets live in accessorySets).
