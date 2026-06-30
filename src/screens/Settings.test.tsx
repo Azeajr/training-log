@@ -32,7 +32,6 @@ describe('Settings — CLEANUP ORPHANS', () => {
   beforeEach(async () => {
     await Promise.all([
       db.exercises.clear(),
-      db.liftAccessories.clear(),
       db.accessoryTrainingMaxes.clear(),
       db.accessorySets.clear(),
       db.sessions.clear(),
@@ -44,38 +43,22 @@ describe('Settings — CLEANUP ORPHANS', () => {
   afterEach(drain)
 
   it('cancel does not modify DB', async () => {
-    await db.exercises.add({ name: 'Curl', type: 'reps' })
-    await db.liftAccessories.add({ liftId: 1, exerciseId: 9999, order: 0 })
+    await db.accessoryTrainingMaxes.add({ exerciseId: 9999, weight: 50, incrementLb: 5, setAt: new Date() })
 
     renderSettings()
     fireEvent.click(await screen.findByText('CLEANUP ORPHANS'))
     fireEvent.click(await screen.findByText('CANCEL'))
 
-    const las = await db.liftAccessories.toArray()
-    expect(las).toHaveLength(1)
+    expect(await db.accessoryTrainingMaxes.count()).toBe(1)
   })
 
-  it('removes orphan liftAccessory rows', async () => {
-    await db.exercises.add({ name: 'Curl', type: 'reps' })
-    const exId2 = await db.exercises.add({ name: 'Row', type: 'reps' })
-    await db.liftAccessories.add({ liftId: 1, exerciseId: 9999, order: 0 })
-    await db.liftAccessories.add({ liftId: 1, exerciseId: exId2, order: 1 })
-
-    renderSettings()
-    fireEvent.click(await screen.findByText('CLEANUP ORPHANS'))
-    fireEvent.click(await screen.findByText('CLEANUP'))
-
-    await waitFor(async () => {
-      const las = await db.liftAccessories.toArray()
-      expect(las).toHaveLength(1)
-      expect(las[0].exerciseId).toBe(exId2)
-    })
-  })
-
-  it('archives exercise with no assignments and no set history', async () => {
+  it('archives an exercise with no set history', async () => {
     const orphanId = await db.exercises.add({ name: 'Forgotten', type: 'reps' })
     const activeId = await db.exercises.add({ name: 'Active', type: 'reps' })
-    await db.liftAccessories.add({ liftId: 1, exerciseId: activeId, order: 0 })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.accessorySets.add({ sessionId, exerciseId: activeId, setNumber: 1, weight: 50, reps: 10, duration: null, distance: null })
 
     renderSettings()
     fireEvent.click(await screen.findByText('CLEANUP ORPHANS'))
@@ -133,7 +116,6 @@ describe('Settings — skip to week', () => {
   beforeEach(async () => {
     await Promise.all([
       db.exercises.clear(),
-      db.liftAccessories.clear(),
       db.accessoryTrainingMaxes.clear(),
       db.accessorySets.clear(),
       db.sessions.clear(),
@@ -290,7 +272,7 @@ describe('Settings — deload', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
-      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sessions.clear(), db.exercises.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
     ])
   })
@@ -340,7 +322,7 @@ describe('Settings — TM editing', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
-      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sessions.clear(), db.exercises.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
     ])
   })
@@ -428,7 +410,7 @@ describe('Settings — exercises', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
-      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sessions.clear(), db.exercises.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
     ])
   })
@@ -624,7 +606,7 @@ describe('Settings — rest timers', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
-      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sessions.clear(), db.exercises.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
     ])
     // Seed a settings row so updateSettings can write to DB
@@ -760,7 +742,7 @@ describe('Settings — exercise increment stepper', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
-      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sessions.clear(), db.exercises.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
     ])
   })
@@ -799,7 +781,7 @@ describe('Settings — import error', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
-      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sessions.clear(), db.exercises.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
     ])
   })
@@ -873,7 +855,7 @@ describe('Settings — SUPPLEMENTAL', () => {
   beforeEach(async () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
-      db.sessions.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.sessions.clear(), db.exercises.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
       db.settings.clear(),
     ])
@@ -933,7 +915,7 @@ describe('Settings — skip deload', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(),
-      db.settings.clear(), db.exercises.clear(), db.liftAccessories.clear(),
+      db.settings.clear(), db.exercises.clear(),
       db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
     ])
   })
@@ -1105,7 +1087,6 @@ describe('Settings — current week (issue #52) + reopen', () => {
   beforeEach(async () => {
     await Promise.all([
       db.exercises.clear(),
-      db.liftAccessories.clear(),
       db.accessoryTrainingMaxes.clear(),
       db.accessorySets.clear(),
       db.sessions.clear(),
@@ -1188,7 +1169,7 @@ describe('Settings — current week (issue #52) + reopen', () => {
 describe('Settings — lift roster', () => {
   beforeEach(async () => {
     await Promise.all([
-      db.exercises.clear(), db.liftAccessories.clear(), db.accessoryTrainingMaxes.clear(),
+      db.exercises.clear(), db.accessoryTrainingMaxes.clear(),
       db.accessorySets.clear(), db.sessions.clear(), db.lifts.clear(),
       db.cycles.clear(), db.trainingMaxes.clear(), db.liftSupplementals.clear(),
     ])
@@ -1224,6 +1205,35 @@ describe('Settings — lift roster', () => {
     fireEvent.click(screen.getByText('ARCHIVE'))
 
     await waitFor(async () => expect((await db.lifts.get(ids[0]))?.archived).toBe(true))
+  })
+
+  it('archiving a cross-movement lift warns and KEEP CROSS keeps the block', async () => {
+    const ids = await seedLifts() // Squat(0), Bench(1), Deadlift(2), OHP(3)
+    // Squat's day runs a cross block off Bench's movement.
+    await db.liftSupplementals.add({ liftId: ids[0], movementLiftId: ids[1], weightMode: 'fsl', percent: null, sets: 5, reps: 10, order: 0 })
+    renderSettings()
+    await screen.findAllByText('archive')
+    fireEvent.click(screen.getAllByText('archive')[1]) // Bench
+
+    await screen.findByText(/cross-lift movement for Squat/)
+    fireEvent.click(screen.getByText('KEEP CROSS'))
+
+    await waitFor(async () => expect((await db.lifts.get(ids[1]))?.archived).toBe(true))
+    expect(await db.liftSupplementals.where('movementLiftId').equals(ids[1]).toArray()).toHaveLength(1)
+  })
+
+  it('archiving a cross-movement lift with REMOVE CROSS drops the block', async () => {
+    const ids = await seedLifts()
+    await db.liftSupplementals.add({ liftId: ids[0], movementLiftId: ids[1], weightMode: 'fsl', percent: null, sets: 5, reps: 10, order: 0 })
+    renderSettings()
+    await screen.findAllByText('archive')
+    fireEvent.click(screen.getAllByText('archive')[1])
+
+    await screen.findByText(/cross-lift movement for Squat/)
+    fireEvent.click(screen.getByText('REMOVE CROSS'))
+
+    await waitFor(async () => expect((await db.lifts.get(ids[1]))?.archived).toBe(true))
+    expect(await db.liftSupplementals.where('movementLiftId').equals(ids[1]).toArray()).toHaveLength(0)
   })
 
   it('archiving the last remaining active lift is blocked with a toast', async () => {

@@ -18,17 +18,15 @@ export default function Setup() {
   // eslint-disable-next-line no-unassigned-vars -- Solid `ref={importInputRef}` reassigns at runtime
   let importInputRef!: HTMLInputElement
 
-  // Lifts enriched with assistance + cross-lift block counts so step 1 can show
-  // at a glance what's already been configured on each lift.
+  // Lifts enriched with cross-lift block counts so step 1 can show at a glance
+  // what's already been configured on each lift.
   const [lifts, { refetch }] = createResource(async () => {
-    const [ls, accs, blocks] = await Promise.all([
+    const [ls, blocks] = await Promise.all([
       db.lifts.orderBy('order').toArray(),
-      db.liftAccessories.toArray(),
       db.liftSupplementals.toArray(),
     ])
     return ls.map(l => ({
       ...l,
-      accCount: accs.filter(a => a.liftId === l.id).length,
       crossCount: blocks.filter(b => b.liftId === l.id).length,
     }))
   })
@@ -148,7 +146,7 @@ export default function Setup() {
       <Show when={step() === 1}>
         <p class="text-muted text-xs mb-6">
           Set up your main lifts. The classic 5/3/1 four are ready to go — rename, reorder,
-          remove, or add your own. Tap SETUP on a lift to choose its assistance work.
+          remove, or add your own. Tap SETUP on a lift for cross-lift work and equipment.
         </p>
 
         <Rule label="MAIN LIFTS" class="text-muted mb-3" />
@@ -177,12 +175,9 @@ export default function Setup() {
                     >▼</button>
                   </div>
                   <span class="text-text uppercase tracking-widest text-sm flex-1">{l.name}</span>
-                  <Show when={l.accCount > 0 || l.crossCount > 0}>
+                  <Show when={l.crossCount > 0}>
                     <span class="text-faint text-[10px] tracking-normal">
-                      {[
-                        l.accCount > 0 ? `${l.accCount} asst` : null,
-                        l.crossCount > 0 ? `${l.crossCount} cross` : null,
-                      ].filter(Boolean).join(' · ')}
+                      {l.crossCount} cross
                     </span>
                   </Show>
                   <span class="text-faint text-xs">+{l.progressionIncrement}</span>

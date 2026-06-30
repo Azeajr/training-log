@@ -8,6 +8,7 @@ import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
 import SetLogControls, { FieldRow } from '../forms/SetLogControls'
 import SetReadout from '../forms/SetReadout'
+import PlateDisplay from '../forms/PlateDisplay'
 
 // Pre-format an accessory set's value for the readout: reps, time (s), or
 // distance (ft) — whichever the exercise type uses.
@@ -180,6 +181,9 @@ export default function AccessoryLog(props: Props) {
             value={activeValue()}
             leading={<span class="text-warn">Set {nextSet()}</span>}
           />
+          <Show when={props.exercise?.usesBarbell === true}>
+            <PlateDisplay weight={weight()} />
+          </Show>
           <SetLogControls
             weight={weight()}
             onWeightChange={setWeight}

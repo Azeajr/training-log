@@ -17,16 +17,42 @@ export async function updateLift(db: TrainingDB, id: number, patch: Partial<Lift
 // Archiving keeps all history (TMs, completed/skipped sessions) but removes the
 // lift from the active roster: it no longer counts toward cycle completion.
 // Pending sessions in any cycle are deleted so they don't linger on Today.
-export async function archiveLift(db: TrainingDB, id: number): Promise<void> {
+export async function archiveLift(
+  db: TrainingDB,
+  id: number,
+  opts?: { removeCrossRefs?: boolean },
+): Promise<void> {
   await db.transaction(async () => {
     await db.lifts.update(id, { archived: true })
     const pending = await db.sessions.where('liftId').equals(id).filter(s => s.status === 'pending').toArray()
     for (const s of pending) await db.sessions.delete(s.id!)
+    // Optionally drop cross-lift blocks on other days that use this lift as
+    // their movement. Off by default: archiving is reversible, so the blocks
+    // keep running off this lift's last (frozen) TM until the user opts to remove.
+    if (opts?.removeCrossRefs) {
+      const refs = await db.liftSupplementals.where('movementLiftId').equals(id).toArray()
+      for (const b of refs) await db.liftSupplementals.delete(b.id!)
+    }
   })
 }
 
 export async function unarchiveLift(db: TrainingDB, id: number): Promise<void> {
   await db.lifts.update(id, { archived: false })
+}
+
+// Names of active training days whose cross-lift supplemental uses this lift as
+// its movement. Drives the archive warning: archiving leaves these blocks
+// pointing at a now-inactive lift (they keep its frozen TM unless removed).
+export async function liftsCrossReferencing(db: TrainingDB, movementLiftId: number): Promise<string[]> {
+  const refs = await db.liftSupplementals.where('movementLiftId').equals(movementLiftId).toArray()
+  if (refs.length === 0) return []
+  const lifts = await db.lifts.toArray()
+  const names: string[] = []
+  for (const b of refs) {
+    const owner = lifts.find(l => l.id === b.liftId)
+    if (owner && !owner.archived && !names.includes(owner.name)) names.push(owner.name)
+  }
+  return names
 }
 
 // Hard-delete a lift and everything attached to it. Destructive — intended for
@@ -35,7 +61,6 @@ export async function unarchiveLift(db: TrainingDB, id: number): Promise<void> {
 // this lift as their movement.
 export async function deleteLift(db: TrainingDB, id: number): Promise<void> {
   await db.transaction(async () => {
-    await db.liftAccessories.where('liftId').equals(id).delete()
     await db.liftSupplementals.where('liftId').equals(id).delete()
     const referencing = await db.liftSupplementals.where('movementLiftId').equals(id).toArray()
     for (const b of referencing) await db.liftSupplementals.delete(b.id!)

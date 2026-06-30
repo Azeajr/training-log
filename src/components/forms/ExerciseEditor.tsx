@@ -10,6 +10,8 @@ interface Props {
   onIncrementChange: (v: number) => void
   category?: ExerciseCategory
   onCategoryChange?: (v: ExerciseCategory) => void
+  usesBarbell?: boolean
+  onUsesBarbellChange?: (v: boolean) => void
   onSave: () => void
   onCancel: () => void
   fullWidth?: boolean
@@ -38,6 +40,17 @@ export default function ExerciseEditor(props: Props) {
               <option value={c}>{CATEGORY_LABEL[c]}</option>
             )}</For>
           </select>
+        </div>
+      </Show>
+      <Show when={props.onUsesBarbellChange}>
+        <div class="flex items-center gap-2">
+          <span class="text-muted text-xs uppercase tracking-widest w-20">Barbell</span>
+          <button
+            onClick={() => props.onUsesBarbellChange!(!props.usesBarbell)}
+            class={`px-2 py-0.5 text-xs border ${props.usesBarbell ? 'border-accent text-accent' : 'border-border text-muted'}`}
+          >
+            {props.usesBarbell ? 'YES · plate math' : 'NO'}
+          </button>
         </div>
       </Show>
       <Show when={props.increment !== null}>

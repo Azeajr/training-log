@@ -78,31 +78,6 @@ async function _seedDatabase() {
     }
   }
 
-  // Seed lift accessories if missing — done separately so a partial first-run recovers
-  const accessoryCount = await db.liftAccessories.count()
-  if (accessoryCount === 0) {
-    const lifts = await db.lifts.orderBy('order').toArray()
-    const exercises = await db.exercises.toArray()
-
-    const byName = (name: string) => exercises.find(e => e.name === name)!.id!
-    const liftId = (name: string) => lifts.find(l => l.name === name)!.id!
-
-    await db.liftAccessories.bulkAdd([
-      { liftId: liftId('OHP'), exerciseId: byName('Chinups'),       order: 1 },
-      { liftId: liftId('OHP'), exerciseId: byName('Lat Pulldowns'), order: 2 },
-      { liftId: liftId('OHP'), exerciseId: byName('Bicep Curls'),   order: 3 },
-      { liftId: liftId('Deadlift'), exerciseId: byName('Nordic Curls'),          order: 1 },
-      { liftId: liftId('Deadlift'), exerciseId: byName('Bulgarian Split Squat'), order: 2 },
-      { liftId: liftId('Deadlift'), exerciseId: byName('Leg Press'),             order: 3 },
-      { liftId: liftId('Bench'), exerciseId: byName('Barbell Row'),  order: 1 },
-      { liftId: liftId('Bench'), exerciseId: byName('T Bar Row'),    order: 2 },
-      { liftId: liftId('Bench'), exerciseId: byName('Dumbbell Row'), order: 3 },
-      { liftId: liftId('Squat'), exerciseId: byName('Reverse Nordic'),                order: 1 },
-      { liftId: liftId('Squat'), exerciseId: byName('Single Leg Romanian Deadlift'), order: 2 },
-      { liftId: liftId('Squat'), exerciseId: byName('Pull Through'),                  order: 3 },
-    ])
-  }
-
   // Seed settings if missing
   const settingsCount = await db.settings.count()
   if (settingsCount === 0) {

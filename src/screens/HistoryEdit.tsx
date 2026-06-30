@@ -1,7 +1,7 @@
 import { createSignal, onMount, For, Index, Show } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
-import type { Exercise, LiftAccessory } from '../types/domain'
+import type { Exercise } from '../types/domain'
 import { SET_TYPE_EDIT_ORDER } from '../lib/calc'
 import { formatDateLong } from '../lib/format'
 import DurationInput from '../components/forms/DurationInput'
@@ -36,11 +36,6 @@ interface EditAccessory {
   sets: EditAccSet[]
 }
 
-interface LiftExercise {
-  exercise: Exercise
-  liftAccessory: LiftAccessory
-}
-
 export default function HistoryEdit() {
   const params = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
@@ -58,7 +53,7 @@ export default function HistoryEdit() {
   const [editAccessories, setEditAccessories] = createSignal<EditAccessory[]>([])
   const [deletedAccessoryIds, setDeletedAccessoryIds] = createSignal<number[]>([])
   const [notes, setNotes] = createSignal('')
-  const [liftExercises, setLiftExercises] = createSignal<LiftExercise[]>([])
+  const [libraryExercises, setLibraryExercises] = createSignal<Exercise[]>([])
   const [picker, setPicker] = createSignal<PickerMode>(null)
   const [isSaving, setIsSaving] = createSignal(false)
 
@@ -132,13 +127,11 @@ export default function HistoryEdit() {
     }
     setEditAccessories(accessories)
 
-    const liftAccs = await db.liftAccessories.where('liftId').equals(lift.id!).sortBy('order')
-    const liftExIds = liftAccs.map(la => la.exerciseId)
-    const liftExList = await db.exercises.where('id').anyOf(liftExIds).toArray()
-    setLiftExercises(
-      liftAccs
-        .map(la => ({ liftAccessory: la, exercise: liftExList.find(e => e.id === la.exerciseId)! }))
-        .filter(r => r.exercise)
+    // The roster is gone — offer the whole non-archived library, alphabetical.
+    setLibraryExercises(
+      (await db.exercises.toArray())
+        .filter(e => !e.archived)
+        .sort((a, b) => a.name.localeCompare(b.name))
     )
   }
 
@@ -411,8 +404,8 @@ export default function HistoryEdit() {
                 <div class="w-14" />
               </div>
               <div class="space-y-1">
-                <For each={liftExercises()}>
-                  {({ exercise }) => {
+                <For each={libraryExercises()}>
+                  {(exercise) => {
                     const alreadyAdded = picker()?.kind === 'add'
                       && editAccessories().some(a => a.exerciseId === exercise.id)
                     return (

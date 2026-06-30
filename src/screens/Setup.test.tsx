@@ -24,7 +24,6 @@ beforeEach(async () => {
   await Promise.all([
     db.lifts.clear(),
     db.trainingMaxes.clear(),
-    db.liftAccessories.clear(),
     db.liftSupplementals.clear(),
     db.exercises.clear(),
   ])
@@ -183,7 +182,7 @@ describe('Setup screen — roster editing', () => {
 
     // Setup modal opens against the draft, but nothing is written yet.
     await screen.findByText('DONE')
-    expect(document.body.textContent).toContain('ASSISTANCE')
+    expect(document.body.textContent).toContain('CROSS-LIFT SUPPLEMENTAL')
     expect((await db.lifts.toArray()).some(l => l.name === 'Front Squat')).toBe(false)
 
     // Commit creates the lift.
@@ -227,13 +226,6 @@ describe('Setup screen — roster editing', () => {
     await waitFor(() => expect(screen.queryByText('DONE')).not.toBeInTheDocument())
     // No draft was in flight, so no add form should reopen.
     expect(screen.queryByPlaceholderText('Lift name')).not.toBeInTheDocument()
-  })
-
-  it('shows an assistance-count badge for a lift with accessories', async () => {
-    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
-    await db.liftAccessories.add({ liftId: 1, exerciseId: exId, order: 1 })
-    renderSetup()
-    await screen.findByText('1 asst')
   })
 
   it('SAVE on a rename trimmed to empty is a no-op (keeps the original name)', async () => {
