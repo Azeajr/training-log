@@ -16,6 +16,8 @@ import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
 import LiftSetupModal, { type DraftLiftFields } from '../components/modals/LiftSetupModal'
 import Rule from '../components/layout/Rule'
+import SectionLabel from '../components/layout/SectionLabel'
+import ToggleChip from '../components/ui/ToggleChip'
 import Stepper from '../components/forms/Stepper'
 import ExerciseEditor from '../components/forms/ExerciseEditor'
 
@@ -450,10 +452,9 @@ export default function Settings() {
             </div>
             <div class="flex gap-2">
               <For each={(['upper', 'lower'] as const)}>{type => (
-                <button
-                  onClick={() => setNewLiftType(type)}
-                  class={`px-2 py-1 text-xs border ${newLiftType() === type ? 'border-accent text-accent' : 'border-border text-muted'}`}
-                >{type}</button>
+                <ToggleChip active={newLiftType() === type} onClick={() => setNewLiftType(type)}>
+                  {type}
+                </ToggleChip>
               )}</For>
             </div>
             <div class="flex gap-3">
@@ -524,32 +525,24 @@ export default function Settings() {
         <Rule label="SUPPLEMENTAL" class="text-muted mb-2" />
         <div class="flex gap-1 flex-wrap">
           <For each={(['fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'none'] as const)}>{(t) => (
-            <button
-              class={`px-2 py-1 text-xs font-mono tracking-widest border ${
-                (settings.supplementalTemplate ?? 'fsl+bbb') === t
-                  ? 'border-accent text-accent'
-                  : 'border-border text-muted hover:border-accent hover:text-accent'
-              }`}
+            <ToggleChip
+              active={(settings.supplementalTemplate ?? 'fsl+bbb') === t}
               onClick={() => void handleSaveTemplate(t)}
             >
               {t.toUpperCase()}
-            </button>
+            </ToggleChip>
           )}</For>
         </div>
 
-        <div class="text-muted text-xs uppercase tracking-widest mt-3 mb-1">Deload week</div>
+        <SectionLabel class="mt-3 mb-1">Deload week</SectionLabel>
         <div class="flex gap-1 flex-wrap">
           <For each={([[true, '4-WEEK'], [false, '3-WEEK']] as const)}>{([on, label]) => (
-            <button
-              class={`px-2 py-1 text-xs font-mono tracking-widest border ${
-                settings.hasDeloadWeek === on
-                  ? 'border-accent text-accent'
-                  : 'border-border text-muted hover:border-accent hover:text-accent'
-              }`}
+            <ToggleChip
+              active={settings.hasDeloadWeek === on}
               onClick={() => void updateSettings({ hasDeloadWeek: on })}
             >
               {label}
-            </button>
+            </ToggleChip>
           )}</For>
         </div>
         <Show
@@ -560,19 +553,15 @@ export default function Settings() {
             </p>
           }
         >
-          <div class="text-muted text-xs uppercase tracking-widest mt-3 mb-1">Deload supplemental</div>
+          <SectionLabel class="mt-3 mb-1">Deload supplemental</SectionLabel>
           <div class="flex gap-1 flex-wrap">
             <For each={([['skip', 'SKIP IT'], ['deload', 'DELOAD %'], ['normal', 'NORMAL']] as const)}>{([m, label]) => (
-              <button
-                class={`px-2 py-1 text-xs font-mono tracking-widest border ${
-                  (settings.deloadSupplemental ?? 'normal') === m
-                    ? 'border-accent text-accent'
-                    : 'border-border text-muted hover:border-accent hover:text-accent'
-                }`}
+              <ToggleChip
+                active={(settings.deloadSupplemental ?? 'normal') === m}
                 onClick={() => void updateSettings({ deloadSupplemental: m })}
               >
                 {label}
-              </button>
+              </ToggleChip>
             )}</For>
           </div>
           <p class="text-faint text-xs mt-1">
