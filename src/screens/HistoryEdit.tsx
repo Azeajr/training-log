@@ -6,6 +6,7 @@ import { SET_TYPE_EDIT_ORDER } from '../lib/calc'
 import { formatDateLong } from '../lib/format'
 import DurationInput from '../components/forms/DurationInput'
 import Rule from '../components/layout/Rule'
+import SectionLabel from '../components/layout/SectionLabel'
 import Stepper from '../components/forms/Stepper'
 
 type PickerMode = { kind: 'add' } | { kind: 'swap'; accIdx: number } | null
@@ -292,9 +293,7 @@ export default function HistoryEdit() {
               return (
                 <Show when={rows().length > 0}>
                   <div class="mb-6">
-                    <div class="text-muted uppercase text-xs tracking-widest mb-2">
-                      {type.toUpperCase()}
-                    </div>
+                    <SectionLabel class="mb-2">{type.toUpperCase()}</SectionLabel>
                     <Index each={rows()}>
                       {row => (
                         <div class="flex items-center gap-2 py-1.5 flex-wrap">
@@ -378,7 +377,7 @@ export default function HistoryEdit() {
           </div>
 
           <div class="mb-6">
-            <div class="text-muted uppercase text-xs tracking-widest mb-2">NOTES</div>
+            <SectionLabel class="mb-2">NOTES</SectionLabel>
             <textarea
               value={notes()}
               onInput={e => setNotes(e.currentTarget.value)}
