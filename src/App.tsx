@@ -18,6 +18,7 @@ const History = lazy(() => import('./screens/History'))
 const HistoryEdit = lazy(() => import('./screens/HistoryEdit'))
 const Settings = lazy(() => import('./screens/Settings'))
 const Setup = lazy(() => import('./screens/Setup'))
+const Stats = lazy(() => import('./screens/Stats'))
 
 function AppShell(props: ParentProps) {
   const navigate = useNavigate()
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/today" component={Today} />
         <Route path="/workout" component={Workout} />
         <Route path="/history" component={History} />
+        <Route path="/stats" component={Stats} />
         <Route path="/history/:sessionId/edit" component={HistoryEdit} />
         <Route path="/settings" component={Settings} />
         <Route path="/setup" component={Setup} />
