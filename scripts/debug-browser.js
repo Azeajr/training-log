@@ -69,25 +69,27 @@ async function waitForText(page, text, timeout = 5000) {
 }
 
 async function runSetupWizard(page) {
-  // Step 1 — enter training maxes
-  const onStep1 = await waitForText(page, 'STEP 1')
-  if (!onStep1) return
+  // Step 1 — MAIN LIFTS (defaults pre-populated): just advance.
+  if (!await waitForText(page, 'STEP 1')) return
+  console.log('  [setup] Step 1 — main lifts (defaults) → NEXT')
+  await page.click('button:has-text("NEXT")')
+  await page.waitForTimeout(600)
 
-  console.log('  [setup] filling Step 1 — training maxes')
+  // Step 2 — TRAINING MAXES: fill one number input per lift.
+  if (!await waitForText(page, 'STEP 2')) return
+  console.log('  [setup] Step 2 — filling training maxes')
   const inputs = await page.locator('input[type=number]').all()
-  // Use realistic defaults: OHP/Bench 95 lb, Squat/Deadlift 135 lb
+  // Realistic defaults: OHP/Bench 95 lb, Squat/Deadlift 135 lb
   const defaults = [95, 95, 135, 135]
   for (let i = 0; i < inputs.length; i++) {
     await inputs[i].fill(String(defaults[i] ?? 100))
   }
   await page.click('button:has-text("NEXT")')
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(600)
 
-  // Step 2 — confirm
-  const onStep2 = await waitForText(page, 'STEP 2')
-  if (!onStep2) return
-
-  console.log('  [setup] confirming Step 2 — START TRAINING')
+  // Step 3 — CONFIRM.
+  if (!await waitForText(page, 'STEP 3')) return
+  console.log('  [setup] Step 3 — confirm → START TRAINING')
   await page.click('button:has-text("START TRAINING")')
   await page.waitForTimeout(1500)
 }
