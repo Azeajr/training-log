@@ -31,6 +31,7 @@ import TmRecommendationModal from '../components/modals/TmRecommendationModal'
 import { getSessionTmRecommendation } from '../lib/tm-recommendations'
 import type { SessionTmRecommendation } from '../lib/tm-recommendations'
 import Rule from '../components/layout/Rule'
+import SectionLabel from '../components/layout/SectionLabel'
 import { ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../lib/assistance'
 
 interface LoadedCrossBlock {
@@ -112,7 +113,10 @@ export default function Workout() {
   // (cross, accessories) don't report, so they never pull focus.
   const [activeRowEl, setActiveRowEl] = createSignal<HTMLDivElement>()
   createEffect(on(activeRowEl, el => {
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // Honor reduce-motion: the CSS scroll-behavior override can't reach an
+    // explicit JS 'smooth', so gate the scroll-to-active-set here too.
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    el?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' })
   }))
 
   // Plate-loading for the session's own lift (warmup/main/joker/supplemental).
@@ -598,7 +602,7 @@ export default function Workout() {
 
         <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start mb-6">
           <div class="mb-6 md:mb-0">
-            <div class="text-muted uppercase text-xs tracking-widest mb-2">WARM UP</div>
+            <SectionLabel class="mb-2">WARM UP</SectionLabel>
             <SetSection
               sets={warmupSets}
               offset={() => 0}
@@ -612,7 +616,7 @@ export default function Workout() {
           </div>
 
           <div class="mb-6 md:mb-0">
-            <div class="text-muted uppercase text-xs tracking-widest mb-2">MAIN</div>
+            <SectionLabel class="mb-2">MAIN</SectionLabel>
             <SetSection
               sets={mainSets}
               offset={() => setOffset('main')}
@@ -626,7 +630,7 @@ export default function Workout() {
             />
             <Show when={jokerSetsRendered().length > 0}>
               <div class="mt-4">
-                <div class="text-muted uppercase text-xs tracking-widest mb-2">JOKER SETS</div>
+                <SectionLabel class="mb-2">JOKER SETS</SectionLabel>
                 <SetSection
                   sets={jokerSetsRendered}
                   offset={() => setOffset('joker')}
@@ -650,7 +654,7 @@ export default function Workout() {
 
           <Show when={supplementalLabel() !== null}>
             <div class="mb-6 md:mb-0">
-              <div class="text-muted uppercase text-xs tracking-widest mb-2">{supplementalLabel()}</div>
+              <SectionLabel class="mb-2">{supplementalLabel()}</SectionLabel>
               <SetSection
                 sets={fslSets}
                 offset={() => setOffset('fsl')}
@@ -702,7 +706,7 @@ export default function Workout() {
               const acc = () => workout.activeAccessories.find(a => a.slot === section)
               return (
                 <div class="mb-3">
-                  <div class="text-muted text-xs uppercase tracking-widest mb-1">{SECTION_LABEL[section]}</div>
+                  <SectionLabel class="mb-1">{SECTION_LABEL[section]}</SectionLabel>
                   <Show
                     when={acc()}
                     fallback={
@@ -729,7 +733,7 @@ export default function Workout() {
 
           <Show when={extraAccessories().length > 0}>
             <div class="mb-2">
-              <div class="text-faint text-xs uppercase tracking-widest mb-1">EXTRA</div>
+              <SectionLabel tone="text-faint" class="mb-1">EXTRA</SectionLabel>
               <For each={extraAccessories()}>
                 {acc => <AccessoryLog accessory={acc} exercise={exercises().find(e => e.id === acc.exerciseId)} />}
               </For>
