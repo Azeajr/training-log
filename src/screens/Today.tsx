@@ -10,6 +10,8 @@ import { getCurrentTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import Rule from '../components/layout/Rule'
+import SectionLabel from '../components/layout/SectionLabel'
+import SetReadout from '../components/forms/SetReadout'
 
 interface WeekStatus {
   liftId: number
@@ -110,6 +112,9 @@ export default function Today() {
 
   const selectedLift = () => lifts().find(l => l.id === selectedLiftId())
   const main = () => selectedLift() ? calcMainSets(tm(), currentWeek(), settings.barWeight) : []
+  // The day's defining lift: the heaviest (last) main set — the AMRAP on weeks
+  // 1-3, the top deload set on week 4. Promoted to the hero readout.
+  const topMain = () => { const m = main(); return m.length > 0 ? m[m.length - 1] : null }
   const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm(), settings.barWeight) : []
 
   // Supplemental preview runs at the effective week (deload may remap or skip).
@@ -205,45 +210,60 @@ export default function Today() {
                 </p>
               </Show>
               <Show when={tm() > 0}>
+                <Show when={topMain()}>
+                  {top => (
+                    <div class="mb-6">
+                      <SectionLabel class="mb-1">TOP SET</SectionLabel>
+                      <SetReadout
+                        size="lg"
+                        weight={top().weight}
+                        value={`${top().reps}${top().isAmrap ? '+' : ''}`}
+                        badges={
+                          <Show when={top().isAmrap}>
+                            <span class="text-warn text-xs tracking-widest self-center">AMRAP</span>
+                          </Show>
+                        }
+                      />
+                    </div>
+                  )}
+                </Show>
+
                 <div class="space-y-4 font-mono text-sm">
                   <div>
-                    <div class="text-muted uppercase text-xs tracking-widest mb-1">WARM UP</div>
+                    <SectionLabel class="mb-1">WARM UP</SectionLabel>
                     <For each={warmup()}>{s => (
-                      <div class="flex gap-4 text-text-dim pl-2">
-                        <span class="w-16 text-right">{s.weight}lb</span>
-                        <span>x {s.reps}</span>
-                      </div>
+                      <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={s.weight} value={`${s.reps}`} />
                     )}</For>
                   </div>
                   <div>
-                    <div class="text-muted uppercase text-xs tracking-widest mb-1">MAIN</div>
+                    <SectionLabel class="mb-1">MAIN</SectionLabel>
                     <For each={main()}>{s => (
-                      <div class="flex gap-4 text-text pl-2">
-                        <span class="w-16 text-right">{s.weight}lb</span>
-                        <span>x {s.reps}{s.isAmrap ? '+' : ''}</span>
-                        <Show when={s.isAmrap}>
-                          <span class="text-warn text-xs">AMRAP</span>
-                        </Show>
-                      </div>
+                      <SetReadout
+                        size="sm"
+                        alignWeight
+                        tone="text-text"
+                        class="pl-2"
+                        weight={s.weight}
+                        value={`${s.reps}${s.isAmrap ? '+' : ''}`}
+                        badges={
+                          <Show when={s.isAmrap}>
+                            <span class="text-warn text-xs tracking-widest">AMRAP</span>
+                          </Show>
+                        }
+                      />
                     )}</For>
                   </div>
                   <Show when={supplementalLabel() !== null && supplementalSets().length > 0}>
                     <div>
-                      <div class="text-muted uppercase text-xs tracking-widest mb-1">{supplementalLabel()}</div>
-                      <div class="flex gap-4 text-text-dim pl-2">
-                        <span class="w-16 text-right">{supplementalSets()[0].weight}lb</span>
-                        <span>x {supplementalSets()[0].reps}</span>
-                      </div>
+                      <SectionLabel class="mb-1">{supplementalLabel()}</SectionLabel>
+                      <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={supplementalSets()[0].weight} value={`${supplementalSets()[0].reps}`} />
                     </div>
                   </Show>
                   <For each={crossPreview() ?? []}>
                     {block => (
                       <div>
-                        <div class="text-muted uppercase text-xs tracking-widest mb-1">{block.label}</div>
-                        <div class="flex gap-4 text-text-dim pl-2">
-                          <span class="w-16 text-right">{block.weight}lb</span>
-                          <span>x {block.reps}</span>
-                        </div>
+                        <SectionLabel class="mb-1">{block.label}</SectionLabel>
+                        <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={block.weight} value={`${block.reps}`} />
                       </div>
                     )}
                   </For>
