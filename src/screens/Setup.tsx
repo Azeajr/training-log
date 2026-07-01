@@ -6,6 +6,8 @@ import { updateLift, deleteLift, moveLift } from '../lib/lift'
 import { importJson } from '../lib/export-import'
 import { loadSettings } from '../store/settings-store'
 import Rule from '../components/layout/Rule'
+import SectionLabel from '../components/layout/SectionLabel'
+import ToggleChip from '../components/ui/ToggleChip'
 import Stepper from '../components/forms/Stepper'
 import LiftSetupModal, { type DraftLiftFields } from '../components/modals/LiftSetupModal'
 
@@ -138,8 +140,33 @@ export default function Setup() {
   return (
     <div class="max-w-md mx-auto px-4 py-8">
       <div class="mb-8">
-        <p class="text-muted text-xs uppercase tracking-widest mb-1">TRAINING LOG</p>
-        <h1 class="text-text text-xl font-mono">{stepTitle()}</h1>
+        <SectionLabel class="mb-1">TRAINING LOG</SectionLabel>
+        <h1 class="text-text text-xl font-mono mb-4">{stepTitle()}</h1>
+        {/* Three-step onboarding is a real sequence, so the numbered rail
+            encodes true progress — done / current / upcoming. Decorative
+            reinforcement of the STEP N title, hidden from SR to avoid echo. */}
+        <div class="flex items-center gap-2" aria-hidden="true">
+          <For each={[1, 2, 3] as const}>
+            {n => (
+              <>
+                <Show when={n > 1}>
+                  <span class={`h-px flex-1 ${step() >= n ? 'bg-accent/60' : 'bg-border-dim'}`} />
+                </Show>
+                <span
+                  class={`w-7 h-7 flex items-center justify-center border font-mono text-xs ${
+                    step() === n
+                      ? 'border-accent text-accent'
+                      : step() > n
+                        ? 'border-accent/60 text-accent/70'
+                        : 'border-border-dim text-faint'
+                  }`}
+                >
+                  {n}
+                </span>
+              </>
+            )}
+          </For>
+        </div>
       </div>
 
       {/* ── Step 1: roster ─────────────────────────────────────────────── */}
@@ -241,10 +268,9 @@ export default function Setup() {
             </div>
             <div class="flex gap-2">
               <For each={(['upper', 'lower'] as const)}>{type => (
-                <button
-                  onClick={() => setNewLiftType(type)}
-                  class={`px-2 py-1 text-xs border ${newLiftType() === type ? 'border-accent text-accent' : 'border-border text-muted'}`}
-                >{type}</button>
+                <ToggleChip active={newLiftType() === type} onClick={() => setNewLiftType(type)}>
+                  {type}
+                </ToggleChip>
               )}</For>
             </div>
             <div class="flex gap-3">
