@@ -4,8 +4,18 @@ import { db } from '../db/index'
 import type { Session, Lift, Set as TrainingSet, AccessorySet } from '../types/domain'
 import { estimated1RM, formatDuration, SET_TYPE_DISPLAY_ORDER } from '../lib/calc'
 import { formatDateShort, formatDateLong } from '../lib/format'
+import SectionLabel from '../components/layout/SectionLabel'
+import SetReadout from '../components/forms/SetReadout'
 
 type ViewMode = 'lift' | 'date' | 'calendar'
+
+// One accessory set's value string for SetReadout: reps, else duration, else
+// distance (compact "ft"), else empty. Mirrors the main-set "× N" idiom.
+const accSetValue = (s: AccessorySet) =>
+  s.reps != null ? `${s.reps}`
+  : s.duration != null ? formatDuration(s.duration)
+  : s.distance != null ? `${s.distance}ft`
+  : ''
 
 const dateKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -127,14 +137,21 @@ function HistorySessionRow(props: {
                 return (
                   <Show when={typeSets.length > 0}>
                     <div>
-                      <div class="text-muted uppercase tracking-widest mb-0.5">{type}</div>
+                      <SectionLabel class="mb-0.5">{type}</SectionLabel>
                       <For each={typeSets}>{s => (
-                        <div class="pl-2">
-                          {s.weight}lb x {s.reps}
-                          <Show when={s.isAmrap && e1rm()}>
-                            <span class="text-muted ml-2">est. 1RM: {e1rm()}lb</span>
-                          </Show>
-                        </div>
+                        <SetReadout
+                          size="sm"
+                          alignWeight
+                          tone="text-text-dim"
+                          class="pl-2"
+                          weight={s.weight}
+                          value={`${s.reps}`}
+                          trailing={
+                            <Show when={s.isAmrap && e1rm()}>
+                              <span class="text-muted ml-2">est. 1RM: {e1rm()}lb</span>
+                            </Show>
+                          }
+                        />
                       )}</For>
                     </div>
                   </Show>
@@ -148,16 +165,16 @@ function HistorySessionRow(props: {
                   const exName = detail().exerciseNames.get(exId) ?? `Exercise ${exId}`
                   return (
                     <div>
-                      <div class="text-muted uppercase tracking-widest mb-0.5">{exName}</div>
+                      <SectionLabel class="mb-0.5">{exName}</SectionLabel>
                       <For each={exSets}>{s => (
-                        <div class="pl-2">
-                          <Show when={s.weight != null && s.weight > 0}>{s.weight}lb × </Show>
-                          <Show when={s.reps != null}>{s.reps} reps</Show>
-                          <Show when={s.duration != null}>
-                            {formatDuration(s.duration!)}
-                          </Show>
-                          <Show when={s.distance != null}>{s.distance} ft</Show>
-                        </div>
+                        <SetReadout
+                          size="sm"
+                          alignWeight
+                          tone="text-text-dim"
+                          class="pl-2"
+                          weight={s.weight != null && s.weight > 0 ? s.weight : null}
+                          value={accSetValue(s)}
+                        />
                       )}</For>
                     </div>
                   )
@@ -166,7 +183,7 @@ function HistorySessionRow(props: {
             </Show>
             <Show when={detail().notes}>
               <div>
-                <div class="text-muted uppercase tracking-widest mb-0.5">NOTES</div>
+                <SectionLabel class="mb-0.5">NOTES</SectionLabel>
                 <div class="pl-2 text-text-dim">{detail().notes}</div>
               </div>
             </Show>
@@ -441,7 +458,7 @@ export default function History() {
         </div>
         <Show when={selectedDay() && selectedDayRows().length > 0}>
           <div class="mb-2">
-            <div class="text-muted text-xs uppercase tracking-widest mb-2">{formatDateLong(selectedDay()!)}</div>
+            <SectionLabel class="mb-2">{formatDateLong(selectedDay()!)}</SectionLabel>
             <For each={selectedDayRows()}>
               {row => (
                 <HistorySessionRow
