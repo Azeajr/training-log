@@ -20,6 +20,7 @@ export const THEMES = {
       '--color-accent':       '#4ade80',
       '--color-warn':         '#fbbf24',
       '--color-danger':       '#f87171',
+      '--color-info':         '#60a5fa',
     },
   },
   light: {
@@ -39,6 +40,7 @@ export const THEMES = {
       '--color-accent':       '#15803d',
       '--color-warn':         '#b45309',
       '--color-danger':       '#dc2626',
+      '--color-info':         '#2563eb',
     },
   },
   rosepine: {
@@ -58,6 +60,7 @@ export const THEMES = {
       '--color-accent':       '#9ccfd8',
       '--color-warn':         '#f6c177',
       '--color-danger':       '#eb6f92',
+      '--color-info':         '#c4a7e7',
     },
   },
   mocha: {
@@ -77,6 +80,7 @@ export const THEMES = {
       '--color-accent':       '#cba6f7',
       '--color-warn':         '#f9e2af',
       '--color-danger':       '#f38ba8',
+      '--color-info':         '#89b4fa',
     },
   },
   latte: {
@@ -96,6 +100,7 @@ export const THEMES = {
       '--color-accent':       '#8839ef',
       '--color-warn':         '#df8e1d',
       '--color-danger':       '#d20f39',
+      '--color-info':         '#1e66f5',
     },
   },
 }

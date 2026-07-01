@@ -593,7 +593,7 @@ export default function Workout() {
       <div class="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
         <Rule
           label={`${liftName()} . WEEK ${workout.activeSession!.week}${workout.activeSession!.week === 4 ? ' . DELOAD' : ''}`}
-          class={`mb-6 ${workout.activeSession!.week === 4 ? 'text-blue-400' : 'text-muted'}`}
+          class={`mb-6 ${workout.activeSession!.week === 4 ? 'text-info' : 'text-muted'}`}
         />
 
         <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start mb-6">
