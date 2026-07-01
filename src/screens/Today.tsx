@@ -171,7 +171,7 @@ export default function Today() {
           <div>
             <Rule
               label={`WEEK ${currentWeek()}${currentWeek() === 4 ? ' . DELOAD' : ''}`}
-              class={`mb-4 ${currentWeek() === 4 ? 'text-blue-400' : 'text-muted'}`}
+              class={`mb-4 ${currentWeek() === 4 ? 'text-info' : 'text-muted'}`}
             />
             <div class="flex gap-2 mb-6 flex-wrap">
               <For each={weekStatuses()}>
