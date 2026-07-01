@@ -10,7 +10,7 @@ export default function BottomNav() {
     >
       <A
         href="/today"
-        class="flex-1 py-4 text-center text-xs tracking-widest transition-colors"
+        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors"
         activeClass="text-accent border-t border-accent -mt-px"
         inactiveClass="text-muted hover:text-text"
       >
@@ -18,7 +18,7 @@ export default function BottomNav() {
       </A>
       <A
         href="/workout"
-        class="flex-1 py-4 text-center text-xs tracking-widest transition-colors inline-flex items-center justify-center gap-1"
+        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors inline-flex items-center justify-center gap-1"
         activeClass="text-accent border-t border-accent -mt-px"
         inactiveClass="text-muted hover:text-text"
       >
@@ -30,15 +30,23 @@ export default function BottomNav() {
       <A
         href="/history"
         end={false}
-        class="flex-1 py-4 text-center text-xs tracking-widest transition-colors"
+        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors"
         activeClass="text-accent border-t border-accent -mt-px"
         inactiveClass="text-muted hover:text-text"
       >
         HISTORY
       </A>
       <A
+        href="/stats"
+        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors"
+        activeClass="text-accent border-t border-accent -mt-px"
+        inactiveClass="text-muted hover:text-text"
+      >
+        STATS
+      </A>
+      <A
         href="/settings"
-        class="flex-1 py-4 text-center text-xs tracking-widest transition-colors"
+        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors"
         activeClass="text-accent border-t border-accent -mt-px"
         inactiveClass="text-muted hover:text-text"
       >
