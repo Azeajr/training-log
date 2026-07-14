@@ -441,6 +441,33 @@ describe('Settings — exercises', () => {
     })
   })
 
+  it('shows active and archived exercises alphabetically', async () => {
+    await db.exercises.bulkAdd([
+      { name: 'Zercher Carry', type: 'distance' },
+      { name: 'ab rollout', type: 'reps' },
+      { name: 'Yoke Walk', type: 'distance', archived: true },
+      { name: 'Back Extension', type: 'reps', archived: true },
+    ])
+    renderSettings()
+
+    await screen.findByText('Zercher Carry')
+    const text = document.body.textContent ?? ''
+    expect(text.indexOf('ab rollout')).toBeLessThan(text.indexOf('Zercher Carry'))
+    expect(text.indexOf('Back Extension')).toBeLessThan(text.indexOf('Yoke Walk'))
+  })
+
+  it('does not create a duplicate exercise and keeps the add form open', async () => {
+    await db.exercises.add({ name: 'Pull-up', type: 'reps', archived: true })
+    renderSettings()
+    fireEvent.click(await screen.findByText('+ ADD EXERCISE'))
+    fireEvent.input(screen.getByPlaceholderText('Exercise name'), { target: { value: ' pull-UP ' } })
+    fireEvent.click(screen.getByText('ADD'))
+
+    await waitFor(() => expect(toast()).toMatch(/already exists/))
+    expect(await db.exercises.count()).toBe(1)
+    expect(screen.getByPlaceholderText('Exercise name')).toBeInTheDocument()
+  })
+
   it('add exercise with empty name does nothing', async () => {
     renderSettings()
     fireEvent.click(await screen.findByText('+ ADD EXERCISE'))

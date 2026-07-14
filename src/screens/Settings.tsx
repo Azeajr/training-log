@@ -6,7 +6,7 @@ import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
-import { createExercise, renameExercise, setExerciseCategory, setExercisePlateLoading, archiveExercise, unarchiveExercise } from '../lib/exercise'
+import { createExercise, ExerciseNameConflictError, renameExercise, setExerciseCategory, setExercisePlateLoading, archiveExercise, unarchiveExercise } from '../lib/exercise'
 import { updateLift, archiveLift, unarchiveLift, moveLift, liftsCrossReferencing } from '../lib/lift'
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -48,6 +48,9 @@ export default function Settings() {
 
   const activeLifts = () => lifts().filter(l => !l.archived)
   const archivedLifts = () => lifts().filter(l => l.archived)
+  const exercisesByName = (archived: boolean) => exercises()
+    .filter(ex => Boolean(ex.archived) === archived)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
 
   const [setupLiftId, setSetupLiftId] = createSignal<number | null>(null)
   const [draftLift, setDraftLift] = createSignal<DraftLiftFields | null>(null)
@@ -167,7 +170,15 @@ export default function Settings() {
 
   const handleAddExercise = async () => {
     if (!newExName().trim()) return
-    await createExercise(db, newExName().trim(), newExType(), newExCategory())
+    try {
+      await createExercise(db, newExName(), newExType(), newExCategory())
+    } catch (error) {
+      if (error instanceof ExerciseNameConflictError) {
+        showToast(error.message)
+        return
+      }
+      throw error
+    }
     setNewExName('')
     setShowAddEx(false)
     await load()
@@ -175,7 +186,15 @@ export default function Settings() {
 
   const handleRenameExercise = async (id: number) => {
     if (!editExName().trim()) return
-    await renameExercise(db, id, editExName().trim())
+    try {
+      await renameExercise(db, id, editExName())
+    } catch (error) {
+      if (error instanceof ExerciseNameConflictError) {
+        showToast(error.message)
+        return
+      }
+      throw error
+    }
     await setExerciseCategory(db, id, editExCategory())
     const exMode = editExPlateMode()
     const exDefBase = exMode === 'paired' ? settings.barWeight : 0
@@ -657,7 +676,7 @@ export default function Settings() {
       <div class="mb-6">
         <Rule label="EXERCISES" class="text-muted mb-2" />
 
-        <For each={exercises().filter(ex => !ex.archived)}>{(ex) => (
+        <For each={exercisesByName(false)}>{(ex) => (
           <div class="py-1 border-b border-border-dim">
             <Show when={editingEx() === ex.id} fallback={
               <div class="flex items-center justify-between">
@@ -694,7 +713,7 @@ export default function Settings() {
         <Show when={exercises().some(ex => ex.archived)}>
           <>
             <Rule label="ARCHIVED" class="text-faint mt-4 mb-2" />
-            <For each={exercises().filter(ex => ex.archived)}>{(ex) => (
+            <For each={exercisesByName(true)}>{(ex) => (
               <div class="py-1 border-b border-border-dim flex items-center justify-between">
                 <span class="text-faint text-sm">{ex.name}</span>
                 <button onClick={() => handleUnarchiveExercise(ex.id!)} class="text-muted text-xs hover:text-accent">unarchive</button>
