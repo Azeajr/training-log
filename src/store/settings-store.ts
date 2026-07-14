@@ -3,6 +3,26 @@ import { db } from '../db/index'
 import type { PlateConfig, SupplementalTemplate, DeloadSupplemental } from '../types/domain'
 
 export const THEMES = {
+  oled: {
+    label: 'OLED',
+    colorScheme: 'dark' as const,
+    vars: {
+      '--color-bg':           '#000000',
+      '--color-surface':      '#080808',
+      '--color-surface-high': '#141414',
+      '--color-border-dim':   '#303030',
+      '--color-border':       '#525252',
+      '--color-text':         '#e5e5e5',
+      '--color-text-dim':     '#cccccc',
+      '--color-muted':        '#a3a3a3',
+      '--color-faint':        '#737373',
+      '--color-on-accent':    '#000000',
+      '--color-accent':       '#4ade80',
+      '--color-warn':         '#fbbf24',
+      '--color-danger':       '#fb7185',
+      '--color-info':         '#60a5fa',
+    },
+  },
   dark: {
     label: 'Dark',
     colorScheme: 'dark' as const,
