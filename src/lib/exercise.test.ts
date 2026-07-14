@@ -35,6 +35,16 @@ describe('createExercise', () => {
     const id = await createExercise(db, 'Mystery', 'reps')
     expect((await db.exercises.get(id))?.category).toBeNull()
   })
+
+  it('rejects a duplicate name regardless of case, whitespace, or archive status', async () => {
+    const id = await createExercise(db, 'Chinup', 'reps')
+    await archiveExercise(db, id)
+
+    await expect(createExercise(db, '  CHINUP  ', 'timed')).rejects.toThrow(
+      'An exercise named "CHINUP" already exists'
+    )
+    expect(await db.exercises.count()).toBe(1)
+  })
 })
 
 describe('setExerciseCategory', () => {
@@ -51,6 +61,14 @@ describe('renameExercise', () => {
     await renameExercise(db, id, 'NewName')
     const ex = await db.exercises.get(id)
     expect(ex?.name).toBe('NewName')
+  })
+
+  it('rejects a rename that duplicates another exercise name', async () => {
+    await createExercise(db, 'Chinup', 'reps')
+    const rowId = await createExercise(db, 'Row', 'reps')
+
+    await expect(renameExercise(db, rowId, 'chinup')).rejects.toThrow(/already exists/)
+    expect((await db.exercises.get(rowId))?.name).toBe('Row')
   })
 })
 
