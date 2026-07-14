@@ -649,7 +649,7 @@ export default function Settings() {
 
       <div class="mb-6">
         <Rule label="THEME" class="text-muted mb-3" />
-        <div class="flex gap-4">
+        <div class="flex flex-wrap gap-x-4 gap-y-3">
           <For each={Object.entries(THEMES) as [string, typeof THEMES[keyof typeof THEMES]][]}>{([key, t]) => (
             <button onClick={() => updateSettings({ theme: key })} class="flex flex-col items-center gap-1.5">
               <div
