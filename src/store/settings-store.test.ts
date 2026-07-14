@@ -8,7 +8,7 @@ const drain = async () => { for (let i = 0; i < 10; i++) await new Promise(r => 
 beforeEach(async () => {
   await db.settings.clear()
   // reset CSS vars between tests
-  for (const prop of Object.keys(THEMES.dark.vars)) {
+  for (const prop of Object.keys(THEMES.oled.vars)) {
     document.documentElement.style.removeProperty(prop)
   }
 })
@@ -26,27 +26,27 @@ describe('applyTheme', () => {
     expect(document.documentElement.style.colorScheme).toBe('dark')
   })
 
-  it('sets CSS custom properties for the dark theme', () => {
+  it('migrates the retired dark theme to OLED', () => {
     applyTheme('dark')
-    expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe(THEMES.dark.vars['--color-bg'])
-    expect(document.documentElement.style.getPropertyValue('--color-accent')).toBe(THEMES.dark.vars['--color-accent'])
+    expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe(THEMES.oled.vars['--color-bg'])
   })
 
-  it('sets CSS custom properties for the light theme', () => {
-    applyTheme('light')
-    expect(document.documentElement.style.getPropertyValue('--color-accent')).toBe(THEMES.light.vars['--color-accent'])
+  it('provides a high-contrast light OLED theme', () => {
+    applyTheme('oled-light')
+    expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe('#ffffff')
+    expect(document.documentElement.style.getPropertyValue('--color-text')).toBe('#0a0a0a')
   })
 
   it('sets colorScheme on documentElement', () => {
-    applyTheme('light')
+    applyTheme('oled-light')
     expect(document.documentElement.style.colorScheme).toBe('light')
-    applyTheme('dark')
+    applyTheme('oled')
     expect(document.documentElement.style.colorScheme).toBe('dark')
   })
 
-  it('falls back to dark theme for unknown key', () => {
+  it('falls back to OLED for unknown key', () => {
     applyTheme('nonexistent')
-    expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe(THEMES.dark.vars['--color-bg'])
+    expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe(THEMES.oled.vars['--color-bg'])
   })
 })
 
@@ -71,7 +71,7 @@ describe('loadSettings', () => {
     expect(settings.restTimer1).toBe(60)
     expect(settings.restTimer2).toBe(120)
     expect(settings.restTimerFail).toBe(240)
-    expect(settings.theme).toBe('light')
+    expect(settings.theme).toBe('oled-light')
     expect(settings.barWeight).toBe(35)
   })
 
@@ -112,8 +112,8 @@ describe('updateSettings', () => {
 
   it('applies theme when theme key is updated', async () => {
     await seedSettings()
-    await updateSettings({ theme: 'light' })
-    expect(document.documentElement.style.getPropertyValue('--color-accent')).toBe(THEMES.light.vars['--color-accent'])
+    await updateSettings({ theme: 'oled-light' })
+    expect(document.documentElement.style.getPropertyValue('--color-accent')).toBe(THEMES['oled-light'].vars['--color-accent'])
   })
 
   it('inserts defaults when no settings row exists in DB', async () => {

@@ -65,7 +65,7 @@ export default defineConfig(() => {
       manifest: {
         name: 'Training Log',
         short_name: 'Training',
-        theme_color: '#09090b',
+        theme_color: '#000000',
         background_color: '#09090b',
         display: 'standalone',
         icons: [
