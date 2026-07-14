@@ -18,6 +18,14 @@ afterEach(drain)
 // ─── applyTheme ───────────────────────────────────────────────────────────────
 
 describe('applyTheme', () => {
+  it('provides a pure-black OLED theme with readable secondary text', () => {
+    applyTheme('oled')
+    expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe('#000000')
+    expect(document.documentElement.style.getPropertyValue('--color-muted')).toBe('#a3a3a3')
+    expect(document.documentElement.style.getPropertyValue('--color-faint')).toBe('#737373')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
+  })
+
   it('sets CSS custom properties for the dark theme', () => {
     applyTheme('dark')
     expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe(THEMES.dark.vars['--color-bg'])
