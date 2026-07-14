@@ -23,44 +23,24 @@ export const THEMES = {
       '--color-info':         '#60a5fa',
     },
   },
-  dark: {
-    label: 'Dark',
-    colorScheme: 'dark' as const,
-    vars: {
-      '--color-bg':           '#09090b',
-      '--color-surface':      '#18181b',
-      '--color-surface-high': '#27272a',
-      '--color-border-dim':   '#27272a',
-      '--color-border':       '#3f3f46',
-      '--color-text':         '#f4f4f5',
-      '--color-text-dim':     '#d4d4d8',
-      '--color-muted':        '#71717a',
-      '--color-faint':        '#3f3f46',
-      '--color-on-accent':    '#09090b',
-      '--color-accent':       '#4ade80',
-      '--color-warn':         '#fbbf24',
-      '--color-danger':       '#f87171',
-      '--color-info':         '#60a5fa',
-    },
-  },
-  light: {
-    label: 'Light',
+  'oled-light': {
+    label: 'OLED Light',
     colorScheme: 'light' as const,
     vars: {
-      '--color-bg':           '#fafafa',
+      '--color-bg':           '#ffffff',
       '--color-surface':      '#ffffff',
-      '--color-surface-high': '#f4f4f5',
-      '--color-border-dim':   '#e4e4e7',
-      '--color-border':       '#d4d4d8',
-      '--color-text':         '#18181b',
-      '--color-text-dim':     '#52525b',
-      '--color-muted':        '#71717a',
-      '--color-faint':        '#a1a1aa',
+      '--color-surface-high': '#f0f0f0',
+      '--color-border-dim':   '#e0e0e0',
+      '--color-border':       '#b8b8b8',
+      '--color-text':         '#0a0a0a',
+      '--color-text-dim':     '#333333',
+      '--color-muted':        '#5c5c5c',
+      '--color-faint':        '#8a8a8a',
       '--color-on-accent':    '#ffffff',
-      '--color-accent':       '#15803d',
-      '--color-warn':         '#b45309',
-      '--color-danger':       '#dc2626',
-      '--color-info':         '#2563eb',
+      '--color-accent':       '#08752f',
+      '--color-warn':         '#9a4b00',
+      '--color-danger':       '#c5162e',
+      '--color-info':         '#1456c0',
     },
   },
   rosepine: {
@@ -127,7 +107,7 @@ export const THEMES = {
 
 export type ThemeKey = keyof typeof THEMES
 
-const DEFAULT_THEME: ThemeKey = 'dark'
+const DEFAULT_THEME: ThemeKey = 'oled'
 export const DEFAULT_BAR_WEIGHT = 45
 export const DEFAULT_PLATES: PlateConfig[] = [
   { weight: 45,  count: 4 },
@@ -151,8 +131,14 @@ export const SETTINGS_DEFAULTS = {
   hasDeloadWeek: true,
 }
 
+function resolveThemeKey(key: string | null | undefined): ThemeKey {
+  if (key === 'dark') return 'oled'
+  if (key === 'light') return 'oled-light'
+  return key && key in THEMES ? key as ThemeKey : DEFAULT_THEME
+}
+
 export function applyTheme(key: string) {
-  const theme = THEMES[key as ThemeKey] ?? THEMES[DEFAULT_THEME]
+  const theme = THEMES[resolveThemeKey(key)]
   for (const [prop, value] of Object.entries(theme.vars)) {
     document.documentElement.style.setProperty(prop, value)
   }
@@ -180,7 +166,7 @@ export async function loadSettings() {
     restTimer1: row.restTimer1,
     restTimer2: row.restTimer2,
     restTimerFail: row.restTimerFail,
-    theme: row.theme ?? DEFAULT_THEME,
+    theme: resolveThemeKey(row.theme),
     barWeight: row.barWeight ?? DEFAULT_BAR_WEIGHT,
     plates: row.plates ?? DEFAULT_PLATES,
     supplementalTemplate: row.supplementalTemplate ?? 'fsl+bbb',
