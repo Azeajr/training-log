@@ -79,7 +79,7 @@ export default function Stepper(props: Props) {
             type="button"
             data-testid="stepper-value"
             onClick={() => { setRaw(fmt(props.value)); setEditing(true) }}
-            class="bg-surface border-y border-border text-text font-mono px-3 py-3 min-w-[2.5rem] text-center"
+            class="bg-surface border-y border-border text-text font-mono px-3 py-3 min-w-[2.5rem] text-center select-none touch-manipulation [-webkit-touch-callout:none]"
           >
             {fmt(props.value)}
           </button>
