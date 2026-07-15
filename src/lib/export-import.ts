@@ -32,6 +32,7 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     exercises: await db.exercises.toArray(),
     liftSupplementals: await db.liftSupplementals.toArray(),
     accessorySets: await db.accessorySets.toArray(),
+    accessoryNotes: await db.accessoryNotes.toArray(),
     settings: await db.settings.toArray(),
   }
   const content = JSON.stringify(data, null, 2)
@@ -76,6 +77,7 @@ const COLS = {
   liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order'],
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],
+  accessoryNotes: ['id', 'sessionId', 'exerciseId', 'notes'],
   settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental'],
 } as const
 
@@ -126,6 +128,7 @@ function importSpec(db: TrainingDB): ImportTableSpec[] {
     { key: 'liftSupplementals',      table: db.liftSupplementals,      dates: [] },
     { key: 'accessoryTrainingMaxes', table: db.accessoryTrainingMaxes, dates: ['setAt'] },
     { key: 'accessorySets',          table: db.accessorySets,          dates: [] },
+    { key: 'accessoryNotes',         table: db.accessoryNotes,         dates: [] },
     { key: 'settings',               table: db.settings,               dates: [] },
   ]
 }
@@ -158,28 +161,32 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
   const sets = await db.sets.toArray()
   const lifts = await db.lifts.toArray()
   const accessorySets = await db.accessorySets.toArray()
+  const accessoryNotes = await db.accessoryNotes.toArray()
   const exercises = await db.exercises.toArray()
   const liftMap = Object.fromEntries(lifts.map(l => [l.id!, l.name]))
   const exerciseMap = Object.fromEntries(exercises.map(e => [e.id!, e.name]))
 
   const rows: string[][] = [
-    ['date', 'lift', 'week', 'type', 'set_number', 'weight_lb', 'reps', 'is_amrap', 'session_notes', 'exercise_name'],
+    ['date', 'lift', 'week', 'type', 'set_number', 'weight_lb', 'reps', 'is_amrap', 'session_notes', 'exercise_name', 'accessory_notes'],
   ]
 
   for (const session of sessions) {
     if (session.status !== 'completed') continue
     const sessionSets = sets.filter(s => s.sessionId === session.id)
     const sessionAccessorySets = accessorySets.filter(a => a.sessionId === session.id)
+    const notesByExercise = new Map(
+      accessoryNotes.filter(n => n.sessionId === session.id).map(n => [n.exerciseId, n.notes])
+    )
     const dateStr = formatDateIso(session.date)
     const liftName = liftMap[session.liftId] ?? String(session.liftId)
 
     if (sessionSets.length === 0 && sessionAccessorySets.length === 0) {
-      rows.push([dateStr, liftName, String(session.week), '', '', '', '', '', session.notes ?? '', ''])
+      rows.push([dateStr, liftName, String(session.week), '', '', '', '', '', session.notes ?? '', '', ''])
     } else {
       for (const s of sessionSets) {
         rows.push([
           dateStr, liftName, String(session.week), s.type, String(s.setNumber),
-          String(s.weight), String(s.reps), s.isAmrap ? 'true' : 'false', session.notes ?? '', '',
+          String(s.weight), String(s.reps), s.isAmrap ? 'true' : 'false', session.notes ?? '', '', '',
         ])
       }
       for (const a of sessionAccessorySets) {
@@ -187,6 +194,7 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
           dateStr, liftName, String(session.week), 'accessory', String(a.setNumber),
           a.weight != null ? String(a.weight) : '', a.reps != null ? String(a.reps) : '',
           'false', session.notes ?? '', exerciseMap[a.exerciseId] ?? String(a.exerciseId),
+          notesByExercise.get(a.exerciseId) ?? '',
         ])
       }
     }

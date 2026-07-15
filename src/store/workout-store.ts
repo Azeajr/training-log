@@ -5,7 +5,7 @@ import type { AssistanceSlot } from '../lib/assistance'
 
 export type RestType = 'normal' | 'transition' | 'fail'
 
-interface ActiveAccessory {
+export interface ActiveAccessory {
   exerciseId: number
   exerciseName: string
   tm: number
@@ -14,6 +14,10 @@ interface ActiveAccessory {
   // Which assistance slot this fills. Absent (legacy/extra) accessories append
   // freely; the three fixed slots hold one exercise each.
   slot?: AssistanceSlot
+  // Free-text note for this exercise within this session. Optional rather than
+  // defaulted to '' so accessories rehydrated from a pre-feature localStorage
+  // snapshot (see PERSISTED_VALIDATORS) don't need a shape migration.
+  notes?: string
 }
 
 interface WorkoutState {
@@ -219,6 +223,10 @@ export function deleteLastAccessorySet(exerciseId: number) {
 
 export function removeAccessory(exerciseId: number) {
   setWorkout('activeAccessories', (prev) => prev.filter((a) => a.exerciseId !== exerciseId))
+}
+
+export function setAccessoryNotes(exerciseId: number, notes: string) {
+  setWorkout('activeAccessories', (a) => a.exerciseId === exerciseId, 'notes', notes)
 }
 
 export function clearSession() {

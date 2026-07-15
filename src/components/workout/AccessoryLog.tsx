@@ -1,5 +1,5 @@
 import { createSignal, createMemo, For, Show } from 'solid-js'
-import { logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory, startRest } from '../../store/workout-store'
+import { logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory, startRest, setAccessoryNotes, type ActiveAccessory } from '../../store/workout-store'
 import type { AccessorySet, Exercise } from '../../types/domain'
 import { db } from '../../db/index'
 import { ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB, roundToNearest5 } from '../../lib/calc'
@@ -20,14 +20,6 @@ const fmtSetValue = (s: { reps?: number | null; duration?: number | null; distan
     : s.distance != null ? `${s.distance}ft`
     : ''
 import InlineConfirm from '../ui/InlineConfirm'
-
-interface ActiveAccessory {
-  exerciseId: number
-  exerciseName: string
-  tm: number
-  calculatedWeight: number
-  loggedSets: Partial<AccessorySet>[]
-}
 
 interface Props {
   accessory: ActiveAccessory
@@ -50,6 +42,7 @@ export default function AccessoryLog(props: Props) {
   const [reps, setReps] = createSignal(ACCESSORY_REPS)
   const [duration, setDuration] = createSignal<number | null>(null)
   const [distance, setDistance] = createSignal(0)
+  const [noteOpen, setNoteOpen] = createSignal(false)
   // Live value for the active-set headline, mirroring the stepper being edited.
   const activeValue = () =>
     type() === 'reps' ? `${reps()}`
@@ -130,6 +123,35 @@ export default function AccessoryLog(props: Props) {
           strong
         />
       </div>
+      <Show
+        when={noteOpen()}
+        fallback={
+          <button
+            onClick={() => setNoteOpen(true)}
+            class={props.accessory.notes?.trim()
+              ? 'block w-full text-left pl-2 mb-1 text-faint text-xs font-mono hover:text-accent truncate'
+              : 'block pl-2 mb-1 text-faint text-xs font-mono hover:text-accent tracking-widest'}
+          >
+            {props.accessory.notes?.trim() || '+ NOTE'}
+          </button>
+        }
+      >
+        <div class="pl-2 mb-2">
+          <textarea
+            value={props.accessory.notes ?? ''}
+            onInput={e => setAccessoryNotes(props.accessory.exerciseId, e.currentTarget.value)}
+            class="w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs focus:outline-none focus:border-accent resize-none"
+            rows={2}
+            placeholder="Note for this exercise…"
+          />
+          <button
+            onClick={() => setNoteOpen(false)}
+            class="text-muted text-xs mt-0.5"
+          >
+            done
+          </button>
+        </div>
+      </Show>
       <For each={props.accessory.loggedSets}>
         {(s, i) => {
           const isLast = () => i() === props.accessory.loggedSets.length - 1

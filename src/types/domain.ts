@@ -128,6 +128,16 @@ export interface AccessorySet {
   distance: number | null
 }
 
+// A free-text note on one exercise within one session (what band, swapped to
+// an easier variation after set 3, etc.) — scoped to (sessionId, exerciseId),
+// distinct from the whole-session `Session.notes` and from any single set.
+export interface AccessoryNote {
+  id?: number
+  sessionId: number
+  exerciseId: number
+  notes: string
+}
+
 export interface PlateConfig {
   weight: number
   count: number

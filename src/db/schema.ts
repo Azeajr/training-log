@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS accessorySets (
   duration REAL,
   distance REAL
 );
+CREATE TABLE IF NOT EXISTS accessoryNotes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sessionId INTEGER NOT NULL,
+  exerciseId INTEGER NOT NULL,
+  notes TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   restTimer1 INTEGER NOT NULL,
@@ -86,6 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_cycleId ON sessions(cycleId);
 CREATE INDEX IF NOT EXISTS idx_sessions_liftId ON sessions(liftId);
 CREATE INDEX IF NOT EXISTS idx_sets_sessionId ON sets(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessorySets_sessionId ON accessorySets(sessionId);
+CREATE INDEX IF NOT EXISTS idx_accessoryNotes_sessionId ON accessoryNotes(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTrainingMaxes(exerciseId);
 CREATE INDEX IF NOT EXISTS idx_liftSupplementals_liftId ON liftSupplementals(liftId);
 `
@@ -118,5 +125,5 @@ export const ADDITIVE_MIGRATIONS = [
 export const ALL_TABLES = [
   'lifts', 'trainingMaxes', 'cycles', 'sessions', 'sets',
   'exercises', 'liftSupplementals',
-  'accessoryTrainingMaxes', 'accessorySets', 'settings',
+  'accessoryTrainingMaxes', 'accessorySets', 'accessoryNotes', 'settings',
 ] as const

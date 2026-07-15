@@ -40,7 +40,7 @@ beforeEach(async () => {
   await Promise.all([
     db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
     db.sets.clear(), db.exercises.clear(),
-    db.accessorySets.clear(),
+    db.accessorySets.clear(), db.accessoryNotes.clear(),
   ])
   mockNavigate.mockClear()
 })
@@ -210,7 +210,7 @@ describe('HistoryEdit — accessory picker', () => {
     await Promise.all([
       db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
       db.sets.clear(), db.exercises.clear(),
-      db.accessorySets.clear(),
+      db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
     mockNavigate.mockClear()
   })
@@ -284,6 +284,64 @@ describe('HistoryEdit — accessory picker', () => {
         .filter(s => s.exerciseId === exId)
         .toArray()
       expect(remaining).toHaveLength(0)
+    })
+  })
+
+  it('deleting an accessory and saving removes its note from DB too', async () => {
+    const { sessionId, exId } = await seedSessionWithAccessorySets()
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'purple band' })
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+
+    fireEvent.click(screen.getByText('✕'))
+    await waitFor(() => expect(screen.queryByText('Chinup')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const remaining = await db.accessoryNotes
+        .where('sessionId').equals(sessionId)
+        .filter(n => n.exerciseId === exId)
+        .toArray()
+      expect(remaining).toHaveLength(0)
+    })
+  })
+
+  it('typing an accessory note and saving persists it to DB', async () => {
+    const { sessionId, exId } = await seedSessionWithAccessorySets()
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+
+    const noteField = screen.getByPlaceholderText('Note for this exercise…')
+    fireEvent.input(noteField, { target: { value: 'switched to a lighter band' } })
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const notes = await db.accessoryNotes
+        .where('sessionId').equals(sessionId)
+        .filter(n => n.exerciseId === exId)
+        .toArray()
+      expect(notes).toHaveLength(1)
+      expect(notes[0].notes).toBe('switched to a lighter band')
+    })
+  })
+
+  it('editing an existing accessory note and saving updates the same row (not a duplicate)', async () => {
+    const { sessionId, exId } = await seedSessionWithAccessorySets()
+    const noteId = await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'purple band' })
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+
+    const noteField = await screen.findByPlaceholderText('Note for this exercise…') as HTMLTextAreaElement
+    expect(noteField.value).toBe('purple band')
+    fireEvent.input(noteField, { target: { value: 'switched to red band' } })
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const notes = await db.accessoryNotes.where('sessionId').equals(sessionId).toArray()
+      expect(notes).toHaveLength(1)
+      expect(notes[0].id).toBe(noteId)
+      expect(notes[0].notes).toBe('switched to red band')
     })
   })
 
@@ -438,6 +496,30 @@ describe('HistoryEdit — accessory picker', () => {
       expect(newSets.length).toBeGreaterThan(0)
     })
   })
+
+  it('swapping an accessory clears its note field and drops the old note row on save', async () => {
+    const { sessionId, exId1 } = await seedSessionWithTwoExercises()
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId1, notes: 'purple band' })
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+    expect((screen.getByPlaceholderText('Note for this exercise…') as HTMLTextAreaElement).value).toBe('purple band')
+
+    fireEvent.click(screen.getByText('swap'))
+    await waitFor(() => expect(document.body.textContent).toContain('SELECT EXERCISE'))
+    await screen.findByText('Dips')
+    fireEvent.click(screen.getByText('Dips'))
+    await waitFor(() => expect(document.body.textContent).not.toContain('SELECT EXERCISE'))
+
+    // Field cleared in the UI immediately after the swap, before saving.
+    expect((screen.getByPlaceholderText('Note for this exercise…') as HTMLTextAreaElement).value).toBe('')
+
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const notes = await db.accessoryNotes.where('sessionId').equals(sessionId).toArray()
+      expect(notes).toHaveLength(0)
+    })
+  })
 })
 
 // ─── set type rendering ───────────────────────────────────────────────────────
@@ -474,7 +556,7 @@ describe('HistoryEdit — set type rendering', () => {
     await Promise.all([
       db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
       db.sets.clear(), db.exercises.clear(),
-      db.accessorySets.clear(),
+      db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
     mockNavigate.mockClear()
   })
@@ -501,7 +583,7 @@ describe('HistoryEdit — accessory exercise types', () => {
     await Promise.all([
       db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
       db.sets.clear(), db.exercises.clear(),
-      db.accessorySets.clear(),
+      db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
     mockNavigate.mockClear()
   })

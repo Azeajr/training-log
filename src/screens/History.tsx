@@ -49,6 +49,7 @@ interface Detail {
   accessorySets: AccessorySet[]
   exerciseNames: Map<number, string>
   notes: string | null
+  notesByExercise: Map<number, string>
 }
 
 interface ChartPoint { date: Date; weight: number }
@@ -158,11 +159,15 @@ function HistorySessionRow(props: {
                 )
               }}
             </For>
-            <Show when={detail().accessorySets.length > 0}>
-              <For each={[...new Set(detail().accessorySets.map(s => s.exerciseId))]}>
+            <Show when={detail().accessorySets.length > 0 || detail().notesByExercise.size > 0}>
+              <For each={[...new Set([
+                ...detail().accessorySets.map(s => s.exerciseId),
+                ...detail().notesByExercise.keys(),
+              ])]}>
                 {exId => {
                   const exSets = detail().accessorySets.filter(s => s.exerciseId === exId)
                   const exName = detail().exerciseNames.get(exId) ?? `Exercise ${exId}`
+                  const exNote = () => detail().notesByExercise.get(exId)
                   return (
                     <div>
                       <SectionLabel class="mb-0.5">{exName}</SectionLabel>
@@ -176,6 +181,9 @@ function HistorySessionRow(props: {
                           value={accSetValue(s)}
                         />
                       )}</For>
+                      <Show when={exNote()}>
+                        <div class="pl-2 text-text-dim">{exNote()}</div>
+                      </Show>
                     </div>
                   )
                 }}
@@ -347,18 +355,20 @@ export default function History() {
   const handleExpand = async (sessionId: number) => {
     if (expanded() === sessionId) { setExpanded(null); setDetail(null); return }
     setExpanded(sessionId)
-    const [sets, accSets, session] = await Promise.all([
+    const [sets, accSets, accNotes, session] = await Promise.all([
       db.sets.where('sessionId').equals(sessionId).toArray(),
       db.accessorySets.where('sessionId').equals(sessionId).toArray(),
+      db.accessoryNotes.where('sessionId').equals(sessionId).toArray(),
       db.sessions.get(sessionId),
     ])
+    const notesByExercise = new Map(accNotes.map(n => [n.exerciseId, n.notes]))
     let exerciseNames = new Map<number, string>()
-    if (accSets.length > 0) {
-      const exIds = [...new Set(accSets.map(s => s.exerciseId))]
+    const exIds = [...new Set([...accSets.map(s => s.exerciseId), ...notesByExercise.keys()])]
+    if (exIds.length > 0) {
       const exercises = await db.exercises.where('id').anyOf(exIds).toArray()
       exerciseNames = new Map(exercises.map(e => [e.id!, e.name]))
     }
-    setDetail({ sets, accessorySets: accSets, exerciseNames, notes: session?.notes ?? null })
+    setDetail({ sets, accessorySets: accSets, exerciseNames, notes: session?.notes ?? null, notesByExercise })
   }
 
   return (

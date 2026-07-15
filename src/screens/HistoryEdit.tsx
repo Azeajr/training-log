@@ -35,6 +35,7 @@ interface EditAccessory {
   exerciseName: string
   exerciseType: 'reps' | 'timed' | 'distance'
   sets: EditAccSet[]
+  notes: string
 }
 
 export default function HistoryEdit() {
@@ -96,7 +97,9 @@ export default function HistoryEdit() {
     })))
 
     const dbAccSets = await db.accessorySets.where('sessionId').equals(sid).toArray()
+    const dbAccNotes = await db.accessoryNotes.where('sessionId').equals(sid).toArray()
     const allExercises = await db.exercises.toArray()
+    const notesByExercise = new Map(dbAccNotes.map(n => [n.exerciseId, n.notes]))
 
     const grouped = new Map<number, EditAccSet[]>()
     for (const s of dbAccSets) {
@@ -109,6 +112,11 @@ export default function HistoryEdit() {
         duration: s.duration,
         distance: s.distance,
       })
+    }
+    // An accessory whose only footprint is a note (no logged sets) still needs
+    // a card — otherwise its note is invisible and unrecoverable from here.
+    for (const exId of notesByExercise.keys()) {
+      if (!grouped.has(exId)) grouped.set(exId, [])
     }
     for (const sets of grouped.values()) {
       sets.sort((a, b) => a.setNumber - b.setNumber)
@@ -124,6 +132,7 @@ export default function HistoryEdit() {
         exerciseName: ex.name,
         exerciseType: ex.type,
         sets,
+        notes: notesByExercise.get(exId) ?? '',
       })
     }
     setEditAccessories(accessories)
@@ -145,6 +154,10 @@ export default function HistoryEdit() {
       if (ai !== accIdx) return acc
       return { ...acc, sets: acc.sets.map((s, si) => si === setIdx ? { ...s, [field]: value } : s) }
     }))
+  }
+
+  const updateAccNotes = (accIdx: number, value: string) => {
+    setEditAccessories(prev => prev.map((acc, ai) => ai === accIdx ? { ...acc, notes: value } : acc))
   }
 
   const deleteAccessory = (accIdx: number) => {
@@ -171,6 +184,7 @@ export default function HistoryEdit() {
           duration: null,
           distance: null,
         })),
+        notes: '',
       }])
     } else {
       setEditAccessories(prev => prev.map((acc, i) => {
@@ -184,6 +198,9 @@ export default function HistoryEdit() {
           sets: typeChanged
             ? acc.sets.map(s => ({ ...s, weight: null, reps: null, duration: null, distance: null }))
             : acc.sets,
+          // The note described the old exercise specifically — always clear
+          // on swap, regardless of whether the type changed.
+          notes: '',
         }
       }))
     }
@@ -196,6 +213,10 @@ export default function HistoryEdit() {
       await db.accessorySets
         .where('sessionId').equals(sid)
         .filter(s => s.exerciseId === acc.originalExerciseId)
+        .delete()
+      await db.accessoryNotes
+        .where('sessionId').equals(sid)
+        .filter(n => n.exerciseId === acc.originalExerciseId)
         .delete()
     }
     const existing = !swapped && acc.originalExerciseId === acc.exerciseId
@@ -234,6 +255,19 @@ export default function HistoryEdit() {
         distance: s.distance,
       })))
     }
+
+    const trimmedNotes = acc.notes.trim()
+    const existingNote = await db.accessoryNotes
+      .where('sessionId').equals(sid)
+      .filter(n => n.exerciseId === acc.exerciseId)
+      .first()
+    if (trimmedNotes === '') {
+      if (existingNote?.id != null) await db.accessoryNotes.delete(existingNote.id)
+    } else if (existingNote?.id != null) {
+      await db.accessoryNotes.update(existingNote.id, { notes: trimmedNotes })
+    } else {
+      await db.accessoryNotes.add({ sessionId: sid, exerciseId: acc.exerciseId, notes: trimmedNotes })
+    }
   }
 
   const handleSave = async () => {
@@ -247,6 +281,10 @@ export default function HistoryEdit() {
           await db.accessorySets
             .where('sessionId').equals(sid)
             .filter(s => s.exerciseId === exId)
+            .delete()
+          await db.accessoryNotes
+            .where('sessionId').equals(sid)
+            .filter(n => n.exerciseId === exId)
             .delete()
         }
         for (const acc of editAccessories()) await persistAccessory(acc)
@@ -365,6 +403,13 @@ export default function HistoryEdit() {
                       </div>
                     )}
                   </Index>
+                  <textarea
+                    value={accAcc().notes}
+                    onInput={e => updateAccNotes(ai, e.currentTarget.value)}
+                    class="w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs mt-2 focus:outline-none focus:border-accent resize-none"
+                    rows={2}
+                    placeholder="Note for this exercise…"
+                  />
                 </div>
               )}
             </Index>

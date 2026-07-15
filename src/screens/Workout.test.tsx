@@ -42,7 +42,7 @@ beforeEach(async () => {
   await Promise.all([
     db.lifts.clear(), db.trainingMaxes.clear(),
     db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-    db.exercises.clear(), db.accessorySets.clear(),
+    db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
     db.liftSupplementals.clear(), db.settings.clear(),
   ])
   mockNavigate.mockClear()
@@ -237,6 +237,23 @@ describe('Workout screen — with active session', () => {
       expect(accSets).toHaveLength(1)
       expect(accSets[0].reps).toBe(8)
       expect(accSets[0].exerciseId).toBe(10)
+    })
+  })
+
+  it('COMPLETE SESSION saves a non-empty accessory note, and skips a blank one', async () => {
+    startSession(BENCH)
+    await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+    await db.exercises.add({ id: 11, name: 'Dip', type: 'reps' })
+    addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 50, loggedSets: [], notes: 'purple band' })
+    addAccessory({ exerciseId: 11, exerciseName: 'Dip', tm: 50, calculatedWeight: 50, loggedSets: [], notes: '  ' })
+
+    renderWorkout()
+    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+
+    await waitFor(async () => {
+      const notes = await db.accessoryNotes.toArray()
+      expect(notes).toHaveLength(1)
+      expect(notes[0]).toMatchObject({ exerciseId: 10, notes: 'purple band' })
     })
   })
 
@@ -461,7 +478,7 @@ describe('Workout screen — rest types', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-      db.exercises.clear(), db.accessorySets.clear(),
+      db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
     mockNavigate.mockClear()
     await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
@@ -509,7 +526,7 @@ describe('Workout screen — undo last set', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-      db.exercises.clear(), db.accessorySets.clear(),
+      db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
     mockNavigate.mockClear()
     await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
@@ -549,7 +566,7 @@ describe('Workout screen — joker sets', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-      db.exercises.clear(), db.accessorySets.clear(),
+      db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
     mockNavigate.mockClear()
     await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
@@ -844,7 +861,7 @@ describe('Workout screen — FSL and AMRAP weight branches', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-      db.exercises.clear(), db.accessorySets.clear(),
+      db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
     mockNavigate.mockClear()
     await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
@@ -1066,7 +1083,7 @@ describe('Workout screen — cycle complete', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-      db.exercises.clear(), db.accessorySets.clear(),
+      db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
     mockNavigate.mockClear()
     await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
@@ -1259,7 +1276,7 @@ describe('Workout screen — DB error handling', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-      db.exercises.clear(), db.accessorySets.clear(),
+      db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
       db.settings.clear(),
     ])
     mockNavigate.mockClear()
