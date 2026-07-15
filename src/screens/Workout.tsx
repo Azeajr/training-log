@@ -793,7 +793,7 @@ export default function Workout() {
           <AccessoryPicker
             slot={pickerSlot()!}
             liftId={lift()!.id!}
-            onClose={() => { setPickerSlot(null); void loadData() }}
+            onClose={() => setPickerSlot(null)}
           />
         </Show>
 
