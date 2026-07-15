@@ -408,7 +408,7 @@ export default function HistoryEdit() {
                     onInput={e => updateAccNotes(ai, e.currentTarget.value)}
                     class="w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs mt-2 focus:outline-none focus:border-accent resize-none"
                     rows={2}
-                    placeholder="Note for this exercise…"
+                    placeholder="e.g. switched grip after set 3…"
                   />
                 </div>
               )}
