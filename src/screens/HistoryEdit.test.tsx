@@ -312,7 +312,7 @@ describe('HistoryEdit — accessory picker', () => {
     renderHistoryEdit(sessionId)
     await screen.findByText('Chinup')
 
-    const noteField = screen.getByPlaceholderText('Note for this exercise…')
+    const noteField = screen.getByPlaceholderText('e.g. switched grip after set 3…')
     fireEvent.input(noteField, { target: { value: 'switched to a lighter band' } })
     fireEvent.click(screen.getByText('SAVE'))
 
@@ -332,7 +332,7 @@ describe('HistoryEdit — accessory picker', () => {
     renderHistoryEdit(sessionId)
     await screen.findByText('Chinup')
 
-    const noteField = await screen.findByPlaceholderText('Note for this exercise…') as HTMLTextAreaElement
+    const noteField = await screen.findByPlaceholderText('e.g. switched grip after set 3…') as HTMLTextAreaElement
     expect(noteField.value).toBe('purple band')
     fireEvent.input(noteField, { target: { value: 'switched to red band' } })
     fireEvent.click(screen.getByText('SAVE'))
@@ -502,7 +502,7 @@ describe('HistoryEdit — accessory picker', () => {
     await db.accessoryNotes.add({ sessionId, exerciseId: exId1, notes: 'purple band' })
     renderHistoryEdit(sessionId)
     await screen.findByText('Chinup')
-    expect((screen.getByPlaceholderText('Note for this exercise…') as HTMLTextAreaElement).value).toBe('purple band')
+    expect((screen.getByPlaceholderText('e.g. switched grip after set 3…') as HTMLTextAreaElement).value).toBe('purple band')
 
     fireEvent.click(screen.getByText('swap'))
     await waitFor(() => expect(document.body.textContent).toContain('SELECT EXERCISE'))
@@ -511,7 +511,7 @@ describe('HistoryEdit — accessory picker', () => {
     await waitFor(() => expect(document.body.textContent).not.toContain('SELECT EXERCISE'))
 
     // Field cleared in the UI immediately after the swap, before saving.
-    expect((screen.getByPlaceholderText('Note for this exercise…') as HTMLTextAreaElement).value).toBe('')
+    expect((screen.getByPlaceholderText('e.g. switched grip after set 3…') as HTMLTextAreaElement).value).toBe('')
 
     fireEvent.click(screen.getByText('SAVE'))
 
