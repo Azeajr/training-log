@@ -169,7 +169,7 @@ describe('History — session expansion', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-      db.accessorySets.clear(), db.exercises.clear(),
+      db.accessorySets.clear(), db.accessoryNotes.clear(), db.exercises.clear(),
     ])
     mockNavigate.mockClear()
   })
@@ -293,6 +293,44 @@ describe('History — session expansion', () => {
     fireEvent.click(rowBtn)
 
     await waitFor(() => expect(document.body.textContent?.toUpperCase()).toContain('CHINUP'))
+  })
+
+  it('expanded detail shows an accessory note next to its sets', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1,
+      date: new Date(Date.now() - 1_000_000),
+      notes: null, status: 'completed',
+    })
+    await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'purple band' })
+
+    renderHistory()
+    fireEvent.click(await findSessionRowBtn())
+
+    await waitFor(() => expect(document.body.textContent).toContain('purple band'))
+  })
+
+  it('expanded detail shows a note-only accessory (no logged sets) with its real exercise name', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId = await db.exercises.add({ name: 'Band Pull-Apart', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1,
+      date: new Date(Date.now() - 1_000_000),
+      notes: null, status: 'completed',
+    })
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'ran out of time, skipped' })
+
+    renderHistory()
+    fireEvent.click(await findSessionRowBtn())
+
+    await waitFor(() => {
+      expect(document.body.textContent?.toUpperCase()).toContain('BAND PULL-APART')
+      expect(document.body.textContent).toContain('ran out of time, skipped')
+    })
   })
 })
 
@@ -434,7 +472,7 @@ describe('History — calendar', () => {
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
-      db.accessorySets.clear(),
+      db.accessorySets.clear(), db.accessoryNotes.clear(),
     ])
   })
 

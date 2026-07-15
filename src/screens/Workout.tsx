@@ -481,9 +481,15 @@ export default function Workout() {
           distance: s.distance ?? null,
         }))
     )
+    // Independent of toSave — a note with no logged sets is still meaningful
+    // ("wanted to try this, ran out of time").
+    const notesToSave = workout.activeAccessories
+      .filter(acc => acc.notes?.trim())
+      .map(acc => ({ sessionId, exerciseId: acc.exerciseId, notes: acc.notes!.trim() }))
     await db.transaction(async () => {
       await db.sessions.update(sessionId, { status: 'completed', notes: workout.notes, date: new Date() })
       if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
+      if (notesToSave.length > 0) await db.accessoryNotes.bulkAdd(notesToSave)
     })
     if (session.week !== 4) {
       const l = lift()
@@ -503,6 +509,7 @@ export default function Workout() {
     await db.transaction(async () => {
       await db.sets.where('sessionId').equals(sessionId).delete()
       await db.accessorySets.where('sessionId').equals(sessionId).delete()
+      await db.accessoryNotes.where('sessionId').equals(sessionId).delete()
     })
     clearSession()
     navigate('/today')

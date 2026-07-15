@@ -6,6 +6,7 @@ import {
   logCrossSet, editCrossSet, deleteLastCrossSetFor,
   startRest, stopRest,
   addAccessory, logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory,
+  setAccessoryNotes,
   clearSession, setNotes, setupWorkoutPersistence,
 } from './workout-store'
 import type { Session } from '../types/domain'
@@ -248,6 +249,17 @@ describe('editAccessorySet', () => {
     logAccessorySet(99, { setNumber: 1, weight: 50, reps: 8 })
     editAccessorySet(99, 0, { reps: 10 })
     expect(workout.activeAccessories[0].loggedSets[0]).toMatchObject({ reps: 10, weight: 50 })
+  })
+})
+
+describe('setAccessoryNotes', () => {
+  it('sets notes on the matching accessory only', () => {
+    startSession(SESSION)
+    addAccessory({ ...makeAcc(), exerciseId: 1 })
+    addAccessory({ ...makeAcc(), exerciseId: 2 })
+    setAccessoryNotes(1, 'purple band')
+    expect(workout.activeAccessories.find(a => a.exerciseId === 1)?.notes).toBe('purple band')
+    expect(workout.activeAccessories.find(a => a.exerciseId === 2)?.notes).toBeUndefined()
   })
 })
 

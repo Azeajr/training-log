@@ -10,6 +10,7 @@ import type {
   LiftSupplemental,
   AccessoryTrainingMax,
   AccessorySet,
+  AccessoryNote,
   Settings,
 } from '../types/domain'
 
@@ -27,6 +28,7 @@ class TrainingSQLiteDB {
     dateFields: ['setAt'],
   })
   accessorySets = new SQLiteTable<AccessorySet>('accessorySets')
+  accessoryNotes = new SQLiteTable<AccessoryNote>('accessoryNotes')
   settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'], boolFields: ['hasDeloadWeek'] })
 
   transaction(fn: () => Promise<void>): Promise<void> {

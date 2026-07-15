@@ -224,6 +224,19 @@ describe('exportJson', () => {
     expect(parsed).toHaveProperty('exportedAt')
   })
 
+  it('includes accessoryNotes in the exported payload', async () => {
+    const cycleId = await seedBase()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed',
+    })
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'purple band' })
+    await exportJson(db)
+    const parsed = JSON.parse(await capturedBlob!.text())
+    expect(parsed.accessoryNotes).toHaveLength(1)
+    expect(parsed.accessoryNotes[0].notes).toBe('purple band')
+  })
+
   it('saves to localStorage when download throws', async () => {
     await seedBase()
     ;(globalThis.URL as { createObjectURL: unknown }).createObjectURL = vi.fn(() => { throw new Error('unavailable') })
@@ -276,6 +289,21 @@ describe('exportCsv', () => {
     const text = await capturedBlob!.text()
     expect(text).toContain('Chinup')
     expect(text).toContain('accessory')
+  })
+
+  it('includes the accessory note as a trailing column on that exercise\'s row', async () => {
+    const cycleId = await seedBase()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed',
+    })
+    await db.accessorySets.add({ sessionId, exerciseId: exId, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'purple band' })
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    expect(lines[0]).toContain('"accessory_notes"')
+    const cols = lines[1].split(',')
+    expect(cols[cols.length - 1]).toBe('"purple band"')
   })
 
   it('includes a row with no sets when session has empty sets', async () => {
@@ -433,6 +461,7 @@ describe('importFromRawData — full payload', () => {
       settings: [{ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, theme: 'dark', barWeight: 45, plates: [] }],
       accessoryTrainingMaxes: [{ id: 1, exerciseId: 1, weight: 50, incrementLb: 5, setAt: '2026-01-01T00:00:00.000Z' }],
       accessorySets: [{ id: 1, sessionId: 1, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null }],
+      accessoryNotes: [{ id: 1, sessionId: 1, exerciseId: 1, notes: 'purple band' }],
     })
 
     expect(await db.lifts.count()).toBe(1)
@@ -444,6 +473,7 @@ describe('importFromRawData — full payload', () => {
     expect(await db.settings.count()).toBe(1)
     expect(await db.accessoryTrainingMaxes.count()).toBe(1)
     expect(await db.accessorySets.count()).toBe(1)
+    expect(await db.accessoryNotes.count()).toBe(1)
 
     const cycles = await db.cycles.toArray()
     expect(cycles[0].startDate).toBeInstanceOf(Date)
@@ -482,6 +512,7 @@ describe('exportJson → importFromRawData round-trip', () => {
     await db.liftSupplementals.add({ id: 1, liftId: 1, movementLiftId: 2, weightMode: 'percent', percent: 0.7, sets: 5, reps: 10, order: 0 })
     await db.accessoryTrainingMaxes.add({ id: 1, exerciseId: 1, weight: 50, incrementLb: 5, setAt: new Date('2026-01-01T00:00:00.000Z') })
     await db.accessorySets.add({ id: 1, sessionId: 1, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    await db.accessoryNotes.add({ id: 1, sessionId: 1, exerciseId: 1, notes: 'purple band' })
     await db.settings.add({ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, theme: 'mocha', barWeight: 45, plates: [{ weight: 45, count: 4 }, { weight: 25, count: 2 }], supplementalTemplate: 'fsl+bbb', deloadSupplemental: 'normal' })
 
     await exportJson(db)
@@ -502,6 +533,7 @@ describe('exportJson → importFromRawData round-trip', () => {
     expect(await db.liftSupplementals.count()).toBe(1)
     expect(await db.accessoryTrainingMaxes.count()).toBe(1)
     expect(await db.accessorySets.count()).toBe(1)
+    expect(await db.accessoryNotes.count()).toBe(1)
     expect(await db.settings.count()).toBe(1)
 
     // Bool fields survive as booleans.
@@ -544,6 +576,8 @@ describe('exportJson → importFromRawData round-trip', () => {
     const accSet = (await db.accessorySets.toArray())[0]
     expect(accSet.duration).toBeNull()
     expect(accSet.distance).toBeNull()
+    const accNote = (await db.accessoryNotes.toArray())[0]
+    expect(accNote).toMatchObject({ sessionId: 1, exerciseId: 1, notes: 'purple band' })
   })
 })
 
