@@ -1,5 +1,5 @@
 import { Router, Route, useNavigate, useLocation } from '@solidjs/router'
-import { lazy, Suspense, Show, createEffect, type ParentProps } from 'solid-js'
+import { lazy, Suspense, Show, createEffect, createSignal, onMount, onCleanup, type ParentProps } from 'solid-js'
 import { createConfirmation, ConfirmationContext } from './hooks/use-confirmation'
 import BottomNav from './components/layout/BottomNav'
 import Toast from './components/layout/Toast'
@@ -35,6 +35,23 @@ function AppShell(props: ParentProps) {
     })()
   })
 
+  // Restoring a tab from the browser's back/forward cache repaints the whole
+  // page in one visible blip (default background before the theme reasserts
+  // itself). `pageshow`'s `persisted` flag is the precise signal for that
+  // restore — unlike `visibilitychange`, which also fires on ordinary
+  // app-switches where there's no repaint to mask. Hold an opaque veil for
+  // one restored frame to cover the blip.
+  const [restoring, setRestoring] = createSignal(false)
+  onMount(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return
+      setRestoring(true)
+      requestAnimationFrame(() => requestAnimationFrame(() => setRestoring(false)))
+    }
+    window.addEventListener('pageshow', onPageShow)
+    onCleanup(() => window.removeEventListener('pageshow', onPageShow))
+  })
+
   return (
     <div
       class="bg-bg min-h-screen font-mono text-text flex flex-col"
@@ -52,6 +69,9 @@ function AppShell(props: ParentProps) {
       <Show when={location.pathname !== '/setup'}>
         <Toast />
         <BottomNav />
+      </Show>
+      <Show when={restoring()}>
+        <div class="fixed inset-0 z-[100] bg-bg" />
       </Show>
     </div>
   )
