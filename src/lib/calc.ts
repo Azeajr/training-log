@@ -239,17 +239,31 @@ export const calcWarmup = (
   return sets
 }
 
-export const estimated1RM = (weight: number, reps: number): number =>
-  reps === 1 ? weight : weight * (1 + reps / 30)
+// Wathan (1994): more accurate than Epley outside the ~5-17 rep band (matches
+// closely within it — see targetReps below), and asymptotic rather than
+// unbounded, which matches reality at high reps. Base/scale/decay are the
+// published constants; BASE is also the formula's ceiling fraction (see
+// targetReps).
+const WATHAN_BASE = 0.488
+const WATHAN_SCALE = 0.538
+const WATHAN_DECAY = 0.075
 
-// Fewest AMRAP reps at todayWeight whose e1RM reaches prev1RM. A single rep
-// scores plain weight (the estimated1RM reps===1 short-circuit), so when the
-// weight already meets the target the answer is 1 — never 0 or negative. Below
-// that, the Epley back-calc applies, floored at 2 because a 1-rep result can
-// never reach a target above the weight itself.
-export const targetReps = (prev1RM: number, todayWeight: number): number => {
+export const estimated1RM = (weight: number, reps: number): number =>
+  reps === 1 ? weight : weight / (WATHAN_BASE + WATHAN_SCALE * Math.exp(-WATHAN_DECAY * reps))
+
+// Fewest AMRAP reps at todayWeight whose e1RM reaches prev1RM, via the Wathan
+// inverse. Null when unreachable at any rep count: Wathan is asymptotic, so
+// todayWeight/prev1RM <= WATHAN_BASE (~48.8%) never gets there even at
+// infinite reps — unlike Epley, which always had a finite answer. Floored at
+// 1 rather than 2 because (unlike Epley) a single Wathan rep already scores
+// above plain weight, so a big enough todayWeight can close the gap in 1 rep
+// without reaching prev1RM outright.
+export const targetReps = (prev1RM: number, todayWeight: number): number | null => {
   if (todayWeight <= 0 || todayWeight >= prev1RM) return 1
-  return Math.max(2, Math.ceil((prev1RM / todayWeight - 1) * 30))
+  const ratio = todayWeight / prev1RM
+  if (ratio <= WATHAN_BASE) return null
+  const reps = -Math.log((ratio - WATHAN_BASE) / WATHAN_SCALE) / WATHAN_DECAY
+  return Math.max(1, Math.ceil(reps))
 }
 
 export interface AmrapTarget {
@@ -273,7 +287,7 @@ export const median = (xs: readonly number[]): number => {
 export const SEED_WINDOW = 3
 
 // Robust seed e1RM from recent AMRAPs given most-recent-first. Median of the
-// per-set Epley estimates over the window. Returns 0 for an empty list.
+// per-set Wathan estimates over the window. Returns 0 for an empty list.
 export const seedE1Rm = (
   recentAmraps: ReadonlyArray<{ weight: number; reps: number }>,
   window = SEED_WINDOW,
@@ -281,17 +295,20 @@ export const seedE1Rm = (
   median(recentAmraps.slice(0, window).map(s => estimated1RM(s.weight, s.reps)))
 
 // Single AMRAP rep target for today's weight, seeded from the robust e1RM of the
-// most recent AMRAPs (median over SEED_WINDOW). Null when there is no history —
-// callers fall back to the TM-implied e1RM.
+// most recent AMRAPs (median over SEED_WINDOW). Null when there is no history, or
+// when todayAmrapWeight is too light relative to the seed for targetReps to
+// resolve (see targetReps) — callers fall back to the TM-implied e1RM.
 export const calcAmrapTarget = (
   recentAmraps: ReadonlyArray<{ weight: number; reps: number }>,
   todayAmrapWeight: number,
 ): AmrapTarget | null => {
   if (recentAmraps.length === 0) return null
   const est = seedE1Rm(recentAmraps)
+  const reps = targetReps(est, todayAmrapWeight)
+  if (reps === null) return null
   return {
     label: 'target',
-    reps: targetReps(est, todayAmrapWeight),
+    reps,
     est1RM: Math.round(est * 100) / 100,
   }
 }

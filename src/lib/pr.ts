@@ -15,12 +15,12 @@ export interface AmrapPrResult {
 //
 // Two flavors of PR are reported independently:
 //   - repPr: strictly more reps than any prior AMRAP at this exact weight
-//   - e1RmPr: strictly higher Epley estimated 1RM than any prior AMRAP
+//   - e1RmPr: strictly higher Wathan estimated 1RM than any prior AMRAP
 //
 // First-ever AMRAP for a lift returns e1RmPr=true (sets the baseline record).
-// A 0-rep AMRAP (failed set) is never a PR and never a record: Epley
-// degenerates to estimated1RM(weight, 0) === weight, which would otherwise
-// credit an e1RM for a lift that was never completed.
+// A 0-rep AMRAP (failed set) is never a PR and never a record: the reps < 1
+// guard below returns early, so a lift that was never completed can't be
+// credited with an e1RM regardless of what the formula returns at reps=0.
 export async function detectAmrapPRs(
   db: TrainingDB,
   liftId: number,
