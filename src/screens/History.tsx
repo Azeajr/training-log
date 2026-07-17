@@ -90,6 +90,7 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
   const PAD_LEFT = 34, PAD_RIGHT = 8, PAD_TOP = 10, PAD_BOTTOM = 22
   const plotW = W - PAD_LEFT - PAD_RIGHT
   const plotH = H - PAD_TOP - PAD_BOTTOM
+  const X_TICK_COUNT = 4
 
   const [active, setActive] = createSignal<ActivePoint | null>(null)
 
@@ -131,19 +132,23 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
   })
   const secondaryPath = createMemo(() => secondaryPts().length >= 2 ? smoothPath(secondaryPts()) : '')
 
-  const areaPath = createMemo(() => {
-    const pts = extendedPrimaryPts()
-    if (pts.length < 2) return ''
-    const baseline = (PAD_TOP + plotH).toFixed(1)
-    return `${primaryPath()} L ${pts[pts.length - 1].x.toFixed(1)},${baseline} L ${pts[0].x.toFixed(1)},${baseline} Z`
-  })
-
   const yTicks = createMemo(() => {
     const lo = minW(), hi = maxW()
     return lo === hi ? [lo] : [lo, (lo + hi) / 2, hi]
   })
 
   const yTickY = (w: number) => PAD_TOP + plotH - ((w - minW()) / (maxW() - minW() || 1)) * plotH
+
+  // Recharts-style auto axis: several evenly spaced ticks across the domain,
+  // not just the two endpoints.
+  const xTicks = createMemo(() => {
+    const lo = minDate(), hi = maxDate()
+    if (all().length === 0) return []
+    if (lo === hi) return [lo]
+    return Array.from({ length: X_TICK_COUNT }, (_, i) => lo + (hi - lo) * (i / (X_TICK_COUNT - 1)))
+  })
+
+  const xTickX = (t: number) => PAD_LEFT + ((t - minDate()) / (maxDate() - minDate() || 1)) * plotW
 
   const dateLabel = (t: number) => formatDateShort(new Date(t))
 
@@ -154,30 +159,30 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} class="w-full h-40 select-none">
-      <defs>
-        <linearGradient id="tm-chart-area" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--color-accent)" stop-opacity="0.25" />
-          <stop offset="100%" stop-color="var(--color-accent)" stop-opacity="0" />
-        </linearGradient>
-      </defs>
+      <line x1={PAD_LEFT} y1={PAD_TOP} x2={PAD_LEFT} y2={PAD_TOP + plotH} stroke="var(--color-border-dim)" stroke-width="0.5" />
+      <line x1={PAD_LEFT} y1={PAD_TOP + plotH} x2={W - PAD_RIGHT} y2={PAD_TOP + plotH} stroke="var(--color-border-dim)" stroke-width="0.5" />
 
       <For each={yTicks()}>
         {w => (
           <>
-            <line x1={PAD_LEFT} y1={yTickY(w)} x2={W - PAD_RIGHT} y2={yTickY(w)} stroke="var(--color-border-dim)" stroke-width="0.5" />
-            <text x={PAD_LEFT - 4} y={yTickY(w) + 2.5} text-anchor="end" font-size="7" fill="var(--color-muted)">{Math.round(w)}</text>
+            <line x1={PAD_LEFT - 3} y1={yTickY(w)} x2={PAD_LEFT} y2={yTickY(w)} stroke="var(--color-border-dim)" stroke-width="0.5" />
+            <text x={PAD_LEFT - 5} y={yTickY(w) + 2.5} text-anchor="end" font-size="7" fill="var(--color-muted)">{Math.round(w)}</text>
           </>
         )}
       </For>
 
-      <Show when={all().length > 0}>
-        <text x={PAD_LEFT} y={H - 6} text-anchor="start" font-size="7" fill="var(--color-muted)">{dateLabel(minDate())}</text>
-        <text x={W - PAD_RIGHT} y={H - 6} text-anchor="end" font-size="7" fill="var(--color-muted)">{dateLabel(maxDate())}</text>
-      </Show>
+      <For each={xTicks()}>
+        {(t, i) => {
+          const anchor = i() === 0 ? 'start' : i() === xTicks().length - 1 ? 'end' : 'middle'
+          return (
+            <>
+              <line x1={xTickX(t)} y1={PAD_TOP + plotH} x2={xTickX(t)} y2={PAD_TOP + plotH + 3} stroke="var(--color-border-dim)" stroke-width="0.5" />
+              <text x={xTickX(t)} y={H - 6} text-anchor={anchor} font-size="7" fill="var(--color-muted)">{dateLabel(t)}</text>
+            </>
+          )
+        }}
+      </For>
 
-      <Show when={areaPath()}>
-        <path d={areaPath()} fill="url(#tm-chart-area)" stroke="none" />
-      </Show>
       <Show when={primaryPath()}>
         <path d={primaryPath()} fill="none" stroke="var(--color-accent)" stroke-width="1.5" />
       </Show>
@@ -186,20 +191,10 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
       </Show>
 
       <For each={primaryPts()}>
-        {p => (
-          <>
-            <circle cx={p.x} cy={p.y} r="6" fill="transparent" class="cursor-pointer" onClick={() => togglePoint(p, 'var(--color-accent)')} />
-            <circle cx={p.x} cy={p.y} r="2" fill="var(--color-accent)" pointer-events="none" />
-          </>
-        )}
+        {p => <circle cx={p.x} cy={p.y} r="6" fill="transparent" class="cursor-pointer" onClick={() => togglePoint(p, 'var(--color-accent)')} />}
       </For>
       <For each={secondaryPts()}>
-        {p => (
-          <>
-            <circle cx={p.x} cy={p.y} r="6" fill="transparent" class="cursor-pointer" onClick={() => togglePoint(p, 'var(--color-warn)')} />
-            <circle cx={p.x} cy={p.y} r="2" fill="var(--color-warn)" pointer-events="none" />
-          </>
-        )}
+        {p => <circle cx={p.x} cy={p.y} r="6" fill="transparent" class="cursor-pointer" onClick={() => togglePoint(p, 'var(--color-warn)')} />}
       </For>
 
       <Show when={active()}>
@@ -209,6 +204,8 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
           const ty = a().y < PAD_TOP + 16 ? a().y + 15 : a().y - 8
           return (
             <g pointer-events="none">
+              <line x1={a().x} y1={PAD_TOP} x2={a().x} y2={PAD_TOP + plotH} stroke="var(--color-border)" stroke-width="0.5" stroke-dasharray="2 2" />
+              <circle cx={a().x} cy={a().y} r="3" fill={a().color} />
               <rect x={tx - w / 2} y={ty - 9} width={w} height="12" fill="var(--color-surface-high)" stroke="var(--color-border)" stroke-width="0.5" />
               <text x={tx} y={ty} text-anchor="middle" font-size="6.5" fill={a().color}>{a().label}</text>
             </g>
