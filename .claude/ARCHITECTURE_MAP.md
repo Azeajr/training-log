@@ -147,7 +147,7 @@ so there is exactly one place to edit when adding a column or table.
   CSP set on preview server (also configured server-side for prod).
 - **Tests**: co-located `*.test.ts(x)` next to source. Vitest + jsdom + `@solidjs/testing-library`
   + `@testing-library/jest-dom`. Coverage gated at 80% on `lib/`, `screens/`, `store/`. Stryker
-  mutation testing available via `npm run test:mutation`. Many components in `components/` have
+  mutation testing available via `pnpm test:mutation`. Many components in `components/` have
   no co-located test — coverage is concentrated on screens and lib.
 - **E2E**: Playwright specs under `tests/e2e/`.
 

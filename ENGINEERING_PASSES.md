@@ -1,7 +1,7 @@
 # Engineering Passes
 
 Reusable autonomous-execution prompts, **adapted to this repo** (`training-log`: a Solid.js + TypeScript +
-SQLite-Wasm offline-first PWA for 5/3/1 strength training; `npm` / `vitest` / `playwright` / `stryker`,
+SQLite-Wasm offline-first PWA for 5/3/1 strength training; `pnpm` / `vitest` / `playwright` / `stryker`,
 deployed static to Cloudflare Pages). Each is a full loop — the agent reviews, implements, verifies through
 the toolchain, commits, and pushes. Pick a pass, paste its prompt, let it run.
 
@@ -22,7 +22,7 @@ Repo shape the prompts assume:
 - `src/components/*.tsx` — layout / modals / forms / ui / workout components.
 - `src/lib/**/*.test.ts(x)`, `src/screens/**`, `src/store/**` — co-located Vitest suites (468+ tests),
   run against the real SQLite engine via the in-process client (no DB mocks). Coverage gated ≥80%
-  (line/branch/fn/stmt) on `lib`/`screens`/`store`; Stryker mutation ≥80% on `lib` (`npm run test:mutation`).
+  (line/branch/fn/stmt) on `lib`/`screens`/`store`; Stryker mutation ≥80% on `lib` (`pnpm test:mutation`).
 - `tests/e2e/` — Playwright specs.
 - Design constraints live in `.claude/ARCHITECTURE_MAP.md` (boot order, layering) and
   `.claude/COMMON_MISTAKES.md` (schema-drift, destructive import, positional lift IDs, persisted-store
@@ -43,30 +43,30 @@ Verification commands referenced by every pass (this repo):
 
 ```bash
 # Build = typecheck + bundle (tsc -b is the compile/type gate; no separate typecheck script)
-npm run build
+pnpm build
 
 # Lint
-npm run lint
+pnpm lint
 
 # Unit + component tests (Vitest, jsdom, real in-process SQLite — no DB mocks). Prints per-file coverage.
-npm test
-npm run test:coverage          # enforces the ≥80% gate on lib/screens/store
+pnpm test
+pnpm test:coverage          # enforces the ≥80% gate on lib/screens/store
 
 # Mutation score (Stryker, ≥80% on src/lib via inPlace + perTest). Slow — scope it (see Pass 4).
-npm run test:mutation
+pnpm test:mutation
 
 # E2E (Playwright — needs the dev server or a build; the real Worker+OPFS path)
-npm run test:e2e
+pnpm test:e2e
 
 # Browser smoke against a real OPFS DB (Puppeteer-style helper; --no-wipe keeps existing data)
-npm run debug:browser
-npm run debug:browser:nowipe
+pnpm debug:browser
+pnpm debug:browser:nowipe
 
 # Commit + push — Conventional Commits, NO Co-Authored-By trailer (project preference); trunk-based.
 git commit -m "..." && git push origin main
 # CI (.github/workflows/deploy.yml) builds + deploys to Cloudflare Pages on a push to main that
 # touches src/public/config — it does NOT run the test suite, so tests are a LOCAL gate. A pass is
-# done only when `npm run build && npm test` are green locally AND the deploy run is green:
+# done only when `pnpm build && pnpm test` are green locally AND the deploy run is green:
 gh run watch "$(gh run list -L1 --json databaseId -q '.[0].databaseId')" --exit-status
 ```
 
@@ -87,7 +87,7 @@ Evaluate and modify against these criteria:
 5. Explicit data flow: Remove hidden side effects and tight coupling. src/lib MUST stay pure (takes a TrainingDB or plain inputs, no DOM, no module-level I/O); the ONLY I/O boundary (SQLite Worker + OPFS) lives in src/db — keep it there. localStorage effects belong in the store's setup function, not at module init (the History/RestTimer side-effect-at-construction fixes are the precedent).
 6. Structural flattening: Replace deep nesting and complex conditionals with early returns and linear paths.
 7. Output discipline: Do not regress the layering — lib stays framework-free and unit-testable without a DOM; screens stay thin over lib + store.
-8. Test before restructuring: check coverage for the path you're about to refactor (`npm run test:coverage` prints per-file missing lines/branches). If the suite doesn't reach it, first add ≤ 3 targeted tests for its current behavior so the refactor lands verified, not hopeful.
+8. Test before restructuring: check coverage for the path you're about to refactor (`pnpm test:coverage` prints per-file missing lines/branches). If the suite doesn't reach it, first add ≤ 3 targeted tests for its current behavior so the refactor lands verified, not hopeful.
 
 SCOPE GUARDS:
 - The 5/3/1 prescription constants (MAIN_PERCENTAGES, MAIN_REPS, BBB_PCT, BBS_PERCENTAGES, warmup 40/50/60, threshold constants SESSION_TM_BUMP_THRESHOLD/CYCLE_DOUBLE_THRESHOLD) are program canon with test fixtures — changing a number is a BEHAVIOR change, out of scope. Restructure around them, never re-weigh them.
@@ -97,11 +97,11 @@ SCOPE GUARDS:
 Honor the existing invariants: lib is pure and DOM-free; the persisted workout-store shape is version-gated by STORAGE_VERSION; lift IDs are positional (look up by name, never hardcode — COMMON_MISTAKES #3); the test client and prod worker share schema.ts and sqlite-table.ts verbatim.
 
 EXECUTION WORKFLOW (run in order; do not stop until green):
-1. Build/typecheck: `npm run build`.
-2. Lint: `npm run lint`.
-3. Test: `npm test`. If anything fails, or a bug fix broke an existing assumption, fix your implementation until it passes. For a math/cycle bug fix, pin the corrected behavior with a regression test in the matching src/lib/*.test.ts before moving on. If you touched a path the unit suite can't reach (real Worker/OPFS), spot-check with `npm run test:e2e` or `npm run debug:browser`.
+1. Build/typecheck: `pnpm build`.
+2. Lint: `pnpm lint`.
+3. Test: `pnpm test`. If anything fails, or a bug fix broke an existing assumption, fix your implementation until it passes. For a math/cycle bug fix, pin the corrected behavior with a regression test in the matching src/lib/*.test.ts before moving on. If you touched a path the unit suite can't reach (real Worker/OPFS), spot-check with `pnpm test:e2e` or `pnpm debug:browser`.
 4. Commit with a concise message explaining WHY the bug was fixed or the structural change was made (not what). No Co-Authored-By trailer.
-5. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). Remember CI does not run the tests — your local `npm test` is the regression gate.
+5. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). Remember CI does not run the tests — your local `pnpm test` is the regression gate.
 ```
 
 ---
@@ -117,16 +117,16 @@ Several mitigations already shipped (see ROADMAP.md § Security) — verify they
 3. Untrusted import payload: importFromRawData is intentionally destructive (clear-then-bulkAdd in a transaction). Confirm the file-size cap (MAX_IMPORT_BYTES, ~50 MB) rejects BEFORE file.text() runs, non-object top-level JSON is rejected with a friendly error, and the per-table column allowlist (the pickCols / known-column pattern) drops unknown keys instead of letting them reach the INSERT column list. A malicious or malformed backup must fail safe, never throw a raw SQL error or graft extra columns.
 4. Persisted-state tampering: workout-store loadFromStorage must reject a non-object persisted blob and copy only the explicit PERSISTED_KEYS allowlist into the reactive store (defense against a corrupted/tampered localStorage entry grafting fields after a future migration/XSS bug). STORAGE_VERSION mismatch must drop state, not throw.
 5. URL/slug injection into SQL params: route slugs that become SQL parameters (e.g. HistoryEdit's :sessionId) must be coerced through `Number.isInteger(n) && n > 0` and redirect on failure, never bind NaN.
-6. Supply chain / deploy: the deploy workflow must stay least-privilege (`permissions: contents: read`, `persist-credentials: false`) and keep `npm audit signatures` so a tampered lockfile is caught before deploy. PWA caching must keep `cleanupOutdatedCaches: true` and the user-controlled `registerType: 'prompt'` (skipWaiting/clientsClaim false) so a stale/tampered precache is evicted and updates aren't force-activated.
+6. Supply chain / deploy: the deploy workflow must stay least-privilege (`permissions: contents: read`, `persist-credentials: false`) and keep `pnpm audit signatures` so a tampered lockfile is caught before deploy. PWA caching must keep `cleanupOutdatedCaches: true` and the user-controlled `registerType: 'prompt'` (skipWaiting/clientsClaim false) so a stale/tampered precache is evicted and updates aren't force-activated.
 
 Do not add authentication, encryption-at-rest, or a heavy security framework — that contradicts the no-server, single-user, offline model and would be theater. Do not weaken offline-first behavior or the destructive-import contract.
 
 EXECUTION WORKFLOW (run in order; do not stop until green):
-1. Build/typecheck: `npm run build`.
-2. Lint: `npm run lint`.
-3. Test: `npm test`, and add tests for any new/tightened guard (oversized import, non-object payload, unknown-column strip, bad slug redirect, non-object persisted state, identifier rejection). The existing precedents live in src/db/sqlite-table.test.ts (identifier guard), src/lib/export-import.test.ts (import guards), src/store/workout-store.test.ts (hydration allowlist). Do not compromise core functionality for security theater.
+1. Build/typecheck: `pnpm build`.
+2. Lint: `pnpm lint`.
+3. Test: `pnpm test`, and add tests for any new/tightened guard (oversized import, non-object payload, unknown-column strip, bad slug redirect, non-object persisted state, identifier rejection). The existing precedents live in src/db/sqlite-table.test.ts (identifier guard), src/lib/export-import.test.ts (import guards), src/store/workout-store.test.ts (hydration allowlist). Do not compromise core functionality for security theater.
 4. Commit: the message must state the EXACT vulnerability mitigated and the method used. No Co-Authored-By trailer.
-5. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `npm test` is the gate.
+5. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `pnpm test` is the gate.
 ```
 
 ---
@@ -145,20 +145,20 @@ Route each test to the layer that owns it:
 Enforce these principles:
 1. Test behavior, not implementation: call the public functions/components as a consumer would and assert on OUTPUTS — computed set arrays (weight/reps/isAmrap), cycle-advance deltas, recommendation flags, rendered text, persisted DB rows. Don't assert on internal call sequencing.
 2. Real instances over mocks: build real inputs and feed them through lib; build real DB state through the in-process test client. The DB engine in tests IS the production engine (only the Worker/OPFS transport differs) — there is nothing to mock. Reset state between tests with `__resetForTest()` from the test client (autouse fixture).
-3. High-signal targeting: the 5/3/1 boundaries are where regressions actually live — warmup dedup/floor/break, the week-4 deload (no-AMRAP, hidden BBS/supplemental), roundToNearest5 edges, plate-math `remaining` float tolerance + the "can't make weight → null" return, joker increment thresholds and the shouldShowJokerButton index-shift guard, Epley `reps===1` short-circuit, AMRAP target back-calc, cycle-advance TM progression + the CYCLE_START_TOLERANCE_MS auto-vs-bump discriminator, doubling-candidate eligibility (all-3-weeks ≥10% AND no mid-cycle bump), PR detection (rep-PR at exact weight, e1RM-PR, first-ever baseline, exclude-self). Pick targets from evidence: `npm run test:coverage` prints per-file missing lines/branches — chase uncovered BRANCHES that encode a decision (a guard, a threshold gate, a fallback), not trivial passthroughs.
+3. High-signal targeting: the 5/3/1 boundaries are where regressions actually live — warmup dedup/floor/break, the week-4 deload (no-AMRAP, hidden BBS/supplemental), roundToNearest5 edges, plate-math `remaining` float tolerance + the "can't make weight → null" return, joker increment thresholds and the shouldShowJokerButton index-shift guard, Epley `reps===1` short-circuit, AMRAP target back-calc, cycle-advance TM progression + the CYCLE_START_TOLERANCE_MS auto-vs-bump discriminator, doubling-candidate eligibility (all-3-weeks ≥10% AND no mid-cycle bump), PR detection (rep-PR at exact weight, e1RM-PR, first-ever baseline, exclude-self). Pick targets from evidence: `pnpm test:coverage` prints per-file missing lines/branches — chase uncovered BRANCHES that encode a decision (a guard, a threshold gate, a fallback), not trivial passthroughs.
 4. Clean state hygiene: guarantee isolation — `__resetForTest()` between tests; reset module-level store state; for localStorage-backed store tests, clear and set the key explicitly and exercise the STORAGE_VERSION mismatch path.
 5. Defensive boundaries: malformed/oversized import payloads, non-object persisted state, bad route slugs, empty cycle/session sets, zero-prior-AMRAP PR baseline, schema additive-migration applied to an already-seeded DB. Assert the app degrades into a friendly/safe state, never a crash or a silent wrong-weight.
 6. Assert meaning, not prose: pin computed numbers, counts, boolean flags, and DB row shapes — not exact toast strings or incidental formatting that's allowed to be reworded.
-7. Mutation as the quality bar: for src/lib changes, the real target is the Stryker mutation score (≥80%, `npm run test:mutation`) — a test that doesn't kill a mutant of the line it "covers" is vanity. Prefer assertions specific enough to catch a flipped comparator or an off-by-one (see Pass 4 for the dedicated loop).
+7. Mutation as the quality bar: for src/lib changes, the real target is the Stryker mutation score (≥80%, `pnpm test:mutation`) — a test that doesn't kill a mutant of the line it "covers" is vanity. Prefer assertions specific enough to catch a flipped comparator or an off-by-one (see Pass 4 for the dedicated loop).
 
 Match the existing files' style (Vitest, describe/it, parametrized cases for the four 5/3/1 weeks, the autouse reset fixture, shared synthetic fixtures — reuse them instead of inventing new ones; never seed tests from real user exports).
 
 EXECUTION WORKFLOW (run in order; do not stop until green):
-1. Build/typecheck: `npm run build`.
-2. Lint: `npm run lint`.
-3. Test: `npm test`. If new tests fail or break existing ones, debug and fix the TEST — unless you uncovered a real bug in src/lib / src/db / a screen, in which case fix the source and note it in the commit. Confirm the coverage gate still holds with `npm run test:coverage`.
+1. Build/typecheck: `pnpm build`.
+2. Lint: `pnpm lint`.
+3. Test: `pnpm test`. If new tests fail or break existing ones, debug and fix the TEST — unless you uncovered a real bug in src/lib / src/db / a screen, in which case fix the source and note it in the commit. Confirm the coverage gate still holds with `pnpm test:coverage`.
 4. Commit with a concise message describing the BEHAVIOR now covered. No Co-Authored-By trailer.
-5. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `npm test` is the gate.
+5. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `pnpm test` is the gate.
 ```
 
 ---
@@ -181,7 +181,7 @@ CONTEXT
 - The richest mutant nests are exactly the 5/3/1 boundaries from Pass 3: comparators in warmup break/dedup, the week-4 `isAmrap`/BBS gates, plate-math thresholds, joker rep-minimum gates, CYCLE_START_TOLERANCE_MS comparisons, doubling-eligibility AND-chains, PR strict-greater-than checks.
 
 PHASE 1 — RUN AND TRIAGE
-1. Scope the run to keep it fast: temporarily narrow `mutate` in stryker.config.mjs to `['src/lib/<module>', '!src/lib/**/*.test.ts']`, or run `npm run test:mutation` and read only the <module> section of the HTML report. (Revert the config narrowing before committing — it is not a shipped change.)
+1. Scope the run to keep it fast: temporarily narrow `mutate` in stryker.config.mjs to `['src/lib/<module>', '!src/lib/**/*.test.ts']`, or run `pnpm test:mutation` and read only the <module> section of the HTML report. (Revert the config narrowing before committing — it is not a shipped change.)
 2. List the surviving + no-coverage mutants for <module>. For each, record: the line, the mutation applied, and WHY the current tests don't catch it (assertion too loose? branch never exercised? only the happy path tested?).
 3. Ignore mutants that are genuinely equivalent (the mutation produces identical behavior) — note them, don't chase them.
 
@@ -194,11 +194,11 @@ For each real survivor, add or tighten a test in src/lib/<module-without-ext>.te
 PHASE 3 — VERIFY AND SHIP
 Run in order; do not proceed past a failure:
 1. Revert any temporary stryker.config.mjs narrowing.
-2. Build/typecheck: `npm run build`.
-3. Lint: `npm run lint`.
-4. Test: `npm test` (fast gate), then `npm run test:mutation` and confirm the <module> survivors you targeted are now killed and the overall src/lib score did not regress below 80%.
+2. Build/typecheck: `pnpm build`.
+3. Lint: `pnpm lint`.
+4. Test: `pnpm test` (fast gate), then `pnpm test:mutation` and confirm the <module> survivors you targeted are now killed and the overall src/lib score did not regress below 80%.
 5. Commit with a message naming the module hardened and the class of mutant killed (e.g. "test: kill warmup break/dedup comparator survivors in calc"). If you fixed a real source bug, lead with that. No Co-Authored-By trailer.
-6. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `npm test` + mutation run is the gate.
+6. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `pnpm test` + mutation run is the gate.
 
 GUARDRAILS
 - Never commit a narrowed stryker.config.mjs — the full src/lib mutate glob is the shipped config.
@@ -274,11 +274,11 @@ SCOPE GUARDS (a fix that needs any of these is out of scope — stop and note it
 EXECUTION WORKFLOW (run in order; do not stop until green):
 1. Hunt: walk PHASE A→F. Keep a short running log of each suspect: the triggering input, confirmed-bug vs. confirmed-intentional vs. out-of-scope.
 2. For each CONFIRMED bug: write the failing regression test first, then apply the minimal fix, then confirm the test passes and no existing test regressed.
-3. Build/typecheck: `npm run build`.
-4. Lint: `npm run lint`.
-5. Test: `npm test`. If a fix broke an existing assertion, decide whether the old assertion pinned the BUG (update it, and say so) or whether your fix is wrong (revert). For a path the unit suite can't reach (real Worker/OPFS), spot-check with `npm run test:e2e` or `npm run debug:browser`.
+3. Build/typecheck: `pnpm build`.
+4. Lint: `pnpm lint`.
+5. Test: `pnpm test`. If a fix broke an existing assertion, decide whether the old assertion pinned the BUG (update it, and say so) or whether your fix is wrong (revert). For a path the unit suite can't reach (real Worker/OPFS), spot-check with `pnpm test:e2e` or `pnpm debug:browser`.
 6. Commit each fix (or a tight cluster of related fixes) with a message stating the concrete defect and the input that triggered it — WHY it was wrong, with the expected-vs-actual values. No Co-Authored-By trailer.
-7. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `npm test` is the regression gate.
+7. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local `pnpm test` is the regression gate.
 ```
 
 ---
@@ -319,10 +319,10 @@ SCOPE GUARDS (a change that needs any of these is out of scope — stop and note
 - NO removal of focus styles, touch-target size, or safe-area handling for the sake of looks.
 
 EXECUTION WORKFLOW (run in order; do not stop until green):
-1. Build/typecheck: `npm run build`.
-2. Lint: `npm run lint`.
-3. Test: `npm test`. Component tests render the real DOM — assert on structure, token classes, and ARIA, not exact copy that's allowed to be reworded. If you restyled a component whose test pinned a brittle string, re-point the test at the meaningful structure.
-4. Visual verification (this pass's real gate — a green unit run does NOT prove it looks right): drive the actual app against a real OPFS DB with `npm run debug:browser` (or `npm run test:e2e`) and LOOK. Screenshot the changed screen and — critically — toggle through all five themes in Settings (Dark, Light, Rosé Pine, Mocha, Latte) to confirm no hardcoded color leaked and contrast holds everywhere. Spot-check a mobile width and prefers-reduced-motion.
+1. Build/typecheck: `pnpm build`.
+2. Lint: `pnpm lint`.
+3. Test: `pnpm test`. Component tests render the real DOM — assert on structure, token classes, and ARIA, not exact copy that's allowed to be reworded. If you restyled a component whose test pinned a brittle string, re-point the test at the meaningful structure.
+4. Visual verification (this pass's real gate — a green unit run does NOT prove it looks right): drive the actual app against a real OPFS DB with `pnpm debug:browser` (or `pnpm test:e2e`) and LOOK. Screenshot the changed screen and — critically — toggle through all five themes in Settings (Dark, Light, Rosé Pine, Mocha, Latte) to confirm no hardcoded color leaked and contrast holds everywhere. Spot-check a mobile width and prefers-reduced-motion.
 5. Commit with a concise message explaining the design intent / what was tokenized or unified (WHY), not a list of class diffs. No Co-Authored-By trailer.
 6. Push `git push origin main`, then confirm the deploy run is green (`gh run watch ... --exit-status`). CI does not run tests — your local build + test + the visual check are the gate.
 ```

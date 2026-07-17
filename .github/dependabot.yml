@@ -10,7 +10,7 @@ updates:
     groups:
       # Bundle non-security minor/patch bumps into a single PR per ecosystem.
       # Security advisories still open their own PR.
-      npm-minor-and-patch:
+      pnpm-minor-and-patch:
         update-types:
           - minor
           - patch

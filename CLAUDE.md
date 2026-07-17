@@ -17,12 +17,12 @@
 ## Quick Start Commands
 
 ```bash
-npm run dev          # dev server (Vite)
-npm test             # unit tests (Vitest)
-npm run check        # build + test
-npm run test:e2e     # Playwright e2e
-npm run build        # tsc + vite build
-npm run lint         # ESLint
+pnpm dev             # dev server (Vite)
+pnpm test            # unit tests (Vitest)
+pnpm check           # build + test
+pnpm test:e2e        # Playwright e2e
+pnpm build           # tsc + vite build
+pnpm lint            # ESLint
 ```
 
 **See**: `.claude/QUICK_START.md` for full reference

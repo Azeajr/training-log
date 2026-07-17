@@ -5,20 +5,20 @@
 ## Development
 
 ```bash
-npm run dev                      # Vite dev server at localhost:5173
-npm run build                    # tsc -b && vite build → dist/
-npm run preview                  # preview production build at localhost:5175
-npm run lint                     # ESLint
+pnpm dev                         # Vite dev server at localhost:5173
+pnpm build                       # tsc -b && vite build → dist/
+pnpm preview                     # preview production build at localhost:5175
+pnpm lint                        # ESLint
 ```
 
 ## Testing
 
 ```bash
-npm test                         # Vitest unit tests (run once)
-npm run test:coverage            # Vitest with v8 coverage (gated 80%)
-npm run test:mutation            # Stryker mutation testing
-npm run check                    # build + unit tests (pre-commit gate)
-npm run test:e2e                 # Playwright e2e (needs built app or dev server)
+pnpm test                        # Vitest unit tests (run once)
+pnpm test:coverage               # Vitest with v8 coverage (gated 80%)
+pnpm test:mutation               # Stryker mutation testing
+pnpm check                       # build + unit tests (pre-commit gate)
+pnpm test:e2e                    # Playwright e2e (needs built app or dev server)
 ```
 
 Unit tests live next to source: `src/**/*.test.ts(x)`.

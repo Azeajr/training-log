@@ -1,5 +1,5 @@
 export default {
-  packageManager: 'npm',
+  packageManager: 'pnpm',
   testRunner: 'vitest',
   vitest: { configFile: 'vite.config.ts' },
   testFiles: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
