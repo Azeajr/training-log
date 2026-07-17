@@ -256,7 +256,9 @@ export default function Workout() {
     const tm = tmWeight()
     if (tm <= 0) return []
     const est1RM = est1RMFromTm(tm)
-    return [{ label: 'goal', reps: targetReps(est1RM, weight), est1RM: Math.round(est1RM) }]
+    const reps = targetReps(est1RM, weight)
+    if (reps === null) return []
+    return [{ label: 'goal', reps, est1RM: Math.round(est1RM) }]
   }
 
   const handleAmrapWeightChange = (weight: number) => setAmrapTargets(amrapTargetsFor(weight))

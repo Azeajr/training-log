@@ -5,7 +5,7 @@ import Rule from '../components/layout/Rule'
 
 interface RecordRow {
   name: string
-  e1rm: number | null   // rounded best Epley estimated 1RM; null when no AMRAP yet
+  e1rm: number | null   // rounded best Wathan estimated 1RM; null when no AMRAP yet
   weight: number | null // the set that produced it
   reps: number | null
 }

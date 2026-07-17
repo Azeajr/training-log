@@ -272,8 +272,8 @@ describe('calcWarmup', () => {
 })
 
 describe('estimated1RM', () => {
-  it('160lb x 17 reps = 250.67', () => {
-    expect(estimated1RM(160, 17)).toBeCloseTo(250.67, 1)
+  it('160lb x 17 reps = 250.65', () => {
+    expect(estimated1RM(160, 17)).toBeCloseTo(250.65, 1)
   })
   it('1 rep returns exact weight lifted', () => {
     expect(estimated1RM(225, 1)).toBe(225)
@@ -281,12 +281,12 @@ describe('estimated1RM', () => {
 })
 
 describe('targetReps', () => {
-  it('250.67 target at 170lb rounds up to 15', () => {
-    expect(targetReps(250.67, 170)).toBe(15)
+  it('250.65 target at 170lb rounds up to 14', () => {
+    expect(targetReps(250.65, 170)).toBe(14)
   })
   it('returns 1 when today weight exceeds the target e1RM — never a negative target', () => {
-    // 200×5 prior → e1RM 233.33; AMRAP weight bumped to 245 → raw back-calc is ceil(-1.43) = -1
-    expect(targetReps(233.33, 245)).toBe(1)
+    // 200×5 prior → e1RM 233.17; AMRAP weight bumped to 245 → ratio > 1, short-circuits
+    expect(targetReps(233.17, 245)).toBe(1)
   })
   it('returns 1 when today weight equals the target e1RM — never a 0-rep target', () => {
     expect(targetReps(200, 200)).toBe(1)
@@ -295,9 +295,14 @@ describe('targetReps', () => {
     expect(targetReps(200, 0)).toBe(1)
   })
   it('returns 2 when 1 rep would score below the target — estimated1RM reps===1 short-circuit', () => {
-    // raw back-calc gives ceil(0.64) = 1, but estimated1RM(235, 1) = 235 < 240:
+    // raw back-calc gives a value < 1, but estimated1RM(235, 1) = 235 < 240:
     // a 1-rep "target" can never reach the displayed est. 1RM
     expect(targetReps(240, 235)).toBe(2)
+  })
+  it('returns null when todayWeight is too light to ever reach prev1RM (Wathan asymptote)', () => {
+    // Wathan caps e1RM at weight / 0.488 ≈ 2.049×weight — below that ratio,
+    // no finite rep count closes the gap.
+    expect(targetReps(500, 200)).toBeNull()
   })
 })
 
@@ -312,13 +317,13 @@ describe('seedE1Rm', () => {
 
   it('is the median e1RM over the window, ignoring a single inflated set', () => {
     // most-recent-first. A lone high-rep crater/spike in the middle can't drag
-    // the seed: 100×10 (133.3), 95×10 (126.7), 60×20 (100.0) -> median 126.7.
+    // the seed: 100×10 (134.75), 95×10 (128.01), 60×20 (98.68) -> median 128.01.
     const est = seedE1Rm([
       { weight: 100, reps: 10 },
       { weight: 95, reps: 10 },
       { weight: 60, reps: 20 },
     ])
-    expect(est).toBeCloseTo(126.67, 1)
+    expect(est).toBeCloseTo(128.01, 1)
   })
 
   it('only considers the most recent `window` sets', () => {
@@ -339,8 +344,8 @@ describe('calcAmrapTarget', () => {
   })
 
   it('seeds reps from the median e1RM of recent AMRAPs', () => {
-    // e1RMs: 250.67 (160×17), 232.5 (155×15), 220.0 (150×14) -> median 232.5.
-    // The high outlier (250.67) does not drive the seed.
+    // e1RMs: 250.65 (160×17), 233.90 (155×15), 221.81 (150×14) -> median 233.90.
+    // The high outlier (250.65) does not drive the seed.
     const target = calcAmrapTarget(
       [
         { weight: 160, reps: 17 },
@@ -350,7 +355,7 @@ describe('calcAmrapTarget', () => {
       170,
     )!
     expect(target.label).toBe('target')
-    expect(target.est1RM).toBeCloseTo(232.5, 1)
+    expect(target.est1RM).toBeCloseTo(233.90, 1)
     expect(target.reps).toBe(targetReps(target.est1RM, 170))
   })
 
