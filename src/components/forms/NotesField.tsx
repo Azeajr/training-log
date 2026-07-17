@@ -36,6 +36,7 @@ interface Props {
 // line. The ← → chips mirror Tab/Shift+Tab for touch keyboards, which have no
 // Tab key.
 export default function NotesField(props: Props) {
+  // eslint-disable-next-line no-unassigned-vars -- Solid `ref={ref}` reassigns at runtime
   let ref: HTMLTextAreaElement | undefined
   const [listMode, setListMode] = createSignal(false)
 
