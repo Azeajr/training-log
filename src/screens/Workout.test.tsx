@@ -353,7 +353,7 @@ describe('Workout screen — with active session', () => {
     renderWorkout()
     await screen.findByText('WARM UP')
 
-    const textarea = screen.getByPlaceholderText('Session notes...')
+    const textarea = screen.getByPlaceholderText('session notes...')
     fireEvent.input(textarea, { target: { value: 'great session' } })
 
     await waitFor(() => {

@@ -128,7 +128,7 @@ describe('HistoryEdit screen', () => {
     renderHistoryEdit(sessionId)
     await screen.findByText(/Bench/)
 
-    const textarea = screen.getByPlaceholderText('Session notes...')
+    const textarea = screen.getByPlaceholderText('session notes...')
     fireEvent.input(textarea, { target: { value: 'updated notes' } })
 
     fireEvent.click(await screen.findByText('SAVE'))

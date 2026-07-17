@@ -6,6 +6,7 @@ import { estimated1RM, formatDuration, SET_TYPE_DISPLAY_ORDER } from '../lib/cal
 import { formatDateShort, formatDateLong } from '../lib/format'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
+import NotesText from '../components/forms/NotesText'
 
 type ViewMode = 'lift' | 'date' | 'calendar'
 
@@ -53,9 +54,44 @@ interface Detail {
 }
 
 interface ChartPoint { date: Date; weight: number }
+interface PlotPoint { x: number; y: number; date: Date; weight: number }
+interface ActivePoint { x: number; y: number; label: string; color: string }
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
+
+// Catmull-Rom → cubic-bezier conversion so the line reads as a trend rather
+// than a jagged connect-the-dots; degenerates to a straight segment for 2 pts.
+// Control points are clamped into each segment's own bounding box: a cubic
+// bezier is guaranteed to stay within the convex hull of its 4 control
+// points, so this keeps a sharp direction change (steep rise into a flat
+// plateau, say) from bulging the curve backward past its own endpoints.
+function smoothPath(points: PlotPoint[]): string {
+  if (points.length === 0) return ''
+  if (points.length < 3) return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] ?? points[i]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[i + 2] ?? p2
+    const [xLo, xHi] = p1.x < p2.x ? [p1.x, p2.x] : [p2.x, p1.x]
+    const [yLo, yHi] = p1.y < p2.y ? [p1.y, p2.y] : [p2.y, p1.y]
+    const c1x = clamp(p1.x + (p2.x - p0.x) / 6, xLo, xHi)
+    const c1y = clamp(p1.y + (p2.y - p0.y) / 6, yLo, yHi)
+    const c2x = clamp(p2.x - (p3.x - p1.x) / 6, xLo, xHi)
+    const c2y = clamp(p2.y - (p3.y - p1.y) / 6, yLo, yHi)
+    d += ` C ${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
+  }
+  return d
+}
 
 function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
-  const W = 400, H = 80, PAD = 20
+  const W = 400, H = 140
+  const PAD_LEFT = 34, PAD_RIGHT = 8, PAD_TOP = 10, PAD_BOTTOM = 22
+  const plotW = W - PAD_LEFT - PAD_RIGHT
+  const plotH = H - PAD_TOP - PAD_BOTTOM
+
+  const [active, setActive] = createSignal<ActivePoint | null>(null)
 
   const all = createMemo(() => [...props.primary, ...(props.secondary ?? [])])
   const minDate = createMemo(() => Math.min(...all().map(d => d.date.getTime())))
@@ -63,34 +99,121 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
   const minW = createMemo(() => Math.min(...all().map(d => d.weight)))
   const maxW = createMemo(() => Math.max(...all().map(d => d.weight)))
 
-  const toXY = (d: ChartPoint) => {
+  const toXY = (d: ChartPoint): PlotPoint => {
     const dateSpan = maxDate() - minDate() || 1
     const range = maxW() - minW() || 1
-    const x = PAD + ((d.date.getTime() - minDate()) / dateSpan) * (W - PAD * 2)
-    const y = H - PAD - ((d.weight - minW()) / range) * (H - PAD * 2)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
+    const x = PAD_LEFT + ((d.date.getTime() - minDate()) / dateSpan) * plotW
+    const y = PAD_TOP + plotH - ((d.weight - minW()) / range) * plotH
+    return { x, y, date: d.date, weight: d.weight }
   }
 
-  const extendedPrimary = createMemo(() => {
-    const pts = props.primary
+  const primaryPts = createMemo(() => props.primary.map(toXY))
+  const secondaryPts = createMemo(() => (props.secondary ?? []).map(toXY))
+
+  const extendedPrimaryPts = createMemo(() => {
+    const pts = primaryPts()
     if (pts.length < 1) return pts
     const last = pts[pts.length - 1]
     if (last.date.getTime() < maxDate()) {
-      return [...pts, { date: new Date(maxDate()), weight: last.weight }]
+      return [...pts, toXY({ date: new Date(maxDate()), weight: last.weight })]
     }
     return pts
   })
 
-  const primaryPts = createMemo(() => extendedPrimary().length >= 2 ? extendedPrimary().map(toXY).join(' ') : '')
-  const secondaryPts = createMemo(() => (props.secondary?.length ?? 0) >= 2 ? props.secondary!.map(toXY).join(' ') : '')
+  // Smooth only the real points; the synthetic flat-extension tail is a plain
+  // line so it can't drag the curve's tangent into an overshoot dip.
+  const primaryPath = createMemo(() => {
+    const pts = primaryPts()
+    if (pts.length < 2) return ''
+    const ext = extendedPrimaryPts()
+    const tail = ext.length > pts.length ? ` L ${ext[ext.length - 1].x.toFixed(1)},${ext[ext.length - 1].y.toFixed(1)}` : ''
+    return smoothPath(pts) + tail
+  })
+  const secondaryPath = createMemo(() => secondaryPts().length >= 2 ? smoothPath(secondaryPts()) : '')
+
+  const areaPath = createMemo(() => {
+    const pts = extendedPrimaryPts()
+    if (pts.length < 2) return ''
+    const baseline = (PAD_TOP + plotH).toFixed(1)
+    return `${primaryPath()} L ${pts[pts.length - 1].x.toFixed(1)},${baseline} L ${pts[0].x.toFixed(1)},${baseline} Z`
+  })
+
+  const yTicks = createMemo(() => {
+    const lo = minW(), hi = maxW()
+    return lo === hi ? [lo] : [lo, (lo + hi) / 2, hi]
+  })
+
+  const yTickY = (w: number) => PAD_TOP + plotH - ((w - minW()) / (maxW() - minW() || 1)) * plotH
+
+  const dateLabel = (t: number) => formatDateShort(new Date(t))
+
+  const togglePoint = (p: PlotPoint, color: string) => {
+    const label = `${dateLabel(p.date.getTime())} · ${p.weight}lb`
+    setActive(a => (a && a.x === p.x && a.y === p.y ? null : { x: p.x, y: p.y, label, color }))
+  }
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} class="w-full h-32">
-      <Show when={primaryPts()}>
-        <polyline points={primaryPts()} fill="none" stroke="var(--color-accent)" stroke-width="1.5" />
+    <svg viewBox={`0 0 ${W} ${H}`} class="w-full h-40 select-none">
+      <defs>
+        <linearGradient id="tm-chart-area" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--color-accent)" stop-opacity="0.25" />
+          <stop offset="100%" stop-color="var(--color-accent)" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+
+      <For each={yTicks()}>
+        {w => (
+          <>
+            <line x1={PAD_LEFT} y1={yTickY(w)} x2={W - PAD_RIGHT} y2={yTickY(w)} stroke="var(--color-border-dim)" stroke-width="0.5" />
+            <text x={PAD_LEFT - 4} y={yTickY(w) + 2.5} text-anchor="end" font-size="7" fill="var(--color-muted)">{Math.round(w)}</text>
+          </>
+        )}
+      </For>
+
+      <Show when={all().length > 0}>
+        <text x={PAD_LEFT} y={H - 6} text-anchor="start" font-size="7" fill="var(--color-muted)">{dateLabel(minDate())}</text>
+        <text x={W - PAD_RIGHT} y={H - 6} text-anchor="end" font-size="7" fill="var(--color-muted)">{dateLabel(maxDate())}</text>
       </Show>
-      <Show when={secondaryPts()}>
-        <polyline points={secondaryPts()} fill="none" stroke="var(--color-warn)" stroke-width="1.5" stroke-dasharray="4 3" />
+
+      <Show when={areaPath()}>
+        <path d={areaPath()} fill="url(#tm-chart-area)" stroke="none" />
+      </Show>
+      <Show when={primaryPath()}>
+        <path d={primaryPath()} fill="none" stroke="var(--color-accent)" stroke-width="1.5" />
+      </Show>
+      <Show when={secondaryPath()}>
+        <path d={secondaryPath()} fill="none" stroke="var(--color-warn)" stroke-width="1.5" stroke-dasharray="4 3" />
+      </Show>
+
+      <For each={primaryPts()}>
+        {p => (
+          <>
+            <circle cx={p.x} cy={p.y} r="6" fill="transparent" class="cursor-pointer" onClick={() => togglePoint(p, 'var(--color-accent)')} />
+            <circle cx={p.x} cy={p.y} r="2" fill="var(--color-accent)" pointer-events="none" />
+          </>
+        )}
+      </For>
+      <For each={secondaryPts()}>
+        {p => (
+          <>
+            <circle cx={p.x} cy={p.y} r="6" fill="transparent" class="cursor-pointer" onClick={() => togglePoint(p, 'var(--color-warn)')} />
+            <circle cx={p.x} cy={p.y} r="2" fill="var(--color-warn)" pointer-events="none" />
+          </>
+        )}
+      </For>
+
+      <Show when={active()}>
+        {a => {
+          const w = a().label.length * 3.7 + 6
+          const tx = Math.min(Math.max(a().x, PAD_LEFT + w / 2), W - PAD_RIGHT - w / 2)
+          const ty = a().y < PAD_TOP + 16 ? a().y + 15 : a().y - 8
+          return (
+            <g pointer-events="none">
+              <rect x={tx - w / 2} y={ty - 9} width={w} height="12" fill="var(--color-surface-high)" stroke="var(--color-border)" stroke-width="0.5" />
+              <text x={tx} y={ty} text-anchor="middle" font-size="6.5" fill={a().color}>{a().label}</text>
+            </g>
+          )
+        }}
       </Show>
     </svg>
   )
@@ -182,7 +305,7 @@ function HistorySessionRow(props: {
                         />
                       )}</For>
                       <Show when={exNote()}>
-                        <div class="pl-2 text-text-dim">{exNote()}</div>
+                        <NotesText class="pl-2 text-text-dim" text={exNote()!} />
                       </Show>
                     </div>
                   )
@@ -192,7 +315,7 @@ function HistorySessionRow(props: {
             <Show when={detail().notes}>
               <div>
                 <SectionLabel class="mb-0.5">NOTES</SectionLabel>
-                <div class="pl-2 text-text-dim">{detail().notes}</div>
+                <NotesText class="pl-2 text-text-dim" text={detail().notes!} />
               </div>
             </Show>
           </div>

@@ -25,6 +25,7 @@ import AccessoryLog from '../components/workout/AccessoryLog'
 import CrossBlockLog from '../components/workout/CrossBlockLog'
 import { resolveLiftLoading, type PlateLoading } from '../lib/plate-loading'
 import RestTimer from '../components/workout/RestTimer'
+import NotesField from '../components/forms/NotesField'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
 import TmRecommendationModal from '../components/modals/TmRecommendationModal'
@@ -756,12 +757,12 @@ export default function Workout() {
 
         <div class="mb-6">
           <Rule label="NOTES" class="text-muted mb-2" />
-          <textarea
+          <NotesField
             value={workout.notes}
-            onInput={e => setNotes(e.currentTarget.value)}
-            class="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
+            onInput={setNotes}
             rows={3}
-            placeholder="Session notes..."
+            placeholder="session notes..."
+            textareaClass="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
           />
         </div>
 
