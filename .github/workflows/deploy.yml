@@ -10,7 +10,7 @@ on:
       - 'public/**'
       - 'index.html'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
       - 'vite.config.*'
       - 'tsconfig*'
 
@@ -26,27 +26,20 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v6
         with:
           node-version: 25
-          cache: npm
+          cache: pnpm
 
-      # TODO: switch back to `npm ci` once npm resolves the lock-file bug:
-      # @rolldown/binding-wasm32-wasi (cpu:wasm32) lists @emnapi/core + @emnapi/runtime
-      # as deps, but npm 11 omits them from the lock file because the cpu-filtered
-      # optional package is never installed locally. `npm ci` then fails with
-      # "Missing: @emnapi/core@1.10.0 from lock file". Track: https://github.com/npm/cli/issues
-      #
-      # Until then: prefer the lockfile (`--prefer-offline`, `--no-audit`,
-      # `--no-fund`) so we still get reproducible installs in CI, and verify
-      # registry signatures so a tampered lockfile is caught before deploy.
-      - run: npm install --prefer-offline --no-audit --no-fund
-      - run: npm audit signatures
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit signatures
 
-      - run: npm run build
+      - run: pnpm run build
 
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler pages deploy dist --project-name 531-log
+        run: pnpm dlx wrangler pages deploy dist --project-name 531-log
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5141f0dec18e8fb0aa0942a9f09f982d

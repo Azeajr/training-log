@@ -181,7 +181,7 @@ Last open tech-debt item from the roadmap, plus a small DRY win.
 
 ### Test Infrastructure — Coverage + Mutation
 
-414 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`npm run test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
+414 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`pnpm test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
 
 Coverage approach: lib functions and screens both run against the real `@sqlite.org/sqlite-wasm` engine via the in-process `sqlite-test-client.ts` (Vite alias `/sqlite-client$/`). Screens are exercised end-to-end from DOM event → SolidJS store → SQLite → rendered output with no DB layer mocked.
 
@@ -496,16 +496,16 @@ breakdowns, equipment changes, or rep-count uncertainty mid-session.
 *Threat model: static Cloudflare-Pages PWA, no server, no auth, client-authoritative. Primary
 risk is XSS → OPFS read/write; supply chain is the realistic active threat. CSP shipped in
 `index.html` and `public/_headers`; SQL identifier guard in `src/db/sqlite-table.ts`; import
-size cap in `src/lib/export-import.ts`; deploy workflow least-privilege + `npm audit
+size cap in `src/lib/export-import.ts`; deploy workflow least-privilege + `pnpm audit
 signatures`. See "Security Hardening Pass (2026-05-22)" under Done for details.*
 
 No open items.
 
 ### Future considerations
 
-- **Switch deploy from `npm install` → `npm ci`** once the rolldown optional-cpu lockfile bug
-  resolves upstream (tracked in `.github/workflows/deploy.yml`). `npm audit signatures` is the
-  current bridge.
+- ~~Switch deploy from `npm install` → `npm ci`~~ — moot as of the pnpm migration (2026-07-17):
+  `pnpm install --frozen-lockfile` doesn't hit the npm-specific rolldown optional-cpu lockfile
+  bug (verified locally), so it replaced `npm install` directly in `.github/workflows/deploy.yml`.
 - **Subresource Integrity / dependency lockdown** — would catch a tampered CDN delivery, but
   all assets are self-hosted today so impact is low. Revisit if any external `<script>` lands.
 

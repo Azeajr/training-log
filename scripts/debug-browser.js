@@ -15,9 +15,9 @@
  *   node scripts/debug-browser.js --no-wipe # keep existing DB state
  *
  * Prerequisites:
- *   - Dev server running:  npm run dev
- *   - Playwright installed: npm install -D playwright  (already in devDependencies)
- *   - Browser downloaded:  npx playwright install chromium
+ *   - Dev server running:  pnpm dev
+ *   - Playwright installed: pnpm add -D playwright  (already in devDependencies)
+ *   - Browser downloaded:  pnpm exec playwright install chromium
  */
 
 import { chromium } from 'playwright'

@@ -33,8 +33,8 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 ## Getting Started
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Open `http://localhost:5173` and enter your training maxes to begin.
@@ -42,10 +42,10 @@ Open `http://localhost:5173` and enter your training maxes to begin.
 ## Running Tests
 
 ```bash
-npm test             # unit + component integration (Vitest)
-npm run test:e2e     # end-to-end (Playwright)
-npm run test:coverage  # coverage report (v8)
-npm run test:mutation  # mutation score (Stryker)
+pnpm test             # unit + component integration (Vitest)
+pnpm test:e2e         # end-to-end (Playwright)
+pnpm test:coverage    # coverage report (v8)
+pnpm test:mutation    # mutation score (Stryker)
 ```
 
 **Arch Linux**: Playwright's bundled Chromium requires system libs not installed by default:
