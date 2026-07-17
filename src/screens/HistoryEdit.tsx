@@ -8,6 +8,7 @@ import DurationInput from '../components/forms/DurationInput'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import Stepper from '../components/forms/Stepper'
+import NotesField from '../components/forms/NotesField'
 
 type PickerMode = { kind: 'add' } | { kind: 'swap'; accIdx: number } | null
 
@@ -403,12 +404,13 @@ export default function HistoryEdit() {
                       </div>
                     )}
                   </Index>
-                  <textarea
+                  <NotesField
                     value={accAcc().notes}
-                    onInput={e => updateAccNotes(ai, e.currentTarget.value)}
-                    class="w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs mt-2 focus:outline-none focus:border-accent resize-none"
+                    onInput={v => updateAccNotes(ai, v)}
                     rows={2}
                     placeholder="e.g. switched grip after set 3…"
+                    class="mt-2"
+                    textareaClass="w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs focus:outline-none focus:border-accent resize-none"
                   />
                 </div>
               )}
@@ -423,12 +425,12 @@ export default function HistoryEdit() {
 
           <div class="mb-6">
             <SectionLabel class="mb-2">NOTES</SectionLabel>
-            <textarea
+            <NotesField
               value={notes()}
-              onInput={e => setNotes(e.currentTarget.value)}
-              class="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
+              onInput={setNotes}
               rows={3}
-              placeholder="Session notes..."
+              placeholder="session notes..."
+              textareaClass="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
             />
           </div>
 

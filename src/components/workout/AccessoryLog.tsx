@@ -8,6 +8,7 @@ import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
 import SetLogControls, { FieldRow } from '../forms/SetLogControls'
 import SetReadout from '../forms/SetReadout'
+import NotesField from '../forms/NotesField'
 import PlateDisplay from '../forms/PlateDisplay'
 import { settings } from '../../store/settings-store'
 import { resolveExerciseLoading } from '../../lib/plate-loading'
@@ -137,12 +138,12 @@ export default function AccessoryLog(props: Props) {
         }
       >
         <div class="pl-2 mb-2">
-          <textarea
+          <NotesField
             value={props.accessory.notes ?? ''}
-            onInput={e => setAccessoryNotes(props.accessory.exerciseId, e.currentTarget.value)}
-            class="w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs focus:outline-none focus:border-accent resize-none"
+            onInput={v => setAccessoryNotes(props.accessory.exerciseId, v)}
             rows={2}
             placeholder="e.g. switched grip after set 3…"
+            textareaClass="w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs focus:outline-none focus:border-accent resize-none"
           />
           <button
             onClick={() => setNoteOpen(false)}
