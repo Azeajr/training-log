@@ -167,26 +167,32 @@ export default function Workout() {
       .filter(s => s.type === 'joker')
       .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
 
-    // Cross blocks are independent of the linear list — each computed from its
-    // movement lift's TM and restored from its own logged store. Like the
-    // supplemental tail, a logged set's weight overrides the remaining planned
-    // sets of the same block (matched by movement liftId), and extra logged
-    // sets beyond the plan are restored.
-    const cross: CrossSet[] = crossBlocks().flatMap(block => {
-      const logged = workout.loggedCrossSets.filter(s => s.liftId === block.movementLiftId)
-      let sets: CrossSet[] = block.computed
-      if (logged.length > 0) {
-        const override = logged[logged.length - 1].weight
-        sets = sets.map((s, i) => i >= logged.length ? { ...s, weight: override } : s)
-      }
-      const extra: CrossSet[] = logged.slice(sets.length).map((s, i) => ({
-        setNumber: sets.length + i + 1, weight: s.weight, reps: s.reps, type: 'cross' as const, liftId: block.movementLiftId,
-      }))
-      return [...sets, ...extra]
-    })
-
-    return { all: [...warmup, ...main, ...restoredJokers, ...fsl, ...extraFsl], cross, main }
+    return { all: [...warmup, ...main, ...restoredJokers, ...fsl, ...extraFsl], cross: composeCrossSets(), main }
   }
+
+  // Cross blocks are independent of the linear list — each computed from its
+  // movement lift's TM and restored from its own logged store. Like the
+  // supplemental tail, a logged set's weight overrides the remaining planned
+  // sets of the same block (matched by movement liftId), and extra logged
+  // sets beyond the plan are restored.
+  // Split out from composeAllSets so cross-only mutations can rebuild just
+  // this, without handing the warmup/main/fsl <For> lists fresh object
+  // references — that reference churn was remounting every SetRow (including
+  // whichever one is active elsewhere in the linear flow) and re-firing its
+  // activeRef, which yanked the page's scroll back to the linear cursor on
+  // every cross-lift set logged.
+  const composeCrossSets = (): CrossSet[] => crossBlocks().flatMap(block => {
+    const logged = workout.loggedCrossSets.filter(s => s.liftId === block.movementLiftId)
+    let sets: CrossSet[] = block.computed
+    if (logged.length > 0) {
+      const override = logged[logged.length - 1].weight
+      sets = sets.map((s, i) => i >= logged.length ? { ...s, weight: override } : s)
+    }
+    const extra: CrossSet[] = logged.slice(sets.length).map((s, i) => ({
+      setNumber: sets.length + i + 1, weight: s.weight, reps: s.reps, type: 'cross' as const, liftId: block.movementLiftId,
+    }))
+    return [...sets, ...extra]
+  })
 
   const loadData = async () => {
     const session = workout.activeSession
@@ -252,6 +258,10 @@ export default function Workout() {
     setAllSets(all)
     setCrossSets(cross)
   }
+
+  // Cross-only rebuild — leaves allSets (and its object references) untouched
+  // so warmup/main/fsl rows never remount for a cross-lift-only change.
+  const rebuildCrossSets = () => setCrossSets(composeCrossSets())
 
   // Targets for today's AMRAP at a given weight: beat the matching previous
   // AMRAP sets when history exists, otherwise the e1RM implied by the TM.
@@ -383,7 +393,7 @@ export default function Workout() {
     }
     const prevCross = crossSets()
     logCrossSet(setData)
-    rebuildAllSets()
+    rebuildCrossSets()
     const idx = workout.loggedCrossSets.length - 1
     try {
       const dbId = await db.sets.add(setData)
@@ -408,13 +418,13 @@ export default function Workout() {
     if (absIdx == null) return
     const { id, reps: prevReps, weight: prevWeight } = workout.loggedCrossSets[absIdx]
     editCrossSet(absIdx, { reps, weight })
-    rebuildAllSets()
+    rebuildCrossSets()
     if (!id) return
     try {
       await db.sets.update(id, { reps, weight })
     } catch (err) {
       editCrossSet(absIdx, { reps: prevReps, weight: prevWeight })
-      rebuildAllSets()
+      rebuildCrossSets()
       showToast(`Failed to save edit: ${err instanceof Error ? err.message : 'unknown error'}`)
     }
   }
@@ -426,7 +436,7 @@ export default function Workout() {
     if (!last) return
     if (last.id) await db.sets.delete(last.id)
     deleteLastCrossSetFor(liftId)
-    rebuildAllSets()
+    rebuildCrossSets()
   }
 
   const handleAddJoker = () => {
