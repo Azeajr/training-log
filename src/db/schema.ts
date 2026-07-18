@@ -120,6 +120,11 @@ export const ADDITIVE_MIGRATIONS = [
   // First destructive migration — safe because nothing reads it and it held no
   // training history (only assignments; logged sets live in accessorySets).
   `DROP TABLE IF EXISTS liftAccessories`,
+  // One note per (session, exercise) — readers assume it (Map last-wins would
+  // silently hide dupes). Deliberately here and not in SCHEMA: SCHEMA exec is
+  // unguarded, so a DB that already holds dupes would fail every boot; as a
+  // migration the error is swallowed and that DB just skips the index.
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_accessoryNotes_session_exercise ON accessoryNotes(sessionId, exerciseId)`,
 ] as const
 
 export const ALL_TABLES = [

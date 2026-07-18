@@ -452,8 +452,9 @@ export default function HistoryEdit() {
               <div class="space-y-1">
                 <For each={libraryExercises()}>
                   {(exercise) => {
-                    const alreadyAdded = picker()?.kind === 'add'
-                      && editAccessories().some(a => a.exerciseId === exercise.id)
+                    // Guard swap too: swapping onto an exercise that already has
+                    // a card would duplicate its set rows and clobber its note.
+                    const alreadyAdded = editAccessories().some(a => a.exerciseId === exercise.id)
                     return (
                       <button
                         onClick={() => !alreadyAdded && handlePickExercise(exercise)}
