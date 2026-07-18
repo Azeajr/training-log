@@ -139,18 +139,20 @@ function TmChart(props: { primary: ChartPoint[]; secondary?: ChartPoint[] }) {
 
   const yTickY = (w: number) => PAD_TOP + plotH - ((w - minW()) / (maxW() - minW() || 1)) * plotH
 
+  const dateLabel = (t: number) => formatDateShort(new Date(t))
+
   // Recharts-style auto axis: several evenly spaced ticks across the domain,
-  // not just the two endpoints.
+  // not just the two endpoints. Spans shorter than the tick count in days can
+  // format adjacent ticks to the same label — keep the first of each run.
   const xTicks = createMemo(() => {
     const lo = minDate(), hi = maxDate()
     if (all().length === 0) return []
     if (lo === hi) return [lo]
-    return Array.from({ length: X_TICK_COUNT }, (_, i) => lo + (hi - lo) * (i / (X_TICK_COUNT - 1)))
+    const ticks = Array.from({ length: X_TICK_COUNT }, (_, i) => lo + (hi - lo) * (i / (X_TICK_COUNT - 1)))
+    return ticks.filter((t, i) => i === 0 || dateLabel(t) !== dateLabel(ticks[i - 1]))
   })
 
   const xTickX = (t: number) => PAD_LEFT + ((t - minDate()) / (maxDate() - minDate() || 1)) * plotW
-
-  const dateLabel = (t: number) => formatDateShort(new Date(t))
 
   const togglePoint = (p: PlotPoint, color: string) => {
     const label = `${dateLabel(p.date.getTime())} · ${p.weight}lb`
