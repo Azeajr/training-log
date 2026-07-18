@@ -98,8 +98,11 @@ describe('Today screen', () => {
   })
 
   it('navigates to /workout when active session matches selected lift', async () => {
+    // Resume requires matching lift AND cycle/week, so use the real cycle id —
+    // the auto-increment counter does not reset when the table is cleared.
+    const cycleId = (await db.cycles.toArray())[0].id!
     const session: Session = {
-      id: 10, cycleId: 1, liftId: 1, week: 1,
+      id: 10, cycleId, liftId: 1, week: 1,
       date: new Date(), notes: null, status: 'pending',
     }
     startSession(session)
@@ -278,6 +281,50 @@ describe('Today screen', () => {
 
     fireEvent.click(screen.getByText('YES'))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
+    clearSession()
+  })
+
+  it('starting an already-completed lift asks for redo confirmation; cancel creates nothing', async () => {
+    const cycleId = (await db.cycles.toArray())[0].id!
+    await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'completed' })
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    // OHP is done, so auto-select moved on — pick OHP back explicitly, then
+    // wait for its TM to load (START stays disabled until tm > 0).
+    const ohpBtn = screen.getAllByRole('button').find(b => b.textContent?.includes('OHP'))!
+    fireEvent.click(ohpBtn)
+    const startBtn = await screen.findByText('START WORKOUT') as HTMLButtonElement
+    await waitFor(() => expect(startBtn.disabled).toBe(false))
+    fireEvent.click(startBtn)
+
+    await screen.findByText(/OHP is already completed this week/)
+    fireEvent.click(screen.getByText('CANCEL'))
+
+    await drain()
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect((await db.sessions.toArray()).filter(s => s.liftId === 1)).toHaveLength(1)
+  })
+
+  it('confirming REDO on a completed lift starts a fresh pending session', async () => {
+    const cycleId = (await db.cycles.toArray())[0].id!
+    await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'completed' })
+    renderToday()
+    await screen.findByText('START WORKOUT')
+
+    const ohpBtn = screen.getAllByRole('button').find(b => b.textContent?.includes('OHP'))!
+    fireEvent.click(ohpBtn)
+    const startBtn = await screen.findByText('START WORKOUT') as HTMLButtonElement
+    await waitFor(() => expect(startBtn.disabled).toBe(false))
+    fireEvent.click(startBtn)
+
+    await screen.findByText(/OHP is already completed this week/)
+    fireEvent.click(screen.getByText('REDO'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
+    const rows = (await db.sessions.toArray()).filter(s => s.liftId === 1)
+    expect(rows.map(s => s.status).sort()).toEqual(['completed', 'pending'])
+    expect(workout.activeSession?.status).toBe('pending')
     clearSession()
   })
 
