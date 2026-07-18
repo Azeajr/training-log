@@ -255,15 +255,15 @@ export const estimated1RM = (weight: number, reps: number): number =>
 // inverse. Null when unreachable at any rep count: Wathan is asymptotic, so
 // todayWeight/prev1RM <= WATHAN_BASE (~48.8%) never gets there even at
 // infinite reps — unlike Epley, which always had a finite answer. Floored at
-// 1 rather than 2 because (unlike Epley) a single Wathan rep already scores
-// above plain weight, so a big enough todayWeight can close the gap in 1 rep
-// without reaching prev1RM outright.
+// 2: the continuous inverse can yield 1 when todayWeight is within ~1.3% of
+// prev1RM, but estimated1RM short-circuits reps===1 to plain weight, so a
+// 1-rep target below prev1RM could never reach it.
 export const targetReps = (prev1RM: number, todayWeight: number): number | null => {
   if (todayWeight <= 0 || todayWeight >= prev1RM) return 1
   const ratio = todayWeight / prev1RM
   if (ratio <= WATHAN_BASE) return null
   const reps = -Math.log((ratio - WATHAN_BASE) / WATHAN_SCALE) / WATHAN_DECAY
-  return Math.max(1, Math.ceil(reps))
+  return Math.max(2, Math.ceil(reps))
 }
 
 export interface AmrapTarget {

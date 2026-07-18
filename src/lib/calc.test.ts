@@ -295,9 +295,14 @@ describe('targetReps', () => {
     expect(targetReps(200, 0)).toBe(1)
   })
   it('returns 2 when 1 rep would score below the target — estimated1RM reps===1 short-circuit', () => {
-    // raw back-calc gives a value < 1, but estimated1RM(235, 1) = 235 < 240:
-    // a 1-rep "target" can never reach the displayed est. 1RM
+    // raw back-calc gives ceil(1.21) = 2 here on its own, but estimated1RM(235, 1)
+    // = 235 < 240: a 1-rep "target" can never reach the displayed est. 1RM
     expect(targetReps(240, 235)).toBe(2)
+  })
+  it('floors to 2 when the raw inverse rounds to 1 — a 1-rep target below prev1RM is unreachable', () => {
+    // ratio 238/240 ≈ 0.9917 → raw inverse ≈ 0.88 → ceil = 1, but
+    // estimated1RM(238, 1) = 238 < 240; only the floor keeps the target honest.
+    expect(targetReps(240, 238)).toBe(2)
   })
   it('returns null when todayWeight is too light to ever reach prev1RM (Wathan asymptote)', () => {
     // Wathan caps e1RM at weight / 0.488 ≈ 2.049×weight — below that ratio,
