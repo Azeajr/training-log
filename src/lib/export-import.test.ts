@@ -306,6 +306,21 @@ describe('exportCsv', () => {
     expect(cols[cols.length - 1]).toBe('"purple band"')
   })
 
+  it('emits a row for a note-only accessory so the note survives in CSV', async () => {
+    const cycleId = await seedBase()
+    const exId = await db.exercises.add({ name: 'Band Pull-Apart', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed',
+    })
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'ran out of time, skipped' })
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    const row = lines.find(l => l.includes('Band Pull-Apart'))
+    expect(row).toBeDefined()
+    expect(row).toContain('"accessory"')
+    expect(row).toContain('"ran out of time, skipped"')
+  })
+
   it('includes a row with no sets when session has empty sets', async () => {
     const cycleId = await seedBase()
     await db.sessions.add({

@@ -180,7 +180,7 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
     const dateStr = formatDateIso(session.date)
     const liftName = liftMap[session.liftId] ?? String(session.liftId)
 
-    if (sessionSets.length === 0 && sessionAccessorySets.length === 0) {
+    if (sessionSets.length === 0 && sessionAccessorySets.length === 0 && notesByExercise.size === 0) {
       rows.push([dateStr, liftName, String(session.week), '', '', '', '', '', session.notes ?? '', '', ''])
     } else {
       for (const s of sessionSets) {
@@ -195,6 +195,15 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
           a.weight != null ? String(a.weight) : '', a.reps != null ? String(a.reps) : '',
           'false', session.notes ?? '', exerciseMap[a.exerciseId] ?? String(a.exerciseId),
           notesByExercise.get(a.exerciseId) ?? '',
+        ])
+      }
+      // A note-only accessory (no logged sets) still gets a row — otherwise
+      // its note would exist in the JSON backup but silently vanish from CSV.
+      for (const [exId, note] of notesByExercise) {
+        if (sessionAccessorySets.some(a => a.exerciseId === exId)) continue
+        rows.push([
+          dateStr, liftName, String(session.week), 'accessory', '', '', '',
+          'false', session.notes ?? '', exerciseMap[exId] ?? String(exId), note,
         ])
       }
     }

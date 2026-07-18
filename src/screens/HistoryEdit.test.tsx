@@ -520,6 +520,22 @@ describe('HistoryEdit — accessory picker', () => {
       expect(notes).toHaveLength(0)
     })
   })
+
+  it('swap picker disables an exercise that already has a card in this session', async () => {
+    const { sessionId, exId2 } = await seedSessionWithTwoExercises()
+    await db.accessorySets.add({ sessionId, exerciseId: exId2, setNumber: 1, weight: 40, reps: 10, duration: null, distance: null })
+    renderHistoryEdit(sessionId)
+    await screen.findByText('Chinup')
+
+    fireEvent.click(screen.getAllByText('swap')[0])
+    await waitFor(() => expect(document.body.textContent).toContain('SELECT EXERCISE'))
+
+    // Dips already has its own card, so the picker marks it taken and ignores clicks.
+    const dipsBtn = (await screen.findByText('Dips ✓')).closest('button')!
+    expect(dipsBtn).toBeDisabled()
+    fireEvent.click(dipsBtn)
+    expect(document.body.textContent).toContain('SELECT EXERCISE')
+  })
 })
 
 // ─── set type rendering ───────────────────────────────────────────────────────

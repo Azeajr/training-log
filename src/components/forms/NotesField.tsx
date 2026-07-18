@@ -35,6 +35,11 @@ interface Props {
 // level, independent of list mode, so nesting works on any existing bullet
 // line. The ← → chips mirror Tab/Shift+Tab for touch keyboards, which have no
 // Tab key.
+//
+// Contract: handlers slice `props.value` at caret offsets read from the live
+// textarea, so the parent must reflect `onInput` back into `value`
+// synchronously and unmodified — a debounced or transformed echo desyncs the
+// caret math.
 export default function NotesField(props: Props) {
   // eslint-disable-next-line no-unassigned-vars -- Solid `ref={ref}` reassigns at runtime
   let ref: HTMLTextAreaElement | undefined

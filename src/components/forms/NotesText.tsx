@@ -67,7 +67,9 @@ export default function NotesText(props: { text: string; class?: string }) {
         {block => block.kind === 'list' ? (
           <BulletList nodes={buildTree(block.items)} />
         ) : (
-          <For each={block.lines}>{l => <div>{l || ' '}</div>}</For>
+          // nbsp, not a plain space: whitespace-only text collapses to a
+          // 0-height div and blank lines between paragraphs would vanish
+          <For each={block.lines}>{l => <div>{l || '\u00A0'}</div>}</For>
         )}
       </For>
     </div>
