@@ -6,6 +6,7 @@ import { workout, startSession, clearSession } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, calcCrossSets, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSessionAdvancingIfDone } from '../lib/cycle'
+import { discardPendingSession } from '../lib/session'
 import { getCurrentTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -16,7 +17,7 @@ import SetReadout from '../components/forms/SetReadout'
 interface WeekStatus {
   liftId: number
   name: string
-  status: 'pending' | 'completed' | 'skipped' | 'suggested'
+  status: 'pending' | 'completed' | 'skipped'
 }
 
 export default function Today() {
@@ -65,13 +66,26 @@ export default function Today() {
     if (!selId) return
     const existing = await db.sessions
       .where('cycleId').equals(currentCycleId())
-      .filter(s => s.liftId === selId && s.week === currentWeek() && s.status === 'pending')
-      .first()
+      .filter(s => s.liftId === selId && s.week === currentWeek())
+      .toArray()
+    const pending = existing.find(s => s.status === 'pending')
 
     let session: Session
-    if (existing) {
-      session = existing
+    if (pending) {
+      session = pending
     } else {
+      // No pending row but the lift already has history this week: starting
+      // again is a redo. The new pending row reopens the lift's week
+      // (weekComplete counts any pending row as work owed), so confirm instead
+      // of silently un-completing the day.
+      if (existing.length > 0) {
+        const name = lifts().find(l => l.id === selId)?.name ?? 'This lift'
+        const done = existing.some(s => s.status === 'completed')
+        if (!await confirm(
+          `${name} ${done ? 'is already completed' : 'was skipped'} this week. Redo it as a new session?`,
+          { confirmLabel: 'REDO' }
+        )) return
+      }
       const draft: Omit<Session, 'id'> = {
         cycleId: currentCycleId(),
         liftId: selId,
@@ -90,21 +104,21 @@ export default function Today() {
   const handleStart = async () => {
     const selId = selectedLiftId()
     if (!selId) return
-    if (workout.activeSession && workout.activeSession.liftId === selId) {
+    const active = workout.activeSession
+    // Resume only when the active session is truly this slot — same lift AND
+    // same cycle/week. A stale session (e.g. cycle advanced from Settings while
+    // one was mid-flight) must fall through to the abandon path, not resume.
+    if (active && active.liftId === selId
+      && active.cycleId === currentCycleId() && active.week === currentWeek()) {
       navigate('/workout')
       return
     }
-    if (workout.activeSession) {
-      const activeLiftName = lifts().find(l => l.id === workout.activeSession?.liftId)?.name ?? ''
+    if (active) {
+      const activeLiftName = lifts().find(l => l.id === active.liftId)?.name ?? ''
       if (!await confirm(`Abandon ${activeLiftName} session?`, { destructive: true, confirmLabel: 'YES' })) return
-      const abandonedId = workout.activeSession.id
-      if (abandonedId) {
-        await db.transaction(async () => {
-          await db.sets.where('sessionId').equals(abandonedId).delete()
-          await db.accessorySets.where('sessionId').equals(abandonedId).delete()
-          await db.sessions.delete(abandonedId)
-        })
-      }
+      // Status-guarded: if the row already completed (stale store after a
+      // killed post-complete modal), keep its data and just drop the store ref.
+      if (active.id) await discardPendingSession(db, active.id)
       clearSession()
     }
     void launchSession()
@@ -153,10 +167,12 @@ export default function Today() {
     },
   )
 
+  // Status outranks the selection arrow: selecting a finished lift must not
+  // hide that it's already done — that's the cue against an accidental redo.
   const statusLabel = (ws: WeekStatus) => {
-    if (ws.liftId === selectedLiftId()) return '->'
     if (ws.status === 'completed') return 'done'
     if (ws.status === 'skipped') return 'skip'
+    if (ws.liftId === selectedLiftId()) return '->'
     return ''
   }
 

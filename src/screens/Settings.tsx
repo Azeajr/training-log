@@ -2,6 +2,7 @@ import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../db/index'
 import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
+import { clearSession } from '../store/workout-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
@@ -375,6 +376,9 @@ export default function Settings() {
     if (!await confirm(`Overwrite all data with ${file.name}? This cannot be undone.`, { destructive: true, confirmLabel: 'IMPORT' })) return
     try {
       await importJson(db, file)
+      // The persisted workout store references pre-import session ids; a stale
+      // active session would resume against whatever row inherited that id.
+      clearSession()
       await loadSettings()
       await load()
       showToast('Import complete')

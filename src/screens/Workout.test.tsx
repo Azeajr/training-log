@@ -304,6 +304,39 @@ describe('Workout screen — with active session', () => {
     })
   })
 
+  it('EXIT confirmed deletes the pending session row itself', async () => {
+    // A leftover empty pending row would hold the week open (weekComplete)
+    // and show the lift as not done on Today.
+    startSession(BENCH)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('EXIT WITHOUT SAVING'))
+    await screen.findByText('Discard this attempt?')
+    fireEvent.click(screen.getByText('EXIT'))
+
+    await waitFor(async () => {
+      expect(await db.sessions.get(1)).toBeUndefined()
+    })
+  })
+
+  it('EXIT on a session already completed in the DB keeps its data', async () => {
+    // The store's session copy goes stale after complete (status only updated
+    // in the DB). If the app dies with a post-complete modal open, resume +
+    // EXIT must not wipe the real completed workout.
+    await db.sessions.update(1, { status: 'completed' })
+    await db.sets.add({ sessionId: 1, type: 'main', setNumber: 1, weight: 130, reps: 5, isAmrap: false })
+    startSession(BENCH)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('EXIT WITHOUT SAVING'))
+    await screen.findByText('Discard this attempt?')
+    fireEvent.click(screen.getByText('EXIT'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    expect((await db.sessions.get(1))?.status).toBe('completed')
+    expect(await db.sets.where('sessionId').equals(1).toArray()).toHaveLength(1)
+  })
+
   it('EXIT cancelled does not navigate', async () => {
     startSession(BENCH)
     renderWorkout()

@@ -1,7 +1,7 @@
 import { createSignal, createEffect, on, For, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
-import type { Lift, Exercise } from '../types/domain'
+import type { Lift, Exercise, Session } from '../types/domain'
 import { workout, logSet, editSet, advanceSet, deleteLastSet, logCrossSet, editCrossSet, deleteLastCrossSetFor, startRest, clearSession, setNotes } from '../store/workout-store'
 import {
   calcMainSets, calcWarmup, calcAmrapTarget, calcSupplementalSets, getSupplementalLabel,
@@ -14,6 +14,7 @@ import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from
 import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getRecentAmraps, deloadTms } from '../lib/cycle'
+import { discardPendingSession } from '../lib/session'
 import { detectAmrapPRs } from '../lib/pr'
 import { getCurrentTm, setTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
@@ -107,6 +108,10 @@ export default function Workout() {
 
   const [recentAmraps, setRecentAmraps] = createSignal<Array<{ weight: number; reps: number }>>([])
   const [tmWeight, setTmWeight] = createSignal(0)
+  // In-flight guard for the session-ending handlers. A double-tap on COMPLETE
+  // would run the accessory bulkAdds twice; SKIP/EXIT racing COMPLETE could
+  // discard a session mid-finalize.
+  const [finishing, setFinishing] = createSignal(false)
 
   // The page owns scroll-to-active: there is one current set on the page (the
   // linear cursor), and the active SetRow reports its element here. Centering it
@@ -468,9 +473,18 @@ export default function Workout() {
   }
 
   const handleComplete = async () => {
+    if (finishing()) return
     const session = workout.activeSession
     if (!session?.id) return
-    const sessionId = session.id
+    setFinishing(true)
+    try {
+      await completeSession(session, session.id)
+    } finally {
+      setFinishing(false)
+    }
+  }
+
+  const completeSession = async (session: Session, sessionId: number) => {
     const toSave = workout.activeAccessories.flatMap(acc =>
       acc.loggedSets
         .filter(s => s.setNumber != null)
@@ -505,25 +519,29 @@ export default function Workout() {
   }
 
   const handleExit = async () => {
+    if (finishing()) return
     if (!await confirm('Discard this attempt?', { destructive: true, confirmLabel: 'EXIT' })) return
     const session = workout.activeSession
-    if (!session?.id) return
-    const sessionId = session.id
-    await db.transaction(async () => {
-      await db.sets.where('sessionId').equals(sessionId).delete()
-      await db.accessorySets.where('sessionId').equals(sessionId).delete()
-      await db.accessoryNotes.where('sessionId').equals(sessionId).delete()
-    })
+    // Delete the pending session row too, not just its child rows — a leftover
+    // empty pending session holds the week open (weekComplete) and shows the
+    // lift as not done. discardPendingSession no-ops on a completed session.
+    if (session?.id) await discardPendingSession(db, session.id)
     clearSession()
     navigate('/today')
   }
 
   const handleSkip = async () => {
+    if (finishing()) return
     if (!await confirm('Skip this lift?', { destructive: true, confirmLabel: 'SKIP' })) return
     const session = workout.activeSession
     if (!session?.id) return
-    await db.sessions.update(session.id, { status: 'skipped' })
-    await finishSession()
+    setFinishing(true)
+    try {
+      await db.sessions.update(session.id, { status: 'skipped' })
+      await finishSession()
+    } finally {
+      setFinishing(false)
+    }
   }
 
   const handleCycleCompleteDismiss = () => {
@@ -771,13 +789,15 @@ export default function Workout() {
         <div class="flex gap-3">
           <button
             onClick={() => void handleComplete()}
-            class="flex-1 border border-accent text-accent py-4 font-mono text-sm tracking-widest"
+            disabled={finishing()}
+            class="flex-1 border border-accent text-accent py-4 font-mono text-sm tracking-widest disabled:opacity-40"
           >
             COMPLETE SESSION
           </button>
           <button
             onClick={() => void handleSkip()}
-            class="border border-danger text-danger px-5 py-4 font-mono text-sm"
+            disabled={finishing()}
+            class="border border-danger text-danger px-5 py-4 font-mono text-sm disabled:opacity-40"
           >
             SKIP LIFT
           </button>
