@@ -10,7 +10,7 @@
 
 **Tech Stack**: Solid.js 1, TypeScript 6, Vite 8, Tailwind CSS 4, `@sqlite.org/sqlite-wasm` (Web Worker + OPFS in prod, in-process under vitest), Vitest 4, Playwright 1, @solidjs/router
 
-**Deployment**: GitHub Pages (static, no server)
+**Deployment**: Cloudflare Pages (static, no server; deployed by `.github/workflows/deploy.yml`)
 
 ---
 
