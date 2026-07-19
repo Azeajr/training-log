@@ -3,7 +3,7 @@ import { db } from '../../db/index'
 import type { Exercise } from '../../types/domain'
 import { workout, addAccessory } from '../../store/workout-store'
 import { roundToNearest5, ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
-import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, ASSISTANCE_SECTIONS, ASSISTANCE_SUGGESTION_SESSIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
+import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, setAssistanceDefault, ASSISTANCE_SECTIONS, ASSISTANCE_SUGGESTION_SESSIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
 
@@ -16,6 +16,12 @@ interface Props {
   // lift to the top of a slot picker.
   liftId: number
   onClose: () => void
+  // 'session' (default): picking also adds/replaces the exercise in the
+  // active workout session. 'default': picking only updates the lift's
+  // persisted default for this section — used from the Today screen, where
+  // there's no active session yet.
+  mode?: 'session' | 'default'
+  onSelected?: (exerciseId: number) => void
 }
 
 interface PickerRow {
@@ -100,20 +106,32 @@ export default function AccessoryPicker(props: Props) {
     </button>
   )
 
-  const handleSelect = (row: PickerRow) => {
+  // Any pick for a fixed section (push/pull/legs_core) becomes that lift's new
+  // default, in both modes — an in-session swap and a Today-screen pick are
+  // the same "last one wins" action. 'extra' has no default to persist.
+  const persistDefault = async (exerciseId: number) => {
+    if (props.slot === 'extra') return
+    await setAssistanceDefault(db, props.liftId, props.slot, exerciseId)
+  }
+
+  const handleSelect = async (row: PickerRow) => {
     if (row.alreadyAdded) return
     if (row.tm == null) {
       setSettingTm(row.exercise)
       return
     }
-    addAccessory({
-      exerciseId: row.exercise.id!,
-      exerciseName: row.exercise.name,
-      tm: row.tm,
-      calculatedWeight: row.calculatedWeight!,
-      loggedSets: [],
-      slot: props.slot,
-    })
+    await persistDefault(row.exercise.id!)
+    if (props.mode !== 'default') {
+      addAccessory({
+        exerciseId: row.exercise.id!,
+        exerciseName: row.exercise.name,
+        tm: row.tm,
+        calculatedWeight: row.calculatedWeight!,
+        loggedSets: [],
+        slot: props.slot,
+      })
+    }
+    props.onSelected?.(row.exercise.id!)
     props.onClose()
   }
 
@@ -126,14 +144,18 @@ export default function AccessoryPicker(props: Props) {
       incrementLb: tmIncrement(),
       setAt: new Date(),
     })
-    addAccessory({
-      exerciseId: ex.id!,
-      exerciseName: ex.name,
-      tm: tmWeight(),
-      calculatedWeight: roundToNearest5(tmWeight() * ACCESSORY_PERCENTAGE),
-      loggedSets: [],
-      slot: props.slot,
-    })
+    await persistDefault(ex.id!)
+    if (props.mode !== 'default') {
+      addAccessory({
+        exerciseId: ex.id!,
+        exerciseName: ex.name,
+        tm: tmWeight(),
+        calculatedWeight: roundToNearest5(tmWeight() * ACCESSORY_PERCENTAGE),
+        loggedSets: [],
+        slot: props.slot,
+      })
+    }
+    props.onSelected?.(ex.id!)
     props.onClose()
   }
 

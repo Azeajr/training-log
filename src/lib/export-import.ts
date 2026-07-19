@@ -33,6 +33,7 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     liftSupplementals: await db.liftSupplementals.toArray(),
     accessorySets: await db.accessorySets.toArray(),
     accessoryNotes: await db.accessoryNotes.toArray(),
+    assistanceDefaults: await db.assistanceDefaults.toArray(),
     settings: await db.settings.toArray(),
   }
   const content = JSON.stringify(data, null, 2)
@@ -78,6 +79,7 @@ const COLS = {
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],
   accessoryNotes: ['id', 'sessionId', 'exerciseId', 'notes'],
+  assistanceDefaults: ['id', 'liftId', 'section', 'exerciseId'],
   settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental'],
 } as const
 
@@ -129,6 +131,7 @@ function importSpec(db: TrainingDB): ImportTableSpec[] {
     { key: 'accessoryTrainingMaxes', table: db.accessoryTrainingMaxes, dates: ['setAt'] },
     { key: 'accessorySets',          table: db.accessorySets,          dates: [] },
     { key: 'accessoryNotes',         table: db.accessoryNotes,         dates: [] },
+    { key: 'assistanceDefaults',     table: db.assistanceDefaults,     dates: [] },
     { key: 'settings',               table: db.settings,               dates: [] },
   ]
 }

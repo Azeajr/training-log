@@ -1,4 +1,6 @@
 import type { Exercise, ExerciseCategory } from '../types/domain'
+import type { TrainingDB } from '../db/index'
+import { roundToNearest5, ACCESSORY_PERCENTAGE } from './calc'
 
 // Wendler assistance is organised into three slots per session: one push, one
 // pull, and one legs/core (lower-body + midsection). The four exercise
@@ -82,4 +84,77 @@ export const groupByAssistanceSection = <T extends { exercise: Exercise }>(
     groups[section ?? 'uncategorized'].push(item)
   }
   return groups
+}
+
+// A lift's persisted picks, one per section. Seeds a fresh session's slots and
+// is what the Today screen shows/edits before a session exists. Archived
+// exercises are dropped — an archived pick has no business resurfacing.
+export async function getAssistanceDefaults(
+  db: TrainingDB,
+  liftId: number,
+): Promise<Partial<Record<AssistanceSection, { exerciseId: number; name: string }>>> {
+  const rows = await db.assistanceDefaults.where('liftId').equals(liftId).toArray()
+  if (rows.length === 0) return {}
+  const exercises = await db.exercises.where('id').anyOf(rows.map(r => r.exerciseId)).toArray()
+  const exById = new Map(exercises.map(e => [e.id!, e]))
+  const out: Partial<Record<AssistanceSection, { exerciseId: number; name: string }>> = {}
+  for (const r of rows) {
+    const ex = exById.get(r.exerciseId)
+    if (!ex || ex.archived) continue
+    out[r.section] = { exerciseId: r.exerciseId, name: ex.name }
+  }
+  return out
+}
+
+// Sets (replaces) the lift's default pick for one section. Called both from
+// the Today screen's picker and from an in-session swap — either one becomes
+// the new default, per the "last pick wins" rule.
+export async function setAssistanceDefault(
+  db: TrainingDB,
+  liftId: number,
+  section: AssistanceSection,
+  exerciseId: number,
+): Promise<void> {
+  await db.assistanceDefaults.put({ liftId, section, exerciseId })
+}
+
+export interface AssistanceDefaultPick {
+  section: AssistanceSection
+  exerciseId: number
+  exerciseName: string
+  tm: number
+  calculatedWeight: number
+}
+
+// Resolves a lift's default picks into ready-to-log accessories for a fresh
+// session. A pick with no accessory training max yet is skipped — same as
+// picking it manually mid-session, it needs a TM before it can be logged.
+export async function getAssistanceDefaultPicks(
+  db: TrainingDB,
+  liftId: number,
+): Promise<AssistanceDefaultPick[]> {
+  const rows = await db.assistanceDefaults.where('liftId').equals(liftId).toArray()
+  if (rows.length === 0) return []
+  const exIds = rows.map(r => r.exerciseId)
+  const exercises = await db.exercises.where('id').anyOf(exIds).toArray()
+  const exById = new Map(exercises.map(e => [e.id!, e]))
+  const atms = await db.accessoryTrainingMaxes.where('exerciseId').anyOf(exIds).sortBy('setAt')
+  const latestTm = new Map<number, number>()
+  for (const atm of atms) latestTm.set(atm.exerciseId, atm.weight)
+
+  const out: AssistanceDefaultPick[] = []
+  for (const r of rows) {
+    const ex = exById.get(r.exerciseId)
+    if (!ex || ex.archived) continue
+    const tm = latestTm.get(r.exerciseId)
+    if (tm == null) continue
+    out.push({
+      section: r.section,
+      exerciseId: r.exerciseId,
+      exerciseName: ex.name,
+      tm,
+      calculatedWeight: roundToNearest5(tm * ACCESSORY_PERCENTAGE),
+    })
+  }
+  return out
 }

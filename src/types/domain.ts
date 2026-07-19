@@ -138,6 +138,16 @@ export interface AccessoryNote {
   notes: string
 }
 
+// The lift's persisted pick for one assistance section — the "default" that
+// seeds a new session's accessory slot and is overwritten whenever the user
+// swaps to something else (in a session, or from the Today screen).
+export interface AssistanceDefault {
+  id?: number
+  liftId: number
+  section: 'push' | 'pull' | 'legs_core'
+  exerciseId: number
+}
+
 export interface PlateConfig {
   weight: number
   count: number

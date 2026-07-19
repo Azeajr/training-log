@@ -2,17 +2,19 @@ import { createSignal, createResource, onMount, Show, For } from 'solid-js'
 import { useNavigate, A } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, Session } from '../types/domain'
-import { workout, startSession, clearSession } from '../store/workout-store'
+import { workout, startSession, clearSession, addAccessory } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, calcCrossSets, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSessionAdvancingIfDone } from '../lib/cycle'
 import { discardPendingSession } from '../lib/session'
 import { getCurrentTm } from '../lib/training-max'
+import { getAssistanceDefaults, getAssistanceDefaultPicks, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSection } from '../lib/assistance'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
+import AccessoryPicker from '../components/workout/AccessoryPicker'
 
 interface WeekStatus {
   liftId: number
@@ -30,7 +32,15 @@ export default function Today() {
   const [currentWeek, setCurrentWeek] = createSignal<1 | 2 | 3 | 4>(1)
   const [currentCycleId, setCurrentCycleId] = createSignal<number>(1)
   const [tm, setTm] = createSignal(0)
+  const [assistanceDefaults, setAssistanceDefaults] = createSignal<
+    Partial<Record<AssistanceSection, { exerciseId: number; name: string }>>
+  >({})
+  const [pickerSlot, setPickerSlot] = createSignal<AssistanceSection | null>(null)
   onMount(() => { void load() })
+
+  const loadAssistanceDefaults = async (liftId: number) => {
+    setAssistanceDefaults(await getAssistanceDefaults(db, liftId))
+  }
 
   const load = async () => {
     setLoading(true)
@@ -52,6 +62,7 @@ export default function Today() {
     setWeekStatuses(statuses)
 
     setTm(await getCurrentTm(db, next.liftId))
+    await loadAssistanceDefaults(next.liftId)
 
     setLoading(false)
   }
@@ -59,6 +70,7 @@ export default function Today() {
   const handleSelectLift = async (liftId: number) => {
     setSelectedLiftId(liftId)
     setTm(await getCurrentTm(db, liftId))
+    await loadAssistanceDefaults(liftId)
   }
 
   const launchSession = async () => {
@@ -98,6 +110,18 @@ export default function Today() {
       session = { ...draft, id }
     }
     startSession(session)
+    // Seed each fixed slot from this lift's persisted default — the pick from
+    // last time (or from Today), until the user swaps it mid-session.
+    for (const pick of await getAssistanceDefaultPicks(db, selId)) {
+      addAccessory({
+        exerciseId: pick.exerciseId,
+        exerciseName: pick.exerciseName,
+        tm: pick.tm,
+        calculatedWeight: pick.calculatedWeight,
+        loggedSets: [],
+        slot: pick.section,
+      })
+    }
     navigate('/workout')
   }
 
@@ -284,6 +308,26 @@ export default function Today() {
                     )}
                   </For>
                 </div>
+
+                <div class="mt-6">
+                  <SectionLabel class="mb-1">ASSISTANCE</SectionLabel>
+                  <For each={ASSISTANCE_SECTIONS}>
+                    {section => {
+                      const def = () => assistanceDefaults()[section]
+                      return (
+                        <div class="mb-2">
+                          <button
+                            onClick={() => setPickerSlot(section)}
+                            class="w-full text-left border border-border px-3 py-2 text-xs tracking-widest text-muted hover:border-accent hover:text-accent flex justify-between"
+                          >
+                            <span class="text-faint">{SECTION_LABEL[section]}</span>
+                            <span>{def() ? def()!.name : `+ CHOOSE`}</span>
+                          </button>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
               </Show>
               <button
                 onClick={() => void handleStart()}
@@ -295,6 +339,16 @@ export default function Today() {
             </Show>
           </div>
         </div>
+
+        <Show when={pickerSlot() !== null && selectedLiftId()}>
+          <AccessoryPicker
+            slot={pickerSlot()!}
+            liftId={selectedLiftId()!}
+            mode="default"
+            onSelected={() => void loadAssistanceDefaults(selectedLiftId()!)}
+            onClose={() => setPickerSlot(null)}
+          />
+        </Show>
       </div>
     </Show>
   )
