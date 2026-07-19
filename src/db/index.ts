@@ -11,6 +11,7 @@ import type {
   AccessoryTrainingMax,
   AccessorySet,
   AccessoryNote,
+  AssistanceDefault,
   Settings,
 } from '../types/domain'
 
@@ -29,6 +30,7 @@ class TrainingSQLiteDB {
   })
   accessorySets = new SQLiteTable<AccessorySet>('accessorySets')
   accessoryNotes = new SQLiteTable<AccessoryNote>('accessoryNotes')
+  assistanceDefaults = new SQLiteTable<AssistanceDefault>('assistanceDefaults')
   settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'], boolFields: ['hasDeloadWeek'] })
 
   transaction(fn: () => Promise<void>): Promise<void> {

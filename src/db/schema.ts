@@ -77,6 +77,12 @@ CREATE TABLE IF NOT EXISTS accessoryNotes (
   exerciseId INTEGER NOT NULL,
   notes TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS assistanceDefaults (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  liftId INTEGER NOT NULL,
+  section TEXT NOT NULL,
+  exerciseId INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   restTimer1 INTEGER NOT NULL,
@@ -95,6 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_accessorySets_sessionId ON accessorySets(sessionI
 CREATE INDEX IF NOT EXISTS idx_accessoryNotes_sessionId ON accessoryNotes(sessionId);
 CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTrainingMaxes(exerciseId);
 CREATE INDEX IF NOT EXISTS idx_liftSupplementals_liftId ON liftSupplementals(liftId);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assistanceDefaults_lift_section ON assistanceDefaults(liftId, section);
 `
 
 export const ADDITIVE_MIGRATIONS = [
@@ -131,4 +138,5 @@ export const ALL_TABLES = [
   'lifts', 'trainingMaxes', 'cycles', 'sessions', 'sets',
   'exercises', 'liftSupplementals',
   'accessoryTrainingMaxes', 'accessorySets', 'accessoryNotes', 'settings',
+  'assistanceDefaults',
 ] as const
