@@ -1,4 +1,4 @@
-import { createSignal, createEffect, on, For, Show } from 'solid-js'
+import { createSignal, createEffect, on, For, Index, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, Exercise, Session } from '../types/domain'
@@ -60,28 +60,35 @@ function SetSection(props: {
   // Reports the active row's element up to the page so Workout can scroll to it.
   onActiveRef?: (el: HTMLDivElement) => void
 }) {
+  // Index, not For: these lists are keyed by position (a set's slot in the
+  // linear flow), and a rebuild with fresh object refs must update rows in place
+  // rather than remount them. For remounts every row on a fresh-ref rebuild,
+  // which re-fires the active row's activeRef and yanks the page scroll back to
+  // the linear cursor — even when the rebuild was triggered by unrelated
+  // (cross-lift) logging. Index reuses the row per position, so only a genuine
+  // isActive/isCompleted transition mounts/unmounts the active-set form.
   return (
-    <For each={props.sets()}>
+    <Index each={props.sets()}>
       {(s, i) => {
-        const globalIdx = () => props.offset() + i()
+        const globalIdx = () => props.offset() + i
         return (
           <SetRow
-            set={{ ...s, isAmrap: props.forceAmrapFalse ? false : !!(s as MainSet).isAmrap }}
+            set={{ ...s(), isAmrap: props.forceAmrapFalse ? false : !!(s() as MainSet).isAmrap }}
             isActive={workout.currentSetIndex === globalIdx()}
             isCompleted={globalIdx() < workout.currentSetIndex}
             loggedReps={workout.loggedSets[globalIdx()]?.reps}
             loggedWeight={workout.loggedSets[globalIdx()]?.weight}
-            amrapTargets={(s as MainSet).isAmrap && props.amrapTargets ? props.amrapTargets() : undefined}
+            amrapTargets={(s() as MainSet).isAmrap && props.amrapTargets ? props.amrapTargets() : undefined}
             onLog={(reps, weight) => props.onLog(globalIdx(), reps, weight)}
             onEdit={(reps, weight) => props.onEdit(globalIdx(), reps, weight)}
-            onWeightChange={(s as MainSet).isAmrap ? props.onWeightChange : undefined}
+            onWeightChange={(s() as MainSet).isAmrap ? props.onWeightChange : undefined}
             onDelete={globalIdx() === workout.currentSetIndex - 1 ? props.onDelete : undefined}
             loading={props.loading}
             activeRef={props.onActiveRef}
           />
         )
       }}
-    </For>
+    </Index>
   )
 }
 
@@ -174,13 +181,7 @@ export default function Workout() {
   // movement lift's TM and restored from its own logged store. Like the
   // supplemental tail, a logged set's weight overrides the remaining planned
   // sets of the same block (matched by movement liftId), and extra logged
-  // sets beyond the plan are restored.
-  // Split out from composeAllSets so cross-only mutations can rebuild just
-  // this, without handing the warmup/main/fsl <For> lists fresh object
-  // references — that reference churn was remounting every SetRow (including
-  // whichever one is active elsewhere in the linear flow) and re-firing its
-  // activeRef, which yanked the page's scroll back to the linear cursor on
-  // every cross-lift set logged.
+  // sets beyond the plan are restored. Extracted as a helper for composeAllSets.
   const composeCrossSets = (): CrossSet[] => crossBlocks().flatMap(block => {
     const logged = workout.loggedCrossSets.filter(s => s.liftId === block.movementLiftId)
     let sets: CrossSet[] = block.computed
@@ -266,6 +267,9 @@ export default function Workout() {
     setExercises(await db.exercises.toArray())
   }
 
+  // One rebuild for every mutation, cross-lift included. The linear <Index>
+  // lists update in place on a fresh-ref rebuild (no remount), so cross-only
+  // logging no longer needs a separate narrower rebuild to avoid the scroll yank.
   const rebuildAllSets = () => {
     const session = workout.activeSession
     if (!session) return
@@ -273,10 +277,6 @@ export default function Workout() {
     setAllSets(all)
     setCrossSets(cross)
   }
-
-  // Cross-only rebuild — leaves allSets (and its object references) untouched
-  // so warmup/main/fsl rows never remount for a cross-lift-only change.
-  const rebuildCrossSets = () => setCrossSets(composeCrossSets())
 
   // Targets for today's AMRAP at a given weight: beat the matching previous
   // AMRAP sets when history exists, otherwise the e1RM implied by the TM.
@@ -408,7 +408,7 @@ export default function Workout() {
     }
     const prevCross = crossSets()
     logCrossSet(setData)
-    rebuildCrossSets()
+    rebuildAllSets()
     const idx = workout.loggedCrossSets.length - 1
     try {
       const dbId = await db.sets.add(setData)
@@ -433,13 +433,13 @@ export default function Workout() {
     if (absIdx == null) return
     const { id, reps: prevReps, weight: prevWeight } = workout.loggedCrossSets[absIdx]
     editCrossSet(absIdx, { reps, weight })
-    rebuildCrossSets()
+    rebuildAllSets()
     if (!id) return
     try {
       await db.sets.update(id, { reps, weight })
     } catch (err) {
       editCrossSet(absIdx, { reps: prevReps, weight: prevWeight })
-      rebuildCrossSets()
+      rebuildAllSets()
       showToast(`Failed to save edit: ${err instanceof Error ? err.message : 'unknown error'}`)
     }
   }
@@ -451,7 +451,7 @@ export default function Workout() {
     if (!last) return
     if (last.id) await db.sets.delete(last.id)
     deleteLastCrossSetFor(liftId)
-    rebuildCrossSets()
+    rebuildAllSets()
   }
 
   const handleAddJoker = () => {
