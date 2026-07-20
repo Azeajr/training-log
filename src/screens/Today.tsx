@@ -2,11 +2,11 @@ import { createSignal, createResource, onMount, Show, For } from 'solid-js'
 import { useNavigate, A } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, Session } from '../types/domain'
-import { workout, startSession, clearSession, addAccessory } from '../store/workout-store'
+import { workout, startSession, clearSession, addAccessory, toActiveAccessory } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, calcCrossSets, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSessionAdvancingIfDone } from '../lib/cycle'
-import { discardPendingSession } from '../lib/session'
+import { discardPendingSession, reconcileActiveSession } from '../lib/session'
 import { getCurrentTm } from '../lib/training-max'
 import { getAssistanceDefaults, getAssistanceDefaultPicks, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSection } from '../lib/assistance'
 import { settings } from '../store/settings-store'
@@ -113,14 +113,7 @@ export default function Today() {
     // Seed each fixed slot from this lift's persisted default — the pick from
     // last time (or from Today), until the user swaps it mid-session.
     for (const pick of await getAssistanceDefaultPicks(db, selId)) {
-      addAccessory({
-        exerciseId: pick.exerciseId,
-        exerciseName: pick.exerciseName,
-        tm: pick.tm,
-        calculatedWeight: pick.calculatedWeight,
-        loggedSets: [],
-        slot: pick.section,
-      })
+      addAccessory(toActiveAccessory(pick, pick.section))
     }
     navigate('/workout')
   }
@@ -130,14 +123,17 @@ export default function Today() {
     if (!selId) return
     const active = workout.activeSession
     // Resume only when the active session is truly this slot — same lift AND
-    // same cycle/week. A stale session (e.g. cycle advanced from Settings while
-    // one was mid-flight) must fall through to the abandon path, not resume.
+    // same cycle/week — AND its DB row is still a live pending session. A stale
+    // store (row completed under a killed post-complete modal, or deleted) must
+    // not resume into a finished/gone session; drop the dead ref and start fresh.
     if (active && active.liftId === selId
       && active.cycleId === currentCycleId() && active.week === currentWeek()) {
-      navigate('/workout')
-      return
-    }
-    if (active) {
+      if (await reconcileActiveSession(db, active)) {
+        navigate('/workout')
+        return
+      }
+      clearSession()
+    } else if (active) {
       const activeLiftName = lifts().find(l => l.id === active.liftId)?.name ?? ''
       if (!await confirm(`Abandon ${activeLiftName} session?`, { destructive: true, confirmLabel: 'YES' })) return
       // Status-guarded: if the row already completed (stale store after a
@@ -345,7 +341,9 @@ export default function Today() {
             slot={pickerSlot()!}
             liftId={selectedLiftId()!}
             mode="default"
-            onSelected={() => void loadAssistanceDefaults(selectedLiftId()!)}
+            onSelected={(exerciseId, name) =>
+              setAssistanceDefaults(prev => ({ ...prev, [pickerSlot()!]: { exerciseId, name } }))
+            }
             onClose={() => setPickerSlot(null)}
           />
         </Show>

@@ -1,8 +1,9 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../../db/index'
 import type { Exercise } from '../../types/domain'
-import { workout, addAccessory } from '../../store/workout-store'
-import { roundToNearest5, ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
+import { workout, addAccessory, toActiveAccessory } from '../../store/workout-store'
+import { accessoryWeight, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
+import { getLatestAccessoryTms } from '../../lib/training-max'
 import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, setAssistanceDefault, ASSISTANCE_SECTIONS, ASSISTANCE_SUGGESTION_SESSIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
@@ -21,7 +22,7 @@ interface Props {
   // persisted default for this section — used from the Today screen, where
   // there's no active session yet.
   mode?: 'session' | 'default'
-  onSelected?: (exerciseId: number) => void
+  onSelected?: (exerciseId: number, exerciseName: string) => void
 }
 
 interface PickerRow {
@@ -51,9 +52,7 @@ export default function AccessoryPicker(props: Props) {
       .filter(e => !e.archived)
       .sort((a, b) => a.name.localeCompare(b.name))
 
-    const allAtms = await db.accessoryTrainingMaxes.where('exerciseId').anyOf(exercises.map(e => e.id!)).sortBy('setAt')
-    const latestAtmByExercise = new Map<number, number>()
-    for (const atm of allAtms) latestAtmByExercise.set(atm.exerciseId, atm.weight)
+    const latestAtmByExercise = await getLatestAccessoryTms(db, exercises.map(e => e.id!))
 
     // Recency of accessory use for this main lift, limited to the last few
     // sessions so suggestions reflect the current rotation. Only completed
@@ -75,8 +74,10 @@ export default function AccessoryPicker(props: Props) {
       return {
         exercise: ex,
         tm: tmWeight,
-        calculatedWeight: tmWeight != null ? roundToNearest5(tmWeight * ACCESSORY_PERCENTAGE) : null,
-        alreadyAdded: workout.activeAccessories.some(a => a.exerciseId === ex.id),
+        calculatedWeight: tmWeight != null ? accessoryWeight(tmWeight) : null,
+        // In 'default' mode there's no live session, so a stale persisted
+        // session's accessories must not disable rows in the Today picker.
+        alreadyAdded: props.mode !== 'default' && workout.activeAccessories.some(a => a.exerciseId === ex.id),
         usedRank: bestRecency.get(ex.id!) ?? null,
       }
     }))
@@ -109,9 +110,16 @@ export default function AccessoryPicker(props: Props) {
   // Any pick for a fixed section (push/pull/legs_core) becomes that lift's new
   // default, in both modes — an in-session swap and a Today-screen pick are
   // the same "last one wins" action. 'extra' has no default to persist.
+  // Best-effort: persisting the default must never block the pick itself. A
+  // failed write just means the default doesn't update — the accessory is still
+  // added to the session, as it was before defaults existed.
   const persistDefault = async (exerciseId: number) => {
     if (props.slot === 'extra') return
-    await setAssistanceDefault(db, props.liftId, props.slot, exerciseId)
+    try {
+      await setAssistanceDefault(db, props.liftId, props.slot, exerciseId)
+    } catch (err) {
+      console.warn('[assistance] failed to persist default', err)
+    }
   }
 
   const handleSelect = async (row: PickerRow) => {
@@ -122,16 +130,14 @@ export default function AccessoryPicker(props: Props) {
     }
     await persistDefault(row.exercise.id!)
     if (props.mode !== 'default') {
-      addAccessory({
+      addAccessory(toActiveAccessory({
         exerciseId: row.exercise.id!,
         exerciseName: row.exercise.name,
         tm: row.tm,
         calculatedWeight: row.calculatedWeight!,
-        loggedSets: [],
-        slot: props.slot,
-      })
+      }, props.slot))
     }
-    props.onSelected?.(row.exercise.id!)
+    props.onSelected?.(row.exercise.id!, row.exercise.name)
     props.onClose()
   }
 
@@ -146,16 +152,14 @@ export default function AccessoryPicker(props: Props) {
     })
     await persistDefault(ex.id!)
     if (props.mode !== 'default') {
-      addAccessory({
+      addAccessory(toActiveAccessory({
         exerciseId: ex.id!,
         exerciseName: ex.name,
         tm: tmWeight(),
-        calculatedWeight: roundToNearest5(tmWeight() * ACCESSORY_PERCENTAGE),
-        loggedSets: [],
-        slot: props.slot,
-      })
+        calculatedWeight: accessoryWeight(tmWeight()),
+      }, props.slot))
     }
-    props.onSelected?.(ex.id!)
+    props.onSelected?.(ex.id!, ex.name)
     props.onClose()
   }
 
@@ -226,7 +230,7 @@ export default function AccessoryPicker(props: Props) {
             <Show when={tmWeight() >= 0}>
               <div class="flex items-center gap-4">
                 <span class="text-muted text-sm uppercase tracking-widest w-32">{ACCESSORY_SETS}×{ACCESSORY_REPS} weight</span>
-                <span class="text-accent font-mono text-lg">{roundToNearest5(tmWeight() * ACCESSORY_PERCENTAGE)} lb</span>
+                <span class="text-accent font-mono text-lg">{accessoryWeight(tmWeight())} lb</span>
               </div>
             </Show>
             <div class="flex items-center gap-4">

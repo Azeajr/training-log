@@ -9,6 +9,20 @@ export async function setTm(db: TrainingDB, liftId: number, weight: number): Pro
   return db.trainingMaxes.add({ liftId, weight, setAt: new Date() })
 }
 
+// Latest accessory training max per exercise, for a set of exercise ids. One
+// definition shared by the accessory picker and the assistance-default resolver
+// — both need "the current TM for these accessories" from an append-only table.
+export async function getLatestAccessoryTms(
+  db: TrainingDB,
+  exerciseIds: number[],
+): Promise<Map<number, number>> {
+  const latest = new Map<number, number>()
+  if (exerciseIds.length === 0) return latest
+  const atms = await db.accessoryTrainingMaxes.where('exerciseId').anyOf(exerciseIds).sortBy('setAt')
+  for (const atm of atms) latest.set(atm.exerciseId, atm.weight)
+  return latest
+}
+
 export async function getAllCurrentTms(
   db: TrainingDB
 ): Promise<Record<number, number>> {

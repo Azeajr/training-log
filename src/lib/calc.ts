@@ -96,6 +96,11 @@ export function restStatus(elapsed: number, type: 'normal' | 'transition' | 'fai
 export const roundToNearest5 = (weight: number): number =>
   Math.round(weight / 5) * 5
 
+// The working weight for an accessory from its training max. One definition so
+// the picker preview, the seeded slot, and calcAccessorySets can't drift.
+export const accessoryWeight = (tm: number): number =>
+  roundToNearest5(tm * ACCESSORY_PERCENTAGE)
+
 export interface MainSet {
   setNumber: number
   weight: number
@@ -203,7 +208,7 @@ export interface AccessorySetCalc {
 }
 
 export const calcAccessorySets = (accessoryTm: number): AccessorySetCalc[] => {
-  const weight = roundToNearest5(accessoryTm * ACCESSORY_PERCENTAGE)
+  const weight = accessoryWeight(accessoryTm)
   return Array.from({ length: ACCESSORY_SETS }, (_, i) => ({
     setNumber: i + 1,
     weight,

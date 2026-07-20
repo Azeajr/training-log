@@ -247,6 +247,24 @@ describe('getCycleDoublingCandidates', () => {
     expect(result[0].progressionIncrement).toBe(5)
   })
 
+  it('a redo supersedes the original week — only the newest per week counts', async () => {
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    // The three QUALIFYING weeks are the kept (newer) attempts, dated cycleStart
+    // + week days. Add an older, weak week-1 attempt that was later redone.
+    const cycle = await buildCycle({ liftId, weeks: QUALIFYING_WEEKS })
+    const stale = await db.sessions.add({
+      cycleId: cycle.id!, liftId, week: 1,
+      date: new Date(CYCLE_START.getTime() - 86_400_000), // day before the kept week-1
+      notes: null, status: 'completed',
+    })
+    // 170×9 → ~0% delta, well under threshold. Pre-dedup this drags the lift
+    // below the bar and blocks doubling; deduped, only the newer week-1 counts.
+    await db.sets.add({ sessionId: stale, type: 'main', setNumber: 3, weight: 170, reps: 9, isAmrap: true })
+    const result = await getCycleDoublingCandidates(db, cycle)
+    expect(result.map(c => c.liftId)).toEqual([liftId])
+  })
+
   it('returns [] when a mid-cycle TM bump occurred (>60s after cycle start)', async () => {
     const lifts = await seedLifts()
     const bumpDate = new Date(CYCLE_START.getTime() + 120_000) // 2 min after start

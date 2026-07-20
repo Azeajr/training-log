@@ -197,7 +197,22 @@ export default function Workout() {
   const loadData = async () => {
     const session = workout.activeSession
     if (!session) return
-    const l = await db.lifts.get(session.liftId)
+    // Guard the dangling-row case: an exit that deleted the session but crashed
+    // before clearSession ran leaves the store pointing at a gone id. Logging
+    // into it would insert child rows with no parent (no FK), silently orphaned.
+    // A completed-but-present row is left alone — the EXIT/COMPLETE handlers
+    // already guard it, and the post-complete modal flow legitimately still
+    // holds it. Fetched in parallel with the lift so the check adds no latency
+    // before setLift (the action bar is live before loadData finishes).
+    const [sessionRow, l] = await Promise.all([
+      session.id ? db.sessions.get(session.id) : Promise.resolve(undefined),
+      db.lifts.get(session.liftId),
+    ])
+    if (session.id && !sessionRow) {
+      clearSession()
+      navigate('/today')
+      return
+    }
     if (!l) return
     setLift(l)
 
@@ -482,17 +497,25 @@ export default function Workout() {
     await proceedAfterSession()
   }
 
-  const handleComplete = async () => {
+  // Mutual exclusion for the three session-ending actions. Holding the guard
+  // across the whole handler (confirm included) is what stops EXIT/SKIP from
+  // racing a COMPLETE that's mid-finalize — each disables the others' buttons
+  // for its duration.
+  const runFinishing = async (fn: () => Promise<void>) => {
     if (finishing()) return
-    const session = workout.activeSession
-    if (!session?.id) return
     setFinishing(true)
     try {
-      await completeSession(session, session.id)
+      await fn()
     } finally {
       setFinishing(false)
     }
   }
+
+  const handleComplete = () => runFinishing(async () => {
+    const session = workout.activeSession
+    if (!session?.id) return
+    await completeSession(session, session.id)
+  })
 
   const completeSession = async (session: Session, sessionId: number) => {
     const toSave = workout.activeAccessories.flatMap(acc =>
@@ -528,8 +551,7 @@ export default function Workout() {
     await proceedAfterSession()
   }
 
-  const handleExit = async () => {
-    if (finishing()) return
+  const handleExit = () => runFinishing(async () => {
     if (!await confirm('Discard this attempt?', { destructive: true, confirmLabel: 'EXIT' })) return
     const session = workout.activeSession
     // Delete the pending session row too, not just its child rows — a leftover
@@ -538,21 +560,15 @@ export default function Workout() {
     if (session?.id) await discardPendingSession(db, session.id)
     clearSession()
     navigate('/today')
-  }
+  })
 
-  const handleSkip = async () => {
-    if (finishing()) return
+  const handleSkip = () => runFinishing(async () => {
     if (!await confirm('Skip this lift?', { destructive: true, confirmLabel: 'SKIP' })) return
     const session = workout.activeSession
     if (!session?.id) return
-    setFinishing(true)
-    try {
-      await db.sessions.update(session.id, { status: 'skipped' })
-      await finishSession()
-    } finally {
-      setFinishing(false)
-    }
-  }
+    await db.sessions.update(session.id, { status: 'skipped' })
+    await finishSession()
+  })
 
   const handleCycleCompleteDismiss = () => {
     setCycleCompleteData(null)
@@ -816,7 +832,8 @@ export default function Workout() {
         <div class="flex justify-end mt-3">
           <button
             onClick={() => void handleExit()}
-            class="text-muted hover:text-text-dim font-mono text-xs tracking-widest"
+            disabled={finishing()}
+            class="text-muted hover:text-text-dim font-mono text-xs tracking-widest disabled:opacity-40"
           >
             EXIT WITHOUT SAVING
           </button>

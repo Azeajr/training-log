@@ -59,7 +59,17 @@ export async function getCycleDoublingCandidates(
   const candidates: DoublingCandidate[] = []
   const cycleStartTs = new Date(cycle.startDate).getTime()
 
-  for (const [liftId, liftSessions] of byLift) {
+  for (const [liftId, allLiftSessions] of byLift) {
+    // Dedup to the latest completed session per week — a redo adds a second
+    // completed row for the same week, and only the most recent attempt counts.
+    // Without this, a redo inflates the count (3 rows across 2 weeks passes the
+    // "all 3 weeks done" gate) and drags a superseded attempt into the check.
+    const latestPerWeek = new Map<number, (typeof allLiftSessions)[number]>()
+    for (const s of allLiftSessions) {
+      const cur = latestPerWeek.get(s.week)
+      if (!cur || new Date(s.date).getTime() > new Date(cur.date).getTime()) latestPerWeek.set(s.week, s)
+    }
+    const liftSessions = [...latestPerWeek.values()]
     if (liftSessions.length < 3) continue
 
     const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')

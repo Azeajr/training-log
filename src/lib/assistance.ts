@@ -1,12 +1,14 @@
-import type { Exercise, ExerciseCategory } from '../types/domain'
+import type { Exercise, ExerciseCategory, AssistanceSection } from '../types/domain'
 import type { TrainingDB } from '../db/index'
-import { roundToNearest5, ACCESSORY_PERCENTAGE } from './calc'
+import { accessoryWeight } from './calc'
+import { getLatestAccessoryTms } from './training-max'
 
 // Wendler assistance is organised into three slots per session: one push, one
 // pull, and one legs/core (lower-body + midsection). The four exercise
 // categories collapse onto these three sections — legs and core share the last
-// slot.
-export type AssistanceSection = 'push' | 'pull' | 'legs_core'
+// slot. AssistanceSection is defined in domain.ts (beside ExerciseCategory) and
+// re-exported here with the labels and mapping below.
+export type { AssistanceSection }
 
 // A live accessory either fills one of the three fixed section slots (exactly
 // one exercise each, picking replaces) or is an unconstrained 'extra'.
@@ -127,33 +129,29 @@ export interface AssistanceDefaultPick {
 }
 
 // Resolves a lift's default picks into ready-to-log accessories for a fresh
-// session. A pick with no accessory training max yet is skipped — same as
-// picking it manually mid-session, it needs a TM before it can be logged.
+// session. Builds on getAssistanceDefaults (same row/exercise/archived filter)
+// and layers on the training-max lookup. A pick with no accessory training max
+// yet is skipped — same as picking it manually mid-session, it needs a TM
+// before it can be logged.
 export async function getAssistanceDefaultPicks(
   db: TrainingDB,
   liftId: number,
 ): Promise<AssistanceDefaultPick[]> {
-  const rows = await db.assistanceDefaults.where('liftId').equals(liftId).toArray()
-  if (rows.length === 0) return []
-  const exIds = rows.map(r => r.exerciseId)
-  const exercises = await db.exercises.where('id').anyOf(exIds).toArray()
-  const exById = new Map(exercises.map(e => [e.id!, e]))
-  const atms = await db.accessoryTrainingMaxes.where('exerciseId').anyOf(exIds).sortBy('setAt')
-  const latestTm = new Map<number, number>()
-  for (const atm of atms) latestTm.set(atm.exerciseId, atm.weight)
+  const defaults = await getAssistanceDefaults(db, liftId)
+  const entries = Object.entries(defaults) as Array<[AssistanceSection, { exerciseId: number; name: string }]>
+  if (entries.length === 0) return []
+  const latestTm = await getLatestAccessoryTms(db, entries.map(([, d]) => d.exerciseId))
 
   const out: AssistanceDefaultPick[] = []
-  for (const r of rows) {
-    const ex = exById.get(r.exerciseId)
-    if (!ex || ex.archived) continue
-    const tm = latestTm.get(r.exerciseId)
+  for (const [section, d] of entries) {
+    const tm = latestTm.get(d.exerciseId)
     if (tm == null) continue
     out.push({
-      section: r.section,
-      exerciseId: r.exerciseId,
-      exerciseName: ex.name,
+      section,
+      exerciseId: d.exerciseId,
+      exerciseName: d.name,
       tm,
-      calculatedWeight: roundToNearest5(tm * ACCESSORY_PERCENTAGE),
+      calculatedWeight: accessoryWeight(tm),
     })
   }
   return out
