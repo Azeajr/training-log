@@ -35,10 +35,16 @@ export async function renameExercise(db: TrainingDB, id: number, name: string): 
 }
 
 export async function setExerciseCategory(db: TrainingDB, id: number, category: ExerciseCategory): Promise<void> {
-  await db.exercises.update(id, { category })
+  const current = await db.exercises.get(id)
+  if (current?.category === category) return
   // A re-tag moves the exercise to a new assistance section; carry any default
-  // picks along so they never surface under the old, now-wrong slot.
-  await syncAssistanceDefaultsForCategory(db, id, category)
+  // picks along so they never surface under the old, now-wrong slot. Update and
+  // cascade in one transaction so a failure can't leave the category changed but
+  // the defaults half-migrated.
+  await db.transaction(async () => {
+    await db.exercises.update(id, { category })
+    await syncAssistanceDefaultsForCategory(db, id, category)
+  })
 }
 
 export async function setExercisePlateLoading(

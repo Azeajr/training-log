@@ -350,6 +350,34 @@ describe('Workout screen — with active session', () => {
     })
   })
 
+  it('redirects to /today when the active session row is gone from the DB', async () => {
+    // Dangling store: an exit deleted the row but a crash skipped clearSession.
+    // Logging into it would orphan child rows, so loadData must bounce out.
+    await db.sessions.delete(1)
+    startSession(BENCH)
+    renderWorkout()
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+  })
+
+  it('disables COMPLETE and EXIT while a SKIP confirm is pending (runFinishing guard)', async () => {
+    // runFinishing holds the guard across the whole handler — including the
+    // confirm — so the other session-ending actions can't race it.
+    startSession(BENCH)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByText('SKIP LIFT'))
+    await screen.findByText('Skip this lift?')
+
+    expect((screen.getByText('COMPLETE SESSION') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByText('EXIT WITHOUT SAVING') as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.click(screen.getByText('CANCEL'))
+    await waitFor(() =>
+      expect((screen.getByText('COMPLETE SESSION') as HTMLButtonElement).disabled).toBe(false)
+    )
+  })
+
   it('SKIP confirmed marks session as skipped and navigates', async () => {
     startSession(BENCH)
     renderWorkout()

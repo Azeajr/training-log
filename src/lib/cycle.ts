@@ -239,27 +239,29 @@ export async function getRecentAmraps(
     new Date(b.date).getTime() - new Date(a.date).getTime()
   )
 
-  // Dedup to the newest completed session per (cycle, week) before windowing —
-  // a redo adds a second completed row for the same cycle+week, and two such
-  // AMRAPs in a 3-slot window would skew the median e1RM seed. Keyed by cycle+
-  // week, not week alone: week numbers repeat across cycles and those are
-  // distinct real sessions. Sessions are date-desc, so first-seen wins (newest).
-  const byCycleWeek = new Map<string, (typeof sessions)[number]>()
-  for (const s of sessions) {
-    const key = `${s.cycleId}-${s.week}`
-    if (!byCycleWeek.has(key)) byCycleWeek.set(key, s)
-  }
-  const deduped = [...byCycleWeek.values()]
-
+  // At most one AMRAP per (cycle, week) in the window — a redo adds a second
+  // completed row for the same cycle+week, and two such AMRAPs would skew the
+  // median e1RM seed. Keyed by cycle+week, not week alone: week numbers repeat
+  // across cycles and those are distinct real sessions. Sessions are date-desc,
+  // so the newest attempt for a week is seen first; a week is only marked done
+  // once an attempt actually contributes an AMRAP, so a newest attempt that
+  // logged no AMRAP falls through to an older attempt of the same week rather
+  // than dropping the week's data entirely.
+  const seenWeeks = new Set<string>()
   const recent: Array<{ weight: number; reps: number }> = []
-  for (const session of deduped) {
+  for (const session of sessions) {
     if (recent.length >= window) break
     if (!session.id) continue
+    const key = `${session.cycleId}-${session.week}`
+    if (seenWeeks.has(key)) continue
     const amrap = await db.sets
       .where('sessionId').equals(session.id)
       .filter(s => s.isAmrap)
       .first()
-    if (amrap) recent.push({ weight: amrap.weight, reps: amrap.reps })
+    if (amrap) {
+      recent.push({ weight: amrap.weight, reps: amrap.reps })
+      seenWeeks.add(key)
+    }
   }
   return recent
 }
