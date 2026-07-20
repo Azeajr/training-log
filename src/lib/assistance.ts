@@ -120,6 +120,30 @@ export async function setAssistanceDefault(
   await db.assistanceDefaults.put({ liftId, section, exerciseId })
 }
 
+// Keep assistanceDefaults consistent when an exercise's category changes, so a
+// default tracks its exercise's live category instead of the section it was
+// first filed under. The default follows into the section its new category maps
+// to when that slot is free; if the slot is already held (or the new category
+// maps to no section), the default is dropped rather than silently clobbering
+// another slot's pick or lingering in the wrong one.
+export async function syncAssistanceDefaultsForCategory(
+  db: TrainingDB,
+  exerciseId: number,
+  category?: ExerciseCategory,
+): Promise<void> {
+  const newSection = sectionForCategory(category)
+  const rows = await db.assistanceDefaults.where('exerciseId').equals(exerciseId).toArray()
+  for (const row of rows) {
+    if (row.section === newSection) continue
+    const targetFree = newSection != null && !(await db.assistanceDefaults
+      .where('liftId').equals(row.liftId)
+      .filter(r => r.section === newSection)
+      .first())
+    if (targetFree) await db.assistanceDefaults.update(row.id!, { section: newSection })
+    else await db.assistanceDefaults.delete(row.id!)
+  }
+}
+
 export interface AssistanceDefaultPick {
   section: AssistanceSection
   exerciseId: number

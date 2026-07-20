@@ -3,6 +3,7 @@ import type { Exercise } from '../types/domain'
 import {
   sectionForCategory, groupByAssistanceSection, accessoryRecencyRanks,
   getAssistanceDefaults, setAssistanceDefault, getAssistanceDefaultPicks,
+  syncAssistanceDefaultsForCategory,
 } from './assistance'
 import { db } from '../db/index'
 import { __resetForTest } from '../db/sqlite-client'
@@ -169,6 +170,55 @@ describe('assistance defaults (db-backed)', () => {
       await setAtm(dips, 100, new Date('2026-01-01'))
       await setAssistanceDefault(db, LIFT, 'push', dips)
       expect(await getAssistanceDefaultPicks(db, LIFT)).toEqual([])
+    })
+  })
+
+  describe('syncAssistanceDefaultsForCategory (re-tag cascade)', () => {
+    it('moves a default to the section its new category maps to when the slot is free', async () => {
+      const dips = await addExercise('Dips', 'push')
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+
+      await syncAssistanceDefaultsForCategory(db, dips, 'pull')
+
+      const defaults = await getAssistanceDefaults(db, LIFT)
+      expect(defaults.push).toBeUndefined()
+      expect(defaults.pull).toEqual({ exerciseId: dips, name: 'Dips' })
+    })
+
+    it('collapses legs and core into the same section — a legs↔core re-tag is a no-op', async () => {
+      const squat = await addExercise('Split Squat', 'legs')
+      await setAssistanceDefault(db, LIFT, 'legs_core', squat)
+
+      await syncAssistanceDefaultsForCategory(db, squat, 'core')
+
+      expect((await getAssistanceDefaults(db, LIFT)).legs_core).toEqual({ exerciseId: squat, name: 'Split Squat' })
+      expect(await db.assistanceDefaults.where('exerciseId').equals(squat).toArray()).toHaveLength(1)
+    })
+
+    it('drops the default when the target section is already taken, without clobbering the occupant', async () => {
+      const dips = await addExercise('Dips', 'push')
+      const chin = await addExercise('Chinups', 'pull')
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+      await setAssistanceDefault(db, LIFT, 'pull', chin)
+
+      // Dips re-tagged to pull, but pull is already Chinups → Dips's default is dropped.
+      await syncAssistanceDefaultsForCategory(db, dips, 'pull')
+
+      const defaults = await getAssistanceDefaults(db, LIFT)
+      expect(defaults.push).toBeUndefined()
+      expect(defaults.pull).toEqual({ exerciseId: chin, name: 'Chinups' })
+      expect(await db.assistanceDefaults.where('exerciseId').equals(dips).toArray()).toHaveLength(0)
+    })
+
+    it('only touches the re-tagged exercise, across all lifts that defaulted it', async () => {
+      const dips = await addExercise('Dips', 'push')
+      await setAssistanceDefault(db, 1, 'push', dips)
+      await setAssistanceDefault(db, 2, 'push', dips)
+
+      await syncAssistanceDefaultsForCategory(db, dips, 'pull')
+
+      expect((await getAssistanceDefaults(db, 1)).pull).toEqual({ exerciseId: dips, name: 'Dips' })
+      expect((await getAssistanceDefaults(db, 2)).pull).toEqual({ exerciseId: dips, name: 'Dips' })
     })
   })
 })

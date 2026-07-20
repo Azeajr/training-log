@@ -1,5 +1,6 @@
 import type { TrainingDB } from '../db/index'
 import type { ExerciseCategory, PlateMode } from '../types/domain'
+import { syncAssistanceDefaultsForCategory } from './assistance'
 
 export class ExerciseNameConflictError extends Error {
   constructor(name: string) {
@@ -35,6 +36,9 @@ export async function renameExercise(db: TrainingDB, id: number, name: string): 
 
 export async function setExerciseCategory(db: TrainingDB, id: number, category: ExerciseCategory): Promise<void> {
   await db.exercises.update(id, { category })
+  // A re-tag moves the exercise to a new assistance section; carry any default
+  // picks along so they never surface under the old, now-wrong slot.
+  await syncAssistanceDefaultsForCategory(db, id, category)
 }
 
 export async function setExercisePlateLoading(
