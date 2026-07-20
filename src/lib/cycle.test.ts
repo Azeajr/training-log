@@ -651,6 +651,16 @@ describe('getRecentAmraps', () => {
     ])
   })
 
+  it('falls back to an older same-week attempt when the newest logged no AMRAP', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    // Older week-1 attempt with an AMRAP; a newer week-1 redo that logged none.
+    // The newest attempt must not shadow the week's real data.
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 200, amrapReps: 7, date: new Date('2026-01-10') })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, date: new Date('2026-01-12') })
+    expect(await getRecentAmraps(db, lifts[0].id!)).toEqual([{ weight: 200, reps: 7 }])
+  })
+
   it('honors an explicit window argument', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })

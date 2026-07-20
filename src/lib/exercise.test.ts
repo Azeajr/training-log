@@ -6,6 +6,7 @@ import {
   createExercise, renameExercise, setExerciseCategory,
   archiveExercise, unarchiveExercise,
 } from './exercise'
+import { setAssistanceDefault, getAssistanceDefaults } from './assistance'
 
 beforeEach(async () => { await __resetForTest() })
 
@@ -52,6 +53,26 @@ describe('setExerciseCategory', () => {
     const id = await createExercise(db, 'Row', 'reps', 'push')
     await setExerciseCategory(db, id, 'pull')
     expect((await db.exercises.get(id))?.category).toBe('pull')
+  })
+
+  it('cascades: a default pick follows the exercise into its new section', async () => {
+    const id = await createExercise(db, 'Dips', 'reps', 'push')
+    await setAssistanceDefault(db, 1, 'push', id)
+
+    await setExerciseCategory(db, id, 'pull')
+
+    const defaults = await getAssistanceDefaults(db, 1)
+    expect(defaults.push).toBeUndefined()
+    expect(defaults.pull).toEqual({ exerciseId: id, name: 'Dips' })
+  })
+
+  it('does not touch defaults when the category is unchanged', async () => {
+    const id = await createExercise(db, 'Dips', 'reps', 'push')
+    await setAssistanceDefault(db, 1, 'push', id)
+
+    await setExerciseCategory(db, id, 'push')
+
+    expect((await getAssistanceDefaults(db, 1)).push).toEqual({ exerciseId: id, name: 'Dips' })
   })
 })
 
