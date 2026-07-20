@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, it, expect } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import {
   createExercise, renameExercise, setExerciseCategory,
   archiveExercise, unarchiveExercise,
 } from './exercise'
+import * as assistance from './assistance'
 import { setAssistanceDefault, getAssistanceDefaults } from './assistance'
 
 beforeEach(async () => { await __resetForTest() })
@@ -66,13 +67,17 @@ describe('setExerciseCategory', () => {
     expect(defaults.pull).toEqual({ exerciseId: id, name: 'Dips' })
   })
 
-  it('does not touch defaults when the category is unchanged', async () => {
+  it('skips the default cascade entirely when the category is unchanged', async () => {
     const id = await createExercise(db, 'Dips', 'reps', 'push')
-    await setAssistanceDefault(db, 1, 'push', id)
+    const spy = vi.spyOn(assistance, 'syncAssistanceDefaultsForCategory')
 
-    await setExerciseCategory(db, id, 'push')
+    await setExerciseCategory(db, id, 'push') // unchanged → no cascade
+    expect(spy).not.toHaveBeenCalled()
 
-    expect((await getAssistanceDefaults(db, 1)).push).toEqual({ exerciseId: id, name: 'Dips' })
+    await setExerciseCategory(db, id, 'pull') // changed → cascade runs once
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    spy.mockRestore()
   })
 })
 
