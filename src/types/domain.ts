@@ -94,6 +94,11 @@ export interface Set {
 // + midsection slot).
 export type ExerciseCategory = 'push' | 'pull' | 'legs' | 'core'
 
+// The three assistance slots a session fills (legs + core collapse into one).
+// Lives here beside ExerciseCategory as the single source of truth; lib/assistance
+// re-exports it with the section labels and category→section mapping.
+export type AssistanceSection = 'push' | 'pull' | 'legs_core'
+
 export interface Exercise {
   id?: number
   name: string
@@ -144,7 +149,7 @@ export interface AccessoryNote {
 export interface AssistanceDefault {
   id?: number
   liftId: number
-  section: 'push' | 'pull' | 'legs_core'
+  section: AssistanceSection
   exerciseId: number
 }
 

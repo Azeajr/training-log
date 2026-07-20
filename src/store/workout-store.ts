@@ -184,6 +184,16 @@ export function stopRest() {
   setWorkout({ isResting: false, restStartedAt: null, restType: 'normal' })
 }
 
+// Build an ActiveAccessory for a freshly-picked/seeded slot (no logged sets
+// yet). One constructor so the picker's two entry points and the Today-screen
+// seed loop stay in step with the store's shape.
+export function toActiveAccessory(
+  pick: { exerciseId: number; exerciseName: string; tm: number; calculatedWeight: number },
+  slot: AssistanceSlot,
+): ActiveAccessory {
+  return { ...pick, loggedSets: [], slot }
+}
+
 export function addAccessory(accessory: ActiveAccessory) {
   setWorkout('activeAccessories', (prev) => {
     // A fixed slot (push/pull/legs_core) holds exactly one exercise:

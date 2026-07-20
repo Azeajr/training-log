@@ -239,8 +239,20 @@ export async function getRecentAmraps(
     new Date(b.date).getTime() - new Date(a.date).getTime()
   )
 
+  // Dedup to the newest completed session per (cycle, week) before windowing —
+  // a redo adds a second completed row for the same cycle+week, and two such
+  // AMRAPs in a 3-slot window would skew the median e1RM seed. Keyed by cycle+
+  // week, not week alone: week numbers repeat across cycles and those are
+  // distinct real sessions. Sessions are date-desc, so first-seen wins (newest).
+  const byCycleWeek = new Map<string, (typeof sessions)[number]>()
+  for (const s of sessions) {
+    const key = `${s.cycleId}-${s.week}`
+    if (!byCycleWeek.has(key)) byCycleWeek.set(key, s)
+  }
+  const deduped = [...byCycleWeek.values()]
+
   const recent: Array<{ weight: number; reps: number }> = []
-  for (const session of sessions) {
+  for (const session of deduped) {
     if (recent.length >= window) break
     if (!session.id) continue
     const amrap = await db.sets

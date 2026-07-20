@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import type { Exercise } from '../types/domain'
-import { sectionForCategory, groupByAssistanceSection, accessoryRecencyRanks } from './assistance'
+import {
+  sectionForCategory, groupByAssistanceSection, accessoryRecencyRanks,
+  getAssistanceDefaults, setAssistanceDefault, getAssistanceDefaultPicks,
+} from './assistance'
+import { db } from '../db/index'
+import { __resetForTest } from '../db/sqlite-client'
 
 const ex = (name: string, category?: Exercise['category']): { exercise: Exercise } => ({
   exercise: { name, type: 'reps', category },
@@ -77,5 +82,93 @@ describe('accessoryRecencyRanks', () => {
     const ranks = accessoryRecencyRanks(sessions, accSets, 2)
     expect(ranks.get(1)).toBe(0)
     expect(ranks.has(8)).toBe(false)
+  })
+})
+
+describe('assistance defaults (db-backed)', () => {
+  const LIFT = 1
+
+  beforeEach(async () => {
+    await __resetForTest()
+  })
+
+  const addExercise = (name: string, category: Exercise['category'], archived = false) =>
+    db.exercises.add({ name, type: 'reps', category, archived })
+
+  const setAtm = (exerciseId: number, weight: number, setAt: Date) =>
+    db.accessoryTrainingMaxes.add({ exerciseId, weight, incrementLb: 5, setAt })
+
+  describe('getAssistanceDefaults', () => {
+    it('returns the picked exercise per section, keyed by section', async () => {
+      const dips = await addExercise('Dips', 'push')
+      const chin = await addExercise('Chinups', 'pull')
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+      await setAssistanceDefault(db, LIFT, 'pull', chin)
+
+      const defaults = await getAssistanceDefaults(db, LIFT)
+      expect(defaults.push).toEqual({ exerciseId: dips, name: 'Dips' })
+      expect(defaults.pull).toEqual({ exerciseId: chin, name: 'Chinups' })
+      expect(defaults.legs_core).toBeUndefined()
+    })
+
+    it('drops a default whose exercise was archived', async () => {
+      const dips = await addExercise('Dips', 'push')
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+      await db.exercises.update(dips, { archived: true })
+      expect(await getAssistanceDefaults(db, LIFT)).toEqual({})
+    })
+
+    it('returns {} for a lift with no defaults', async () => {
+      expect(await getAssistanceDefaults(db, LIFT)).toEqual({})
+    })
+  })
+
+  describe('setAssistanceDefault', () => {
+    it('replaces the pick for a section instead of accumulating rows (last wins)', async () => {
+      const dips = await addExercise('Dips', 'push')
+      const cgbp = await addExercise('Close-Grip Bench', 'push')
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+      await setAssistanceDefault(db, LIFT, 'push', cgbp)
+
+      const rows = await db.assistanceDefaults.where('liftId').equals(LIFT).toArray()
+      expect(rows).toHaveLength(1)
+      expect(rows[0].exerciseId).toBe(cgbp)
+    })
+
+    it('keeps a separate default per (lift, section)', async () => {
+      const dips = await addExercise('Dips', 'push')
+      const chin = await addExercise('Chinups', 'pull')
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+      await setAssistanceDefault(db, LIFT, 'pull', chin)
+      await setAssistanceDefault(db, 2, 'push', dips)
+      expect(await db.assistanceDefaults.toArray()).toHaveLength(3)
+    })
+  })
+
+  describe('getAssistanceDefaultPicks', () => {
+    it('resolves picks with the latest TM and its working weight', async () => {
+      const dips = await addExercise('Dips', 'push')
+      await setAtm(dips, 90, new Date('2026-01-01'))
+      await setAtm(dips, 100, new Date('2026-02-01')) // latest wins
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+
+      const picks = await getAssistanceDefaultPicks(db, LIFT)
+      expect(picks).toEqual([
+        { section: 'push', exerciseId: dips, exerciseName: 'Dips', tm: 100, calculatedWeight: 75 },
+      ])
+    })
+
+    it('skips a default that has no accessory training max yet', async () => {
+      const dips = await addExercise('Dips', 'push')
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+      expect(await getAssistanceDefaultPicks(db, LIFT)).toEqual([])
+    })
+
+    it('skips an archived default even when it has a TM', async () => {
+      const dips = await addExercise('Dips', 'push', true)
+      await setAtm(dips, 100, new Date('2026-01-01'))
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+      expect(await getAssistanceDefaultPicks(db, LIFT)).toEqual([])
+    })
   })
 })

@@ -615,16 +615,40 @@ describe('getRecentAmraps', () => {
 
   it('caps at the window (default 3), dropping the oldest', async () => {
     const lifts = await seedLifts()
+    // Five distinct (cycle, week) sessions across two cycles — the window caps
+    // to the 3 newest by date. Kept distinct so the recency cap, not the
+    // redo-dedup, is what's under test here.
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
-    for (let i = 0; i < 5; i++) {
+    const cycle2 = await db.cycles.add({ number: 2, startDate: new Date('2026-02-01'), endDate: null })
+    const rows: Array<{ cycleId: number; week: 1 | 2 | 3 }> = [
+      { cycleId: cycle1, week: 1 }, { cycleId: cycle1, week: 2 }, { cycleId: cycle1, week: 3 },
+      { cycleId: cycle2, week: 1 }, { cycleId: cycle2, week: 2 },
+    ]
+    for (let i = 0; i < rows.length; i++) {
       await seedAmrapSession({
-        cycleId: cycle1, liftId: lifts[0].id!, week: 1,
+        cycleId: rows[i].cycleId, liftId: lifts[0].id!, week: rows[i].week,
         amrapWeight: 200 + i, amrapReps: 5, date: new Date(2026, 0, 10 + i),
       })
     }
     const result = await getRecentAmraps(db, lifts[0].id!)
     expect(result).toHaveLength(3)
     expect(result.map(r => r.weight)).toEqual([204, 203, 202])
+  })
+
+  it('dedups redos: only the newest completed session per cycle+week counts', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    // A redo leaves two completed rows for the same cycle+week. Only the newer
+    // attempt should seed the window — otherwise one week's two AMRAPs crowd out
+    // the other weeks and skew the median e1RM.
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 180, amrapReps: 5, date: new Date('2026-01-10') })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 205, amrapReps: 8, date: new Date('2026-01-12') })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 210, amrapReps: 6, date: new Date('2026-01-20') })
+    const result = await getRecentAmraps(db, lifts[0].id!)
+    expect(result).toEqual([
+      { weight: 210, reps: 6 },  // week 2
+      { weight: 205, reps: 8 },  // week 1, the redo (newer) — the 180 attempt is dropped
+    ])
   })
 
   it('honors an explicit window argument', async () => {
