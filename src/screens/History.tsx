@@ -613,7 +613,7 @@ export default function History() {
           when={sessions().length > 0}
           fallback={<div class="text-muted text-sm">No completed sessions yet.</div>}
         >
-          <div class="overflow-auto max-h-[60vh]">
+          <div>
             <For each={sessions()}>
               {row => (
                 <HistorySessionRow
