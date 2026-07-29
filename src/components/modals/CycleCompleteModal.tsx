@@ -62,7 +62,7 @@ export default function CycleCompleteModal(props: Props) {
               onClick={props.onDeload}
               class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-danger hover:text-danger"
             >
-              DELOAD INSTEAD  −10%
+              CUT ALL TMS INSTEAD  −10%
             </button>
           </div>
         </div>

@@ -42,7 +42,10 @@ export const computeClosedThroughWeek = (
   sessions: Array<{ week: number; liftId: number; status: string }>,
   activeLiftIds: number[],
   prevClosed: number,
-  finalWeek = 4,
+  // Required, not defaulted: a `= 4` default silently gave 3-week cycles a
+  // week 4 whenever a caller forgot to pass it. Keeping it required makes the
+  // compiler enumerate every call site instead.
+  finalWeek: 3 | 4,
 ): number => {
   let closed = prevClosed
   for (let w = closed + 1; w <= finalWeek; w++) {
@@ -64,7 +67,7 @@ export const syncClosedThroughWeek = async (
   sessions: Array<{ week: number; liftId: number; status: string }>,
   activeLiftIds: number[],
   prevClosed: number,
-  finalWeek = 4,
+  finalWeek: 3 | 4,
 ): Promise<number> => {
   const closed = computeClosedThroughWeek(sessions, activeLiftIds, prevClosed, finalWeek)
   if (closed !== prevClosed) await db.cycles.update(cycleId, { closedThroughWeek: closed })

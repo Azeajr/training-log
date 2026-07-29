@@ -55,16 +55,16 @@ describe('computeClosedThroughWeek', () => {
     liftIds.map(liftId => ({ week, liftId, status: 'completed' }))
 
   it('never drops below the stored high-water mark', () => {
-    expect(computeClosedThroughWeek([], [1, 2], 2)).toBe(2)
+    expect(computeClosedThroughWeek([], [1, 2], 2, 4)).toBe(2)
   })
 
   it('advances over contiguous fully-completed weeks', () => {
-    expect(computeClosedThroughWeek([...done(1, 1, 2), ...done(2, 1, 2)], [1, 2], 0)).toBe(2)
+    expect(computeClosedThroughWeek([...done(1, 1, 2), ...done(2, 1, 2)], [1, 2], 0, 4)).toBe(2)
   })
 
   it('stops at the first incomplete week', () => {
     // lift 2 has no week-2 session
-    expect(computeClosedThroughWeek([...done(1, 1, 2), ...done(2, 1)], [1, 2], 0)).toBe(1)
+    expect(computeClosedThroughWeek([...done(1, 1, 2), ...done(2, 1)], [1, 2], 0, 4)).toBe(1)
   })
 
   it('counts skipped sessions as closing a week', () => {
@@ -72,20 +72,20 @@ describe('computeClosedThroughWeek', () => {
       { week: 1, liftId: 1, status: 'skipped' },
       { week: 1, liftId: 2, status: 'skipped' },
     ]
-    expect(computeClosedThroughWeek(sessions, [1, 2], 0)).toBe(1)
+    expect(computeClosedThroughWeek(sessions, [1, 2], 0, 4)).toBe(1)
   })
 
   it('does not reopen a closed week when a new lift joins owing only later weeks (issue #52)', () => {
     // Week 1 closed for {1,2}; lift 3 added mid-cycle. The mark holds at 1.
-    expect(computeClosedThroughWeek([...done(1, 1, 2)], [1, 2, 3], 1)).toBe(1)
+    expect(computeClosedThroughWeek([...done(1, 1, 2)], [1, 2, 3], 1, 4)).toBe(1)
   })
 
   it('closes no week when the active roster is empty (kills L24 length-guard mutant)', () => {
     // every() over an empty activeLiftIds is vacuously true. Without the
     // `length > 0` guard, an empty roster would "complete" every week and the
     // mark would jump to 4 — the guard must keep it at the prior high-water mark.
-    expect(computeClosedThroughWeek([], [], 0)).toBe(0)
-    expect(computeClosedThroughWeek([...done(1)], [], 2)).toBe(2)
+    expect(computeClosedThroughWeek([], [], 0, 4)).toBe(0)
+    expect(computeClosedThroughWeek([...done(1)], [], 2, 4)).toBe(2)
   })
 })
 

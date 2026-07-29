@@ -279,7 +279,7 @@ describe('Settings — deload', () => {
 
   afterEach(drain)
 
-  it('DELOAD confirmed drops all TMs by 10% (new TM records added)', async () => {
+  it('CUT ALL TMS confirmed drops all TMs by 10% (new TM records added)', async () => {
     const liftId1 = await db.lifts.add({ name: 'OHP',   order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
     const liftId2 = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
     await db.trainingMaxes.add({ liftId: liftId1, weight: 200, setAt: new Date('2026-01-01') })
@@ -287,8 +287,8 @@ describe('Settings — deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByText(/DELOAD ALL/))
-    fireEvent.click(await screen.findByText('DELOAD'))
+    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+    fireEvent.click(await screen.findByText('CUT TMS'))
 
     await waitFor(async () => {
       const tms = await db.trainingMaxes.orderBy('setAt').toArray()
@@ -299,13 +299,13 @@ describe('Settings — deload', () => {
     })
   })
 
-  it('DELOAD cancelled does not change TMs', async () => {
+  it('CUT ALL TMS cancelled does not change TMs', async () => {
     const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
     await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') })
 
     renderSettings()
 
-    fireEvent.click(await screen.findByText(/DELOAD ALL/))
+    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
     fireEvent.click(await screen.findByText('CANCEL'))
 
     await waitFor(async () => {
@@ -964,16 +964,16 @@ describe('Settings — skip deload', () => {
     return { cycleId, liftIds }
   }
 
-  it('SKIP DELOAD button is visible only in week 4', async () => {
+  it('END CYCLE NOW button is visible only in week 4', async () => {
     await seedWeek4Context()
     renderSettings()
-    await screen.findByText('SKIP DELOAD')
+    await screen.findByText(/END CYCLE NOW/)
   })
 
   it('cancelling skip deload confirmation leaves DB unchanged', async () => {
     await seedWeek4Context()
     renderSettings()
-    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    fireEvent.click(await screen.findByText(/END CYCLE NOW/))
     await screen.findByText('CANCEL')
     fireEvent.click(screen.getByText('CANCEL'))
     await drain()
@@ -985,12 +985,12 @@ describe('Settings — skip deload', () => {
     await seedWeek4Context()
     renderSettings()
 
-    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    fireEvent.click(await screen.findByText(/END CYCLE NOW/))
     await screen.findByText('CANCEL') // dialog open
 
-    // Both the Settings button and dialog confirm say "SKIP DELOAD"; click the dialog's
-    const skipBtns = screen.getAllByText('SKIP DELOAD')
-    fireEvent.click(skipBtns[skipBtns.length - 1])
+    // Button reads END CYCLE NOW · TMS PROGRESS; the dialog confirm is exactly
+    // 'END CYCLE', so an exact-string query hits the dialog unambiguously.
+    fireEvent.click(screen.getByText('END CYCLE'))
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
     // New cycle created by advanceCycleIfComplete
@@ -1009,10 +1009,9 @@ describe('Settings — skip deload', () => {
     await db.sessions.add({ cycleId, liftId: liftIds[1], week: 4, date: new Date(), notes: null, status: 'pending' })
     renderSettings()
 
-    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    fireEvent.click(await screen.findByText(/END CYCLE NOW/))
     await screen.findByText('CANCEL')
-    const skipBtns = screen.getAllByText('SKIP DELOAD')
-    fireEvent.click(skipBtns[skipBtns.length - 1])
+    fireEvent.click(screen.getByText('END CYCLE'))
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
 
@@ -1027,10 +1026,9 @@ describe('Settings — skip deload', () => {
     await seedWeek4Context()
     renderSettings()
 
-    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    fireEvent.click(await screen.findByText(/END CYCLE NOW/))
     await screen.findByText('CANCEL')
-    const skipBtns = screen.getAllByText('SKIP DELOAD')
-    fireEvent.click(skipBtns[skipBtns.length - 1])
+    fireEvent.click(screen.getByText('END CYCLE'))
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
     fireEvent.click(screen.getByText('CONTINUE'))
@@ -1038,17 +1036,16 @@ describe('Settings — skip deload', () => {
     await waitFor(() => expect(screen.queryByText('CYCLE COMPLETE')).toBeNull())
   })
 
-  it('DELOAD INSTEAD in Settings CycleCompleteModal deloads TMs and dismisses modal (covers onDeload)', async () => {
+  it('CUT ALL TMS INSTEAD in Settings CycleCompleteModal deloads TMs and dismisses modal (covers onDeload)', async () => {
     const { liftIds } = await seedWeek4Context()
     renderSettings()
 
-    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    fireEvent.click(await screen.findByText(/END CYCLE NOW/))
     await screen.findByText('CANCEL')
-    const skipBtns = screen.getAllByText('SKIP DELOAD')
-    fireEvent.click(skipBtns[skipBtns.length - 1])
+    fireEvent.click(screen.getByText('END CYCLE'))
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
-    fireEvent.click(screen.getByText(/DELOAD INSTEAD/))
+    fireEvent.click(screen.getByText(/CUT ALL TMS INSTEAD/))
 
     await waitFor(async () => {
       const tms = await db.trainingMaxes.where('liftId').equals(liftIds[0]).sortBy('setAt')
@@ -1071,7 +1068,7 @@ describe('Settings — skip deload', () => {
       await db.trainingMaxes.add({ liftId, weight: 100, setAt: new Date() })
     }
 
-    // Weeks 1-3 for all lifts so currentCycleWeek()===4 and SKIP DELOAD is visible
+    // Weeks 1-3 for all lifts so currentCycleWeek()===4 and END CYCLE NOW is visible
     for (const week of [1, 2, 3] as const) {
       for (const liftId of [benchId, deadliftId, ohpId]) {
         await db.sessions.add({ cycleId, liftId, week, date: new Date(), notes: null, status: 'completed' })
@@ -1091,10 +1088,9 @@ describe('Settings — skip deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByText('SKIP DELOAD'))
+    fireEvent.click(await screen.findByText(/END CYCLE NOW/))
     await screen.findByText('CANCEL')
-    const skipBtns = screen.getAllByText('SKIP DELOAD')
-    fireEvent.click(skipBtns[skipBtns.length - 1])
+    fireEvent.click(screen.getByText('END CYCLE'))
 
     await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'), { timeout: 5000 })
     const dblBtn = await screen.findByText('+10 LBS')
@@ -1328,5 +1324,148 @@ describe('Settings — lift roster', () => {
     fireEvent.click(screen.getByText('CANCEL'))
 
     await waitFor(() => expect(screen.queryByText('DONE')).not.toBeInTheDocument())
+  })
+})
+
+describe('Settings — CYCLE SHAPE', () => {
+  beforeEach(async () => {
+    await Promise.all([db.lifts.clear(), db.cycles.clear(), db.sessions.clear(), db.settings.clear()])
+    await loadSettings()
+  })
+
+  afterEach(drain)
+
+  it('shows all four cycle shapes at once, without needing a toggle first', async () => {
+    renderSettings()
+    await screen.findByText(/3-WEEK · NO DELOAD WEEK/)
+    // The supplemental modes used to be hidden until the deload week was on.
+    screen.getByText(/4-WEEK · DELOAD, NO SUPPLEMENTAL/)
+    screen.getByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT DELOAD %/)
+    screen.getByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT NORMAL %/)
+  })
+
+  it('picking a 4-week shape writes both the deload week and the supplemental mode', async () => {
+    renderSettings()
+    fireEvent.click(await screen.findByText(/4-WEEK · DELOAD, NO SUPPLEMENTAL/))
+
+    await waitFor(async () => {
+      const row = await db.settings.toCollection().first()
+      expect(row?.hasDeloadWeek).toBe(true)
+      expect(row?.deloadSupplemental).toBe('skip')
+    })
+  })
+
+  it('switching to 3-week preserves the supplemental mode for switching back', async () => {
+    renderSettings()
+    fireEvent.click(await screen.findByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT DELOAD %/))
+    await waitFor(async () => {
+      expect((await db.settings.toCollection().first())?.deloadSupplemental).toBe('deload')
+    })
+
+    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD WEEK/))
+    await waitFor(async () => {
+      const row = await db.settings.toCollection().first()
+      expect(row?.hasDeloadWeek).toBe(false)
+      // Retained, not reset — switching back restores the prior choice.
+      expect(row?.deloadSupplemental).toBe('deload')
+    })
+  })
+})
+
+
+// ─── Settings — cycle shape reconcile ────────────────────────────────────────
+
+describe('Settings — cycle shape reconcile', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.settings.clear(), db.exercises.clear(),
+      db.accessoryTrainingMaxes.clear(), db.accessorySets.clear(),
+    ])
+    await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, hasDeloadWeek: true })
+    await loadSettings()
+  })
+
+  afterEach(drain)
+
+  // Weeks 1-3 completed for every lift → closed = 3, so a 4-week cycle sits on
+  // its deload and a 3-week cycle is already finished.
+  async function seedThroughWeek3() {
+    const liftIds = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await Promise.all(liftIds.map(liftId => db.trainingMaxes.add({ liftId, weight: 100, setAt: new Date() })))
+    for (const week of [1, 2, 3] as const) {
+      for (const liftId of liftIds) {
+        await db.sessions.add({ cycleId, liftId, week, date: new Date(), notes: null, status: 'completed' })
+      }
+    }
+    return { cycleId, liftIds }
+  }
+
+  it('4→3 during the deload completes the cycle and progresses TMs', async () => {
+    const { liftIds } = await seedThroughWeek3()
+    renderSettings()
+    await screen.findByText(/END CYCLE NOW/) // on week 4
+
+    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD WEEK/))
+
+    await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
+    expect(await db.cycles.count()).toBe(2)
+    const tms = await db.trainingMaxes.where('liftId').equals(liftIds[0]).sortBy('setAt')
+    expect(tms.at(-1)!.weight).toBeGreaterThan(100) // progressed, not cut
+  })
+
+  it('4→3 retires an unfinished deload session as skipped, keeping completed ones', async () => {
+    const { cycleId, liftIds } = await seedThroughWeek3()
+    await db.sessions.add({ cycleId, liftId: liftIds[0], week: 4, date: new Date(), notes: null, status: 'completed' })
+    await db.sessions.add({ cycleId, liftId: liftIds[1], week: 4, date: new Date(), notes: null, status: 'pending' })
+
+    renderSettings()
+    await screen.findByText(/END CYCLE NOW/)
+    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD WEEK/))
+
+    await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
+    const week4 = await db.sessions.filter(s => s.week === 4).toArray()
+    // The logged deload day survives as history; the unfinished one is retired.
+    expect(week4.find(s => s.liftId === liftIds[0])!.status).toBe('completed')
+    expect(week4.find(s => s.liftId === liftIds[1])!.status).toBe('skipped')
+    expect(week4.some(s => s.status === 'pending')).toBe(false)
+  })
+
+  it('4→3 early in the cycle just drops the deload, without ending the cycle', async () => {
+    const liftIds = await seedLifts()
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    await Promise.all(liftIds.map(liftId => db.trainingMaxes.add({ liftId, weight: 100, setAt: new Date() })))
+    for (const liftId of liftIds) {
+      await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    }
+
+    renderSettings()
+    await screen.findByText(/3-WEEK · NO DELOAD WEEK/)
+    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD WEEK/))
+
+    await waitFor(async () => expect(await db.cycles.count()).toBe(1)) // no rollover
+    expect(document.body.textContent).not.toContain('CYCLE COMPLETE')
+    // Week picker drops to 1-3.
+    expect(screen.queryByLabelText('Week 4')).not.toBeInTheDocument()
+  })
+
+  it('3→4 extends the current cycle with a deload week', async () => {
+    await db.settings.clear()
+    await db.settings.add({ restTimer1: 90, restTimer2: 180, restTimerFail: 300, hasDeloadWeek: false })
+    await loadSettings()
+    await seedThroughWeek3()
+
+    renderSettings()
+    // 3-week cycle finished through its final week; no week 4 offered yet.
+    await screen.findByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT NORMAL %/)
+    expect(screen.queryByLabelText('Week 4')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT NORMAL %/))
+
+    // Cycle extends in place — week 4 appears, nothing rolls over.
+    await waitFor(() => expect(screen.queryByLabelText('Week 4')).toBeInTheDocument())
+    expect(await db.cycles.count()).toBe(1)
+    expect(document.body.textContent).not.toContain('CYCLE COMPLETE')
   })
 })
