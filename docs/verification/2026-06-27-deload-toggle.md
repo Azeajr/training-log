@@ -37,3 +37,11 @@ week selector only renders when `currentCycleWeek() !== null`).
   fresh DB until setup completes. Expected, not a bug.
 - `deloadSupplemental` selection survives toggling the deload week off and on;
   no surprise reset.
+
+## Since verified
+
+Record kept as-is. Two details have moved: the dev command is now `pnpm dev`
+(npm → pnpm, 2026-07-17), and the deload-supplemental options were relabelled
+(SKIP IT / DELOAD % / NORMAL → NO SUPPLEMENTAL / SUPPLEMENTAL AT DELOAD % /
+SUPPLEMENTAL AT NORMAL %). The controls still live under Settings → SUPPLEMENTAL
+and the behaviour verified above still holds.

@@ -1,19 +1,14 @@
 # Task Completion Documentation
 
-Document completed tasks with zero token cost.
+Optional write-ups of completed tasks, at zero context cost.
 
 ## Usage
 
-Create completion docs as:
-`.claude/completions/YYYY-MM-DD-task-name.md`
-
-Use template: `.claude/templates/completion-template.md`
+`.claude/completions/YYYY-MM-DD-task-name.md`. No template — state what changed, why, and what was
+verified.
 
 ## Never Auto-Load
 
-Completion docs cost 0 tokens (never auto-loaded via .claudeignore).
-Available when explicitly requested.
+Excluded via `.claudeignore`, so these cost 0 tokens. Read only on explicit request.
 
----
-
-**Last Updated**: YYYY-MM-DD
+Currently empty; the convention is unused.
