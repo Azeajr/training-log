@@ -46,9 +46,15 @@ own session, `typeof row !== 'object'` on its own (the existing test passed `[nu
 `row == null` arm catches first), and several id-less rows in one table not being read as duplicates.
 
 Remaining next targets, both already at or above the 80 target so the expected yield is low:
-`exercise.ts` (82.50%) and `plate-loading.ts` (80.00%). `calc.ts` sits at 97.61% with 25 timeouts —
-worth one look to confirm those are genuine infinite loops in the warmup/plate loops rather than
-masked weak assertions.
+`exercise.ts` (82.50%) and `plate-loading.ts` (80.00%).
+
+`calc.ts`'s 25 timeouts were checked and need no work. They are not infinite loops: every one is
+`ArrowFunction → () => undefined` on an exported top-level function, or an emptied module constant.
+Because `calc.ts` feeds every screen, those mutations make screen tests hang on a `waitFor` for a
+weight that never renders, and Stryker exhausts its timeout budget before the unit assertions run.
+Hand-mutating four of them — `roundToNearest5`, `estimated1RM`, `WARMUP_PERCENTAGES`, `JOKER_MIN_REPS`,
+covering both mutant shapes — fails `calc.test.ts` in under two seconds each. Detection is decisive;
+only the label is misleading. The cost is run time, not quality.
 
 **Two measurement caveats — read before chasing a survivor here.**
 
