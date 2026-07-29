@@ -30,14 +30,36 @@ Three survivors remain and are **equivalent mutants** — documented, not chased
 - `getAssistanceDefaultPicks`: dropping `if (entries.length === 0) return []`. `getLatestAccessoryTms`
   carries its own empty-input guard.
 
-Next targets by survivor count: `export-import.ts` (52 survivors, 80.00% — 40% of all remaining
-survivors in one file, and down from 84.36% in June as the module grew), then `exercise.ts` (82.50%)
-and `plate-loading.ts` (80.00%).
+Then `export-import.ts`, which held 52 survivors — 40% of everything remaining, and down from 84.36%
+in June as the module grew: **80.00% → 89.23%** (+8 tests). The killable survivors were almost all in
+`exportCsv`: the empty placeholder cells that keep columns aligned across the three row shapes were
+never asserted, because the existing tests used `toContain`, which cannot see a blank cell turn into
+content. Pinning whole 11-column rows for each shape closed them. Also covered: an accessory holding
+both logged sets *and* a note (the note-only pass must not emit a duplicate row), notes scoped to their
+own session, `typeof row !== 'object'` on its own (the existing test passed `[null]`, which the
+`row == null` arm catches first), and several id-less rows in one table not being read as duplicates.
 
-*Caveat for the next run: Stryker credited 18 of the constant mutants as `Timeout` rather than `Killed`,
-because screen tests hang waiting on a blanked label before the direct assertions run. Verified
-separately that the new `assistance.test.ts` assertions fail on those mutations in under a second, so
-the kills are real; the timeout label is a scheduling artifact.*
+Remaining next targets: `exercise.ts` (82.50%) and `plate-loading.ts` (80.00%).
+
+**Two measurement caveats — read before chasing a survivor here.**
+
+*`perTest` reports false survivors for import-time code.* Module-level constants are evaluated when the
+module loads, before any test body runs, so Stryker cannot attribute them to a test and runs an
+unrelated subset. In `export-import.ts` that accounts for roughly seven "survivors" —
+`PENDING_EXPORT_KEY`, `MAX_IMPORT_BYTES`, the error-message arithmetic, and `importJson`'s
+`typeof parsed !== 'object'` — every one of which was verified killed by hand-mutating the source and
+running the suite. The printed score understates the module. Probe before writing a test.
+
+*Timeouts can stand in for assertions.* In the `assistance.ts` run Stryker credited 18 constant mutants
+as `Timeout` rather than `Killed`, because screen tests hang waiting on a blanked label before the
+direct assertions run. Hand-mutation confirmed the new assertions fail in under a second, so the kills
+are real; the timeout label is a scheduling artifact.
+
+Genuinely equivalent mutants in `export-import.ts`, documented rather than chased: the `importSpec`
+`dates` arrays (`dates: []` → a bogus field name is inert because no row carries it; `dates: ['setAt']`
+→ `[]` is masked by the round-trip, since the raw ISO string `fromSqlRow` revives is the identical
+`Date`), the `parseDates` loop under that same masking, and `if (key === 'exercises')` → `true`
+(`pickCols` strips `category` from every other table, so the `single_leg` migration cannot fire).
 
 ### Design System Consolidation (2026-06-30 → 2026-07-28)
 

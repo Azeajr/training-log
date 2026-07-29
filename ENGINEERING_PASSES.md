@@ -229,6 +229,7 @@ PHASE 1 — RUN AND TRIAGE
 1. Scope the run: temporarily narrow `mutate` to ['src/lib/<module>'], or run the full `pnpm test:mutation` and read only that module's section of the HTML report.
 2. For each Survived / NoCoverage mutant record the line, the mutation applied, and WHY the current tests miss it (assertion too loose? branch never exercised? only the happy path?).
 3. Note genuinely equivalent mutants and move on — do not chase them.
+4. Probe before writing a test for any survivor in import-time code (module-level constants, top-level regexes). perTest coverage cannot attribute those to a test, so Stryker runs an unrelated subset and reports a FALSE survivor. Hand-mutate the line, run only that module's test file, and see whether the suite already kills it — several "survivors" in export-import.ts are exactly this. A `Timeout` verdict deserves the same probe: it counts as detected, but it may mean an unrelated screen test hung rather than an assertion firing.
 
 PHASE 2 — KILL
 For each real survivor, tighten or add a test in the matching src/lib/<module>.test.ts:
