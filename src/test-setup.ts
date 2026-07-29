@@ -1,8 +1,10 @@
 import '@testing-library/jest-dom'
 import { afterEach } from 'vitest'
-import * as calcLib from './lib/calc'
 
-// jsdom has no Worker — provide a stub that handles timer and calc worker messages
+// jsdom has no Worker. The only Worker the app constructs under test is the
+// rest timer (workers/timer.worker.ts) — the SQLite worker is aliased away by
+// the /sqlite-client$/ → sqlite-test-client swap. So this stub only needs to
+// speak the timer protocol.
 class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null
   private intervalId: ReturnType<typeof setInterval> | null = null
@@ -13,7 +15,6 @@ class MockWorker {
   postMessage(data: unknown) {
     const msg = data as Record<string, unknown>
 
-    // Timer worker protocol
     if (msg.type === 'start') {
       this.startTime = (msg.restStartedAt as number) ?? Date.now()
       if (this.intervalId) clearInterval(this.intervalId)
@@ -39,20 +40,6 @@ class MockWorker {
           }
         }, 1000)
       }
-    // Calc worker protocol (id + fn + args)
-    } else if (typeof msg.id === 'number' && typeof msg.fn === 'string') {
-      const { id, fn, args } = msg as { id: number; fn: string; args: unknown[] }
-      queueMicrotask(() => {
-        if (!this.onmessage) return
-        let result: unknown
-        try {
-          const calcFn = (calcLib as Record<string, unknown>)[fn]
-          result = typeof calcFn === 'function' ? calcFn(...args) : null
-        } catch {
-          result = []
-        }
-        this.onmessage!(new MessageEvent('message', { data: { id, result } }))
-      })
     }
   }
 
@@ -63,10 +50,10 @@ class MockWorker {
 
 Object.defineProperty(globalThis, 'Worker', { value: MockWorker, writable: true, configurable: true })
 
-// Components start async DB chains in useEffect. Test assertions can pass
-// mid-chain, leaving pending awaits that hit db.delete() in the next
-// beforeEach. One setTimeout(0) drains all pending fake-indexeddb microtasks
-// before the DB is torn down.
+// Components start async DB chains on mount. Test assertions can pass
+// mid-chain, leaving pending awaits that would hit a cleared table in the next
+// beforeEach. One setTimeout(0) drains those pending continuations before the
+// DB is reset.
 afterEach(async () => {
   await new Promise(r => setTimeout(r, 0))
 })
@@ -91,21 +78,3 @@ Object.defineProperty(globalThis, 'localStorage', {
 
 // jsdom doesn't implement scrollIntoView
 window.HTMLElement.prototype.scrollIntoView = () => {}
-
-// Tanstack Virtual uses ResizeObserver to measure scroll container
-window.ResizeObserver = class ResizeObserver {
-  private cb: ResizeObserverCallback
-  constructor(cb: ResizeObserverCallback) { this.cb = cb }
-  observe(target: Element) {
-    // Report a realistic size so virtual scrollers render items
-    this.cb([{
-      target,
-      contentRect: { height: 600, width: 400, top: 0, left: 0, right: 400, bottom: 600, x: 0, y: 0, toJSON: () => ({}) } as DOMRectReadOnly,
-      borderBoxSize: [{ inlineSize: 400, blockSize: 600 }],
-      contentBoxSize: [{ inlineSize: 400, blockSize: 600 }],
-      devicePixelContentBoxSize: [{ inlineSize: 400, blockSize: 600 }],
-    } as ResizeObserverEntry], this as unknown as ResizeObserver)
-  }
-  unobserve() {}
-  disconnect() {}
-}

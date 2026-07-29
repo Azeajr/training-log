@@ -5,7 +5,7 @@ import Rule from '../components/layout/Rule'
 
 interface RecordRow {
   name: string
-  e1rm: number | null   // rounded best Wathan estimated 1RM; null when no AMRAP yet
+  e1rm: number | null   // rounded best Wathan e1RM; null when no AMRAP yet
   weight: number | null // the set that produced it
   reps: number | null
   maxWeight: number | null     // heaviest weight actually lifted; measured, not estimated
@@ -43,7 +43,7 @@ export default function Stats() {
         ? await db.sets.where('sessionId').anyOf(sessionIds).toArray()
         : []
 
-      // Best AMRAP by Epley e1RM — mirrors pr.ts: only completed AMRAP sets
+      // Best AMRAP by Wathan e1RM — mirrors pr.ts: only completed AMRAP sets
       // (isAmrap && reps >= 1) count, so a failed 0-rep set is never a record.
       // Cross sets are always isAmrap:false, so they can't leak in here.
       const amraps = ownSets.filter(s => s.isAmrap && s.reps >= 1)

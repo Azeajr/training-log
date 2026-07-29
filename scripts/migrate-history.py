@@ -48,24 +48,10 @@ EXERCISES = [
     { "id": 18, "name": "Plank",                        "type": "timed" },
 ]
 
-LIFT_ACCESSORIES = [
-    { "id":  1, "liftId": 1, "exerciseId":  1, "order": 1 },
-    { "id":  2, "liftId": 1, "exerciseId":  2, "order": 2 },
-    { "id":  3, "liftId": 1, "exerciseId":  3, "order": 3 },
-    { "id":  4, "liftId": 2, "exerciseId":  4, "order": 1 },
-    { "id":  5, "liftId": 2, "exerciseId":  5, "order": 2 },
-    { "id":  6, "liftId": 2, "exerciseId":  6, "order": 3 },
-    { "id":  7, "liftId": 2, "exerciseId":  7, "order": 4 },
-    { "id":  8, "liftId": 3, "exerciseId":  8, "order": 1 },
-    { "id":  9, "liftId": 3, "exerciseId":  9, "order": 2 },
-    { "id": 10, "liftId": 3, "exerciseId": 10, "order": 3 },
-    { "id": 11, "liftId": 4, "exerciseId": 11, "order": 1 },
-    { "id": 12, "liftId": 4, "exerciseId": 12, "order": 2 },
-    { "id": 13, "liftId": 4, "exerciseId": 13, "order": 3 },
-    { "id": 14, "liftId": 4, "exerciseId": 14, "order": 4 },
-    { "id": 15, "liftId": 4, "exerciseId": 15, "order": 5 },
-    { "id": 16, "liftId": 4, "exerciseId": 16, "order": 6 },
-]
+# NOTE: this script used to emit a `liftAccessories` roster mapping exercises to
+# lifts. That table was dropped — assistance is now three slots per session,
+# resolved from `assistanceDefaults` plus in-session picks. Exercises still
+# import; they just arrive untagged and unassigned.
 
 SETTINGS = [{ "id": 1, "restTimer1": 90, "restTimer2": 180, "restTimerFail": 300 }]
 
@@ -386,7 +372,6 @@ def build_json(csv_path, tm_overrides):
         "sessions":               sessions_out,
         "sets":                   sets_out,
         "exercises":              EXERCISES,
-        "liftAccessories":        LIFT_ACCESSORIES,
         "accessorySets":          [],
         "settings":               SETTINGS,
     }

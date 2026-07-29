@@ -9,7 +9,7 @@ src/
 ├── App.tsx                       # @solidjs/router routes + AppShell + ConfirmationContext
 ├── main.tsx                      # mount root after dbReady → seed → loadSettings → applyTheme
 ├── index.css                     # Tailwind 4 entry: @theme tokens + global prefers-reduced-motion
-├── test-setup.ts                 # Vitest jsdom setup (MockWorker, localStorage, ResizeObserver)
+├── test-setup.ts                 # Vitest jsdom setup (rest-timer MockWorker, localStorage, scrollIntoView)
 │
 ├── screens/                      # page-level components (one per route)
 │   ├── Today.tsx                 # lift picker, week status, session preview, assistance slots, launch

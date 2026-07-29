@@ -41,9 +41,10 @@ unless explicitly asked. Keep validation strictly before the first `clear()`.
 **Check**: `src/db/seed.ts` inserts lifts via `bulkAdd` with `AUTOINCREMENT`, so IDs follow insertion
 order (OHP=1, Deadlift=2, Bench=3, Squat=4). `scripts/migrate-history.py` hardcodes the same order.
 **Fix**: Never assume lift IDs outside of seed order — look up by name.
-**Note**: `scripts/migrate-history.py` still emits a `liftAccessories` table that no longer exists.
-The key is simply ignored on import (it isn't in `COLS`/`importSpec`), but the script's roster
-section is dead.
+**Note**: an import payload may carry table keys that no longer exist (`public/demo-seed.json` and
+older backups still contain `liftAccessories`). Unknown keys are ignored — `validateImportShape` and
+`importFromRawData` both iterate `COLS`/`importSpec`, never the payload — so they neither restore nor
+error.
 
 ---
 

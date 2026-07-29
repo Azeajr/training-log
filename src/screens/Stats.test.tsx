@@ -29,12 +29,12 @@ describe('Stats screen', () => {
     })
   })
 
-  it('shows the best Epley e1RM for a lift with a completed AMRAP set', async () => {
+  it('shows the best e1RM for a lift with a completed AMRAP set', async () => {
     const t0 = new Date()
     await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: t0 })
     const cycleId = await db.cycles.add({ number: 1, startDate: t0, endDate: null })
     const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 3, date: t0, notes: null, status: 'completed' })
-    // 200 × 5 AMRAP → Epley 200 * (1 + 5/30) = 233.33 → 233
+    // 200 × 5 AMRAP → Wathan 200 / (0.488 + 0.538·e^(−0.375)) = 233.16 → 233
     await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 200, reps: 5, isAmrap: true })
 
     render(() => <Stats />)

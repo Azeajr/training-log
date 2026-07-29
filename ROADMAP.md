@@ -624,19 +624,28 @@ No open items.
 
 ## Tech Debt
 
-Small, known, none load-bearing. All verified against the tree on 2026-07-29.
+No open items.
 
-- **Dead Stryker exclusion** — `stryker.config.mjs` still negates `!src/lib/exportImport.ts`, a name
-  that stopped existing when the module was renamed to `export-import.ts`. The glob matches nothing, so
-  export-import *is* mutated (last report: 178 killed / 33 survived). Delete the entry.
-- **Stale `src/test-setup.ts` comments and dead branch** — `MockWorker` still implements a "calc worker"
-  RPC protocol with no live caller, and comments reference `fake-indexeddb` and TanStack Virtual, neither
-  of which is a dependency. Misleads anyone reading the file as evidence of live code.
-- **`scripts/migrate-history.py` emits a dropped table** — its roster section still writes
-  `liftAccessories` rows. The key is ignored on import (absent from `COLS` / `importSpec`), so it is
-  inert, but the section is dead.
-- **Epley named in Stats** — `src/screens/Stats.tsx` and `Stats.test.tsx` comments still say "Epley".
-  The assertions are correct (Wathan and Epley agree closely at 5 reps), only the naming is stale.
+### Resolved 2026-07-29 — dead code and stale naming
+
+Four inert-but-misleading leftovers, found while reconciling the docs against the tree.
+
+- ~~**Dead Stryker exclusion**~~ — `stryker.config.mjs` negated `!src/lib/exportImport.ts`, a name that
+  stopped existing when the module was renamed to `export-import.ts`. The glob matched nothing, so
+  export-import was being mutated all along (last report: 178 killed / 33 survived). Entry deleted; the
+  `mutate` list is unchanged in effect.
+- ~~**Dead branch and stale comments in `src/test-setup.ts`**~~ — `MockWorker` carried a "calc worker"
+  RPC protocol (and a `lib/calc` import to service it) with no live caller, plus a `ResizeObserver` stub
+  left over from the removed History virtualizer. Both deleted; the remaining stub only speaks the
+  rest-timer protocol, which is the one Worker the app constructs under test. Comments referencing
+  `fake-indexeddb` and TanStack Virtual — neither a dependency — reworded. 880/880 still pass, which is
+  what proves the removed code was dead.
+- ~~**`scripts/migrate-history.py` emitted a dropped table**~~ — its roster section wrote
+  `liftAccessories` rows. The key was ignored on import (absent from `COLS` / `importSpec`), so it was
+  inert. Removed, with a note explaining where assistance assignment lives now.
+- ~~**Epley named in Stats**~~ — `src/screens/Stats.tsx` and `Stats.test.tsx` comments still said
+  "Epley". The assertions were already correct (Wathan and Epley agree to within a rounded pound at 5
+  reps, which is why the drift went unnoticed); only the naming was stale.
 
 ### Resolved 2026-05-21
 
