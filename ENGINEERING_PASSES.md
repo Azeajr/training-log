@@ -195,7 +195,7 @@ TEST ARCHITECTURE AS IT ACTUALLY IS
 - The DB engine in tests IS the production engine; only the Worker/OPFS transport differs. There is nothing to mock.
 - There is NO autouse reset fixture. lib and db suites call `__resetForTest()` (from ../db/sqlite-client) in their own beforeEach; screen suites instead clear the specific tables they seed. Follow whichever convention the file you are editing already uses.
 - The only mock in the suite is @solidjs/router's useNavigate, spread over vi.importActual, in five screen suites. Do not add more.
-- src/test-setup.ts supplies MockWorker (jsdom has no Worker), a localStorage polyfill, scrollIntoView, and ResizeObserver. Several of its comments are stale (fake-indexeddb, TanStack Virtual, a "calc worker" protocol with no live caller) — history, not evidence of live code.
+- src/test-setup.ts supplies MockWorker (jsdom has no Worker; it speaks only the rest-timer protocol, since the SQLite worker is aliased away), a localStorage polyfill, and scrollIntoView. Nothing else is stubbed — if a component needs a new browser API, add it there deliberately rather than assuming one exists.
 - The coverage gate spans src/lib, src/screens, src/store only. src/components, src/db, and src/hooks sit outside it; a component earns a test when it owns real logic (Stepper, RestTimer, SetRow, InlineConfirm, AccessoryPicker, AmrapTargets, NotesField, DurationInput, TmRecommendationModal are the precedents).
 
 PRINCIPLES
@@ -220,7 +220,7 @@ ships assertions that kill the survivors.
 Act as a TypeScript engineer hardening the training-log suite against mutation. Run Stryker against ONE module under src/lib, analyze the surviving mutants, sharpen tests until they die, ship. Pick a different module each run.
 
 STRYKER AS CONFIGURED (stryker.config.mjs)
-- `mutate: ['src/lib/**/*.ts', '!src/lib/**/*.test.ts', '!src/lib/exportImport.ts']`. The third glob predates the rename to export-import.ts and matches nothing — export-import IS mutated. Deleting that dead entry is a legitimate small cleanup, not a narrowing.
+- `mutate: ['src/lib/**/*.ts', '!src/lib/**/*.test.ts']` — every lib module, export-import included.
 - `thresholds: { high: 80, low: 60, break: 40 }`. The run FAILS below 40. 80 is the green-report aspiration, not a gate — do not claim a "≥80% gate".
 - `inPlace: true`: mutants are written into your working tree during the run. After every mutation run, confirm `git status` is clean before committing.
 - coverageAnalysis 'perTest', disableTypeChecks false. Reports land in reports/mutation/ (html + json).

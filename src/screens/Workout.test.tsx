@@ -261,7 +261,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    // Wait for calc worker to deliver warmup sets — LOG button appears on active set
+    // Wait for loadData to compose the set list — LOG appears on the active set
     const logBtn = await screen.findByText('LOG')
     fireEvent.click(logBtn)
 
