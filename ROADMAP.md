@@ -9,11 +9,17 @@ config: Stryker globs `@stryker-mutator/*` relative to its own package, and pnpm
 `node_modules` leaves only core/api/instrumenter/util there, so it loaded zero TestRunner plugins.
 Naming the plugins explicitly in `stryker.config.mjs` resolves them from the project root.
 
-**Baseline over `src/lib`** — 1530 mutants, 15 files, 9m20s: **91.50%** (1375 killed + 25 timeout
+**Baseline over `src/lib`** — 1530 mutants, 15 files, ~9m: **91.50%** (1375 killed + 25 timeout
 detected, 128 survived, 2 no-coverage). Well clear of the `break: 40` gate and above the `high: 80`
 target. 100% on `audio-cues`, `cleanup`, `format`, `rest-timer-worker`.
 
-Then hardened the weakest module, `assistance.ts`: **78.10% → 97.14%** (+7 tests). The survivors were
+**After two hardening passes: 93.20%** (1401 killed + 25 timeout, 102 survived, 2 no-coverage).
+
+Then hardened the weakest module, `assistance.ts`: **78.10% → 80.00%** by Stryker's count (+7 tests).
+The scoped run reported 97.14% for the same code; neither figure is the whole truth, and the gap is
+worth understanding before trusting either — see the caveats below. Of the 21 mutants Stryker still
+calls survivors there, 18 are the taxonomy constants, verified killed by hand-mutation. Real detection
+is 102/105. The survivors were
 16 unasserted taxonomy constants — `ASSISTANCE_SECTIONS`, `SECTION_LABEL`, `EXERCISE_CATEGORIES`,
 `CATEGORY_LABEL`, where an emptied array collapses the slot list and a blanked string ships a
 headerless section — plus two real gaps: `accessoryRecencyRanks` was only tested walking worse→better
@@ -39,7 +45,10 @@ both logged sets *and* a note (the note-only pass must not emit a duplicate row)
 own session, `typeof row !== 'object'` on its own (the existing test passed `[null]`, which the
 `row == null` arm catches first), and several id-less rows in one table not being read as duplicates.
 
-Remaining next targets: `exercise.ts` (82.50%) and `plate-loading.ts` (80.00%).
+Remaining next targets, both already at or above the 80 target so the expected yield is low:
+`exercise.ts` (82.50%) and `plate-loading.ts` (80.00%). `calc.ts` sits at 97.61% with 25 timeouts —
+worth one look to confirm those are genuine infinite loops in the warmup/plate loops rather than
+masked weak assertions.
 
 **Two measurement caveats — read before chasing a survivor here.**
 
@@ -50,10 +59,15 @@ unrelated subset. In `export-import.ts` that accounts for roughly seven "survivo
 `typeof parsed !== 'object'` — every one of which was verified killed by hand-mutating the source and
 running the suite. The printed score understates the module. Probe before writing a test.
 
-*Timeouts can stand in for assertions.* In the `assistance.ts` run Stryker credited 18 constant mutants
-as `Timeout` rather than `Killed`, because screen tests hang waiting on a blanked label before the
-direct assertions run. Hand-mutation confirmed the new assertions fail in under a second, so the kills
-are real; the timeout label is a scheduling artifact.
+*The same mutant can score three different ways.* `assistance.ts`'s 18 taxonomy-constant mutants were
+credited as `Timeout` in the scoped run (screen tests hang on a blanked label before the direct
+assertions run, and Stryker counts a timeout as detected → 97.14%) and as `Survived` in the full run
+(a different covering-test subset → 80.00%). Hand-mutating two of them fails `assistance.test.ts` in
+737 ms, so they are genuinely killed and both printed figures are wrong — one high, one low. Treat a
+scoped run as a triage tool, never as a score, and confirm any constant-mutant verdict by hand.
+
+`export-import.ts` is the counter-example worth noting: its scoped and full runs both reported 89.23%
+exactly, because its killable survivors live inside functions the tests call directly.
 
 Genuinely equivalent mutants in `export-import.ts`, documented rather than chased: the `importSpec`
 `dates` arrays (`dates: []` → a bogus field name is inert because no row carries it; `dates: ['setAt']`
