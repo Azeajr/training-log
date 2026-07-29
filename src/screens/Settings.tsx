@@ -632,9 +632,11 @@ export default function Settings() {
           )}</For>
         </div>
         <p class="text-faint text-xs mt-1">
-          3-week: TMs progress after week 3. 4-week: week 4 is a light deload, and
-          the mode sets what supplemental + cross-lift work does that week — skip it,
-          run it at deload %, or at normal (~65%) weights.
+          3-week: TMs progress after week 3.
+          <br />
+          4-week: week 4 is a light deload, and the mode sets what supplemental +
+          cross-lift work does that week — skip it, run it at deload %, or at
+          normal (~65%) weights.
         </p>
       </div>
 
