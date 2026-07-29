@@ -8,24 +8,11 @@
 
 5/3/1 strength training log — offline-first PWA. Tracks cycles, sessions, sets, accessories, and training maxes.
 
-**Tech Stack**: Solid.js 1, TypeScript 6, Vite 8, Tailwind CSS 4, `@sqlite.org/sqlite-wasm` (Web Worker + OPFS in prod, in-process under vitest), Vitest 4, Playwright 1, @solidjs/router
+**Tech Stack**: Solid.js — **not React** (signals, no re-render, no hooks rules). TypeScript, Vite, Tailwind, Vitest. Package manager is **pnpm**.
+
+**Database**: `@sqlite.org/sqlite-wasm` runs in a Web Worker + OPFS in prod, but in-process under vitest.
 
 **Deployment**: Cloudflare Pages (static, no server; deployed by `.github/workflows/deploy.yml`)
-
----
-
-## Quick Start Commands
-
-```bash
-pnpm dev             # dev server (Vite)
-pnpm test            # unit tests (Vitest)
-pnpm check           # build + test
-pnpm test:e2e        # Playwright e2e
-pnpm build           # tsc + vite build
-pnpm lint            # ESLint
-```
-
-**See**: `.claude/QUICK_START.md` for full reference
 
 ---
 
@@ -42,4 +29,4 @@ pnpm lint            # ESLint
 
 ---
 
-**Last Updated**: 2026-05-31
+**Last Updated**: 2026-07-28

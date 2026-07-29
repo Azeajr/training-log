@@ -60,10 +60,11 @@ in-process `@sqlite.org/sqlite-wasm` (no Web Worker, no OPFS) but through the sa
 
 ## Deploy
 
-Push to `main` → GitHub Actions builds + deploys to GitHub Pages automatically.
+Push to `main` → GitHub Actions builds + deploys to Cloudflare Pages automatically
+(`wrangler pages deploy dist --project-name 531-log`, see `.github/workflows/deploy.yml`).
 `public/demo-seed.json` is a manual-import payload (Settings → IMPORT JSON), not an automatic
 demo-mode seed.
 
 ---
 
-**Last Updated**: 2026-05-31
+**Last Updated**: 2026-07-28
