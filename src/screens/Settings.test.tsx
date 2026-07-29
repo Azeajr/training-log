@@ -1339,14 +1339,14 @@ describe('Settings — CYCLE SHAPE', () => {
     renderSettings()
     await screen.findByText(/3-WEEK · NO DELOAD/)
     // The supplemental modes used to be hidden until the deload week was on.
-    screen.getByText(/4-WEEK · SUPP OFF/)
-    screen.getByText(/4-WEEK · SUPP AT DELOAD %/)
-    screen.getByText(/4-WEEK · SUPP AT NORMAL %/)
+    screen.getByText('NO SUPPLEMENTAL')
+    screen.getByText('SUPPLEMENTAL AT DELOAD %')
+    screen.getByText('SUPPLEMENTAL AT NORMAL %')
   })
 
   it('picking a 4-week shape writes both the deload week and the supplemental mode', async () => {
     renderSettings()
-    fireEvent.click(await screen.findByText(/4-WEEK · SUPP OFF/))
+    fireEvent.click(await screen.findByText('NO SUPPLEMENTAL'))
 
     await waitFor(async () => {
       const row = await db.settings.toCollection().first()
@@ -1357,7 +1357,7 @@ describe('Settings — CYCLE SHAPE', () => {
 
   it('switching to 3-week preserves the supplemental mode for switching back', async () => {
     renderSettings()
-    fireEvent.click(await screen.findByText(/4-WEEK · SUPP AT DELOAD %/))
+    fireEvent.click(await screen.findByText('SUPPLEMENTAL AT DELOAD %'))
     await waitFor(async () => {
       expect((await db.settings.toCollection().first())?.deloadSupplemental).toBe('deload')
     })
@@ -1458,10 +1458,10 @@ describe('Settings — cycle shape reconcile', () => {
 
     renderSettings()
     // 3-week cycle finished through its final week; no week 4 offered yet.
-    await screen.findByText(/4-WEEK · SUPP AT NORMAL %/)
+    await screen.findByText('SUPPLEMENTAL AT NORMAL %')
     expect(screen.queryByLabelText('Week 4')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByText(/4-WEEK · SUPP AT NORMAL %/))
+    fireEvent.click(screen.getByText('SUPPLEMENTAL AT NORMAL %'))
 
     // Cycle extends in place — week 4 appears, nothing rolls over.
     await waitFor(() => expect(screen.queryByLabelText('Week 4')).toBeInTheDocument())
