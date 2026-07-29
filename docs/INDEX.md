@@ -1,27 +1,42 @@
 # Documentation Index
 
-**Master navigation with token cost estimates**
+Every markdown doc in the repo, what it is for, and when to load it.
 
 ---
 
-## Session Start (Essential - ~800 tokens)
+## Load at session start
 
-Load these files at every session start:
-- `CLAUDE.md` (~450 tokens)
-- `.claude/COMMON_MISTAKES.md` (~350 tokens)
-- `.claude/QUICK_START.md` (~100 tokens)
-- `.claude/ARCHITECTURE_MAP.md` (~150 tokens)
+| Doc | Purpose |
+|---|---|
+| `CLAUDE.md` | Stack, deploy model, the gotchas that cost time, pointers to everything else |
+| `.claude/COMMON_MISTAKES.md` | Nine recurring failure modes with symptom → check → fix |
+| `.claude/QUICK_START.md` | Commands and the common workflows (new screen, schema change, calc logic) |
 
-## Task-Specific Topics (Load As Needed)
+## Load when the task calls for it
 
-Add your topic files in `docs/learnings/` and list them here with token estimates.
+| Doc | Purpose |
+|---|---|
+| `.claude/ARCHITECTURE_MAP.md` | Directory tree, routes, SQLite tables, key patterns, boot order |
+| `ENGINEERING_PASSES.md` | Seven self-contained agent prompts: refactor, security, testing, mutation, bug hunt, UI, schema |
+| `ROADMAP.md` | Shipped changelog, planned features, security posture, tech debt |
+| `README.md` | User-facing overview: features, stack, program structure, how to run |
 
-## Design Notes
+## Design notes
 
-- `docs/design/plate-loading-model.md` — v2 generalization of `usesBarbell` into
-  `{ plateMode: none|paired|total, implementBase }` (belt squat, dip belt, plate
-  cable, hex bar). Proposal, not implemented.
+- `docs/design/plate-loading-model.md` — the `{ plateMode, implementBase }` generalization of
+  `usesBarbell`. **Shipped**; kept as the rationale record.
+
+## Verification records
+
+Dated runtime-verification logs, one per claim checked against the running app.
+
+- `docs/verification/2026-06-27-deload-toggle.md` — the 3-WEEK / 4-WEEK cycle toggle.
+
+## Not loaded automatically
+
+`.claude/completions/`, `.claude/sessions/`, and `docs/archive/` are excluded via `.claudeignore`.
+Read them only on explicit request.
 
 ---
 
-**Last Updated**: YYYY-MM-DD
+**Last Updated**: 2026-07-29

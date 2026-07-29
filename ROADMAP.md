@@ -2,6 +2,125 @@
 
 ## Done
 
+### Design System Consolidation (2026-06-30 → 2026-07-28)
+
+Visual pass across every screen, no behavior change. `SectionLabel` (the light eyebrow beside `Rule`)
+and `ToggleChip` (the one-of-N toggle idiom) extracted as primitives and adopted app-wide; set lines
+unified on `SetReadout` across Today, Workout, History, and HistoryEdit; TM chart restyled; the
+cycle-shape controls in Settings unified and made to survive a 360px viewport.
+
+- `--color-info` added as a 14th token (deload state), across `@theme` and every theme.
+- Theme collection expanded to **11**: OLED (new default), OLED Light, Rosé Pine, Frappé, Macchiato,
+  Mocha, Latte, Solarized, Gruvbox, Nord, Dracula. `resolveThemeKey` maps the legacy `dark`/`light`
+  keys onto OLED / OLED Light.
+- `prefers-reduced-motion` handled once, globally, in `src/index.css` — no per-site guards.
+
+### STATS Screen (2026-06-30, extended 2026-07-28)
+
+Read-only third view: best estimated 1RM per lift (with the set that produced it) plus the heaviest
+weight **actually** lifted, and the training-max trajectory per lift. Pure views over existing data —
+no writes, no schema.
+
+### Generalized Plate Loading (2026-06-30)
+
+`usesBarbell: boolean` generalized into `{ plateMode: none|paired|total, implementBase }` on both
+`Lift` and `Exercise`, so hex bars, belt squats, dip belts, and plate-loaded cables all read correctly.
+`calcPlates(target, base, mode, plates)` distributes pairs or singles; `resolveLiftLoading` /
+`resolveExerciseLoading` derive the effective mode, falling back to the legacy flag so no row needed a
+backfill. Full rationale in `docs/design/plate-loading-model.md`.
+
+### Wathan e1RM + Robust AMRAP Seed + Configurable Deload Week (2026-06-27, 2026-07-17)
+
+- **Wathan replaces Epley** — `estimated1RM = weight / (0.488 + 0.538·e^(−0.075·reps))`, with
+  `reps === 1` short-circuiting to `weight`. More accurate outside the ~5–17 rep band and asymptotic
+  rather than unbounded. Consequence: `targetReps` can be unreachable (returns `null` when
+  `todayWeight / prev1RM ≤ 0.488`) and is floored at 2, since a 1-rep target could never reach a
+  higher prior estimate.
+- **Robust AMRAP seed** — the target is seeded from the **median** Wathan estimate over the last 3
+  AMRAPs (`seedE1Rm` / `SEED_WINDOW`) instead of back-calculating a single set, so one stray high-rep
+  set can no longer inflate it. `getRecentAmraps` counts only completed non-deload sessions and at most
+  one AMRAP per `(cycleId, week)`, so a redo can't skew the median.
+- **Configurable cycle length** — `settings.hasDeloadWeek` and `cycleFinalWeek(hasDeloadWeek) → 3 | 4`.
+  A 3-week cycle progresses TMs after week 3 with no light week. `effectiveSupplementalWeek` resolves
+  deload supplemental volume from `settings.deloadSupplemental` (`skip` / `normal` → week 1 / `deload`).
+  Runtime verification: `docs/verification/2026-06-27-deload-toggle.md`.
+
+### Flexible Lift Roster + Cross-Lift Supplemental (2026-06-19 → 2026-06-23)
+
+The four seeded lifts are no longer fixed. Lifts can be added, renamed, reordered, archived
+(history preserved, dropped from the active roster), or hard-deleted before they have history.
+
+- **`cycles.closedThroughWeek`** — a high-water mark of the highest contiguous fully-completed week,
+  recomputed from sessions and self-healing via `syncClosedThroughWeek`. Freezing closed weeks is what
+  lets the roster change mid-cycle without reopening finished weeks or prematurely closing live ones.
+  A reopened week (a fresh `pending` row beside an old `completed` one) stays open until the redo lands.
+- **`liftSupplementals`** — per-training-day cross-lift blocks: N×M of another main lift's movement at
+  that lift's FSL weight or a percentage of its TM. Logged into `workout.loggedCrossSets`, independent
+  of the linear `currentSetIndex` model, and persisted to `sets` as `type: 'cross'` with their own
+  `liftId`.
+
+### Assistance Slots (2026-06-24 → 2026-07-20)
+
+Replaced the per-lift accessory roster with three fixed slots per session — push, pull, legs+core —
+plus unconstrained extras.
+
+- Exercises are tagged `push | pull | legs | core`; the four categories collapse onto three sections.
+  The legacy `single_leg` tag is renamed to `legs` on boot and on import.
+- The slot picker floats previously-used exercises above the alphabetical rest, ranked by recency over
+  the lift's last 3 completed sessions.
+- **`assistanceDefaults`** (unique on `liftId, section`) persists the lift's current pick; picking in a
+  session or from Today updates it ("last pick wins"). Re-tagging an exercise cascades its default onto
+  the new section.
+- **`liftAccessories` dropped** — the first destructive migration, safe because it held only
+  assignments; logged sets live in `accessorySets`.
+- Default accessory scheme is 3×10 at 75% of the accessory TM (`accessoryWeight`).
+
+### Per-Exercise Session Notes (2026-07-14 → 2026-07-17)
+
+`accessoryNotes` — one free-text note per `(session, exercise)`, distinct from `Session.notes` and from
+any single set, with a unique index enforced through `ADDITIVE_MIGRATIONS`. `NotesField` supports a
+bullet-list mode with Tab/Shift+Tab nesting; `NotesText` is the read-side counterpart. Note-only
+accessories (no logged sets) still get a CSV row.
+
+### Session Lifecycle Hardening (2026-07-17 → 2026-07-20)
+
+EXIT used to delete only child rows, leaving an empty `pending` husk that held the week open; both EXIT
+and Today's abandon path trusted the store's stale session copy, so a session resumed after a killed
+post-complete modal could have real logged data wiped.
+
+- `discardPendingSession` — DB-status-guarded, with the status check **inside** the transaction so
+  there is no await gap; no-op on completed sessions.
+- `reconcileActiveSession` — one reconciliation point for every entry that resumes from
+  `workout.activeSession`; returns the live pending row or `null` when the stored session is stale.
+- In-flight guards on COMPLETE / SKIP / EXIT (double-tap duplicated accessory rows); a confirm before
+  redoing an already-completed lift; the persisted store cleared after import (stale session ids).
+- `getCycleDoublingCandidates` and `getRecentAmraps` dedup a redo to the latest attempt per week.
+
+### Positional Set Lists Use `<Index>` (2026-07-18 → 2026-07-20)
+
+The linear set list rendered with `<For>`, which remounts every row when the array is rebuilt with fresh
+object refs — re-firing the active row's ref and yanking page scroll to the linear cursor on unrelated
+cross-lift logging. `SetSection` switched to `<Index>`: rows update in place, refs fire only on a
+genuine transition, and every mutation can go back through a single `rebuildAllSets`. The same class of
+bug had already broken hold-to-repeat on steppers in HistoryEdit and LiftSetupModal.
+
+Also added the `typecheck` script (`tsc -b`) — the root tsconfig is a solution file (`files: []`), so
+`tsc -p tsconfig.json` checks nothing and reports a false green.
+
+### pnpm Migration (2026-07-17)
+
+npm → pnpm across scripts, CI, and Stryker. `pnpm install --frozen-lockfile` replaced `npm install` in
+the deploy workflow, which also resolved the long-standing `npm ci` blocker.
+
+### Import + Persisted-Store Validation (2026-06-11)
+
+- `validateImportShape` runs **before** the destructive clear: a non-array table value, a non-object
+  row, or a duplicate id now rejects with a friendly error instead of crashing mid-transaction or
+  silently erasing a table while the import "succeeded".
+- `PERSISTED_VALIDATORS` — per-key shape checks on rehydrate, so a wrong-typed value under an
+  allowlisted key is dropped rather than grafted into the reactive store.
+- `detectAmrapPRs`: a 0-rep AMRAP is never a PR and never a record.
+
 ### Post-Session TM Adjustment Prompt + Cycle-End Doubling Recommendation (2026-05-31)
 
 Two linked features that replace silent/fixed TM progression with performance-driven suggestions:
@@ -23,6 +142,9 @@ Threshold constants: `SESSION_TM_BUMP_THRESHOLD = 0.15`, `CYCLE_DOUBLE_THRESHOLD
 `CYCLE_START_TOLERANCE_MS = 60_000` (distinguishes auto-progression TMs from user bumps).
 
 18 new tests in `src/lib/tm-recommendations.test.ts`; 2 in `src/lib/cycle.test.ts`. 468/468 pass.
+
+*Superseded 2026-07-17: the e1RM formula is now Wathan, not Epley. The thresholds, the modal flow, and
+the doubling eligibility rules are unchanged.*
 
 ### SKIP DELOAD + Cycle-Complete TM Delta (2026-05-22)
 
@@ -92,7 +214,7 @@ After an AMRAP is logged, `detectAmrapPRs` (in `src/lib/pr.ts`) compares the jus
 against all prior AMRAP sets for that lift and reports two PR flavors independently:
 
 - **Rep PR** — strictly more reps than any prior AMRAP at this *exact* weight
-- **e1RM PR** — strictly higher Epley estimated 1RM than any prior AMRAP
+- **e1RM PR** — strictly higher estimated 1RM than any prior AMRAP (Epley then; Wathan since 2026-07-17)
 
 First-ever AMRAP for a lift returns `e1RmPr: true` and fires the toast (sets the baseline record). `Workout.handleLog`
 calls the detector with `excludeSetId = dbId` (the just-inserted row) so the new set doesn't
@@ -181,7 +303,7 @@ Last open tech-debt item from the roadmap, plus a small DRY win.
 
 ### Test Infrastructure — Coverage + Mutation
 
-414 unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, and key components. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds. Stryker mutation testing (`pnpm test:mutation`) enforces ≥80% mutation score on `src/lib` using `inPlace` mode with `perTest` coverage analysis.
+Unit and component integration tests covering `src/lib`, `src/screens`, `src/store`, `src/db`, and the components that own real logic. Vitest v8 coverage enforces ≥80% line, branch, function, and statement thresholds over `lib` / `screens` / `store`. Stryker (`pnpm test:mutation`) mutates `src/lib` with `inPlace` + `perTest` analysis; the run fails below a 40% score (`break`), with 80% as the `high` reporting target.
 
 Coverage approach: lib functions and screens both run against the real `@sqlite.org/sqlite-wasm` engine via the in-process `sqlite-test-client.ts` (Vite alias `/sqlite-client$/`). Screens are exercised end-to-end from DOM event → SolidJS store → SQLite → rendered output with no DB layer mocked.
 
@@ -234,11 +356,13 @@ Add new exercises (name + type: reps/timed/distance) from Settings and assign th
 
 ### Accessory Data Cleanup
 
-CLEANUP ORPHANS button in Settings → DATA. Deletes `liftAccessories` / `accessoryTrainingMaxes` rows with missing `exerciseId`, deletes `accessorySets` rows with missing `sessionId`, and archives exercises with no assignments and no set history. Gated behind confirm dialog. Detection logic extracted to `buildCleanupPlan` (pure function) with unit and RTL screen test coverage.
+CLEANUP ORPHANS button in Settings → DATA. Deletes `accessoryTrainingMaxes` rows with a missing `exerciseId`, deletes `accessorySets` rows with a missing `sessionId`, and archives exercises with no surviving logged sets. Gated behind confirm dialog. Detection logic extracted to `buildCleanupPlan` (pure function) with unit and RTL screen test coverage.
+
+*Updated 2026-06-25: with the per-lift roster (`liftAccessories`) gone, "in use" means "has surviving logged sets" — a never-logged library exercise is now an archive candidate (reversible).*
 
 ### Manual Week Override
 
-CYCLE section in Settings shows the current week (1–4) with skip-forward buttons. Clicking a future week marks all remaining sessions in skipped weeks as `skipped` (creating missing lift sessions as needed) and advances program state. Gated behind confirm dialog.
+CYCLE section in Settings shows the current week with skip-forward buttons (1–3 or 1–4, per the cycle-shape setting). Clicking a future week marks all remaining sessions in skipped weeks as `skipped` (creating missing lift sessions as needed) and advances program state. Gated behind confirm dialog.
 
 ### Screen Wake Lock
 
@@ -261,7 +385,7 @@ Stored in `settings.supplementalTemplate`; migrated from per-lift column on firs
 
 ### Estimated 1RM History Chart
 
-`TmChart` in the History By Lift view refactored to dual-series SVG with shared date-based X axis. TM plotted in accent colour; estimated 1RM (Epley: `weight × (1 + reps / 30)`) from each AMRAP set plotted in dashed warn colour. Legend shows each series only when it has 2+ data points.
+`TmChart` in the History By Lift view refactored to dual-series SVG with shared date-based X axis. TM plotted in accent colour; estimated 1RM from each AMRAP set plotted in dashed warn colour. Legend shows each series only when it has 2+ data points. (Restyled 2026-07-17; the e1RM series switched from Epley to Wathan on the same date.)
 
 ---
 
@@ -309,17 +433,8 @@ Add an informational section to the setup wizard explaining 5/3/1 basics before 
 **Key terms to define**
 - **Training Max (TM)** — the weight the program calculates sets from; typically 85–90% of true 1RM
 - **AMRAP (Plus sets)** — the final main set each week: lift as many reps as possible; performance drives joker sets and TM recommendations
-- **Cycle structure** — 4 weeks: week 1 (5s), week 2 (3s), week 3 (5/3/1), week 4 (deload); TM increments after each deload
-
----
-
-### TM Adjustment Recommendations
-
-After completing a cycle, recommend whether to increase, hold, or reduce the TM for each lift based on AMRAP performance — rather than applying a fixed increment.
-
-- If AMRAP reps are well above target (e.g. 10+ on week 3), suggest a larger jump
-- If AMRAP reps are at or below minimum (e.g. ≤ 1 on week 3), suggest holding or reducing
-- Surface as a prompt when deload week is completed
+- **Cycle structure** — week 1 (5s), week 2 (3s), week 3 (5/3/1), and optionally week 4 (deload);
+  TMs increment when the cycle closes. Reflect the user's actual cycle-shape setting, not a fixed 4.
 
 ---
 
@@ -335,12 +450,11 @@ If the user bumped up the weight on the top set (AMRAP set) relative to the plan
 
 ### Training Volume Insights
 
-Per-session and per-week totals:
+The STATS screen exists but only shows records and TM progression. Still missing, per-session and
+per-week:
 - Total tonnage (sum of weight × reps across all sets)
-- Set count by category (main / FSL / accessory)
+- Set count by category (main / supplemental / cross / accessory)
 - Weekly frequency — how many days trained
-
-Surface in History or a dedicated Stats tab.
 
 ---
 
@@ -370,15 +484,18 @@ A structured week inserted between Leader and Anchor cycles (or every 2–3 cycl
 
 ---
 
-### Assistance Category Tracking
+### Assistance Rep-Volume Targets
 
-Tag each accessory exercise as **Push**, **Pull**, or **Single Leg / Core**. Track rep totals per category per session and show progress toward the Wendler target of 25–100 reps from each bucket every workout.
+Category tagging and the three push / pull / legs+core slots shipped in 2026-06. What remains: sum
+logged reps per section per session and show progress toward Wendler's 25–100 reps from each bucket.
 
 ---
 
 ### Session Notes Indicator in History
 
-`sessions.notes` is stored and editable in HistoryEdit but invisible in the History list view. Surface a visual indicator (dot or truncated preview) on session rows that have notes, so users can find annotated sessions without expanding each one.
+Session and per-exercise notes render inside an expanded session detail, but a collapsed row gives no
+sign they exist. Surface an indicator (dot or truncated preview) on rows that have notes, so annotated
+sessions are findable without expanding each one.
 
 ---
 
@@ -407,18 +524,6 @@ toggle only affects display and input.
 
 ---
 
-### Per-Lift Bar Weight Override
-
-Some lifts use specialty bars (e.g., 35 lb safety squat bar, 55 lb trap bar, 20 lb women's bar
-for OHP). Today the bar weight is global. Add an optional `barWeight` override on each `Lift`
-record; if null, fall back to `settings.barWeight`.
-
-- Surface in Settings → LIFTS edit row
-- Plate math, warmup floor logic, and Stepper min already use a `barWeight` arg — wire the
-  per-lift value through `composeAllSets`, `calcWarmup`, and the AccessoryPicker
-
----
-
 ### Pre-Session Readiness Rating
 
 1–5 sleep / soreness / energy rating logged at the start of a workout. Stored on the session
@@ -439,17 +544,6 @@ History currently filters by lift or date toggle. Add:
 - Filter chips for status (completed / skipped) and week (1–4)
 
 URL-driven so filters survive reload and share via link.
-
----
-
-### Lift Order Customization
-
-`lifts.order` exists but the UI to reorder it doesn't. Add drag-reorder controls (or up / down
-buttons for mobile reliability) in Settings → LIFTS. Reorder applies everywhere lifts are
-listed (Today week status, Settings, History By Lift tabs).
-
-- Persisted via `db.lifts.update(id, { order: newOrder })`
-- Single transaction to avoid intermediate states where two lifts share an order
 
 ---
 
@@ -493,11 +587,28 @@ breakdowns, equipment changes, or rep-count uncertainty mid-session.
 
 ## Security
 
-*Threat model: static Cloudflare-Pages PWA, no server, no auth, client-authoritative. Primary
-risk is XSS → OPFS read/write; supply chain is the realistic active threat. CSP shipped in
-`index.html` and `public/_headers`; SQL identifier guard in `src/db/sqlite-table.ts`; import
-size cap in `src/lib/export-import.ts`; deploy workflow least-privilege + `pnpm audit
-signatures`. See "Security Hardening Pass (2026-05-22)" under Done for details.*
+*Threat model: static Cloudflare-Pages PWA, no server, no auth, client-authoritative. Primary risk is
+XSS → OPFS read/write; supply chain is the realistic active threat.*
+
+Shipped mitigations:
+
+- **CSP** — one identical policy string in three places: the `<meta>` in `index.html`, `public/_headers`
+  (production), and `preview.headers` in `vite.config.ts`. The other headers differ deliberately —
+  `_headers` also sets `X-Frame-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and a
+  stricter `Referrer-Policy`.
+- **SQL identifier guard** — `assertIdent` in `src/db/sqlite-table.ts`.
+- **Import** — `MAX_IMPORT_BYTES` checked before `file.text()`; `validateImportShape` rejects before the
+  destructive clear; per-table `COLS` allowlist strips unknown keys.
+- **Persisted store** — `PERSISTED_KEYS` allowlist plus per-key `PERSISTED_VALIDATORS`, behind a
+  `STORAGE_VERSION` gate that drops rather than throws.
+- **Route slugs** — `HistoryEdit`'s `:sessionId` coerced through `Number.isInteger(n) && n > 0`.
+- **Dev-only escape hatch** — `window.__e2eResetDb` is behind `import.meta.env.DEV`.
+- **Supply chain** — deploy workflow least-privilege (`contents: read`, `persist-credentials: false`),
+  `pnpm install --frozen-lockfile` + `pnpm audit signatures`, weekly Dependabot on npm and Actions.
+- **PWA cache** — `cleanupOutdatedCaches: true` with `registerType: 'prompt'` and
+  `skipWaiting`/`clientsClaim` false.
+
+See "Security Hardening Pass (2026-05-22)" and Round 2 under Done for the original rationale.
 
 No open items.
 
@@ -513,7 +624,19 @@ No open items.
 
 ## Tech Debt
 
-No open items.
+Small, known, none load-bearing. All verified against the tree on 2026-07-29.
+
+- **Dead Stryker exclusion** — `stryker.config.mjs` still negates `!src/lib/exportImport.ts`, a name
+  that stopped existing when the module was renamed to `export-import.ts`. The glob matches nothing, so
+  export-import *is* mutated (last report: 178 killed / 33 survived). Delete the entry.
+- **Stale `src/test-setup.ts` comments and dead branch** — `MockWorker` still implements a "calc worker"
+  RPC protocol with no live caller, and comments reference `fake-indexeddb` and TanStack Virtual, neither
+  of which is a dependency. Misleads anyone reading the file as evidence of live code.
+- **`scripts/migrate-history.py` emits a dropped table** — its roster section still writes
+  `liftAccessories` rows. The key is ignored on import (absent from `COLS` / `importSpec`), so it is
+  inert, but the section is dead.
+- **Epley named in Stats** — `src/screens/Stats.tsx` and `Stats.test.tsx` comments still say "Epley".
+  The assertions are correct (Wathan and Epley agree closely at 5 reps), only the naming is stale.
 
 ### Resolved 2026-05-21
 

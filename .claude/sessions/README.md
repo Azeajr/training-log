@@ -1,20 +1,13 @@
 # Session Files
 
-Track work progress across sessions.
+Optional working notes carried across sessions, at zero context cost.
 
-## Active Sessions
+## Usage
 
-Current session files go in `active/` directory.
-
-## Archive
-
-Completed sessions move to `archive/` directory.
+Active notes in `active/`, finished ones in `archive/`.
 
 ## Never Auto-Load
 
-Session files cost 0 tokens (never auto-loaded via .claudeignore).
-Available when explicitly requested.
+Excluded via `.claudeignore`, so these cost 0 tokens. Read only on explicit request.
 
----
-
-**Last Updated**: YYYY-MM-DD
+Currently empty; the convention is unused.
