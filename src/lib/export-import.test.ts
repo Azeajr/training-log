@@ -437,6 +437,129 @@ describe('exportCsv', () => {
 
 // ─── importFromRawData — optional keys & parseDates precision ────────────────
 
+// Every CSV cell is quoted, so a row is fully determined by its 11 values. The
+// placeholder cells (the empty ones that keep columns aligned across the three
+// row shapes) are the part nothing pinned — asserting whole rows covers them.
+const row = (...cells: string[]) => cells.map(c => `"${c}"`).join(',')
+
+describe('exportCsv — exact row shapes', () => {
+  const DATE = new Date(2026, 0, 6)
+  const ISO = '2026-01-06'
+
+  it('writes main set rows with both trailing accessory columns empty, and both is_amrap values', async () => {
+    const cycleId = await seedBase()
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 2, date: DATE, notes: 'felt strong', status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 2, weight: 175, reps: 3, isAmrap: false })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 185, reps: 6, isAmrap: true })
+
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    expect(lines[1]).toBe(
+      row(ISO, 'OHP', '2', 'main', '2', '175', '3', 'false', 'felt strong', '', ''),
+    )
+    expect(lines[2]).toBe(
+      row(ISO, 'OHP', '2', 'main', '3', '185', '6', 'true', 'felt strong', '', ''),
+    )
+  })
+
+  it('writes a no-work session row with every set and accessory column empty', async () => {
+    const cycleId = await seedBase()
+    await db.sessions.add({
+      cycleId, liftId: 1, week: 4, date: DATE, notes: 'deload, skipped', status: 'completed',
+    })
+
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    expect(lines[1]).toBe(
+      row(ISO, 'OHP', '4', '', '', '', '', '', 'deload, skipped', '', ''),
+    )
+  })
+
+  it('writes an accessory row with its note, and a note-only row with empty set columns', async () => {
+    const cycleId = await seedBase()
+    const logged = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const noteOnly = await db.exercises.add({ name: 'Plank', type: 'timed' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: DATE, notes: null, status: 'completed',
+    })
+    await db.accessorySets.add({
+      sessionId, exerciseId: logged, setNumber: 2, weight: 50, reps: 8, duration: null, distance: null,
+    })
+    await db.accessoryNotes.add({ sessionId, exerciseId: logged, notes: 'purple band' })
+    await db.accessoryNotes.add({ sessionId, exerciseId: noteOnly, notes: 'out of time' })
+
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    expect(lines).toContain(
+      row(ISO, 'OHP', '1', 'accessory', '2', '50', '8', 'false', '', 'Chinup', 'purple band'),
+    )
+    expect(lines).toContain(
+      row(ISO, 'OHP', '1', 'accessory', '', '', '', 'false', '', 'Plank', 'out of time'),
+    )
+  })
+
+  it('does not emit a second note-only row for an accessory that already logged sets', async () => {
+    const cycleId = await seedBase()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: DATE, notes: null, status: 'completed',
+    })
+    await db.accessorySets.add({
+      sessionId, exerciseId: exId, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null,
+    })
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'purple band' })
+
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    // Header + exactly one accessory row: the note rides on the set row, and the
+    // note-only pass must skip an exercise that already contributed one.
+    expect(lines).toHaveLength(2)
+    expect(lines.filter(l => l.includes('Chinup'))).toHaveLength(1)
+  })
+
+  it('scopes notes to their own session — another session\'s note never leaks in', async () => {
+    const cycleId = await seedBase()
+    const exId = await db.exercises.add({ name: 'Chinup', type: 'reps' })
+    const mine = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: DATE, notes: null, status: 'completed',
+    })
+    const theirs = await db.sessions.add({
+      cycleId, liftId: 1, week: 2, date: DATE, notes: null, status: 'completed',
+    })
+    await db.accessorySets.add({
+      sessionId: mine, exerciseId: exId, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null,
+    })
+    await db.accessoryNotes.add({ sessionId: theirs, exerciseId: exId, notes: 'belongs to week 2' })
+
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    const week1 = lines.filter(l => l.includes('"1"') && l.includes('Chinup'))
+    expect(week1).toHaveLength(1)
+    expect(week1[0]).toBe(
+      row(ISO, 'OHP', '1', 'accessory', '1', '50', '8', 'false', '', 'Chinup', ''),
+    )
+  })
+
+  it('downloads as text/csv under a dated history filename', async () => {
+    let anchor: { href: string; download: string } | null = null
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'a') {
+        anchor = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement & typeof anchor
+        return anchor as unknown as HTMLAnchorElement
+      }
+      return document.createElementNS('http://www.w3.org/1999/xhtml', tag) as HTMLElement
+    })
+
+    await seedBase()
+    await exportCsv(db)
+
+    expect(capturedBlob!.type).toBe('text/csv')
+    expect(anchor!.download).toMatch(/^training-log-history-\d{4}-\d{2}-\d{2}\.csv$/)
+  })
+})
+
 describe('importFromRawData — mutation precision', () => {
   it('handles completely absent optional keys without throwing (kills optional-chaining → true mutants)', async () => {
     // All keys except lifts omitted — with `d.trainingMaxes?.length → d.trainingMaxes.length`
@@ -632,6 +755,25 @@ describe('importFromRawData — malformed table payloads', () => {
 
   it('rejects non-object rows with a friendly error', async () => {
     await expect(importFromRawData(db, { sets: [null] })).rejects.toThrow(/"sets" contains a non-object entry/)
+  })
+
+  it('rejects primitive rows, not just null — a string or number is not a row', async () => {
+    // `null` alone is caught by the `row == null` arm; these exercise the
+    // `typeof row !== 'object'` arm on its own.
+    await expect(importFromRawData(db, { sets: ['abc'] })).rejects.toThrow(/"sets" contains a non-object entry/)
+    await expect(importFromRawData(db, { sets: [42] })).rejects.toThrow(/"sets" contains a non-object entry/)
+  })
+
+  it('accepts several id-less rows in one table without calling them duplicates', async () => {
+    // The dedup check skips rows with no id. Treating them as ids would collapse
+    // every id-less row onto one key and reject a legitimate payload.
+    await importFromRawData(db, {
+      exercises: [
+        { name: 'Chinup', type: 'reps' },
+        { name: 'Plank', type: 'timed' },
+      ],
+    })
+    expect((await db.exercises.toArray()).map(e => e.name).sort()).toEqual(['Chinup', 'Plank'])
   })
 })
 
