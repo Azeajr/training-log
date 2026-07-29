@@ -2,6 +2,43 @@
 
 ## Done
 
+### Mutation Testing Restored + First Post-pnpm Baseline (2026-07-29)
+
+`pnpm test:mutation` had been dead since the pnpm migration (2026-07-17), failing before it read any
+config: Stryker globs `@stryker-mutator/*` relative to its own package, and pnpm's isolated
+`node_modules` leaves only core/api/instrumenter/util there, so it loaded zero TestRunner plugins.
+Naming the plugins explicitly in `stryker.config.mjs` resolves them from the project root.
+
+**Baseline over `src/lib`** — 1530 mutants, 15 files, 9m20s: **91.50%** (1375 killed + 25 timeout
+detected, 128 survived, 2 no-coverage). Well clear of the `break: 40` gate and above the `high: 80`
+target. 100% on `audio-cues`, `cleanup`, `format`, `rest-timer-worker`.
+
+Then hardened the weakest module, `assistance.ts`: **78.10% → 97.14%** (+7 tests). The survivors were
+16 unasserted taxonomy constants — `ASSISTANCE_SECTIONS`, `SECTION_LABEL`, `EXERCISE_CATEGORIES`,
+`CATEGORY_LABEL`, where an emptied array collapses the slot list and a blanked string ships a
+headerless section — plus two real gaps: `accessoryRecencyRanks` was only tested walking worse→better
+rank (an unconditional overwrite passes that too), and no test covered an exercise losing its category
+entirely, which must *delete* its assistance default rather than move it.
+
+Three survivors remain and are **equivalent mutants** — documented, not chased:
+
+- `accessoryRecencyRanks`: `ri < cur` → `ri <= cur`. Differs only when `ri === cur`, and both then
+  store the same value.
+- `getAssistanceDefaults`: dropping `if (rows.length === 0) return {}`. SQLite accepts `IN ()` and
+  returns no rows, so the fall-through still yields `{}`. The guard is a fast path, not a correctness
+  gate.
+- `getAssistanceDefaultPicks`: dropping `if (entries.length === 0) return []`. `getLatestAccessoryTms`
+  carries its own empty-input guard.
+
+Next targets by survivor count: `export-import.ts` (52 survivors, 80.00% — 40% of all remaining
+survivors in one file, and down from 84.36% in June as the module grew), then `exercise.ts` (82.50%)
+and `plate-loading.ts` (80.00%).
+
+*Caveat for the next run: Stryker credited 18 of the constant mutants as `Timeout` rather than `Killed`,
+because screen tests hang waiting on a blanked label before the direct assertions run. Verified
+separately that the new `assistance.test.ts` assertions fail on those mutations in under a second, so
+the kills are real; the timeout label is a scheduling artifact.*
+
 ### Design System Consolidation (2026-06-30 → 2026-07-28)
 
 Visual pass across every screen, no behavior change. `SectionLabel` (the light eyebrow beside `Rule`)
