@@ -8,6 +8,8 @@ interface RecordRow {
   e1rm: number | null   // rounded best Wathan estimated 1RM; null when no AMRAP yet
   weight: number | null // the set that produced it
   reps: number | null
+  maxWeight: number | null     // heaviest weight actually lifted; measured, not estimated
+  maxWeightReps: number | null // reps completed at maxWeight
 }
 
 interface TmRow {
@@ -34,19 +36,41 @@ export default function Stats() {
     const recRows: RecordRow[] = []
     const tmRows: TmRow[] = []
     for (const l of lifts) {
-      // Best AMRAP by Epley e1RM — mirrors pr.ts: only completed AMRAP sets
-      // (isAmrap && reps >= 1) count, so a failed 0-rep set is never a record.
       const sessions = await db.sessions.where('liftId').equals(l.id!).toArray()
       const sessionIds = sessions.map(s => s.id!).filter(Boolean)
-      let record: RecordRow = { name: l.name, e1rm: null, weight: null, reps: null }
-      if (sessionIds.length > 0) {
-        const amraps = (await db.sets.where('sessionId').anyOf(sessionIds).toArray())
-          .filter(s => s.isAmrap && s.reps >= 1)
-        if (amraps.length > 0) {
-          const top = amraps.reduce((a, b) =>
-            estimated1RM(b.weight, b.reps) > estimated1RM(a.weight, a.reps) ? b : a)
-          record = { name: l.name, e1rm: Math.round(estimated1RM(top.weight, top.reps)), weight: top.weight, reps: top.reps }
-        }
+      const record: RecordRow = { name: l.name, e1rm: null, weight: null, reps: null, maxWeight: null, maxWeightReps: null }
+      const ownSets = sessionIds.length > 0
+        ? await db.sets.where('sessionId').anyOf(sessionIds).toArray()
+        : []
+
+      // Best AMRAP by Epley e1RM — mirrors pr.ts: only completed AMRAP sets
+      // (isAmrap && reps >= 1) count, so a failed 0-rep set is never a record.
+      // Cross sets are always isAmrap:false, so they can't leak in here.
+      const amraps = ownSets.filter(s => s.isAmrap && s.reps >= 1)
+      if (amraps.length > 0) {
+        const top = amraps.reduce((a, b) =>
+          estimated1RM(b.weight, b.reps) > estimated1RM(a.weight, a.reps) ? b : a)
+        record.e1rm = Math.round(estimated1RM(top.weight, top.reps))
+        record.weight = top.weight
+        record.reps = top.reps
+      }
+
+      // Heaviest weight actually lifted — measured, never estimated. Warmups and
+      // failed (0-rep) sets don't count. Cross sets belong to the movement lift
+      // they train, not the session's lift, so they're attributed by their own
+      // liftId: this lift's sessions contribute their non-cross work, and cross
+      // blocks tagged with this lift count even though they live in another
+      // lift's session. Ties on weight keep the set with more reps.
+      const crossSets = await db.sets.where('liftId').equals(l.id!).toArray()
+      const working = [
+        ...ownSets.filter(s => s.type !== 'warmup' && s.type !== 'cross'),
+        ...crossSets.filter(s => s.type === 'cross'),
+      ].filter(s => s.reps >= 1)
+      if (working.length > 0) {
+        const top = working.reduce((a, b) =>
+          b.weight > a.weight || (b.weight === a.weight && b.reps > a.reps) ? b : a)
+        record.maxWeight = top.weight
+        record.maxWeightReps = top.reps
       }
       recRows.push(record)
 
@@ -72,16 +96,27 @@ export default function Stats() {
         <div class="space-y-3 mb-10">
           <For each={records()}>
             {r => (
-              <div class="flex items-baseline gap-4">
-                <span class="flex-1 truncate text-text uppercase tracking-wider">{r.name}</span>
-                <Show
-                  when={r.e1rm !== null}
-                  fallback={<span class="text-faint text-xs tracking-widest">NO AMRAP YET</span>}
-                >
-                  <span class="text-accent text-2xl">
-                    {r.e1rm}<span class="text-xs text-muted ml-1 tracking-widest">LB e1RM</span>
-                  </span>
-                  <span class="text-muted text-sm w-20 text-right">{r.weight}×{r.reps}</span>
+              <div>
+                <div class="flex items-baseline gap-4">
+                  <span class="flex-1 truncate text-text uppercase tracking-wider">{r.name}</span>
+                  <Show
+                    when={r.e1rm !== null}
+                    fallback={<span class="text-faint text-xs tracking-widest">NO AMRAP YET</span>}
+                  >
+                    <span class="text-accent text-2xl">
+                      {r.e1rm}<span class="text-xs text-muted ml-1 tracking-widest">LB e1RM</span>
+                    </span>
+                    <span class="text-muted text-sm w-20 text-right">{r.weight}×{r.reps}</span>
+                  </Show>
+                </div>
+                <Show when={r.maxWeight !== null}>
+                  <div class="flex items-baseline gap-4 pl-2">
+                    <span class="flex-1 text-faint text-xs tracking-widest">ACTUAL MAX</span>
+                    <span class="text-text text-sm">
+                      {r.maxWeight}<span class="text-xs text-muted ml-1 tracking-widest">LB</span>
+                    </span>
+                    <span class="text-muted text-sm w-20 text-right">×{r.maxWeightReps}</span>
+                  </div>
                 </Show>
               </div>
             )}

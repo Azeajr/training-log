@@ -1,6 +1,6 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../db/index'
-import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode } from '../types/domain'
+import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode, DeloadSupplemental } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { clearSession } from '../store/workout-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
@@ -12,7 +12,7 @@ import { updateLift, archiveLift, unarchiveLift, moveLift, liftsCrossReferencing
 import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
-import { calcMainSets, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
+import { calcMainSets, cycleFinalWeek, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
 import LiftSetupModal, { type DraftLiftFields } from '../components/modals/LiftSetupModal'
@@ -46,6 +46,10 @@ export default function Settings() {
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
 
   const [importError, setImportError] = createSignal<string | null>(null)
+
+  // The cycle's terminal week. The shape setting always describes the cycle you
+  // are standing in, so this is read live rather than stamped per cycle.
+  const finalWeek = () => cycleFinalWeek(settings.hasDeloadWeek)
 
   const activeLifts = () => lifts().filter(l => !l.archived)
   const archivedLifts = () => lifts().filter(l => l.archived)
@@ -95,8 +99,8 @@ export default function Settings() {
       // (issue #52) and ignores skip/reopen actions that move the mark.
       const cycleSessions = await db.sessions.where('cycleId').equals(latestCycle.id).toArray()
       const activeIds = allLifts.filter(l => !l.archived).map(l => l.id!)
-      const closed = await syncClosedThroughWeek(db, latestCycle.id, cycleSessions, activeIds, latestCycle.closedThroughWeek ?? 0)
-      setCurrentCycleWeek(Math.min(4, closed + 1) as 1 | 2 | 3 | 4)
+      const closed = await syncClosedThroughWeek(db, latestCycle.id, cycleSessions, activeIds, latestCycle.closedThroughWeek ?? 0, finalWeek())
+      setCurrentCycleWeek(Math.min(finalWeek(), closed + 1) as 1 | 2 | 3 | 4)
       setCurrentCycleId(latestCycle.id)
     }
   }
@@ -327,11 +331,11 @@ export default function Settings() {
     const week = currentCycleWeek()
     const cycleId = currentCycleId()
     if (!week || !cycleId) return
-    if (!await confirm('Skip deload week? Remaining sessions will be marked skipped and TMs will progress.', { destructive: true, confirmLabel: 'SKIP DELOAD' })) return
+    if (!await confirm('End the cycle now? Remaining sessions will be marked skipped and TMs will progress.', { destructive: true, confirmLabel: 'END CYCLE' })) return
 
     const allLifts = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived)
     await db.transaction(async () => {
-      for (let w = week; w <= 4; w++) {
+      for (let w = week; w <= finalWeek(); w++) {
         const wk = w as 1 | 2 | 3 | 4
         const weekSessions = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === wk).toArray()
         for (const lift of allLifts) {
@@ -357,11 +361,47 @@ export default function Settings() {
     }
   }
 
+  // The shape setting describes the cycle you are standing in, so changing it
+  // re-evaluates the current cycle right away rather than waiting for the next
+  // workout to notice. Shrinking past the week you are on (4-week → 3-week
+  // during the deload) completes the cycle now: deload days already logged stay
+  // as week-4 history, anything still pending is retired as skipped, and TMs
+  // progress. Growing (3-week → 4-week) needs no reconcile — the new final week
+  // simply opens and its sessions are created on demand.
+  const handleCycleShapeChange = async (
+    updates: { hasDeloadWeek: boolean; deloadSupplemental?: DeloadSupplemental },
+  ) => {
+    await updateSettings(updates)
+    const cycleId = currentCycleId()
+    if (!cycleId) { await load(); return }
+
+    const next = cycleFinalWeek(updates.hasDeloadWeek)
+    const cycle = await db.cycles.get(cycleId)
+    const sessions = await db.sessions.where('cycleId').equals(cycleId).toArray()
+    const activeIds = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived).map(l => l.id!)
+    const closed = await syncClosedThroughWeek(db, cycleId, sessions, activeIds, cycle?.closedThroughWeek ?? 0, next)
+    if (closed < next) { await load(); return }
+
+    // Weeks past the new final week no longer exist in this cycle.
+    await db.transaction(async () => {
+      for (const s of sessions) {
+        if (s.week > next && s.status === 'pending') await db.sessions.update(s.id!, { status: 'skipped' })
+      }
+    })
+
+    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db)
+    if (advanced) {
+      setCycleCompleteData({ newTms, doublingCandidates })
+    } else {
+      await load()
+    }
+  }
+
   const handleDeload = async () => {
-    if (!await confirm('Drop all TMs by 10%?', { destructive: true, confirmLabel: 'DELOAD' })) return
+    if (!await confirm('Drop all TMs by 10%?', { destructive: true, confirmLabel: 'CUT TMS' })) return
     await deloadTms(db)
     await load()
-    showToast('TMs deloaded −10%')
+    showToast('All TMs cut −10%')
   }
 
   const handleFileSelected = (e: Event & { currentTarget: HTMLInputElement }) => {
@@ -539,7 +579,7 @@ export default function Settings() {
             onClick={() => void handleDeload()}
             class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
           >
-            DELOAD ALL  −10%
+            CUT ALL TMS  −10%
           </button>
         </div>
       </div>
@@ -557,40 +597,41 @@ export default function Settings() {
           )}</For>
         </div>
 
-        <SectionLabel class="mt-3 mb-1">Deload week</SectionLabel>
-        <div class="flex gap-1 flex-wrap">
-          <For each={([[true, '4-WEEK'], [false, '3-WEEK']] as const)}>{([on, label]) => (
+        {/* Cycle shape — one list instead of two dependent controls. The old UI
+            hid the supplemental modes until the deload week was toggled on, so
+            their existence was undiscoverable; flattening makes the whole option
+            space visible at once. Selecting 3-WEEK deliberately leaves
+            deloadSupplemental untouched, so switching back restores the prior
+            choice. Both settings fields stay separate in the DB — only the
+            control is merged. */}
+        <SectionLabel class="mt-3 mb-1">Cycle shape</SectionLabel>
+        <div class="flex flex-col gap-1">
+          <ToggleChip
+            class="w-full text-left"
+            active={!settings.hasDeloadWeek}
+            onClick={() => void handleCycleShapeChange({ hasDeloadWeek: false })}
+          >
+            3-WEEK · NO DELOAD WEEK
+          </ToggleChip>
+          <For each={([
+            ['skip',   '4-WEEK · DELOAD, NO SUPPLEMENTAL'],
+            ['deload', '4-WEEK · DELOAD, SUPPLEMENTAL AT DELOAD %'],
+            ['normal', '4-WEEK · DELOAD, SUPPLEMENTAL AT NORMAL %'],
+          ] as const)}>{([m, label]) => (
             <ToggleChip
-              active={settings.hasDeloadWeek === on}
-              onClick={() => void updateSettings({ hasDeloadWeek: on })}
+              class="w-full text-left"
+              active={settings.hasDeloadWeek && (settings.deloadSupplemental ?? 'normal') === m}
+              onClick={() => void handleCycleShapeChange({ hasDeloadWeek: true, deloadSupplemental: m })}
             >
               {label}
             </ToggleChip>
           )}</For>
         </div>
-        <Show
-          when={settings.hasDeloadWeek}
-          fallback={
-            <p class="text-faint text-xs mt-1">
-              3-week cycle: TMs progress after week 3 — no deload week.
-            </p>
-          }
-        >
-          <SectionLabel class="mt-3 mb-1">Deload supplemental</SectionLabel>
-          <div class="flex gap-1 flex-wrap">
-            <For each={([['skip', 'SKIP IT'], ['deload', 'DELOAD %'], ['normal', 'NORMAL']] as const)}>{([m, label]) => (
-              <ToggleChip
-                active={(settings.deloadSupplemental ?? 'normal') === m}
-                onClick={() => void updateSettings({ deloadSupplemental: m })}
-              >
-                {label}
-              </ToggleChip>
-            )}</For>
-          </div>
-          <p class="text-faint text-xs mt-1">
-            Supplemental + cross-lift work on the week-4 deload: skip it, run it at deload %, or at normal (~65%) weights.
-          </p>
-        </Show>
+        <p class="text-faint text-xs mt-1">
+          3-week: TMs progress after week 3. 4-week: week 4 is a light deload, and
+          the mode sets what supplemental + cross-lift work does that week — skip it,
+          run it at deload %, or at normal (~65%) weights.
+        </p>
       </div>
 
       <Show when={currentCycleWeek() !== null}>
@@ -599,7 +640,7 @@ export default function Settings() {
           <div class="flex items-center gap-4 py-1">
             <span class="text-muted text-xs uppercase tracking-widest w-20">Week</span>
             <div class="flex gap-2">
-              <For each={(settings.hasDeloadWeek ? [1, 2, 3, 4] : [1, 2, 3]) as Array<1 | 2 | 3 | 4>}>{(w) => (
+              <For each={(finalWeek() === 4 ? [1, 2, 3, 4] : [1, 2, 3]) as Array<1 | 2 | 3 | 4>}>{(w) => (
                 <button
                   aria-label={`Week ${w}`}
                   onClick={() => {
@@ -621,14 +662,14 @@ export default function Settings() {
               )}</For>
             </div>
           </div>
-          <Show when={currentCycleWeek() === 4}>
+          <Show when={currentCycleWeek() === finalWeek()}>
             <div class="flex items-center gap-4 py-1">
               <span class="w-20" />
               <button
                 onClick={() => void handleSkipDeload()}
                 class="border border-border text-muted text-xs tracking-widest px-3 py-1.5 hover:border-danger hover:text-danger"
               >
-                SKIP DELOAD
+                END CYCLE NOW · TMS PROGRESS
               </button>
             </div>
           </Show>

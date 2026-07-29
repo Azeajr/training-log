@@ -57,6 +57,53 @@ describe('Stats screen', () => {
     await waitFor(() => expect(document.body.textContent).toContain('NO AMRAP YET'))
   })
 
+  it('shows the heaviest actual set and its reps, not an estimate', async () => {
+    const t0 = new Date()
+    const cycleId = await db.cycles.add({ number: 1, startDate: t0, endDate: null })
+    const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 3, date: t0, notes: null, status: 'completed' })
+    await db.sets.add({ sessionId, type: 'warmup', setNumber: 1, weight: 500, reps: 5, isAmrap: false })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 200, reps: 5, isAmrap: true })
+    await db.sets.add({ sessionId, type: 'joker', setNumber: 1, weight: 225, reps: 2, isAmrap: false })
+
+    render(() => <Stats />)
+    // Joker 225x2 is the heaviest real work; the 500 warmup must not win.
+    await waitFor(() => expect(document.body.textContent).toContain('ACTUAL MAX'))
+    expect(document.body.textContent).toContain('225')
+    expect(document.body.textContent).not.toContain('500')
+  })
+
+  it('does not count a failed 0-rep set as the actual max', async () => {
+    const t0 = new Date()
+    const cycleId = await db.cycles.add({ number: 1, startDate: t0, endDate: null })
+    const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 3, date: t0, notes: null, status: 'completed' })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 185, reps: 5, isAmrap: false })
+    await db.sets.add({ sessionId, type: 'joker', setNumber: 1, weight: 405, reps: 0, isAmrap: false })
+
+    render(() => <Stats />)
+    await waitFor(() => expect(document.body.textContent).toContain('ACTUAL MAX'))
+    expect(document.body.textContent).toContain('185')
+    expect(document.body.textContent).not.toContain('405')
+  })
+
+  it('attributes a cross set to the movement lift, not the session lift', async () => {
+    const t0 = new Date()
+    const cycleId = await db.cycles.add({ number: 1, startDate: t0, endDate: null })
+    // An OHP session carrying a Squat cross block at 315.
+    const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 1, date: t0, notes: null, status: 'completed' })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+    await db.sets.add({ sessionId, type: 'cross', setNumber: 1, weight: 315, reps: 3, isAmrap: false, liftId: 2 })
+
+    render(() => <Stats />)
+    await waitFor(() => expect(document.body.textContent).toContain('ACTUAL MAX'))
+    // Squat (lift 2) owns the 315; OHP (lift 1) tops out at its own 100.
+    const rows = document.body.textContent!
+    expect(rows).toContain('315')
+    expect(rows).toContain('100')
+    const ohpIdx = rows.indexOf('OHP')
+    const squatIdx = rows.indexOf('Squat')
+    expect(rows.slice(ohpIdx, squatIdx)).not.toContain('315')
+  })
+
   it('renders the TM progression chain and the delta from first to current', async () => {
     const base = Date.now()
     await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date(base) })
