@@ -4,12 +4,40 @@ import {
   sectionForCategory, groupByAssistanceSection, accessoryRecencyRanks,
   getAssistanceDefaults, setAssistanceDefault, getAssistanceDefaultPicks,
   syncAssistanceDefaultsForCategory,
+  ASSISTANCE_SECTIONS, SECTION_LABEL, EXERCISE_CATEGORIES, CATEGORY_LABEL,
 } from './assistance'
 import { db } from '../db/index'
 import { __resetForTest } from '../db/sqlite-client'
 
 const ex = (name: string, category?: Exercise['category']): { exercise: Exercise } => ({
   exercise: { name, type: 'reps', category },
+})
+
+// The taxonomy tables drive slot order and every on-screen label, so their exact
+// contents are behaviour: an emptied array collapses the slot list and a blank
+// label ships a headerless section.
+describe('assistance taxonomy', () => {
+  it('exposes the three sections in slot order', () => {
+    expect(ASSISTANCE_SECTIONS).toEqual(['push', 'pull', 'legs_core'])
+  })
+
+  it('labels every section', () => {
+    expect(SECTION_LABEL).toEqual({ push: 'PUSH', pull: 'PULL', legs_core: 'LEGS / CORE' })
+  })
+
+  it('exposes the four taggable categories', () => {
+    expect(EXERCISE_CATEGORIES).toEqual(['push', 'pull', 'legs', 'core'])
+  })
+
+  it('labels every category', () => {
+    expect(CATEGORY_LABEL).toEqual({ push: 'Push', pull: 'Pull', legs: 'Legs', core: 'Core' })
+  })
+
+  it('maps every category onto a real section — four categories, three slots', () => {
+    const sections = EXERCISE_CATEGORIES.map(c => sectionForCategory(c))
+    expect(sections).toEqual(['push', 'pull', 'legs_core', 'legs_core'])
+    expect(new Set(sections)).toEqual(new Set(ASSISTANCE_SECTIONS))
+  })
 })
 
 describe('sectionForCategory', () => {
@@ -61,6 +89,17 @@ describe('accessoryRecencyRanks', () => {
     ])
     expect(ranks.get(2)).toBe(0)
     expect(ranks.get(1)).toBe(1)
+  })
+
+  it('keeps the best rank when a worse one appears later in the set list', () => {
+    // Order matters: the newest session is seen FIRST here, so the guard has to
+    // reject the later, worse rank. (The case above walks worse→better, which an
+    // unconditional overwrite would also get right.)
+    const ranks = accessoryRecencyRanks(sessions, [
+      { sessionId: 30, exerciseId: 1 }, // newest → rank 0
+      { sessionId: 10, exerciseId: 1 }, // oldest → rank 2, must not replace 0
+    ])
+    expect(ranks.get(1)).toBe(0)
   })
 
   it('omits exercises never logged for the lift', () => {
@@ -208,6 +247,17 @@ describe('assistance defaults (db-backed)', () => {
       expect(defaults.push).toBeUndefined()
       expect(defaults.pull).toEqual({ exerciseId: chin, name: 'Chinups' })
       expect(await db.assistanceDefaults.where('exerciseId').equals(dips).toArray()).toHaveLength(0)
+    })
+
+    it('drops the default when the exercise loses its category entirely', async () => {
+      const dips = await addExercise('Dips', 'push')
+      await setAssistanceDefault(db, LIFT, 'push', dips)
+
+      // No category → no target section → the default has nowhere to live.
+      await syncAssistanceDefaultsForCategory(db, dips, undefined)
+
+      expect(await db.assistanceDefaults.where('exerciseId').equals(dips).toArray()).toEqual([])
+      expect(await getAssistanceDefaults(db, LIFT)).toEqual({})
     })
 
     it('only touches the re-tagged exercise, across all lifts that defaulted it', async () => {
