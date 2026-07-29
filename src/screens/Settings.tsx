@@ -611,12 +611,14 @@ export default function Settings() {
             active={!settings.hasDeloadWeek}
             onClick={() => void handleCycleShapeChange({ hasDeloadWeek: false })}
           >
-            3-WEEK · NO DELOAD WEEK
+            3-WEEK · NO DELOAD
           </ToggleChip>
+          {/* Labels stay short enough for one line on a ~360px phone; the
+              enclosing SUPPLEMENTAL rule already supplies that noun. */}
           <For each={([
-            ['skip',   '4-WEEK · DELOAD, NO SUPPLEMENTAL'],
-            ['deload', '4-WEEK · DELOAD, SUPPLEMENTAL AT DELOAD %'],
-            ['normal', '4-WEEK · DELOAD, SUPPLEMENTAL AT NORMAL %'],
+            ['skip',   '4-WEEK · SUPP OFF'],
+            ['deload', '4-WEEK · SUPP AT DELOAD %'],
+            ['normal', '4-WEEK · SUPP AT NORMAL %'],
           ] as const)}>{([m, label]) => (
             <ToggleChip
               class="w-full text-left"
@@ -663,14 +665,19 @@ export default function Settings() {
             </div>
           </div>
           <Show when={currentCycleWeek() === finalWeek()}>
-            <div class="flex items-center gap-4 py-1">
-              <span class="w-20" />
-              <button
-                onClick={() => void handleSkipDeload()}
-                class="border border-border text-muted text-xs tracking-widest px-3 py-1.5 hover:border-danger hover:text-danger"
-              >
-                END CYCLE NOW · TMS PROGRESS
-              </button>
+            <div class="flex items-start gap-4 py-1">
+              <span class="w-20 shrink-0" />
+              <div>
+                <button
+                  onClick={() => void handleSkipDeload()}
+                  class="border border-border text-muted text-xs tracking-widest px-3 py-1.5 hover:border-danger hover:text-danger"
+                >
+                  END CYCLE NOW
+                </button>
+                <p class="text-faint text-xs mt-1">
+                  Skips what's left of the week; TMs progress.
+                </p>
+              </div>
             </div>
           </Show>
         </div>

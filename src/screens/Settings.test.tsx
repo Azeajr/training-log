@@ -1337,16 +1337,16 @@ describe('Settings — CYCLE SHAPE', () => {
 
   it('shows all four cycle shapes at once, without needing a toggle first', async () => {
     renderSettings()
-    await screen.findByText(/3-WEEK · NO DELOAD WEEK/)
+    await screen.findByText(/3-WEEK · NO DELOAD/)
     // The supplemental modes used to be hidden until the deload week was on.
-    screen.getByText(/4-WEEK · DELOAD, NO SUPPLEMENTAL/)
-    screen.getByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT DELOAD %/)
-    screen.getByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT NORMAL %/)
+    screen.getByText(/4-WEEK · SUPP OFF/)
+    screen.getByText(/4-WEEK · SUPP AT DELOAD %/)
+    screen.getByText(/4-WEEK · SUPP AT NORMAL %/)
   })
 
   it('picking a 4-week shape writes both the deload week and the supplemental mode', async () => {
     renderSettings()
-    fireEvent.click(await screen.findByText(/4-WEEK · DELOAD, NO SUPPLEMENTAL/))
+    fireEvent.click(await screen.findByText(/4-WEEK · SUPP OFF/))
 
     await waitFor(async () => {
       const row = await db.settings.toCollection().first()
@@ -1357,12 +1357,12 @@ describe('Settings — CYCLE SHAPE', () => {
 
   it('switching to 3-week preserves the supplemental mode for switching back', async () => {
     renderSettings()
-    fireEvent.click(await screen.findByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT DELOAD %/))
+    fireEvent.click(await screen.findByText(/4-WEEK · SUPP AT DELOAD %/))
     await waitFor(async () => {
       expect((await db.settings.toCollection().first())?.deloadSupplemental).toBe('deload')
     })
 
-    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD WEEK/))
+    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD/))
     await waitFor(async () => {
       const row = await db.settings.toCollection().first()
       expect(row?.hasDeloadWeek).toBe(false)
@@ -1407,7 +1407,7 @@ describe('Settings — cycle shape reconcile', () => {
     renderSettings()
     await screen.findByText(/END CYCLE NOW/) // on week 4
 
-    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD WEEK/))
+    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD/))
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
     expect(await db.cycles.count()).toBe(2)
@@ -1422,7 +1422,7 @@ describe('Settings — cycle shape reconcile', () => {
 
     renderSettings()
     await screen.findByText(/END CYCLE NOW/)
-    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD WEEK/))
+    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD/))
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
     const week4 = await db.sessions.filter(s => s.week === 4).toArray()
@@ -1441,8 +1441,8 @@ describe('Settings — cycle shape reconcile', () => {
     }
 
     renderSettings()
-    await screen.findByText(/3-WEEK · NO DELOAD WEEK/)
-    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD WEEK/))
+    await screen.findByText(/3-WEEK · NO DELOAD/)
+    fireEvent.click(screen.getByText(/3-WEEK · NO DELOAD/))
 
     await waitFor(async () => expect(await db.cycles.count()).toBe(1)) // no rollover
     expect(document.body.textContent).not.toContain('CYCLE COMPLETE')
@@ -1458,10 +1458,10 @@ describe('Settings — cycle shape reconcile', () => {
 
     renderSettings()
     // 3-week cycle finished through its final week; no week 4 offered yet.
-    await screen.findByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT NORMAL %/)
+    await screen.findByText(/4-WEEK · SUPP AT NORMAL %/)
     expect(screen.queryByLabelText('Week 4')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByText(/4-WEEK · DELOAD, SUPPLEMENTAL AT NORMAL %/))
+    fireEvent.click(screen.getByText(/4-WEEK · SUPP AT NORMAL %/))
 
     // Cycle extends in place — week 4 appears, nothing rolls over.
     await waitFor(() => expect(screen.queryByLabelText('Week 4')).toBeInTheDocument())
