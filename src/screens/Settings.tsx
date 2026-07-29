@@ -611,21 +611,23 @@ export default function Settings() {
             active={!settings.hasDeloadWeek}
             onClick={() => void handleCycleShapeChange({ hasDeloadWeek: false })}
           >
-            3-WEEK · NO DELOAD
+            3-WEEK · NO DELOAD WEEK
           </ToggleChip>
-          {/* Labels stay short enough for one line on a ~360px phone; the
-              enclosing SUPPLEMENTAL rule already supplies that noun. */}
+          {/* Two-tier row: cycle shape on top, what supplemental does on the
+              deload underneath on its own line. Both lines fit unwrapped at
+              360px — verified in a phone viewport, not assumed. */}
           <For each={([
-            ['skip',   '4-WEEK · SUPP OFF'],
-            ['deload', '4-WEEK · SUPP AT DELOAD %'],
-            ['normal', '4-WEEK · SUPP AT NORMAL %'],
-          ] as const)}>{([m, label]) => (
+            ['skip',   'NO SUPPLEMENTAL'],
+            ['deload', 'SUPPLEMENTAL AT DELOAD %'],
+            ['normal', 'SUPPLEMENTAL AT NORMAL %'],
+          ] as const)}>{([m, detail]) => (
             <ToggleChip
               class="w-full text-left"
               active={settings.hasDeloadWeek && (settings.deloadSupplemental ?? 'normal') === m}
               onClick={() => void handleCycleShapeChange({ hasDeloadWeek: true, deloadSupplemental: m })}
             >
-              {label}
+              <span class="block">4-WEEK · DELOAD</span>
+              <span class="block">{detail}</span>
             </ToggleChip>
           )}</For>
         </div>
