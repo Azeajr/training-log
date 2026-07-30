@@ -514,7 +514,7 @@ describe('History — calendar', () => {
 
     // Verify the cell for today contains both the day number and a session count of 1.
     await waitFor(() => {
-      const cell = screen.queryByLabelText(todayMidday.toDateString())
+      const cell = screen.queryByLabelText(`${todayMidday.toDateString()}, 1 session`)
       const compact = (cell?.textContent ?? '').replace(/\s+/g, '')
       expect(compact).toBe(`${today.getDate()}1`)
     })
@@ -535,7 +535,7 @@ describe('History — calendar', () => {
 
     // Wait for the count badge to render before clicking — guards against an empty
     // monthSessions racing with the click handler.
-    const cellLabel = todayMidday.toDateString()
+    const cellLabel = `${todayMidday.toDateString()}, 1 session`
     await waitFor(() => {
       const cell = screen.queryByLabelText(cellLabel)
       const compact = (cell?.textContent ?? '').replace(/\s+/g, '')
@@ -562,7 +562,7 @@ describe('History — calendar', () => {
     renderHistory()
     fireEvent.click(screen.getByText('Calendar'))
 
-    const cellLabel = todayMidday.toDateString()
+    const cellLabel = `${todayMidday.toDateString()}, 1 session`
     await waitFor(() => {
       const cell = screen.queryByLabelText(cellLabel)
       const compact = (cell?.textContent ?? '').replace(/\s+/g, '')
@@ -598,7 +598,7 @@ describe('History — calendar', () => {
     fireEvent.click(screen.getByText('Calendar'))
 
     await waitFor(() => {
-      const cell = screen.queryByLabelText(todayMidday.toDateString())
+      const cell = screen.queryByLabelText(`${todayMidday.toDateString()}, 2 sessions`)
       expect(cell).not.toBeNull()
       expect(cell!.className).toContain('bg-accent/25')
       const compact = (cell!.textContent ?? '').replace(/\s+/g, '')
@@ -621,7 +621,7 @@ describe('History — calendar', () => {
     fireEvent.click(screen.getByText('Calendar'))
 
     await waitFor(() => {
-      const cell = screen.queryByLabelText(todayMidday.toDateString())
+      const cell = screen.queryByLabelText(`${todayMidday.toDateString()}, 3 sessions`)
       expect(cell).not.toBeNull()
       expect(cell!.className).toContain('bg-accent')
       expect(cell!.className).not.toContain('bg-accent/')

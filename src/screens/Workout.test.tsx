@@ -8,6 +8,7 @@ import {
 } from '../store/workout-store'
 import { loadSettings, updateSettings } from '../store/settings-store'
 import { toast } from '../store/toast-store'
+import { gaps, resetSaveFailures } from '../store/save-failure-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import type { Session } from '../types/domain'
@@ -581,6 +582,88 @@ describe('Workout screen — rest types', () => {
 
 // ─── undo last set ────────────────────────────────────────────────────────────
 
+// ─── collapsing finished sections ─────────────────────────────────────────────
+
+describe('Workout screen — finished sections fold away', () => {
+  beforeEach(async () => {
+    clearSession()
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(),
+      db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+      db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
+    ])
+    mockNavigate.mockClear()
+    await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await db.cycles.add({ id: 1, number: 1, startDate: new Date(), endDate: null })
+    await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
+    await db.sessions.add(BENCH)
+  })
+
+  afterEach(async () => {
+    clearSession()
+    await drain()
+  })
+
+  const sectionToggle = (label: string) =>
+    screen.queryAllByRole('button').find(b => b.textContent?.startsWith(label))
+
+  it('leaves an in-progress section open with no toggle', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText('LOG')
+    expect(sectionToggle('WARM UP')).toBeUndefined()
+  })
+
+  it('collapses warm up once the cursor moves past it', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await logNSets(3)
+
+    await waitFor(() => expect(sectionToggle('WARM UP')).toBeDefined())
+    expect(sectionToggle('WARM UP')).toHaveAttribute('aria-expanded', 'false')
+    // MAIN still holds the cursor, so it stays open and untoggleable.
+    expect(sectionToggle('MAIN')).toBeUndefined()
+  })
+
+  // The invariant the whole design rests on: a section can only fold once the
+  // cursor has left it, so the row the scroll-to-active effect tracks is never
+  // inside a collapsed panel.
+  it('never hides the active set row', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await logNSets(3)
+
+    await waitFor(() => expect(sectionToggle('WARM UP')).toBeDefined())
+    const active = screen.getAllByTestId('active-weight')[0]
+    expect(active.closest('[hidden]')).toBeNull()
+  })
+
+  it('reopens warm up when an undo walks the cursor back into it', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await logNSets(3)
+    await waitFor(() => expect(sectionToggle('WARM UP')).toBeDefined())
+
+    fireEvent.click(screen.getByText('undo'))
+    await screen.findByText('undo set?')
+    fireEvent.click(screen.getByText('yes'))
+
+    await waitFor(() => expect(workout.currentSetIndex).toBe(2))
+    await waitFor(() => expect(sectionToggle('WARM UP')).toBeUndefined())
+  })
+
+  it('can be reopened by hand without disturbing the cursor', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await logNSets(3)
+    await waitFor(() => expect(sectionToggle('WARM UP')).toBeDefined())
+
+    fireEvent.click(sectionToggle('WARM UP')!)
+    expect(sectionToggle('WARM UP')).toHaveAttribute('aria-expanded', 'true')
+    expect(workout.currentSetIndex).toBe(3)
+  })
+})
+
 describe('Workout screen — undo last set', () => {
   beforeEach(async () => {
     clearSession()
@@ -650,7 +733,7 @@ describe('Workout screen — joker sets', () => {
 
     await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      expect(btns.some(b => b.textContent?.includes('JOKER SET'))).toBe(true)
+      expect(btns.some(b => b.textContent?.includes('+ JOKER SET'))).toBe(true)
     })
   })
 
@@ -709,7 +792,7 @@ describe('Workout screen — joker sets', () => {
 
     const jokerBtn = await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      const btn = btns.find(b => b.textContent?.includes('+ JOKER SET'))
       expect(btn).toBeTruthy()
       return btn!
     })
@@ -745,7 +828,7 @@ describe('Workout screen — joker sets', () => {
 
     const jokerBtn = await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      const btn = btns.find(b => b.textContent?.includes('+ JOKER SET'))
       expect(btn).toBeTruthy()
       return btn!
     })
@@ -776,7 +859,7 @@ describe('Workout screen — joker sets', () => {
     // Add joker 1 and log it
     const jokerBtn1 = await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      const btn = btns.find(b => b.textContent?.includes('+ JOKER SET'))
       expect(btn).toBeTruthy()
       return btn!
     })
@@ -787,7 +870,7 @@ describe('Workout screen — joker sets', () => {
     // Add joker 2 and log it
     const jokerBtn2 = await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      const btn = btns.find(b => b.textContent?.includes('+ JOKER SET'))
       expect(btn).toBeTruthy()
       return btn!
     })
@@ -828,7 +911,7 @@ describe('Workout screen — joker sets', () => {
 
     const jokerBtn = await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      const btn = btns.find(b => b.textContent?.includes('+ JOKER SET'))
       expect(btn).toBeTruthy()
       return btn!
     })
@@ -856,7 +939,7 @@ describe('Workout screen — joker sets', () => {
 
     const jokerBtn = await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      const btn = btns.find(b => b.textContent?.includes('+ JOKER SET'))
       expect(btn).toBeTruthy()
       return btn!
     })
@@ -883,7 +966,7 @@ describe('Workout screen — joker sets', () => {
     // Add joker 1 and log it at the prescribed 180
     const jokerBtn1 = await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      const btn = btns.find(b => b.textContent?.includes('+ JOKER SET'))
       expect(btn).toBeTruthy()
       return btn!
     })
@@ -894,7 +977,7 @@ describe('Workout screen — joker sets', () => {
     // Add joker 2, leave it pending (180 × 1.05 → 190)
     const jokerBtn2 = await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      const btn = btns.find(b => b.textContent?.includes('JOKER SET'))
+      const btn = btns.find(b => b.textContent?.includes('+ JOKER SET'))
       expect(btn).toBeTruthy()
       return btn!
     })
@@ -1334,6 +1417,9 @@ describe('Workout screen — TM recommendation modal', () => {
 describe('Workout screen — DB error handling', () => {
   beforeEach(async () => {
     clearSession()
+    // The failure banner is module-global and outlives a render by design —
+    // clear it so each test starts from no outstanding gaps.
+    resetSaveFailures()
     await Promise.all([
       db.lifts.clear(), db.trainingMaxes.clear(),
       db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
@@ -1370,6 +1456,13 @@ describe('Workout screen — DB error handling', () => {
     expect(workout.currentSetIndex).toBe(0)
     const sets = await db.sets.toArray()
     expect(sets).toHaveLength(0)
+
+    // The toast clears itself after 2.5s; the banner is what still says the set
+    // is missing once the user looks up from the bar.
+    const banner = await screen.findByRole('alert')
+    expect(banner.textContent).toContain('Warmup set 1')
+    expect(banner.textContent).toContain('disk full')
+    expect(gaps().map(g => g.describe)).toEqual(['Warmup set 1 · 80lb × 5'])
   })
 
   it('db.sets.update failure in handleEdit shows toast and reverts to the pre-edit values', async () => {
@@ -1394,6 +1487,44 @@ describe('Workout screen — DB error handling', () => {
     await waitFor(() => expect(toast()).toContain('Failed to save edit'))
     expect(workout.loggedSets[0].reps).toBe(5)
     expect(workout.loggedSets[0].weight).toBe(80)
+
+    const banner = await screen.findByRole('alert')
+    expect(banner.textContent).toContain('Edit to Warmup set 1')
+    expect(gaps()).toHaveLength(1)
+  })
+
+  it('retrying a failed set save from the banner writes it and clears the gap', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText('LOG')
+
+    // One transient failure, then the real implementation takes over.
+    vi.spyOn(db.sets, 'add').mockRejectedValueOnce(new Error('disk full'))
+    fireEvent.click(screen.getByText('LOG'))
+    await screen.findByRole('alert')
+    expect(await db.sets.toArray()).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'RETRY' }))
+
+    await waitFor(async () => expect(await db.sets.toArray()).toHaveLength(1))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(gaps()).toHaveLength(0)
+    expect(workout.loggedSets).toHaveLength(1)
+  })
+
+  it('dismissing a failed save leaves the set unwritten and drops the gap', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText('LOG')
+
+    vi.spyOn(db.sets, 'add').mockRejectedValue(new Error('disk full'))
+    fireEvent.click(screen.getByText('LOG'))
+    await screen.findByRole('alert')
+
+    fireEvent.click(screen.getByRole('button', { name: /^Dismiss unsaved/ }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(gaps()).toHaveLength(0)
+    expect(await db.sets.toArray()).toHaveLength(0)
   })
 })
 
@@ -1404,7 +1535,7 @@ describe('Workout screen — DB error handling', () => {
 
 describe('Workout screen — logged-weight cascade regressions', () => {
   const findJokerButton = () => waitFor(() => {
-    const btn = screen.getAllByRole('button').find(b => b.textContent?.includes('JOKER SET'))
+    const btn = screen.getAllByRole('button').find(b => b.textContent?.includes('+ JOKER SET'))
     expect(btn).toBeTruthy()
     return btn!
   })

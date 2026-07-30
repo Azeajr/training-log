@@ -4,7 +4,7 @@ import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode,
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { clearSession } from '../store/workout-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
-import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek } from '../lib/cycle'
+import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
 import { createExercise, ExerciseNameConflictError, renameExercise, setExerciseCategory, setExercisePlateLoading, archiveExercise, unarchiveExercise } from '../lib/exercise'
@@ -475,12 +475,12 @@ export default function Settings() {
                 />
                 <div class="flex items-center gap-2">
                   <span class="text-muted text-xs w-20">increment</span>
-                  <Stepper value={editLiftIncrement()} onChange={setEditLiftIncrement} step={5} min={0} max={50} />
+                  <Stepper value={editLiftIncrement()} onChange={setEditLiftIncrement} step={5} min={0} max={50} fieldLabel="progression increment" />
                   <span class="text-muted text-xs">lb</span>
                 </div>
                 <div class="flex gap-3">
-                  <button onClick={() => void handleSaveLiftEdit(l.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">SAVE</button>
-                  <button onClick={() => setEditingLift(null)} class="text-muted text-lg sm:text-xl">cancel</button>
+                  <button onClick={() => void handleSaveLiftEdit(l.id!)} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase">SAVE</button>
+                  <button onClick={() => setEditingLift(null)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
                 </div>
               </div>
             </Show>
@@ -490,7 +490,7 @@ export default function Settings() {
         <Show when={showAddLift()} fallback={
           <button
             onClick={() => setShowAddLift(true)}
-            class="mt-2 border border-border text-muted px-3 py-1 text-lg sm:text-xl hover:border-accent hover:text-accent"
+            class="mt-2 border border-border text-muted px-3 py-2 text-xs tracking-widest uppercase hover:border-accent hover:text-accent"
           >
             + ADD LIFT
           </button>
@@ -505,12 +505,12 @@ export default function Settings() {
             />
             <div class="flex items-center gap-2">
               <span class="text-muted text-xs w-20">increment</span>
-              <Stepper value={newLiftIncrement()} onChange={setNewLiftIncrement} step={5} min={0} max={50} />
+              <Stepper value={newLiftIncrement()} onChange={setNewLiftIncrement} step={5} min={0} max={50} fieldLabel="progression increment" />
               <span class="text-muted text-xs">lb</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-muted text-xs w-20">base wt</span>
-              <Stepper value={newLiftBase()} onChange={setNewLiftBase} step={5} min={0} max={500} />
+              <Stepper value={newLiftBase()} onChange={setNewLiftBase} step={5} min={0} max={500} fieldLabel="base weight" />
               <span class="text-muted text-xs">lb</span>
             </div>
             <div class="flex gap-2">
@@ -521,8 +521,8 @@ export default function Settings() {
               )}</For>
             </div>
             <div class="flex gap-3">
-              <button onClick={handleAddLift} disabled={!newLiftName().trim()} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted">ADD</button>
-              <button onClick={() => setShowAddLift(false)} class="text-muted text-lg sm:text-xl">cancel</button>
+              <button onClick={handleAddLift} disabled={!newLiftName().trim()} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase disabled:border-border disabled:text-muted">ADD</button>
+              <button onClick={() => setShowAddLift(false)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
             </div>
           </div>
         </Show>
@@ -557,12 +557,12 @@ export default function Settings() {
               }>
                 <div class="flex flex-col gap-2 flex-1">
                   <div class="flex items-center gap-2">
-                    <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} />
+                    <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} fieldLabel="training max" />
                     <span class="text-muted text-xs">lb</span>
                   </div>
                   <div class="flex gap-3">
-                    <button onClick={() => handleSaveTm(l.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl font-mono tracking-widest">SAVE</button>
-                    <button onClick={() => setEditingTm(null)} class="text-muted text-lg sm:text-xl">cancel</button>
+                    <button onClick={() => handleSaveTm(l.id!)} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase font-mono">SAVE</button>
+                    <button onClick={() => setEditingTm(null)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
                   </div>
                 </div>
               </Show>
@@ -696,9 +696,9 @@ export default function Settings() {
         ]}>{({ label, field, value }) => (
           <div class="flex items-center gap-3 py-1 border-b border-border-dim">
             <span class="text-muted w-16 text-xs uppercase tracking-widest">{label}</span>
-            <button onClick={() => timerStep(field, -30)} class="border border-border px-2 py-0.5 text-muted hover:text-text">-</button>
+            <button onClick={() => timerStep(field, -30)} aria-label={`Decrease ${label.toLowerCase()} rest timer`} class="border border-border px-2 py-0.5 text-muted hover:text-text">-</button>
             <span class="text-text w-12 text-center">{formatDuration(value)}</span>
-            <button onClick={() => timerStep(field, 30)} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
+            <button onClick={() => timerStep(field, 30)} aria-label={`Increase ${label.toLowerCase()} rest timer`} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
           </div>
         )}</For>
       </div>
@@ -781,7 +781,7 @@ export default function Settings() {
         <Show when={showAddEx()} fallback={
           <button
             onClick={() => setShowAddEx(true)}
-            class="mt-2 border border-border text-muted px-3 py-1 text-lg sm:text-xl hover:border-accent hover:text-accent"
+            class="mt-2 border border-border text-muted px-3 py-2 text-xs tracking-widest uppercase hover:border-accent hover:text-accent"
           >
             + ADD EXERCISE
           </button>
@@ -815,8 +815,8 @@ export default function Settings() {
               )}</For>
             </select>
             <div class="flex gap-3">
-              <button onClick={handleAddExercise} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">ADD</button>
-              <button onClick={() => setShowAddEx(false)} class="text-muted text-lg sm:text-xl">cancel</button>
+              <button onClick={handleAddExercise} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase">ADD</button>
+              <button onClick={() => setShowAddEx(false)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
             </div>
           </div>
         </Show>
@@ -826,7 +826,7 @@ export default function Settings() {
         <Rule label="PLATES" class="text-muted mb-2" />
         <div class="flex items-center gap-3 py-1 border-b border-border-dim">
           <span class="text-muted w-20 uppercase tracking-widest text-xs">Bar</span>
-          <Stepper value={settings.barWeight} onChange={v => updateSettings({ barWeight: v })} step={2.5} min={10} max={100} />
+          <Stepper value={settings.barWeight} onChange={v => updateSettings({ barWeight: v })} step={2.5} min={10} max={100} fieldLabel="bar weight" />
           <span class="text-muted text-xs">lb</span>
         </div>
         <For each={DEFAULT_PLATES}>{({ weight }) => {
@@ -894,18 +894,7 @@ export default function Settings() {
         onDismiss={async () => { setCycleCompleteData(null); await load() }}
         onDeload={async () => { await deloadTms(db); setCycleCompleteData(null); await load() }}
         onDoubleIncrement={async (liftId, progressionIncrement) => {
-          const currentTm = await getCurrentTm(db, liftId)
-          const newTm = Math.round((currentTm + progressionIncrement) / 5) * 5
-          await setTm(db, liftId, newTm)
-          setCycleCompleteData(prev => {
-            if (!prev) return null
-            const liftName = prev.doublingCandidates.find(c => c.liftId === liftId)?.liftName
-            return {
-              ...prev,
-              newTms: prev.newTms.map(t => t.liftName === liftName ? { ...t, weight: newTm } : t),
-              doublingCandidates: prev.doublingCandidates.filter(c => c.liftId !== liftId),
-            }
-          })
+          setCycleCompleteData(await applyCycleDoubling(db, cycleCompleteData(), liftId, progressionIncrement))
         }}
       />
 

@@ -37,6 +37,7 @@ export default function SetLogControls(props: Props) {
           step={props.weightStep ?? 2.5}
           min={0}
           label="weight"
+          fieldLabel="weight"
         />
       </FieldRow>
       {props.children}

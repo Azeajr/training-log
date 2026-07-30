@@ -2,7 +2,10 @@
 import { beforeEach, describe, it, expect } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
-import { getCurrentTm, setTm, getAllCurrentTms } from './training-max'
+import {
+  getCurrentTm, setTm, getAllCurrentTms,
+  hasTrainingMaxes, refreshTrainingMaxPresence, resetTrainingMaxPresence,
+} from './training-max'
 
 beforeEach(async () => { await __resetForTest() })
 
@@ -101,5 +104,41 @@ describe('getAllCurrentTms', () => {
     await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') }) // older, second
     const result = await getAllCurrentTms(db)
     expect(result[liftId]).toBe(210)
+  })
+})
+
+describe('training-max presence signal', () => {
+  beforeEach(() => { resetTrainingMaxPresence() })
+
+  it('starts undetermined so the redirect holds rather than guessing', () => {
+    expect(hasTrainingMaxes()).toBeNull()
+  })
+
+  it('refresh reports false on an empty table', async () => {
+    expect(await refreshTrainingMaxPresence(db)).toBe(false)
+    expect(hasTrainingMaxes()).toBe(false)
+  })
+
+  it('refresh reports true once a TM exists', async () => {
+    const liftId = await seedLift()
+    await db.trainingMaxes.add({ liftId, weight: 100, setAt: new Date() })
+    expect(await refreshTrainingMaxPresence(db)).toBe(true)
+    expect(hasTrainingMaxes()).toBe(true)
+  })
+
+  it('setTm flips presence without a follow-up query', async () => {
+    const liftId = await seedLift()
+    await refreshTrainingMaxPresence(db)
+    expect(hasTrainingMaxes()).toBe(false)
+    await setTm(db, liftId, 200)
+    expect(hasTrainingMaxes()).toBe(true)
+  })
+
+  it('refresh flips back to false after the table is cleared', async () => {
+    const liftId = await seedLift()
+    await setTm(db, liftId, 200)
+    expect(hasTrainingMaxes()).toBe(true)
+    await db.trainingMaxes.clear()
+    expect(await refreshTrainingMaxPresence(db)).toBe(false)
   })
 })

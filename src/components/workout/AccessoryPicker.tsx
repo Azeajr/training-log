@@ -5,8 +5,8 @@ import { workout, addAccessory, toActiveAccessory } from '../../store/workout-st
 import { accessoryWeight, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
 import { getLatestAccessoryTms } from '../../lib/training-max'
 import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, setAssistanceDefault, ASSISTANCE_SECTIONS, ASSISTANCE_SUGGESTION_SESSIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
-import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
+import Modal from '../modals/Modal'
 
 interface Props {
   // The slot being filled. A fixed section ('push'|'pull'|'legs_core')
@@ -167,12 +167,12 @@ export default function AccessoryPicker(props: Props) {
     <Show
       when={settingTm()}
       fallback={
-        <div class="fixed inset-0 bg-bg z-50 px-4 pb-4 overflow-y-auto" style={{ 'padding-top': 'max(1rem, env(safe-area-inset-top, 0px))' }}>
-          <div class="flex items-center justify-between mb-4">
-            <button onClick={props.onClose} class="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
-            <Rule label={props.slot === 'extra' ? 'SELECT ASSISTANCE EXERCISE' : `CHOOSE ${SECTION_LABEL[props.slot]}`} class="text-muted" />
-            <div class="w-14" />
-          </div>
+        <Modal
+          variant="sheet"
+          title={props.slot === 'extra' ? 'SELECT ASSISTANCE EXERCISE' : `CHOOSE ${SECTION_LABEL[props.slot]}`}
+          onClose={props.onClose}
+          class="px-4 pb-4 overflow-y-auto"
+        >
           <Show
             when={props.slot === 'extra'}
             fallback={
@@ -214,17 +214,23 @@ export default function AccessoryPicker(props: Props) {
               </Show>
             </div>
           </Show>
-        </div>
+        </Modal>
       }
     >
       {ex => (
-        <div class="fixed inset-0 bg-bg z-50 px-4 pb-4" style={{ 'padding-top': 'max(1rem, env(safe-area-inset-top, 0px))' }}>
-          <Rule label="SET TRAINING MAX" class="text-muted mb-4" />
+        // Escape backs out to the exercise list, matching the BACK button —
+        // not all the way out of the picker, which would lose the selection.
+        <Modal
+          variant="sheet"
+          title="SET TRAINING MAX"
+          onClose={() => setSettingTm(null)}
+          class="px-4 pb-4"
+        >
           <div class="text-text mb-6 uppercase tracking-widest">{ex().name}</div>
           <div class="space-y-5">
             <div class="flex items-center gap-4">
               <label class="text-muted text-sm uppercase tracking-widest w-32">TM</label>
-              <Stepper value={tmWeight()} onChange={setTmWeight} step={5} min={0} />
+              <Stepper value={tmWeight()} onChange={setTmWeight} step={5} min={0} fieldLabel="training max" />
               <span class="text-muted text-sm">lb</span>
             </div>
             <Show when={tmWeight() >= 0}>
@@ -235,26 +241,20 @@ export default function AccessoryPicker(props: Props) {
             </Show>
             <div class="flex items-center gap-4">
               <label class="text-muted text-sm uppercase tracking-widest w-32">Increment</label>
-              <Stepper value={tmIncrement()} onChange={setTmIncrement} step={2.5} min={0} />
+              <Stepper value={tmIncrement()} onChange={setTmIncrement} step={2.5} min={0} fieldLabel="increment" />
               <span class="text-muted text-sm">lb</span>
             </div>
           </div>
-          <div class="flex gap-4 mt-8">
-            <button
-              onClick={() => setSettingTm(null)}
-              class="border border-border px-4 py-2 font-mono text-text"
-            >
-              BACK
-            </button>
-            <button
-              onClick={handleSaveTm}
-              disabled={tmWeight() < 0}
-              class="border border-accent text-accent px-6 py-2 font-mono disabled:opacity-40"
-            >
-              SAVE
-            </button>
-          </div>
-        </div>
+          {/* Only SAVE here: the way out is the header's ← BACK, and two
+              controls both labelled BACK on one screen is worse than one. */}
+          <button
+            onClick={handleSaveTm}
+            disabled={tmWeight() < 0}
+            class="w-full border border-accent text-accent py-3 mt-8 font-mono text-xs tracking-widest uppercase disabled:opacity-40"
+          >
+            SAVE
+          </button>
+        </Modal>
       )}
     </Show>
   )

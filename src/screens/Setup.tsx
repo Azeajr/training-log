@@ -4,6 +4,7 @@ import { db } from '../db/index'
 import { BAR_WEIGHT } from '../lib/calc'
 import { updateLift, deleteLift, moveLift } from '../lib/lift'
 import { importJson } from '../lib/export-import'
+import { noteTrainingMaxAdded } from '../lib/training-max'
 import { loadSettings } from '../store/settings-store'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
@@ -126,6 +127,9 @@ export default function Setup() {
         setAt: new Date(),
       }))
       await db.trainingMaxes.bulkAdd(rows)
+      // Onboarding is what the redirect was watching for — tell it before
+      // navigating, or the effect bounces straight back to /setup.
+      noteTrainingMaxAdded()
       navigate('/today', { replace: true })
     } finally {
       setSaving(false)
@@ -227,12 +231,12 @@ export default function Setup() {
                   />
                   <div class="flex items-center gap-2">
                     <span class="text-muted text-xs w-20">increment</span>
-                    <Stepper value={editLiftIncrement()} onChange={setEditLiftIncrement} step={5} min={0} max={50} />
+                    <Stepper value={editLiftIncrement()} onChange={setEditLiftIncrement} step={5} min={0} max={50} fieldLabel="progression increment" />
                     <span class="text-muted text-xs">lb</span>
                   </div>
                   <div class="flex gap-3">
-                    <button onClick={() => void handleSaveLiftEdit(l.id!)} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl">SAVE</button>
-                    <button onClick={() => setEditingLift(null)} class="text-muted text-lg sm:text-xl">cancel</button>
+                    <button onClick={() => void handleSaveLiftEdit(l.id!)} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase">SAVE</button>
+                    <button onClick={() => setEditingLift(null)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
                   </div>
                 </div>
               </Show>
@@ -243,7 +247,7 @@ export default function Setup() {
         <Show when={showAddLift()} fallback={
           <button
             onClick={() => setShowAddLift(true)}
-            class="mt-2 border border-border text-muted px-3 py-1 text-lg sm:text-xl hover:border-accent hover:text-accent"
+            class="mt-2 border border-border text-muted px-3 py-2 text-xs tracking-widest uppercase hover:border-accent hover:text-accent"
           >
             + ADD LIFT
           </button>
@@ -258,12 +262,12 @@ export default function Setup() {
             />
             <div class="flex items-center gap-2">
               <span class="text-muted text-xs w-20">increment</span>
-              <Stepper value={newLiftIncrement()} onChange={setNewLiftIncrement} step={5} min={0} max={50} />
+              <Stepper value={newLiftIncrement()} onChange={setNewLiftIncrement} step={5} min={0} max={50} fieldLabel="progression increment" />
               <span class="text-muted text-xs">lb</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-muted text-xs w-20">base wt</span>
-              <Stepper value={newLiftBase()} onChange={setNewLiftBase} step={5} min={0} max={500} />
+              <Stepper value={newLiftBase()} onChange={setNewLiftBase} step={5} min={0} max={500} fieldLabel="base weight" />
               <span class="text-muted text-xs">lb</span>
             </div>
             <div class="flex gap-2">
@@ -274,8 +278,8 @@ export default function Setup() {
               )}</For>
             </div>
             <div class="flex gap-3">
-              <button onClick={handleAddLift} disabled={!newLiftName().trim()} class="border border-accent text-accent px-2 py-1 text-lg sm:text-xl disabled:border-border disabled:text-muted">ADD</button>
-              <button onClick={() => setShowAddLift(false)} class="text-muted text-lg sm:text-xl">cancel</button>
+              <button onClick={handleAddLift} disabled={!newLiftName().trim()} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase disabled:border-border disabled:text-muted">ADD</button>
+              <button onClick={() => setShowAddLift(false)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
             </div>
           </div>
         </Show>

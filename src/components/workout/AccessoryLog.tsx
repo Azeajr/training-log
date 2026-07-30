@@ -118,6 +118,7 @@ export default function AccessoryLog(props: Props) {
         </span>
         <InlineConfirm
           label="✕"
+          ariaLabel={`Remove ${props.accessory.exerciseName}`}
           confirmText="remove?"
           onConfirm={() => removeAccessory(props.accessory.exerciseId)}
           class="ml-2"
@@ -171,6 +172,7 @@ export default function AccessoryLog(props: Props) {
                     <Show when={isLast()}>
                       <InlineConfirm
                         label="undo"
+                        ariaLabel={`Undo last ${props.accessory.exerciseName} set`}
                         confirmText="undo set?"
                         onConfirm={() => deleteLastAccessorySet(props.accessory.exerciseId)}
                         class="ml-auto"
@@ -182,16 +184,16 @@ export default function AccessoryLog(props: Props) {
             >
               <div class="flex items-center gap-2 pl-2 py-1 flex-wrap">
                 <span class="text-warn text-xs">Set {i() + 1}:</span>
-                <Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} />
+                <Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} fieldLabel="weight" />
                 <span class="text-muted text-xs">lb ×</span>
                 <Show when={type() === 'reps'}>
-                  <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} />
+                  <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} fieldLabel="reps" />
                 </Show>
                 <Show when={type() === 'timed'}>
                   <DurationInput value={editDuration()} onChange={setEditDuration} />
                 </Show>
                 <Show when={type() === 'distance'}>
-                  <Stepper value={editDistance()} onChange={setEditDistance} step={1} min={0} />
+                  <Stepper value={editDistance()} onChange={setEditDistance} step={1} min={0} fieldLabel="distance" />
                 </Show>
                 <button onClick={() => saveEditSet(i())} class="border border-accent text-accent px-2 py-0.5 font-mono text-xs">SAVE</button>
                 <button onClick={() => setEditingSetIdx(null)} class="text-muted text-xs">cancel</button>
@@ -217,7 +219,7 @@ export default function AccessoryLog(props: Props) {
           >
             <Show when={type() === 'reps'}>
               <FieldRow label="reps">
-                <Stepper value={reps()} onChange={setReps} step={1} min={0} />
+                <Stepper value={reps()} onChange={setReps} step={1} min={0} fieldLabel="reps" />
               </FieldRow>
             </Show>
             <Show when={type() === 'timed'}>
@@ -227,7 +229,7 @@ export default function AccessoryLog(props: Props) {
             </Show>
             <Show when={type() === 'distance'}>
               <FieldRow label="dist">
-                <Stepper value={distance()} onChange={setDistance} step={1} min={0} />
+                <Stepper value={distance()} onChange={setDistance} step={1} min={0} fieldLabel="distance" />
               </FieldRow>
             </Show>
           </SetLogControls>

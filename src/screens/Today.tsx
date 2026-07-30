@@ -197,7 +197,10 @@ export default function Today() {
   }
 
   return (
-    <Show when={!loading()}>
+    <Show
+      when={!loading()}
+      fallback={<div class="p-4 md:p-8 font-mono text-muted text-sm tracking-widest uppercase">Loading…</div>}
+    >
       <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
         <Show when={workout.activeSession}>
           <A

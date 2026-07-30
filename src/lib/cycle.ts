@@ -3,6 +3,7 @@ import type { Lift, TrainingMax } from '../types/domain'
 import { roundToNearest5, SEED_WINDOW, cycleFinalWeek } from './calc'
 import { getCycleDoublingCandidates } from './tm-recommendations'
 import type { DoublingCandidate } from './tm-recommendations'
+import { getCurrentTm, setTm, noteTrainingMaxAdded } from './training-max'
 
 // Active = non-archived lifts, ordered. The number of active lifts is the
 // per-week session target (one training day per lift). Archived lifts keep
@@ -92,6 +93,7 @@ async function progressTms(
     if (!current) continue
     const weight = nextWeight(current, lift)
     await db.trainingMaxes.add({ liftId: lift.id!, weight, setAt: new Date() })
+    noteTrainingMaxAdded()
     changes.push({ liftName: lift.name, oldWeight: current.weight, weight })
   }
   return changes
@@ -163,6 +165,41 @@ export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: numbe
 
 export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<TmChange[]> {
   return progressTms(db, current => roundToNearest5(current.weight * (1 - pct)))
+}
+
+// The end-of-cycle summary: what every TM moved to, plus which lifts earned the
+// option of a doubled increment. Lives here rather than next to the modal that
+// renders it — Workout and Settings both build and mutate this shape, and the
+// helper below operates on it, so it belongs with the cycle logic.
+export interface CycleCompleteData {
+  newTms: Array<{ liftName: string; oldWeight: number; weight: number }>
+  doublingCandidates: DoublingCandidate[]
+}
+
+// Accept the doubled increment for one lift: write the new TM, then fold the
+// result back into the summary so the row shows the doubled weight and the lift
+// drops out of the offer list (it can't be taken twice).
+//
+// Both Workout and Settings used to carry their own copy of this, and they had
+// already drifted: one rounded with `roundToNearest5`, the other reimplemented
+// the same formula inline. One implementation now, called from both.
+export async function applyCycleDoubling(
+  db: TrainingDB,
+  data: CycleCompleteData | null,
+  liftId: number,
+  progressionIncrement: number,
+): Promise<CycleCompleteData | null> {
+  const currentTm = await getCurrentTm(db, liftId)
+  const newTm = roundToNearest5(currentTm + progressionIncrement)
+  await setTm(db, liftId, newTm)
+  if (!data) return null
+  // Matched by name because newTms carries the lift's name, not its id.
+  const liftName = data.doublingCandidates.find(c => c.liftId === liftId)?.liftName
+  return {
+    ...data,
+    newTms: data.newTms.map(t => t.liftName === liftName ? { ...t, weight: newTm } : t),
+    doublingCandidates: data.doublingCandidates.filter(c => c.liftId !== liftId),
+  }
 }
 
 export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{

@@ -17,6 +17,27 @@
   --color-info:         #60a5fa;
 }
 
+/* Selection is suppressed on interactive chrome only, never on content.
+   AppShell used to set `user-select: none` on the app root, which caught the
+   things a training log exists to hold — session notes, training maxes,
+   exercise names — and made them impossible to select or copy into a message,
+   a spreadsheet, anywhere. The real problem it was solving is narrower: a tap
+   that drifts a few pixels on a button or a stepper shouldn't start a text
+   selection or raise the iOS callout. That is a property of controls, so it
+   lives on controls.
+
+   `nav` covers the bottom bar's labels; `label` covers the form captions that
+   sit inside tap targets. Anything wanting the same treatment can opt in with
+   Tailwind's `select-none`. */
+button,
+nav,
+label,
+[role="button"] {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* Honor the OS "reduce motion" setting app-wide: collapse transitions,
    animations, and smooth-scroll to near-instant. The app's motion is sparse
    (hover flips, the rest-timer, scroll-to-active-set) — this keeps all of it

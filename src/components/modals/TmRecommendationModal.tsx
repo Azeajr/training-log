@@ -1,4 +1,5 @@
 import { createSignal } from 'solid-js'
+import Modal from './Modal'
 
 interface Props {
   liftName: string
@@ -12,10 +13,15 @@ export default function TmRecommendationModal(props: Props) {
   const [value, setValue] = createSignal(props.suggestedTm)
 
   return (
-    <div class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-      <div class="bg-surface border border-accent p-6 font-mono max-w-sm w-full">
-        <div class="text-accent uppercase tracking-widest text-sm mb-1">TM ADJUSTMENT</div>
-        <div class="text-muted text-xs mb-4 uppercase tracking-widest">{props.liftName}</div>
+    // Escape keeps the current TM — the same outcome as the KEEP CURRENT button.
+    <Modal
+      title="TM ADJUSTMENT"
+      label={`Training max adjustment for ${props.liftName}`}
+      onClose={props.onDismiss}
+      class="bg-surface border border-accent p-6 font-mono max-w-sm w-full"
+    >
+      <div>
+        <div class="text-muted text-xs -mt-3 mb-4 uppercase tracking-widest">{props.liftName}</div>
         <div class="mb-4 space-y-1 text-sm">
           <div class="flex justify-between">
             <span class="text-muted">Current TM</span>
@@ -29,11 +35,13 @@ export default function TmRecommendationModal(props: Props) {
         <div class="flex items-center justify-between border border-border px-3 py-2 mb-6">
           <button
             onClick={() => setValue(v => Math.max(45, v - 5))}
+            aria-label="Decrease training max"
             class="text-muted text-lg leading-none px-2 hover:text-text"
           >−</button>
-          <span class="text-text text-sm tracking-widest">{value()} lbs</span>
+          <span class="text-text text-sm tracking-widest" aria-live="polite">{value()} lbs</span>
           <button
             onClick={() => setValue(v => v + 5)}
+            aria-label="Increase training max"
             class="text-muted text-lg leading-none px-2 hover:text-text"
           >+</button>
         </div>
@@ -50,6 +58,6 @@ export default function TmRecommendationModal(props: Props) {
           KEEP CURRENT
         </button>
       </div>
-    </div>
+    </Modal>
   )
 }

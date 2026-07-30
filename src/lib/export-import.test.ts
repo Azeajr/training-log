@@ -3,6 +3,7 @@ import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import { retryPendingExport, exportJson, importFromRawData, exportCsv, importJson, MAX_IMPORT_BYTES } from './export-import'
+import { hasTrainingMaxes, refreshTrainingMaxPresence, resetTrainingMaxPresence } from './training-max'
 
 let capturedBlob: Blob | null = null
 
@@ -866,5 +867,32 @@ describe('importJson', () => {
     const sets = await db.sets.toArray()
     expect(sets).toHaveLength(1)
     expect(sets[0].weight).toBe(100)
+  })
+})
+
+// ─── training-max presence after import ──────────────────────────────────────
+// Import is the only path that can take training maxes away: it clears every
+// table before restoring, so a payload with none must leave the app knowing it
+// has none — otherwise the onboarding redirect would never fire again.
+describe('importFromRawData — training-max presence', () => {
+  beforeEach(() => { resetTrainingMaxPresence() })
+
+  it('reports presence after restoring a payload that has training maxes', async () => {
+    await importFromRawData(db, {
+      lifts: [{ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
+      trainingMaxes: [{ id: 1, liftId: 1, weight: 200, setAt: '2026-01-01T00:00:00.000Z' }],
+    })
+    expect(hasTrainingMaxes()).toBe(true)
+  })
+
+  it('reports absence after restoring a payload with no training maxes', async () => {
+    await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt: new Date() })
+    await refreshTrainingMaxPresence(db)
+    expect(hasTrainingMaxes()).toBe(true)
+
+    await importFromRawData(db, {
+      lifts: [{ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' }],
+    })
+    expect(hasTrainingMaxes()).toBe(false)
   })
 })

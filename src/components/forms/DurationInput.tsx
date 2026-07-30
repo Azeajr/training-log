@@ -5,6 +5,9 @@ import Stepper from './Stepper'
 interface Props {
   value: number | null
   onChange: (seconds: number) => void
+  // Prefixed onto the mm/ss steppers' accessible names so two duration inputs
+  // on one screen don't both announce as bare "minutes"/"seconds".
+  fieldLabel?: string
 }
 
 export default function DurationInput(props: Props) {
@@ -19,6 +22,8 @@ export default function DurationInput(props: Props) {
     if (next.ss !== ss()) setSs(next.ss)
   }, { defer: true }))
 
+  const prefix = () => props.fieldLabel ? `${props.fieldLabel} ` : ''
+
   return (
     <div class="flex items-center gap-1 font-mono">
       <Stepper
@@ -26,6 +31,7 @@ export default function DurationInput(props: Props) {
         onChange={v => { setMm(v); props.onChange(toSeconds(v, ss())) }}
         step={1}
         min={0}
+        fieldLabel={`${prefix()}minutes`}
       />
       <span class="text-muted px-1">:</span>
       <Stepper
@@ -34,6 +40,7 @@ export default function DurationInput(props: Props) {
         step={1}
         min={0}
         max={59}
+        fieldLabel={`${prefix()}seconds`}
       />
     </div>
   )

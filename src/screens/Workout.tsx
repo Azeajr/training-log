@@ -4,22 +4,25 @@ import { db } from '../db/index'
 import type { Lift, Exercise, Session } from '../types/domain'
 import { workout, logSet, editSet, advanceSet, deleteLastSet, logCrossSet, editCrossSet, deleteLastCrossSetFor, startRest, clearSession, setNotes } from '../store/workout-store'
 import {
-  calcMainSets, calcWarmup, calcAmrapTarget, calcSupplementalSets, getSupplementalLabel,
-  calcJokerSet, calcJokerIncrement, calcNextJokerWeight, shouldShowJokerButton,
-  targetReps, JOKER_MIN_REPS, est1RMFromTm, isSupplementalType, jokerChainBaseWeight,
-  applyMainCascadeToSupplemental, applySupplementalOverride, supplementalSourceSetNumber, roundToNearest5,
+  getSupplementalLabel, calcJokerSet, calcJokerIncrement, calcNextJokerWeight,
+  shouldShowJokerButton, JOKER_MIN_REPS, isSupplementalType, jokerChainBaseWeight,
+  applyMainCascadeToSupplemental, supplementalSourceSetNumber,
   calcCrossSets, getCrossLabel, effectiveSupplementalWeek,
 } from '../lib/calc'
+import { composeAllSets, amrapTargetsFor } from '../lib/workout-compose'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
-import { advanceCycleIfComplete, getRecentAmraps, deloadTms } from '../lib/cycle'
+import { advanceCycleIfComplete, getRecentAmraps, deloadTms, applyCycleDoubling } from '../lib/cycle'
 import { discardPendingSession } from '../lib/session'
 import { detectAmrapPRs } from '../lib/pr'
 import { getCurrentTm, setTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
+import { recordSaveFailure } from '../store/save-failure-store'
+import SaveFailureBanner from '../components/workout/SaveFailureBanner'
+import CollapsibleSection from '../components/workout/CollapsibleSection'
 import SetRow from '../components/workout/SetRow'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
 import AccessoryLog from '../components/workout/AccessoryLog'
@@ -143,57 +146,17 @@ export default function Workout() {
     void loadData()
   }))
 
-  // The single derivation of the rendered set list. Planned sets come from the
-  // TM; everything the user actually did — an overridden source-set weight, a
-  // supplemental override, jokers, extra added sets — is restored from
-  // loggedSets, so the result is identical after a rebuild or a mid-session reload.
-  const composeAllSets = (tm: number, week: 1 | 2 | 3 | 4, template: SupplementalTemplate) => {
-    const loggedSets = workout.loggedSets
-    const main = calcMainSets(tm, week, settings.barWeight)
-    const warmup = calcWarmup(tm, main[0].weight, settings.barWeight)
-
-    // Supplemental runs at the effective week (deload may remap or skip it).
-    const eff = effectiveSupplementalWeek(week, settings.deloadSupplemental)
-    const suppMain = eff === null ? [] : calcMainSets(tm, eff, settings.barWeight)
-    let fsl = eff === null ? [] : calcSupplementalSets(template, suppMain, tm, eff, settings.barWeight)
-    const sourceSetNumber = supplementalSourceSetNumber(template)
-    const loggedSource = sourceSetNumber === null
-      ? undefined
-      : loggedSets.find(s => s.type === 'main' && s.setNumber === sourceSetNumber)
-    // Cascade the logged top set into supplemental only when supplemental tracks
-    // this week's main sets. On a remapped deload (eff !== week) the supplemental
-    // weight is decoupled from the lighter deload top set, so skip the cascade.
-    if (loggedSource && eff === week) fsl = applyMainCascadeToSupplemental(fsl, template, loggedSource.weight)
-    fsl = applySupplementalOverride(fsl, loggedSets, template)
-    const extraFsl: FslSet[] = template === 'none' ? [] : loggedSets
-      .filter(s => s.type === template)
-      .slice(fsl.length)
-      .map((s, i) => ({ setNumber: fsl.length + i + 1, weight: s.weight, reps: s.reps, type: template }))
-
-    const restoredJokers: JokerSet[] = loggedSets
-      .filter(s => s.type === 'joker')
-      .map((s, i) => ({ type: 'joker' as const, setNumber: i + 1, weight: s.weight, reps: s.reps, isAmrap: false as const }))
-
-    return { all: [...warmup, ...main, ...restoredJokers, ...fsl, ...extraFsl], cross: composeCrossSets(), main }
-  }
-
-  // Cross blocks are independent of the linear list — each computed from its
-  // movement lift's TM and restored from its own logged store. Like the
-  // supplemental tail, a logged set's weight overrides the remaining planned
-  // sets of the same block (matched by movement liftId), and extra logged
-  // sets beyond the plan are restored. Extracted as a helper for composeAllSets.
-  const composeCrossSets = (): CrossSet[] => crossBlocks().flatMap(block => {
-    const logged = workout.loggedCrossSets.filter(s => s.liftId === block.movementLiftId)
-    let sets: CrossSet[] = block.computed
-    if (logged.length > 0) {
-      const override = logged[logged.length - 1].weight
-      sets = sets.map((s, i) => i >= logged.length ? { ...s, weight: override } : s)
-    }
-    const extra: CrossSet[] = logged.slice(sets.length).map((s, i) => ({
-      setNumber: sets.length + i + 1, weight: s.weight, reps: s.reps, type: 'cross' as const, liftId: block.movementLiftId,
-    }))
-    return [...sets, ...extra]
-  })
+  // Thin wrapper over the pure derivation in lib/workout-compose: read the
+  // reactive inputs here, hand plain values across.
+  const composeSets = (tm: number, week: 1 | 2 | 3 | 4, template: SupplementalTemplate) =>
+    composeAllSets({
+      tm, week, template,
+      barWeight: settings.barWeight,
+      deloadSupplemental: settings.deloadSupplemental,
+      loggedSets: workout.loggedSets,
+      crossBlocks: crossBlocks(),
+      loggedCrossSets: workout.loggedCrossSets,
+    })
 
   const loadData = async () => {
     const session = workout.activeSession
@@ -252,7 +215,7 @@ export default function Workout() {
       setCrossBlocks(loaded)
     }
 
-    const { all, cross, main } = composeAllSets(tm, session.week, template)
+    const { all, cross, main } = composeSets(tm, session.week, template)
     setAllSets(all)
     setCrossSets(cross)
 
@@ -260,7 +223,7 @@ export default function Workout() {
       const amrapSet = main.find(s => s.isAmrap)
       if (amrapSet) {
         setRecentAmraps(await getRecentAmraps(db, session.liftId))
-        setAmrapTargets(amrapTargetsFor(amrapSet.weight))
+        setAmrapTargets(targetsFor(amrapSet.weight))
       }
     }
 
@@ -273,25 +236,40 @@ export default function Workout() {
   const rebuildAllSets = () => {
     const session = workout.activeSession
     if (!session) return
-    const { all, cross } = composeAllSets(tmWeight(), session.week, supplementalTemplate())
+    const { all, cross } = composeSets(tmWeight(), session.week, supplementalTemplate())
     setAllSets(all)
     setCrossSets(cross)
   }
 
-  // Targets for today's AMRAP at a given weight: beat the matching previous
-  // AMRAP sets when history exists, otherwise the e1RM implied by the TM.
-  const amrapTargetsFor = (weight: number): AmrapTarget[] => {
-    const target = calcAmrapTarget(recentAmraps(), weight)
-    if (target) return [target]
-    const tm = tmWeight()
-    if (tm <= 0) return []
-    const est1RM = est1RMFromTm(tm)
-    const reps = targetReps(est1RM, weight)
-    if (reps === null) return []
-    return [{ label: 'goal', reps, est1RM: Math.round(est1RM) }]
-  }
+  const targetsFor = (weight: number): AmrapTarget[] =>
+    amrapTargetsFor(weight, recentAmraps(), tmWeight())
 
-  const handleAmrapWeightChange = (weight: number) => setAmrapTargets(amrapTargetsFor(weight))
+  const handleAmrapWeightChange = (weight: number) => setAmrapTargets(targetsFor(weight))
+
+  // Human-readable set type for the failure banner: 'fsl+bbb' means nothing to
+  // a lifter, "supplemental" does.
+  const setLabel = (type: string) =>
+    type === 'main' ? 'Main'
+      : type === 'warmup' ? 'Warmup'
+      : type === 'joker' ? 'Joker'
+      : isSupplementalType(type) ? 'Supplemental'
+      : type
+
+  // Both channels for one failure: the toast catches the user who is looking,
+  // the banner (and the persisted session gap behind it) catches the one who
+  // isn't. The old code had only the first, which vanished after 2.5s.
+  const reportSaveFailure = (
+    err: unknown,
+    noun: 'set' | 'edit',
+    describe: string,
+    retry: () => Promise<void>,
+  ) => {
+    const message = err instanceof Error ? err.message : 'unknown error'
+    showToast(`Failed to save ${noun}: ${message}`)
+    const sessionId = workout.activeSession?.id
+    if (sessionId == null) return
+    recordSaveFailure({ sessionId, describe, message, retry })
+  }
 
   const handleDeleteSet = async () => {
     const sets = workout.loggedSets
@@ -326,7 +304,11 @@ export default function Workout() {
     } catch (err) {
       deleteLastSet()
       setAllSets(prevAllSets)
-      showToast(`Failed to save set: ${err instanceof Error ? err.message : 'unknown error'}`)
+      // Toast for the glance, banner for the record. Retry replays the same
+      // handler, so a success walks the full path (advance, PR check, rest)
+      // exactly as if the first attempt had worked.
+      reportSaveFailure(err, 'set', `${setLabel(s.type)} set ${s.setNumber} · ${weight}lb × ${reps}`,
+        () => handleLog(setIndex, reps, weight))
       return
     }
 
@@ -368,7 +350,8 @@ export default function Workout() {
       await db.sets.update(id, { reps, weight })
     } catch (err) {
       editSet(setIndex, { reps: prevReps, weight: prevWeight })
-      showToast(`Failed to save edit: ${err instanceof Error ? err.message : 'unknown error'}`)
+      reportSaveFailure(err, 'edit', `Edit to ${setLabel(type)} set ${setNumber} · ${weight}lb × ${reps}`,
+        () => handleEdit(setIndex, reps, weight))
       return
     }
     // Editing the supplemental source set's weight re-cascades the pending
@@ -416,7 +399,8 @@ export default function Workout() {
     } catch (err) {
       deleteLastCrossSetFor(section.block.movementLiftId)
       setCrossSets(prevCross)
-      showToast(`Failed to save set: ${err instanceof Error ? err.message : 'unknown error'}`)
+      reportSaveFailure(err, 'set', `${section.block.movementName} set ${s.setNumber} · ${weight}lb × ${reps}`,
+        () => handleLogCross(section, localIdx, reps, weight))
       return
     }
     const nextS = section.sets[localIdx + 1]
@@ -440,7 +424,8 @@ export default function Workout() {
     } catch (err) {
       editCrossSet(absIdx, { reps: prevReps, weight: prevWeight })
       rebuildAllSets()
-      showToast(`Failed to save edit: ${err instanceof Error ? err.message : 'unknown error'}`)
+      reportSaveFailure(err, 'edit', `Edit to ${section.block.movementName} set ${localIdx + 1} · ${weight}lb × ${reps}`,
+        () => handleEditCross(section, localIdx, reps, weight))
     }
   }
 
@@ -582,18 +567,7 @@ export default function Workout() {
   }
 
   const handleDoubleIncrement = async (liftId: number, progressionIncrement: number) => {
-    const currentTm = await getCurrentTm(db, liftId)
-    const newTm = roundToNearest5(currentTm + progressionIncrement)
-    await setTm(db, liftId, newTm)
-    setCycleCompleteData(prev => {
-      if (!prev) return null
-      const liftName = prev.doublingCandidates.find(c => c.liftId === liftId)?.liftName
-      return {
-        ...prev,
-        newTms: prev.newTms.map(t => t.liftName === liftName ? { ...t, weight: newTm } : t),
-        doublingCandidates: prev.doublingCandidates.filter(c => c.liftId !== liftId),
-      }
-    })
+    setCycleCompleteData(await applyCycleDoubling(db, cycleCompleteData(), liftId, progressionIncrement))
   }
 
   const warmupSets = () => allSets().filter(s => s.type === 'warmup') as WarmupSet[]
@@ -616,6 +590,13 @@ export default function Workout() {
     if (section === 'joker') return warmupCount() + mainCount()
     return warmupCount() + mainCount() + jokerCount()
   }
+
+  // A linear section is finished when the cursor has moved past its last set.
+  // Only a finished section may collapse — the active row is then guaranteed to
+  // be somewhere else on the page, so folding one can never hide the row the
+  // scroll-to-active effect is tracking.
+  const sectionComplete = (count: number, offset: number) =>
+    count > 0 && workout.currentSetIndex >= offset + count
 
   const showJokerButton = () => workout.activeSession ? shouldShowJokerButton({
     week: workout.activeSession.week,
@@ -654,9 +635,15 @@ export default function Workout() {
           class={`mb-6 ${workout.activeSession!.week === 4 ? 'text-info' : 'text-muted'}`}
         />
 
+        <SaveFailureBanner />
+
         <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start mb-6">
-          <div class="mb-6 md:mb-0">
-            <SectionLabel class="mb-2">WARM UP</SectionLabel>
+          <CollapsibleSection
+            label="WARM UP"
+            complete={sectionComplete(warmupCount(), 0)}
+            summary={`${warmupCount()} sets`}
+            class="mb-6 md:mb-0"
+          >
             <SetSection
               sets={warmupSets}
               offset={() => 0}
@@ -667,24 +654,33 @@ export default function Workout() {
               onDelete={handleDeleteSet}
               onActiveRef={el => setActiveRowEl(el)}
             />
-          </div>
+          </CollapsibleSection>
 
           <div class="mb-6 md:mb-0">
-            <SectionLabel class="mb-2">MAIN</SectionLabel>
-            <SetSection
-              sets={mainSets}
-              offset={() => setOffset('main')}
-              loading={ownLoading()}
-              amrapTargets={amrapTargets}
-              onWeightChange={handleAmrapWeightChange}
-              onLog={handleLog}
-              onEdit={handleEdit}
-              onDelete={handleDeleteSet}
-              onActiveRef={el => setActiveRowEl(el)}
-            />
+            <CollapsibleSection
+              label="MAIN"
+              complete={sectionComplete(mainCount(), setOffset('main'))}
+              summary={`${mainCount()} sets`}
+            >
+              <SetSection
+                sets={mainSets}
+                offset={() => setOffset('main')}
+                loading={ownLoading()}
+                amrapTargets={amrapTargets}
+                onWeightChange={handleAmrapWeightChange}
+                onLog={handleLog}
+                onEdit={handleEdit}
+                onDelete={handleDeleteSet}
+                onActiveRef={el => setActiveRowEl(el)}
+              />
+            </CollapsibleSection>
             <Show when={jokerSetsRendered().length > 0}>
-              <div class="mt-4">
-                <SectionLabel class="mb-2">JOKER SETS</SectionLabel>
+              <CollapsibleSection
+                label="JOKER SETS"
+                complete={sectionComplete(jokerCount(), setOffset('joker'))}
+                summary={`${jokerCount()} sets`}
+                class="mt-4"
+              >
                 <SetSection
                   sets={jokerSetsRendered}
                   offset={() => setOffset('joker')}
@@ -694,7 +690,7 @@ export default function Workout() {
                   onDelete={handleDeleteSet}
                   onActiveRef={el => setActiveRowEl(el)}
                 />
-              </div>
+              </CollapsibleSection>
             </Show>
             <Show when={showJokerButton()}>
               <button
@@ -708,17 +704,24 @@ export default function Workout() {
 
           <Show when={supplementalLabel() !== null}>
             <div class="mb-6 md:mb-0">
-              <SectionLabel class="mb-2">{supplementalLabel()}</SectionLabel>
-              <SetSection
-                sets={fslSets}
-                offset={() => setOffset('fsl')}
-                loading={ownLoading()}
-                forceAmrapFalse
-                onLog={handleLog}
-                onEdit={handleEdit}
-                onDelete={handleDeleteSet}
-                onActiveRef={el => setActiveRowEl(el)}
-              />
+              {/* The rows fold, "+ ADD SET" stays: adding another supplemental
+                  set is the one thing still worth doing to a finished block. */}
+              <CollapsibleSection
+                label={supplementalLabel()!}
+                complete={sectionComplete(fslSets().length, setOffset('fsl'))}
+                summary={`${fslSets().length} sets`}
+              >
+                <SetSection
+                  sets={fslSets}
+                  offset={() => setOffset('fsl')}
+                  loading={ownLoading()}
+                  forceAmrapFalse
+                  onLog={handleLog}
+                  onEdit={handleEdit}
+                  onDelete={handleDeleteSet}
+                  onActiveRef={el => setActiveRowEl(el)}
+                />
+              </CollapsibleSection>
               <Show when={workout.loggedSets.filter(s => isSupplementalType(s.type)).length >= fslSets().length}>
                 <button
                   onClick={handleAddSupplementalSet}

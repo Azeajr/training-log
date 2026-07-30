@@ -3,6 +3,7 @@ import type { CrossSet } from '../../lib/calc'
 import type { Set } from '../../types/domain'
 import type { PlateLoading } from '../../lib/plate-loading'
 import SetRow from './SetRow'
+import CollapsibleSection from './CollapsibleSection'
 
 // Cross-lift supplemental block. Same render shape as Workout's linear
 // SetSection, but driven by a per-block cursor instead of the global
@@ -20,9 +21,18 @@ interface Props {
 }
 
 export default function CrossBlockLog(props: Props) {
+  // The block's own cursor decides completion, not the session's — that's the
+  // point of a cross block, and it means one finished block can fold away while
+  // the one beside it is still being worked.
+  const complete = () => props.sets.length > 0 && props.cursor >= props.sets.length
+
   return (
-    <div class="mb-6 md:mb-0">
-      <div class="text-muted uppercase text-xs tracking-widest mb-2">{props.label}</div>
+    <CollapsibleSection
+      label={props.label}
+      complete={complete()}
+      summary={`${props.sets.length} sets`}
+      class="mb-6 md:mb-0"
+    >
       <For each={props.sets}>
         {(s, i) => (
           <SetRow
@@ -38,6 +48,6 @@ export default function CrossBlockLog(props: Props) {
           />
         )}
       </For>
-    </div>
+    </CollapsibleSection>
   )
 }
