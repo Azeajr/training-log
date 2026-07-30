@@ -5,6 +5,9 @@ interface Props {
   onClick: () => void
   children: JSX.Element
   class?: string
+  // Accessible name, for chips whose visible content is a bare glyph (the
+  // list-indent arrows). Text chips carry their own name and leave this unset.
+  ariaLabel?: string
 }
 
 // A selectable bordered chip — the app's one-of-N toggle idiom (supplemental
@@ -16,6 +19,8 @@ export default function ToggleChip(props: Props) {
   return (
     <button
       onClick={props.onClick}
+      aria-label={props.ariaLabel}
+      aria-pressed={props.active}
       class={`border px-2 py-1 text-xs font-mono tracking-widest transition-colors ${
         props.active
           ? 'border-accent text-accent'

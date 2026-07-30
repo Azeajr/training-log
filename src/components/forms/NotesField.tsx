@@ -136,8 +136,8 @@ export default function NotesField(props: Props) {
     <div class={props.class}>
       <div class="flex justify-end gap-2 mb-1">
         <Show when={listMode()}>
-          <ToggleChip active={false} onClick={() => retab(-1)}>←</ToggleChip>
-          <ToggleChip active={false} onClick={() => retab(1)}>→</ToggleChip>
+          <ToggleChip active={false} ariaLabel="Outdent list item" onClick={() => retab(-1)}>←</ToggleChip>
+          <ToggleChip active={false} ariaLabel="Indent list item" onClick={() => retab(1)}>→</ToggleChip>
         </Show>
         <ToggleChip active={listMode()} onClick={toggleList}>• LIST</ToggleChip>
       </div>

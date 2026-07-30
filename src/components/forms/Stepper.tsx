@@ -6,7 +6,12 @@ interface Props {
   step?: number
   min?: number
   max?: number
+  // Test hook only — feeds `data-testid`, never announced.
   label?: string
+  // What this stepper adjusts, in the user's words ("weight", "reps",
+  // "bar weight"). Names the −/+ buttons and the value announcement; without it
+  // a screen reader gets "minus, button" with no indication of what it changes.
+  fieldLabel?: string
 }
 
 const fmt = (v: number) => v % 1 === 0 ? String(v) : v.toFixed(1)
@@ -19,6 +24,13 @@ export default function Stepper(props: Props) {
 
   const [editing, setEditing] = createSignal(false)
   const [raw, setRaw] = createSignal('')
+  // Announcements are pushed here explicitly rather than mirroring props.value
+  // through a live region: a repeating long-press fires every 80ms and would
+  // flood the queue with values the user is scrubbing past. Discrete taps
+  // announce immediately; a long-press announces once, on release.
+  const [announced, setAnnounced] = createSignal('')
+  const announce = (v: number) =>
+    setAnnounced(`${props.fieldLabel ? `${props.fieldLabel} ` : ''}${fmt(v)}`)
 
   const LONG_PRESS_MS = 400
   const REPEAT_MS = 80
@@ -28,7 +40,9 @@ export default function Stepper(props: Props) {
 
   const clearPress = () => {
     if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
-    if (pressInterval) { clearInterval(pressInterval); pressInterval = null }
+    // Only a press that actually reached the repeat phase owes an announcement;
+    // a short tap is announced by applyStep on click instead.
+    if (pressInterval) { clearInterval(pressInterval); pressInterval = null; announce(props.value) }
   }
 
   onCleanup(clearPress)
@@ -50,12 +64,17 @@ export default function Stepper(props: Props) {
     pressStart = 0
     const v = Math.min(max(), Math.max(min(), safeAdd(props.value, delta)))
     props.onChange(v)
+    announce(v)
     if (editing()) setRaw(fmt(v))
   }
 
   const commit = () => {
     const n = parseFloat(raw())
-    if (!isNaN(n)) props.onChange(Math.min(max(), Math.max(min(), n)))
+    if (!isNaN(n)) {
+      const v = Math.min(max(), Math.max(min(), n))
+      props.onChange(v)
+      announce(v)
+    }
     setEditing(false)
   }
 
@@ -68,6 +87,7 @@ export default function Stepper(props: Props) {
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
         disabled={props.value <= min()}
+        aria-label={props.fieldLabel ? `Decrease ${props.fieldLabel}` : 'Decrease'}
         class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30 select-none touch-manipulation"
       >
         −
@@ -79,6 +99,7 @@ export default function Stepper(props: Props) {
             type="button"
             data-testid="stepper-value"
             onClick={() => { setRaw(fmt(props.value)); setEditing(true) }}
+            aria-label={props.fieldLabel ? `Edit ${props.fieldLabel}, currently ${fmt(props.value)}` : undefined}
             class="bg-surface border-y border-border text-text font-mono px-3 py-3 min-w-[2.5rem] text-center select-none touch-manipulation [-webkit-touch-callout:none]"
           >
             {fmt(props.value)}
@@ -90,6 +111,7 @@ export default function Stepper(props: Props) {
           data-testid="stepper-input"
           value={raw()}
           autofocus
+          aria-label={props.fieldLabel}
           onInput={e => setRaw(e.currentTarget.value)}
           onBlur={commit}
           onKeyDown={e => e.key === 'Enter' && commit()}
@@ -103,10 +125,12 @@ export default function Stepper(props: Props) {
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
         disabled={props.value >= max()}
+        aria-label={props.fieldLabel ? `Increase ${props.fieldLabel}` : 'Increase'}
         class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30 select-none touch-manipulation"
       >
         +
       </button>
+      <span class="sr-only" role="status" aria-live="polite">{announced()}</span>
     </div>
   )
 }

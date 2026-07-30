@@ -1,5 +1,6 @@
 import type { TrainingDB } from '../db/index'
 import { formatDateIso } from './format'
+import { refreshTrainingMaxPresence } from './training-max'
 
 const PENDING_EXPORT_KEY = 'pending-export'
 // Cap import payloads before `file.text()` materializes them — a multi-GB JSON
@@ -20,21 +21,42 @@ export async function retryPendingExport(): Promise<void> {
 }
 
 export async function exportJson(db: TrainingDB): Promise<void> {
+  // Fanned out, not awaited in sequence: each toArray() is its own round-trip to
+  // the SQLite worker and none of the twelve depends on another, so awaiting them
+  // one at a time paid twelve times the latency for no ordering benefit.
+  const [
+    lifts, trainingMaxes, accessoryTrainingMaxes, cycles, sessions, sets,
+    exercises, liftSupplementals, accessorySets, accessoryNotes,
+    assistanceDefaults, settingsRows,
+  ] = await Promise.all([
+    db.lifts.toArray(),
+    db.trainingMaxes.toArray(),
+    db.accessoryTrainingMaxes.toArray(),
+    db.cycles.toArray(),
+    db.sessions.toArray(),
+    db.sets.toArray(),
+    db.exercises.toArray(),
+    db.liftSupplementals.toArray(),
+    db.accessorySets.toArray(),
+    db.accessoryNotes.toArray(),
+    db.assistanceDefaults.toArray(),
+    db.settings.toArray(),
+  ])
   const data = {
     exportedAt: new Date().toISOString(),
     version: 2,
-    lifts: await db.lifts.toArray(),
-    trainingMaxes: await db.trainingMaxes.toArray(),
-    accessoryTrainingMaxes: await db.accessoryTrainingMaxes.toArray(),
-    cycles: await db.cycles.toArray(),
-    sessions: await db.sessions.toArray(),
-    sets: await db.sets.toArray(),
-    exercises: await db.exercises.toArray(),
-    liftSupplementals: await db.liftSupplementals.toArray(),
-    accessorySets: await db.accessorySets.toArray(),
-    accessoryNotes: await db.accessoryNotes.toArray(),
-    assistanceDefaults: await db.assistanceDefaults.toArray(),
-    settings: await db.settings.toArray(),
+    lifts,
+    trainingMaxes,
+    accessoryTrainingMaxes,
+    cycles,
+    sessions,
+    sets,
+    exercises,
+    liftSupplementals,
+    accessorySets,
+    accessoryNotes,
+    assistanceDefaults,
+    settings: settingsRows,
   }
   const content = JSON.stringify(data, null, 2)
   const filename = `training-log-${formatDateIso(new Date())}.json`
@@ -157,15 +179,22 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       await table.bulkAdd(parsed)
     }
   })
+  // The only path that can take training maxes away — every table is cleared
+  // before the restore, and the payload may carry none. Re-derive rather than
+  // assume, so a backup with no TMs correctly sends the user back to /setup.
+  await refreshTrainingMaxPresence(db)
 }
 
 export async function exportCsv(db: TrainingDB): Promise<void> {
-  const sessions = await db.sessions.toArray()
-  const sets = await db.sets.toArray()
-  const lifts = await db.lifts.toArray()
-  const accessorySets = await db.accessorySets.toArray()
-  const accessoryNotes = await db.accessoryNotes.toArray()
-  const exercises = await db.exercises.toArray()
+  // Same fan-out as exportJson — six independent worker round-trips.
+  const [sessions, sets, lifts, accessorySets, accessoryNotes, exercises] = await Promise.all([
+    db.sessions.toArray(),
+    db.sets.toArray(),
+    db.lifts.toArray(),
+    db.accessorySets.toArray(),
+    db.accessoryNotes.toArray(),
+    db.exercises.toArray(),
+  ])
   const liftMap = Object.fromEntries(lifts.map(l => [l.id!, l.name]))
   const exerciseMap = Object.fromEntries(exercises.map(e => [e.id!, e.name]))
 

@@ -5,6 +5,7 @@ import BottomNav from './components/layout/BottomNav'
 import Toast from './components/layout/Toast'
 import ConfirmationDialog from './components/modals/ConfirmationDialog'
 import { db } from './db/index'
+import { hasTrainingMaxes, refreshTrainingMaxPresence } from './lib/training-max'
 
 const ScreenFallback = () => (
   <div class="flex items-center justify-center h-full min-h-[50vh] text-text/40 text-sm">
@@ -24,15 +25,19 @@ function AppShell(props: ParentProps) {
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Re-checked on every navigation, not just first mount: if the user lands
-  // anywhere with no training maxes — e.g. bailed out of onboarding via IMPORT
-  // INSTEAD without finishing — bounce them back to the setup wizard.
+  // If the user lands anywhere with no training maxes — e.g. bailed out of
+  // onboarding via IMPORT INSTEAD without finishing — bounce them back to the
+  // setup wizard.
+  //
+  // The check still re-runs after that first landing, but on a signal rather
+  // than a fresh `db.trainingMaxes.count()` per navigation: the answer only
+  // changes where a TM is written or an import wipes the table, and those places
+  // now say so. `null` is "not yet determined" — hold, don't redirect, or a slow
+  // OPFS boot would throw a set-up user into onboarding.
+  void refreshTrainingMaxPresence(db)
   createEffect(() => {
     if (location.pathname === '/setup') return
-    void (async () => {
-      const count = await db.trainingMaxes.count()
-      if (count === 0) navigate('/setup', { replace: true })
-    })()
+    if (hasTrainingMaxes() === false) navigate('/setup', { replace: true })
   })
 
   // Restoring a tab from the browser's back/forward cache repaints the whole
@@ -53,10 +58,15 @@ function AppShell(props: ParentProps) {
   })
 
   return (
+    // No `user-select: none` and no contextmenu block here: both used to be set
+    // on this root and applied to the whole app, including notes, weights, and
+    // exercise names. Selection suppression now lives in index.css scoped to
+    // buttons/nav/labels, and long-press on a control is handled by the
+    // `-webkit-touch-callout: none` in that same rule — so copy/paste and the
+    // native context menu work on the user's own data again.
     <div
       class="bg-bg min-h-screen font-mono text-text flex flex-col"
-      style={{ 'padding-top': 'env(safe-area-inset-top, 0px)', 'user-select': 'none', '-webkit-user-select': 'none' }}
-      onContextMenu={e => e.preventDefault()}
+      style={{ 'padding-top': 'env(safe-area-inset-top, 0px)' }}
     >
       <main
         class="flex-1 overflow-y-auto"

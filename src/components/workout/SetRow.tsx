@@ -90,7 +90,7 @@ export default function SetRow(props: Props) {
             onLog={() => { props.onLog(reps(), weight()); setReps(props.set.reps); setWeightTouched(false) }}
           >
             <FieldRow label="reps">
-              <Stepper value={reps()} onChange={setReps} step={1} min={0} label="reps" />
+              <Stepper value={reps()} onChange={setReps} step={1} min={0} label="reps" fieldLabel="reps" />
             </FieldRow>
           </SetLogControls>
         </div>
@@ -124,9 +124,9 @@ export default function SetRow(props: Props) {
       {/* Completed — inline edit form */}
       <Match when={editing()}>
         <div class="flex items-center gap-3 py-3 pl-3 border-l-4 border-accent flex-wrap">
-          <Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} label="edit-weight" />
+          <Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} label="edit-weight" fieldLabel="weight" />
           <span class="text-text-dim font-mono text-sm">×</span>
-          <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} label="edit-reps" />
+          <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} label="edit-reps" fieldLabel="reps" />
           <button
             onClick={() => { props.onEdit(editReps(), editWeight()); setEditing(false) }}
             class="border border-accent text-accent px-3 py-2 text-xs font-mono tracking-widest"

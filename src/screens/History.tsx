@@ -7,6 +7,7 @@ import { formatDateShort, formatDateLong } from '../lib/format'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
 import NotesText from '../components/forms/NotesText'
+import { gapsForSession } from '../store/save-failure-store'
 
 type ViewMode = 'lift' | 'date' | 'calendar'
 
@@ -231,21 +232,45 @@ function HistorySessionRow(props: {
     ? estimated1RM(props.row.amrapWeight, props.row.amrapReps).toFixed(1)
     : null
 
+  const panelId = () => `session-detail-${sid()}`
+  // Sets this session logged that the database refused. Without this the only
+  // trace of a failed save was a 2.5s toast at the time; the row would look
+  // complete forever after.
+  const gaps = () => gapsForSession(sid())
+
   return (
     <div>
       <button
         onClick={() => props.onExpand(sid())}
+        aria-expanded={props.expanded}
+        aria-controls={panelId()}
         class="w-full text-left border border-border px-3 py-2 text-sm flex justify-between hover:border-muted"
       >
         <span class="text-muted">{dateStr()}</span>
-        <span class="text-text">{props.row.liftName} W{props.row.session.week}</span>
+        <span class="text-text">
+          {props.row.liftName} W{props.row.session.week}
+          <Show when={gaps().length > 0}>
+            <span class="text-danger ml-2" title="Some sets failed to save">!</span>
+          </Show>
+        </span>
         <span class="text-muted">
           {props.row.amrapWeight && props.row.amrapReps ? `${props.row.amrapWeight}×${props.row.amrapReps} ~ ${e1rm()}lb` : ''}
         </span>
       </button>
       <Show when={props.expanded ? props.detail : null}>
         {detail => (
-          <div class="border border-t-0 border-border px-3 py-2 text-xs text-text-dim space-y-1">
+          <div id={panelId()} class="border border-t-0 border-border px-3 py-2 text-xs text-text-dim space-y-1">
+            <Show when={gaps().length > 0}>
+              <div class="border border-danger px-2 py-1.5 mb-2">
+                <div class="text-danger uppercase tracking-widest text-[10px] mb-1">
+                  {gaps().length} set{gaps().length === 1 ? '' : 's'} failed to save
+                </div>
+                <For each={gaps()}>
+                  {g => <div class="text-text-dim">{g.describe}</div>}
+                </For>
+                <div class="text-faint mt-1">Add them by hand with EDIT below.</div>
+              </div>
+            </Show>
             <div class="flex justify-end mb-1">
               <button
                 onClick={() => navigate(`/history/${sid()}/edit`)}
@@ -574,7 +599,10 @@ export default function History() {
             <For each={calendarCells()}>
               {cell => (
                 <button
-                  aria-label={cell.date.toDateString()}
+                  aria-label={cell.sessions.length > 0
+                    ? `${cell.date.toDateString()}, ${cell.sessions.length} session${cell.sessions.length === 1 ? '' : 's'}`
+                    : cell.date.toDateString()}
+                  aria-pressed={isSelected(cell.date)}
                   onClick={() => cell.isCurrentMonth && setSelectedDay(cell.date)}
                   disabled={!cell.isCurrentMonth}
                   class={`aspect-square flex flex-col items-center justify-center font-mono text-xs ${dayCellClass(cell)} ${isSelected(cell.date) ? 'ring-2 ring-accent' : ''} ${isToday(cell.date) && cell.isCurrentMonth ? 'font-bold outline outline-2 -outline-offset-2 outline-warn' : ''}`}

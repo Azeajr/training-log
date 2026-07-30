@@ -64,14 +64,14 @@ export default function ExerciseEditor(props: Props) {
         <Show when={(props.plateMode ?? 'none') !== 'none' && props.onImplementBaseChange}>
           <div class="flex items-center gap-2">
             <span class="text-muted text-xs uppercase tracking-widest w-20">Base lb</span>
-            <Stepper value={props.implementBase ?? 0} onChange={props.onImplementBaseChange!} step={5} min={0} max={200} />
+            <Stepper value={props.implementBase ?? 0} onChange={props.onImplementBaseChange!} step={5} min={0} max={200} fieldLabel="implement base weight" />
           </div>
         </Show>
       </Show>
       <Show when={props.increment !== null}>
         <div class="flex items-center gap-2">
           <span class="text-muted text-xs uppercase tracking-widest w-20">Increment</span>
-          <Stepper value={props.increment!} onChange={props.onIncrementChange} step={2.5} min={0} />
+          <Stepper value={props.increment!} onChange={props.onIncrementChange} step={2.5} min={0} fieldLabel="increment" />
           <span class="text-muted text-xs">lb</span>
         </div>
       </Show>

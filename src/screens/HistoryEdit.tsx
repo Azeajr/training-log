@@ -9,6 +9,7 @@ import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import Stepper from '../components/forms/Stepper'
 import NotesField from '../components/forms/NotesField'
+import Modal from '../components/modals/Modal'
 
 type PickerMode = { kind: 'add' } | { kind: 'swap'; accIdx: number } | null
 
@@ -336,9 +337,9 @@ export default function HistoryEdit() {
                     <Index each={rows()}>
                       {row => (
                         <div class="flex items-center gap-2 py-1.5 flex-wrap">
-                          <Stepper value={row().s.weight} onChange={v => updateSet(row().i, 'weight', v)} step={2.5} min={0} />
+                          <Stepper value={row().s.weight} onChange={v => updateSet(row().i, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />
                           <span class="text-muted text-xs">lb ×</span>
-                          <Stepper value={row().s.reps} onChange={v => updateSet(row().i, 'reps', v)} step={1} min={0} />
+                          <Stepper value={row().s.reps} onChange={v => updateSet(row().i, 'reps', v)} step={1} min={0} fieldLabel="reps" />
                           <Show when={row().s.isAmrap}>
                             <span class="text-warn text-xs tracking-widest">AMRAP</span>
                           </Show>
@@ -361,6 +362,7 @@ export default function HistoryEdit() {
                       <span class="text-text text-sm uppercase tracking-widest">{accAcc().exerciseName}</span>
                       <button
                         onClick={() => setPicker({ kind: 'swap', accIdx: ai })}
+                        aria-label={`Swap ${accAcc().exerciseName}`}
                         class="text-muted text-xs hover:text-accent"
                       >
                         swap
@@ -368,6 +370,7 @@ export default function HistoryEdit() {
                     </div>
                     <button
                       onClick={() => deleteAccessory(ai)}
+                      aria-label={`Remove ${accAcc().exerciseName}`}
                       class="text-muted hover:text-danger text-xs font-mono px-1"
                     >
                       ✕
@@ -379,14 +382,14 @@ export default function HistoryEdit() {
                         <span class="text-muted text-xs w-10">Set {setRow().setNumber}</span>
                         <Show when={accAcc().exerciseType === 'reps'}>
                           <>
-                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} />
+                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />
                             <span class="text-muted text-xs">lb ×</span>
-                            <Stepper value={setRow().reps ?? 0} onChange={v => updateAccSet(ai, si, 'reps', v)} step={1} min={0} />
+                            <Stepper value={setRow().reps ?? 0} onChange={v => updateAccSet(ai, si, 'reps', v)} step={1} min={0} fieldLabel="reps" />
                           </>
                         </Show>
                         <Show when={accAcc().exerciseType === 'timed'}>
                           <>
-                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} />
+                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />
                             <span class="text-muted text-xs">lb ×</span>
                             <DurationInput
                               value={setRow().duration}
@@ -396,9 +399,9 @@ export default function HistoryEdit() {
                         </Show>
                         <Show when={accAcc().exerciseType === 'distance'}>
                           <>
-                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} />
+                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />
                             <span class="text-muted text-xs">lb ×</span>
-                            <Stepper value={setRow().distance ?? 0} onChange={v => updateAccSet(ai, si, 'distance', v)} step={1} min={0} />
+                            <Stepper value={setRow().distance ?? 0} onChange={v => updateAccSet(ai, si, 'distance', v)} step={1} min={0} fieldLabel="distance" />
                           </>
                         </Show>
                       </div>
@@ -443,12 +446,12 @@ export default function HistoryEdit() {
           </button>
 
           <Show when={picker() !== null}>
-            <div class="fixed inset-0 bg-bg z-50 p-4 overflow-y-auto">
-              <div class="flex items-center justify-between mb-4">
-                <button onClick={() => setPicker(null)} class="text-muted hover:text-text text-xs tracking-widest">← BACK</button>
-                <Rule label="SELECT EXERCISE" class="text-muted" />
-                <div class="w-14" />
-              </div>
+            <Modal
+              variant="sheet"
+              title="SELECT EXERCISE"
+              onClose={() => setPicker(null)}
+              class="px-4 pb-4 overflow-y-auto"
+            >
               <div class="space-y-1">
                 <For each={libraryExercises()}>
                   {(exercise) => {
@@ -472,7 +475,7 @@ export default function HistoryEdit() {
                   }}
                 </For>
               </div>
-            </div>
+            </Modal>
           </Show>
         </div>
       )}

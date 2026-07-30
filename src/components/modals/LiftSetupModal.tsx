@@ -3,9 +3,11 @@ import { db } from '../../db/index'
 import type { Lift, PlateMode } from '../../types/domain'
 import { createLift } from '../../lib/lift'
 import { PLATE_MODE_LABEL, PLATE_MODES } from '../../lib/plate-loading'
+import { noteTrainingMaxAdded } from '../../lib/training-max'
 import { settings } from '../../store/settings-store'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
+import Modal from './Modal'
 
 export interface DraftLiftFields {
   name: string
@@ -125,6 +127,7 @@ export default function LiftSetupModal(props: Props) {
           liftId = await createLift(db, props.draftLift!)
           if (props.collectTm) {
             await db.trainingMaxes.add({ liftId, weight: tmInput(), setAt: new Date() })
+            noteTrainingMaxAdded()
           }
         }
 
@@ -158,16 +161,19 @@ export default function LiftSetupModal(props: Props) {
   }
 
   return (
-    <div class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-      <div class="bg-surface border border-accent p-6 font-mono max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div class="text-accent uppercase tracking-widest text-sm mb-4">
-          {liftLabel()} · SETUP
-        </div>
+    // Escape cancels rather than commits — a half-configured lift should not be
+    // written by a keypress the user meant as "get me out of here".
+    <Modal
+      title={`${liftLabel()} · SETUP`}
+      onClose={() => { if (!saving()) props.onCancel() }}
+      class="bg-surface border border-accent p-6 font-mono max-w-md w-full max-h-[90vh] overflow-y-auto"
+    >
+      <div>
 
         <Show when={props.collectTm}>
           <Rule label="TRAINING MAX" class="text-muted mb-2" />
           <div class="flex items-center gap-2 mb-6">
-            <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} max={1000} label="tm-new-lift" />
+            <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} max={1000} label="tm-new-lift" fieldLabel="training max" />
             <span class="text-muted text-xs">lb</span>
           </div>
         </Show>
@@ -191,7 +197,7 @@ export default function LiftSetupModal(props: Props) {
         >
           <div class="flex items-center gap-2 mb-6">
             <span class="text-muted text-xs w-16">base lb</span>
-            <Stepper value={implementBase()} onChange={setImplementBase} step={5} min={0} max={200} label="implement-base" />
+            <Stepper value={implementBase()} onChange={setImplementBase} step={5} min={0} max={200} label="implement-base" fieldLabel="implement base weight" />
             <span class="text-faint text-[10px]">{plateMode() === 'paired' ? 'bar weight' : '0 = belt/dip'}</span>
           </div>
         </Show>
@@ -222,16 +228,16 @@ export default function LiftSetupModal(props: Props) {
               <Show when={block().weightMode === 'percent'}>
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-muted text-xs w-12">%TM</span>
-                  <Stepper value={Math.round((block().percent ?? 0) * 100)} onChange={v => patchBlock(i, { percent: v / 100 })} step={5} min={0} max={120} />
+                  <Stepper value={Math.round((block().percent ?? 0) * 100)} onChange={v => patchBlock(i, { percent: v / 100 })} step={5} min={0} max={120} fieldLabel="percent of training max" />
                 </div>
               </Show>
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-muted text-xs w-12">sets</span>
-                <Stepper value={block().sets} onChange={v => patchBlock(i, { sets: v })} step={1} min={1} max={20} />
+                <Stepper value={block().sets} onChange={v => patchBlock(i, { sets: v })} step={1} min={1} max={20} fieldLabel="sets" />
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-muted text-xs w-12">reps</span>
-                <Stepper value={block().reps} onChange={v => patchBlock(i, { reps: v })} step={1} min={1} max={50} />
+                <Stepper value={block().reps} onChange={v => patchBlock(i, { reps: v })} step={1} min={1} max={50} fieldLabel="reps" />
               </div>
             </div>
           )}
@@ -267,16 +273,16 @@ export default function LiftSetupModal(props: Props) {
             <Show when={newMode() === 'percent'}>
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-muted text-xs w-12">%TM</span>
-                <Stepper value={newPercent()} onChange={setNewPercent} step={5} min={0} max={120} />
+                <Stepper value={newPercent()} onChange={setNewPercent} step={5} min={0} max={120} fieldLabel="percent of training max" />
               </div>
             </Show>
             <div class="flex items-center gap-2 mb-1">
               <span class="text-muted text-xs w-12">sets</span>
-              <Stepper value={newSets()} onChange={setNewSets} step={1} min={1} max={20} />
+              <Stepper value={newSets()} onChange={setNewSets} step={1} min={1} max={20} fieldLabel="sets" />
             </div>
             <div class="flex items-center gap-2 mb-2">
               <span class="text-muted text-xs w-12">reps</span>
-              <Stepper value={newReps()} onChange={setNewReps} step={1} min={1} max={50} />
+              <Stepper value={newReps()} onChange={setNewReps} step={1} min={1} max={50} fieldLabel="reps" />
             </div>
             <button
               onClick={handleAddBlock}
@@ -305,6 +311,6 @@ export default function LiftSetupModal(props: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
