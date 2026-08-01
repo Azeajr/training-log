@@ -98,15 +98,15 @@ export function composeAllSets(input: ComposeInput): {
   }
 }
 
-// Targets for today's AMRAP at a given weight: beat the matching previous AMRAP
-// sets when history exists, otherwise the e1RM implied by the TM.
+// Targets for today's AMRAP at a given weight: beat the robust recent working
+// performance seed when history exists, otherwise the e1RM implied by the TM.
 export function amrapTargetsFor(
   weight: number,
-  recentAmraps: Array<{ weight: number; reps: number }>,
+  recentPerformances: Array<{ weight: number; reps: number }>,
   tm: number,
   discount: HighRepDiscount = 'off',
 ): AmrapTarget[] {
-  const target = calcAmrapTarget(recentAmraps, weight, discount)
+  const target = calcAmrapTarget(recentPerformances, weight, discount)
   if (target) return [target]
   if (tm <= 0) return []
   const est1RM = est1RMFromTm(tm)

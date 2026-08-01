@@ -10,7 +10,7 @@ import {
   computeClosedThroughWeek,
   deloadTms,
   getNextSessionAdvancingIfDone,
-  getRecentAmraps,
+  getRecentWorkingSets,
 } from './cycle'
 import { archiveLift } from './lift'
 
@@ -572,9 +572,9 @@ describe('flexible roster completion', () => {
   })
 })
 
-// ─── getRecentAmraps ─────────────────────────────────────────────────────────
+// ─── getRecentWorkingSets ────────────────────────────────────────────────────
 
-describe('getRecentAmraps', () => {
+describe('getRecentWorkingSets', () => {
   async function seedAmrapSession(opts: {
     cycleId: number; liftId: number; week: 1 | 2 | 3 | 4
     status?: 'completed' | 'pending' | 'skipped'
@@ -597,7 +597,7 @@ describe('getRecentAmraps', () => {
     const lifts = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await seedAmrapSession({ cycleId, liftId: lifts[0].id!, week: 1, status: 'pending', amrapWeight: 205 })
-    const result = await getRecentAmraps(db, lifts[0].id!)
+    const result = await getRecentWorkingSets(db, lifts[0].id!)
     expect(result).toEqual([])
   })
 
@@ -606,7 +606,7 @@ describe('getRecentAmraps', () => {
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 195, amrapReps: 6, date: new Date('2026-01-10') })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 210, amrapReps: 10, date: new Date('2026-01-20') })
-    const result = await getRecentAmraps(db, lifts[0].id!)
+    const result = await getRecentWorkingSets(db, lifts[0].id!)
     expect(result).toEqual([
       { weight: 210, reps: 10 },
       { weight: 195, reps: 6 },
@@ -630,7 +630,7 @@ describe('getRecentAmraps', () => {
         amrapWeight: 200 + i, amrapReps: 5, date: new Date(2026, 0, 10 + i),
       })
     }
-    const result = await getRecentAmraps(db, lifts[0].id!)
+    const result = await getRecentWorkingSets(db, lifts[0].id!)
     expect(result).toHaveLength(3)
     expect(result.map(r => r.weight)).toEqual([204, 203, 202])
   })
@@ -644,21 +644,21 @@ describe('getRecentAmraps', () => {
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 180, amrapReps: 5, date: new Date('2026-01-10') })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 205, amrapReps: 8, date: new Date('2026-01-12') })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 210, amrapReps: 6, date: new Date('2026-01-20') })
-    const result = await getRecentAmraps(db, lifts[0].id!)
+    const result = await getRecentWorkingSets(db, lifts[0].id!)
     expect(result).toEqual([
       { weight: 210, reps: 6 },  // week 2
       { weight: 205, reps: 8 },  // week 1, the redo (newer) — the 180 attempt is dropped
     ])
   })
 
-  it('falls back to an older same-week attempt when the newest logged no AMRAP', async () => {
+  it('falls back to an older same-week attempt when the newest logged no working set', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
     // Older week-1 attempt with an AMRAP; a newer week-1 redo that logged none.
     // The newest attempt must not shadow the week's real data.
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 200, amrapReps: 7, date: new Date('2026-01-10') })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, date: new Date('2026-01-12') })
-    expect(await getRecentAmraps(db, lifts[0].id!)).toEqual([{ weight: 200, reps: 7 }])
+    expect(await getRecentWorkingSets(db, lifts[0].id!)).toEqual([{ weight: 200, reps: 7 }])
   })
 
   it('honors an explicit window argument', async () => {
@@ -666,7 +666,7 @@ describe('getRecentAmraps', () => {
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 195, amrapReps: 6, date: new Date('2026-01-10') })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 210, amrapReps: 10, date: new Date('2026-01-20') })
-    const result = await getRecentAmraps(db, lifts[0].id!, 1)
+    const result = await getRecentWorkingSets(db, lifts[0].id!, 'off', 1)
     expect(result).toEqual([{ weight: 210, reps: 10 }])
   })
 
@@ -674,7 +674,7 @@ describe('getRecentAmraps', () => {
     const lifts = await seedLifts()
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await seedAmrapSession({ cycleId, liftId: lifts[0].id!, week: 1, status: 'pending', amrapWeight: 205 })
-    const result = await getRecentAmraps(db, lifts[0].id!)
+    const result = await getRecentWorkingSets(db, lifts[0].id!)
     expect(result).toEqual([])
   })
 
@@ -682,30 +682,29 @@ describe('getRecentAmraps', () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 4, amrapWeight: 205 })
-    const result = await getRecentAmraps(db, lifts[0].id!)
+    const result = await getRecentWorkingSets(db, lifts[0].id!)
     expect(result).toEqual([])
   })
 
-  it('skips completed sessions that have no AMRAP set', async () => {
+  it('skips completed sessions that have no working set', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, date: new Date('2026-01-05') })
     await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 205, amrapReps: 9, date: new Date('2026-01-15') })
-    const result = await getRecentAmraps(db, lifts[0].id!)
+    const result = await getRecentWorkingSets(db, lifts[0].id!)
     expect(result).toEqual([{ weight: 205, reps: 9 }])
   })
 
-  it('uses the AMRAP set, not the first logged set of the session', async () => {
+  it('uses the session’s best e1RM, not only its AMRAP', async () => {
     const lifts = await seedLifts()
     const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
     const sessionId = await db.sessions.add({
       cycleId: cycle1, liftId: lifts[0].id!, week: 1, date: new Date('2026-01-10'), notes: null, status: 'completed',
     })
-    // Non-AMRAP set inserted first — without the isAmrap filter, .first() returns it
-    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 130, reps: 5, isAmrap: false })
-    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 205, reps: 9, isAmrap: true })
-    const result = await getRecentAmraps(db, lifts[0].id!)
-    expect(result).toEqual([{ weight: 205, reps: 9 }])
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 235, reps: 8, isAmrap: false })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 165, reps: 14, isAmrap: true })
+    const result = await getRecentWorkingSets(db, lifts[0].id!, 'aggressive')
+    expect(result).toEqual([{ weight: 235, reps: 8 }])
   })
 })
 

@@ -13,7 +13,7 @@ import { composeAllSets, amrapTargetsFor } from '../lib/workout-compose'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
-import { advanceCycleIfComplete, getRecentAmraps, deloadTms, applyCycleDoubling } from '../lib/cycle'
+import { advanceCycleIfComplete, getRecentWorkingSets, deloadTms, applyCycleDoubling } from '../lib/cycle'
 import { discardPendingSession } from '../lib/session'
 import { detectAmrapPRs } from '../lib/pr'
 import { getCurrentTm, setTm } from '../lib/training-max'
@@ -116,7 +116,7 @@ export default function Workout() {
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
   const [tmRecommendation, setTmRecommendation] = createSignal<SessionTmRecommendation | null>(null)
 
-  const [recentAmraps, setRecentAmraps] = createSignal<Array<{ weight: number; reps: number }>>([])
+  const [recentWorkingSets, setRecentWorkingSets] = createSignal<Array<{ weight: number; reps: number }>>([])
   const [tmWeight, setTmWeight] = createSignal(0)
   // In-flight guard for the session-ending handlers. A double-tap on COMPLETE
   // would run the accessory bulkAdds twice; SKIP/EXIT racing COMPLETE could
@@ -222,7 +222,7 @@ export default function Workout() {
     if (session.week !== 4) {
       const amrapSet = main.find(s => s.isAmrap)
       if (amrapSet) {
-        setRecentAmraps(await getRecentAmraps(db, session.liftId))
+        setRecentWorkingSets(await getRecentWorkingSets(db, session.liftId, settings.highRepDiscount))
         setAmrapTargets(targetsFor(amrapSet.weight))
       }
     }
@@ -242,7 +242,7 @@ export default function Workout() {
   }
 
   const targetsFor = (weight: number): AmrapTarget[] =>
-    amrapTargetsFor(weight, recentAmraps(), tmWeight(), settings.highRepDiscount)
+    amrapTargetsFor(weight, recentWorkingSets(), tmWeight(), settings.highRepDiscount)
 
   const handleAmrapWeightChange = (weight: number) => setAmrapTargets(targetsFor(weight))
 

@@ -1,6 +1,7 @@
 import type { TrainingDB } from '../db/index'
-import type { Lift, TrainingMax, HighRepDiscount } from '../types/domain'
+import type { Lift, TrainingMax, HighRepDiscount, Set } from '../types/domain'
 import { roundToNearest5, SEED_WINDOW, cycleFinalWeek } from './calc'
+import { bestEstimatedPerformance, isWorkingPerformance } from './performance'
 import { getCycleDoublingCandidates } from './tm-recommendations'
 import type { DoublingCandidate } from './tm-recommendations'
 import { getCurrentTm, setTm, noteTrainingMaxAdded } from './training-max'
@@ -261,17 +262,17 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
   }
 }
 
-// Most-recent-first AMRAP performances for a lift, used to seed a robust e1RM
-// (median over the window — see calc.seedE1Rm). Only completed, non-deload
-// sessions count: a deload or in-progress session is not a real top-set effort
-// and would drag the estimate. Returns at most `window` entries.
-export async function getRecentAmraps(
+// Most-recent-first best working performances for a lift, used to seed a robust
+// e1RM (median over the window — see calc.seedE1Rm). Only completed, non-deload
+// sessions count. One best set per cycle/week keeps a long supplemental tail or
+// a redo from crowding out the recent training signal.
+export async function getRecentWorkingSets(
   db: TrainingDB,
   liftId: number,
+  discount: HighRepDiscount = 'off',
   window = SEED_WINDOW,
 ): Promise<Array<{ weight: number; reps: number }>> {
   const sessions = await db.sessions
-    .where('liftId').equals(liftId)
     .filter(s => s.status === 'completed' && s.week !== 4)
     .toArray()
 
@@ -279,14 +280,23 @@ export async function getRecentAmraps(
     new Date(b.date).getTime() - new Date(a.date).getTime()
   )
 
-  // At most one AMRAP per (cycle, week) in the window — a redo adds a second
-  // completed row for the same cycle+week, and two such AMRAPs would skew the
-  // median e1RM seed. Keyed by cycle+week, not week alone: week numbers repeat
-  // across cycles and those are distinct real sessions. Sessions are date-desc,
-  // so the newest attempt for a week is seen first; a week is only marked done
-  // once an attempt actually contributes an AMRAP, so a newest attempt that
-  // logged no AMRAP falls through to an older attempt of the same week rather
-  // than dropping the week's data entirely.
+  const sessionById = new Map<number, typeof sessions[number]>()
+  for (const session of sessions) if (session.id != null) sessionById.set(session.id, session)
+  const ownIds = sessions.filter(s => s.liftId === liftId && s.id != null).map(s => s.id!)
+  const ownSets = ownIds.length > 0 ? await db.sets.where('sessionId').anyOf(ownIds).toArray() : []
+  const crossSets = await db.sets.where('liftId').equals(liftId).toArray()
+  const setsBySession = new Map<number, Set[]>()
+  const add = (set: Set) => {
+    const sets = setsBySession.get(set.sessionId) ?? []
+    sets.push(set)
+    setsBySession.set(set.sessionId, sets)
+  }
+  ownSets.filter(s => s.type !== 'cross' && isWorkingPerformance(s)).forEach(add)
+  crossSets.filter(s => s.type === 'cross' && isWorkingPerformance(s) && sessionById.has(s.sessionId)).forEach(add)
+
+  // At most one performance per (cycle, week) in the window. Sessions are
+  // date-desc, so a newer redo wins when it contains qualifying work; a redo
+  // with no work falls through to the older attempt.
   const seenWeeks = new Set<string>()
   const recent: Array<{ weight: number; reps: number }> = []
   for (const session of sessions) {
@@ -294,12 +304,9 @@ export async function getRecentAmraps(
     if (!session.id) continue
     const key = `${session.cycleId}-${session.week}`
     if (seenWeeks.has(key)) continue
-    const amrap = await db.sets
-      .where('sessionId').equals(session.id)
-      .filter(s => s.isAmrap)
-      .first()
-    if (amrap) {
-      recent.push({ weight: amrap.weight, reps: amrap.reps })
+    const best = bestEstimatedPerformance(setsBySession.get(session.id) ?? [], discount)
+    if (best) {
+      recent.push({ weight: best.weight, reps: best.reps })
       seenWeeks.add(key)
     }
   }
