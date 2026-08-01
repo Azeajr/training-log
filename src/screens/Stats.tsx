@@ -100,22 +100,22 @@ export default function Stats() {
                 <div class="flex items-baseline gap-4">
                   <span class="flex-1 truncate text-text uppercase tracking-wider">{r.name}</span>
                   <Show
-                    when={r.e1rm !== null}
-                    fallback={<span class="text-faint text-xs tracking-widest">NO AMRAP YET</span>}
+                    when={r.maxWeight !== null}
+                    fallback={<span class="text-faint text-xs tracking-widest">NO SETS YET</span>}
                   >
                     <span class="text-accent text-2xl">
-                      {r.e1rm}<span class="text-xs text-muted ml-1 tracking-widest">LB e1RM</span>
-                    </span>
-                    <span class="text-muted text-sm w-20 text-right">{r.weight}×{r.reps}</span>
-                  </Show>
-                </div>
-                <Show when={r.maxWeight !== null}>
-                  <div class="flex items-baseline gap-4 pl-2">
-                    <span class="flex-1 text-faint text-xs tracking-widest">ACTUAL MAX</span>
-                    <span class="text-text text-sm">
                       {r.maxWeight}<span class="text-xs text-muted ml-1 tracking-widest">LB</span>
                     </span>
                     <span class="text-muted text-sm w-20 text-right">×{r.maxWeightReps}</span>
+                  </Show>
+                </div>
+                <Show when={r.e1rm !== null}>
+                  <div class="flex items-baseline gap-4 pl-2">
+                    <span class="flex-1 text-faint text-xs tracking-widest">EST. 1RM</span>
+                    <span class="text-text text-sm">
+                      {r.e1rm}<span class="text-xs text-muted ml-1 tracking-widest">LB</span>
+                    </span>
+                    <span class="text-muted text-sm w-20 text-right">{r.weight}×{r.reps}</span>
                   </div>
                 </Show>
               </div>
