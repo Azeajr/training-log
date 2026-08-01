@@ -1,5 +1,5 @@
 import type { TrainingDB } from '../db/index'
-import type { Lift, TrainingMax } from '../types/domain'
+import type { Lift, TrainingMax, HighRepDiscount } from '../types/domain'
 import { roundToNearest5, SEED_WINDOW, cycleFinalWeek } from './calc'
 import { getCycleDoublingCandidates } from './tm-recommendations'
 import type { DoublingCandidate } from './tm-recommendations'
@@ -99,7 +99,7 @@ async function progressTms(
   return changes
 }
 
-export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
+export async function advanceCycleIfComplete(db: TrainingDB, discount: HighRepDiscount = 'off'): Promise<{
   advanced: boolean
   doublingCandidates: DoublingCandidate[]
   newTms: TmChange[]
@@ -120,7 +120,7 @@ export async function advanceCycleIfComplete(db: TrainingDB): Promise<{
   if (!weekComplete(sessions, finalWeek, activeLiftIds)) return { advanced: false, doublingCandidates: [], newTms: [] }
 
   // Compute before progression fires so TM bump detection sees pre-progression state
-  const doublingCandidates = await getCycleDoublingCandidates(db, cycle)
+  const doublingCandidates = await getCycleDoublingCandidates(db, cycle, discount)
 
   const cycleId = cycle.id!
   let newTms: TmChange[] = []

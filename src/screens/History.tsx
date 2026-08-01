@@ -4,6 +4,7 @@ import { db } from '../db/index'
 import type { Session, Lift, Set as TrainingSet, AccessorySet } from '../types/domain'
 import { estimated1RM, formatDuration, SET_TYPE_DISPLAY_ORDER } from '../lib/calc'
 import { formatDateShort, formatDateLong } from '../lib/format'
+import { settings } from '../store/settings-store'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
 import NotesText from '../components/forms/NotesText'
@@ -229,7 +230,7 @@ function HistorySessionRow(props: {
   const sid = () => props.row.session.id!
   const dateStr = () => formatDateShort(props.row.session.date)
   const e1rm = () => props.row.amrapWeight && props.row.amrapReps
-    ? estimated1RM(props.row.amrapWeight, props.row.amrapReps).toFixed(1)
+    ? estimated1RM(props.row.amrapWeight, props.row.amrapReps, settings.highRepDiscount).toFixed(1)
     : null
 
   const panelId = () => `session-detail-${sid()}`
@@ -379,7 +380,7 @@ export default function History() {
       .filter(r => r.amrapWeight != null && r.amrapReps != null)
       .map(r => ({
         date: new Date(r.session.date),
-        weight: Math.round(estimated1RM(r.amrapWeight!, r.amrapReps!) * 10) / 10,
+        weight: Math.round(estimated1RM(r.amrapWeight!, r.amrapReps!, settings.highRepDiscount) * 10) / 10,
       }))
   )
 

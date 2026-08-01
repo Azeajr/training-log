@@ -41,10 +41,11 @@ describe('Stats screen', () => {
     await waitFor(() => expect(document.body.textContent).toContain('233'))
   })
 
-  it('marks a lift with no completed AMRAP as NO AMRAP YET', async () => {
+  it('marks a lift with no completed sets as NO SETS YET and no e1RM row', async () => {
     await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
     render(() => <Stats />)
-    await waitFor(() => expect(document.body.textContent).toContain('NO AMRAP YET'))
+    await waitFor(() => expect(document.body.textContent).toContain('NO SETS YET'))
+    expect(document.body.textContent).not.toContain('EST. 1RM')
   })
 
   it('does not count a failed 0-rep AMRAP as a record', async () => {
@@ -53,8 +54,9 @@ describe('Stats screen', () => {
     const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 3, date: t0, notes: null, status: 'completed' })
     await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 200, reps: 0, isAmrap: true })
     render(() => <Stats />)
-    // OHP has an AMRAP row but 0 reps → still no record.
-    await waitFor(() => expect(document.body.textContent).toContain('NO AMRAP YET'))
+    // OHP has an AMRAP row but 0 reps → still no record, and no working set either.
+    await waitFor(() => expect(document.body.textContent).toContain('NO SETS YET'))
+    expect(document.body.textContent).not.toContain('EST. 1RM')
   })
 
   it('shows the heaviest actual set and its reps, not an estimate', async () => {
@@ -67,8 +69,7 @@ describe('Stats screen', () => {
 
     render(() => <Stats />)
     // Joker 225x2 is the heaviest real work; the 500 warmup must not win.
-    await waitFor(() => expect(document.body.textContent).toContain('ACTUAL MAX'))
-    expect(document.body.textContent).toContain('225')
+    await waitFor(() => expect(document.body.textContent).toContain('225'))
     expect(document.body.textContent).not.toContain('500')
   })
 
@@ -80,8 +81,7 @@ describe('Stats screen', () => {
     await db.sets.add({ sessionId, type: 'joker', setNumber: 1, weight: 405, reps: 0, isAmrap: false })
 
     render(() => <Stats />)
-    await waitFor(() => expect(document.body.textContent).toContain('ACTUAL MAX'))
-    expect(document.body.textContent).toContain('185')
+    await waitFor(() => expect(document.body.textContent).toContain('185'))
     expect(document.body.textContent).not.toContain('405')
   })
 
@@ -94,7 +94,7 @@ describe('Stats screen', () => {
     await db.sets.add({ sessionId, type: 'cross', setNumber: 1, weight: 315, reps: 3, isAmrap: false, liftId: 2 })
 
     render(() => <Stats />)
-    await waitFor(() => expect(document.body.textContent).toContain('ACTUAL MAX'))
+    await waitFor(() => expect(document.body.textContent).toContain('315'))
     // Squat (lift 2) owns the 315; OHP (lift 1) tops out at its own 100.
     const rows = document.body.textContent!
     expect(rows).toContain('315')

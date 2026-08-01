@@ -353,7 +353,7 @@ export default function Settings() {
       }
     })
 
-    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db)
+    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db, settings.highRepDiscount)
     if (advanced) {
       setCycleCompleteData({ newTms, doublingCandidates })
     } else {
@@ -389,7 +389,7 @@ export default function Settings() {
       }
     })
 
-    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db)
+    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db, settings.highRepDiscount)
     if (advanced) {
       setCycleCompleteData({ newTms, doublingCandidates })
     } else {
@@ -637,6 +637,25 @@ export default function Settings() {
           4-week: week 4 is a light deload, and the mode sets what supplemental +
           cross-lift work does that week — skip it, run it at deload %, or at
           normal (~65%) weights.
+        </p>
+      </div>
+
+      <div class="mb-6">
+        <Rule label="e1RM HIGH-REP DISCOUNT" class="text-muted mb-2" />
+        <div class="flex gap-1 flex-wrap">
+          <For each={(['off', 'mild', 'moderate', 'aggressive'] as const)}>{(d) => (
+            <ToggleChip
+              active={(settings.highRepDiscount ?? 'off') === d}
+              onClick={() => void updateSettings({ highRepDiscount: d })}
+            >
+              {d.toUpperCase()}
+            </ToggleChip>
+          )}</For>
+        </div>
+        <p class="text-faint text-xs mt-1">
+          Reps over 10 on an AMRAP set are less reliable strength indicators — higher
+          settings trust them less when estimating your 1RM. Off leaves the Wathan
+          formula unchanged.
         </p>
       </div>
 

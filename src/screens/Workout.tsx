@@ -242,7 +242,7 @@ export default function Workout() {
   }
 
   const targetsFor = (weight: number): AmrapTarget[] =>
-    amrapTargetsFor(weight, recentAmraps(), tmWeight())
+    amrapTargetsFor(weight, recentAmraps(), tmWeight(), settings.highRepDiscount)
 
   const handleAmrapWeightChange = (weight: number) => setAmrapTargets(targetsFor(weight))
 
@@ -314,7 +314,7 @@ export default function Workout() {
 
     if (setData.isAmrap && lift()) {
       try {
-        const prs = await detectAmrapPRs(db, lift()!.id!, weight, reps, dbId)
+        const prs = await detectAmrapPRs(db, lift()!.id!, weight, reps, dbId, settings.highRepDiscount)
         if (prs.repPr || prs.e1RmPr) {
           const msgs: string[] = []
           if (prs.repPr) msgs.push(`REP PR ${weight}×${reps}`)
@@ -461,7 +461,7 @@ export default function Workout() {
   }
 
   const proceedAfterSession = async () => {
-    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db)
+    const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db, settings.highRepDiscount)
     if (advanced) setCycleCompleteData({ newTms, doublingCandidates })
     else { clearSession(); navigate('/today') }
   }
@@ -529,7 +529,7 @@ export default function Workout() {
     if (session.week !== 4) {
       const l = lift()
       if (l) {
-        const rec = await getSessionTmRecommendation(db, sessionId, session.liftId, l.name)
+        const rec = await getSessionTmRecommendation(db, sessionId, session.liftId, l.name, settings.highRepDiscount)
         if (rec) { setTmRecommendation(rec); return }
       }
     }

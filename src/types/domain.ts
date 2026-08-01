@@ -7,6 +7,11 @@ export type SupplementalSetType = Exclude<SupplementalTemplate, 'none'>
 //   normal — computed at week-1 percentages (~65%), "it's already light"
 export type DeloadSupplemental = 'skip' | 'deload' | 'normal'
 
+// How much reps>10 on an AMRAP set should be discounted in estimated1RM — high-rep
+// sets are less reliable strength indicators than low-rep ones. 'off' = no discount
+// (plain Wathan). See calc.ts estimated1RM for the compression mechanics.
+export type HighRepDiscount = 'off' | 'mild' | 'moderate' | 'aggressive'
+
 // How a set's plate-loading readout is computed/displayed:
 //   none   — not plate-loaded (dumbbell/cable-stack/bodyweight): no readout
 //   paired — symmetric 2-end load (barbell, hex bar, two-sided plate cable):
@@ -172,4 +177,5 @@ export interface Settings {
   // completes, TMs progress and the next cycle begins, with no light week. When
   // false the deloadSupplemental setting is moot (no deload week to govern).
   hasDeloadWeek?: boolean
+  highRepDiscount?: HighRepDiscount
 }

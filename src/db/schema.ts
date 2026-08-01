@@ -132,6 +132,7 @@ export const ADDITIVE_MIGRATIONS = [
   // unguarded, so a DB that already holds dupes would fail every boot; as a
   // migration the error is swallowed and that DB just skips the index.
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_accessoryNotes_session_exercise ON accessoryNotes(sessionId, exerciseId)`,
+  `ALTER TABLE settings ADD COLUMN highRepDiscount TEXT`,
 ] as const
 
 export const ALL_TABLES = [
