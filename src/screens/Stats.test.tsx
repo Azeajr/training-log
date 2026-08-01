@@ -41,6 +41,17 @@ describe('Stats screen', () => {
     await waitFor(() => expect(document.body.textContent).toContain('233'))
   })
 
+  it('uses a stronger non-AMRAP working set for the best e1RM', async () => {
+    const t0 = new Date()
+    const cycleId = await db.cycles.add({ number: 1, startDate: t0, endDate: null })
+    const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 3, date: t0, notes: null, status: 'completed' })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 235, reps: 8, isAmrap: false })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 165, reps: 14, isAmrap: true })
+
+    render(() => <Stats />)
+    await waitFor(() => expect(document.body.textContent).toContain('300'))
+  })
+
   it('marks a lift with no completed sets as NO SETS YET and no e1RM row', async () => {
     await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
     render(() => <Stats />)

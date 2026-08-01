@@ -316,33 +316,32 @@ export const median = (xs: readonly number[]): number => {
   return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2
 }
 
-// How many recent AMRAPs feed the seed estimate. Taking the median over this
-// window is the robust replacement for back-calcing a single set: one stray
-// high-rep AMRAP can no longer inflate the target, and old sets fall out of the
-// window so the estimate still tracks strength drift — no stateful estimator
-// needed. Deload sets are excluded upstream (see getRecentAmraps).
+// How many recent working performances feed the seed estimate. Taking the
+// median over this window smooths a single unusual set while old performances
+// fall out as strength changes. Deload sets are excluded upstream (see
+// getRecentWorkingSets).
 export const SEED_WINDOW = 3
 
-// Robust seed e1RM from recent AMRAPs given most-recent-first. Median of the
-// per-set Wathan estimates over the window. Returns 0 for an empty list.
+// Robust seed e1RM from recent working performances, given most-recent-first.
+// Median of the per-set Wathan estimates over the window. Returns 0 when empty.
 export const seedE1Rm = (
-  recentAmraps: ReadonlyArray<{ weight: number; reps: number }>,
+  recentPerformances: ReadonlyArray<{ weight: number; reps: number }>,
   window = SEED_WINDOW,
   discount: HighRepDiscount = 'off',
 ): number =>
-  median(recentAmraps.slice(0, window).map(s => estimated1RM(s.weight, s.reps, discount)))
+  median(recentPerformances.slice(0, window).map(s => estimated1RM(s.weight, s.reps, discount)))
 
 // Single AMRAP rep target for today's weight, seeded from the robust e1RM of the
-// most recent AMRAPs (median over SEED_WINDOW). Null when there is no history, or
+// most recent working performances (median over SEED_WINDOW). Null with no history, or
 // when todayAmrapWeight is too light relative to the seed for targetReps to
 // resolve (see targetReps) — callers fall back to the TM-implied e1RM.
 export const calcAmrapTarget = (
-  recentAmraps: ReadonlyArray<{ weight: number; reps: number }>,
+  recentPerformances: ReadonlyArray<{ weight: number; reps: number }>,
   todayAmrapWeight: number,
   discount: HighRepDiscount = 'off',
 ): AmrapTarget | null => {
-  if (recentAmraps.length === 0) return null
-  const est = seedE1Rm(recentAmraps, SEED_WINDOW, discount)
+  if (recentPerformances.length === 0) return null
+  const est = seedE1Rm(recentPerformances, SEED_WINDOW, discount)
   const reps = targetReps(est, todayAmrapWeight, discount)
   if (reps === null) return null
   return {

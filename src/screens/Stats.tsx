@@ -1,12 +1,13 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../db/index'
 import { estimated1RM } from '../lib/calc'
+import { bestEstimatedPerformance, isWorkingPerformance } from '../lib/performance'
 import { settings } from '../store/settings-store'
 import Rule from '../components/layout/Rule'
 
 interface RecordRow {
   name: string
-  e1rm: number | null   // rounded best Wathan e1RM; null when no AMRAP yet
+  e1rm: number | null   // rounded best Wathan e1RM; null when no working set yet
   weight: number | null // the set that produced it
   reps: number | null
   maxWeight: number | null     // heaviest weight actually lifted; measured, not estimated
@@ -44,18 +45,6 @@ export default function Stats() {
         ? await db.sets.where('sessionId').anyOf(sessionIds).toArray()
         : []
 
-      // Best AMRAP by Wathan e1RM — mirrors pr.ts: only completed AMRAP sets
-      // (isAmrap && reps >= 1) count, so a failed 0-rep set is never a record.
-      // Cross sets are always isAmrap:false, so they can't leak in here.
-      const amraps = ownSets.filter(s => s.isAmrap && s.reps >= 1)
-      if (amraps.length > 0) {
-        const top = amraps.reduce((a, b) =>
-          estimated1RM(b.weight, b.reps, settings.highRepDiscount) > estimated1RM(a.weight, a.reps, settings.highRepDiscount) ? b : a)
-        record.e1rm = Math.round(estimated1RM(top.weight, top.reps, settings.highRepDiscount))
-        record.weight = top.weight
-        record.reps = top.reps
-      }
-
       // Heaviest weight actually lifted — measured, never estimated. Warmups and
       // failed (0-rep) sets don't count. Cross sets belong to the movement lift
       // they train, not the session's lift, so they're attributed by their own
@@ -66,7 +55,17 @@ export default function Stats() {
       const working = [
         ...ownSets.filter(s => s.type !== 'warmup' && s.type !== 'cross'),
         ...crossSets.filter(s => s.type === 'cross'),
-      ].filter(s => s.reps >= 1)
+      ].filter(isWorkingPerformance)
+
+      // Best e1RM across all successful working sets. This is intentionally
+      // broader than the AMRAP-only PR toast: a hard main, joker, supplemental,
+      // or attributed cross set is a valid strength performance here.
+      const bestE1rm = bestEstimatedPerformance(working, settings.highRepDiscount)
+      if (bestE1rm) {
+        record.e1rm = Math.round(estimated1RM(bestE1rm.weight, bestE1rm.reps, settings.highRepDiscount))
+        record.weight = bestE1rm.weight
+        record.reps = bestE1rm.reps
+      }
       if (working.length > 0) {
         const top = working.reduce((a, b) =>
           b.weight > a.weight || (b.weight === a.weight && b.reps > a.reps) ? b : a)
