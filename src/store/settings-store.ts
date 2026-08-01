@@ -1,6 +1,6 @@
 import { createStore } from 'solid-js/store'
 import { db } from '../db/index'
-import type { PlateConfig, SupplementalTemplate, DeloadSupplemental } from '../types/domain'
+import type { PlateConfig, SupplementalTemplate, DeloadSupplemental, HighRepDiscount } from '../types/domain'
 
 export const THEMES = {
   oled: {
@@ -249,6 +249,7 @@ export const SETTINGS_DEFAULTS = {
   supplementalTemplate: 'fsl+bbb' as SupplementalTemplate,
   deloadSupplemental: 'normal' as DeloadSupplemental,
   hasDeloadWeek: true,
+  highRepDiscount: 'off' as HighRepDiscount,
 }
 
 function resolveThemeKey(key: string | null | undefined): ThemeKey {
@@ -275,6 +276,7 @@ interface SettingsState {
   supplementalTemplate: SupplementalTemplate
   deloadSupplemental: DeloadSupplemental
   hasDeloadWeek: boolean
+  highRepDiscount: HighRepDiscount
 }
 
 export const [settings, setSettings] = createStore<SettingsState>({ ...SETTINGS_DEFAULTS })
@@ -292,6 +294,7 @@ export async function loadSettings() {
     supplementalTemplate: row.supplementalTemplate ?? 'fsl+bbb',
     deloadSupplemental: row.deloadSupplemental ?? 'normal',
     hasDeloadWeek: row.hasDeloadWeek ?? true,
+    highRepDiscount: row.highRepDiscount ?? 'off',
   })
 }
 

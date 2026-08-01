@@ -1,7 +1,7 @@
 import { estimated1RM, TM_PCT_OF_1RM, roundToNearest5 } from './calc'
 import { getCurrentTm } from './training-max'
 import type { TrainingDB } from '../db/index'
-import type { Cycle } from '../types/domain'
+import type { Cycle, HighRepDiscount } from '../types/domain'
 
 export const SESSION_TM_BUMP_THRESHOLD = 0.15
 export const CYCLE_DOUBLE_THRESHOLD = 0.10
@@ -25,6 +25,7 @@ export async function getSessionTmRecommendation(
   sessionId: number,
   liftId: number,
   liftName: string,
+  discount: HighRepDiscount = 'off',
 ): Promise<SessionTmRecommendation | null> {
   const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
   const amrap = sets.find(s => s.type === 'main' && s.isAmrap)
@@ -33,7 +34,7 @@ export async function getSessionTmRecommendation(
   const currentTm = await getCurrentTm(db, liftId)
   if (!currentTm) return null
 
-  const e1rm = estimated1RM(amrap.weight, amrap.reps)
+  const e1rm = estimated1RM(amrap.weight, amrap.reps, discount)
   const suggestedTm = roundToNearest5(e1rm * TM_PCT_OF_1RM)
   const delta = (suggestedTm - currentTm) / currentTm
 
@@ -45,6 +46,7 @@ export async function getSessionTmRecommendation(
 export async function getCycleDoublingCandidates(
   db: TrainingDB,
   cycle: Cycle,
+  discount: HighRepDiscount = 'off',
 ): Promise<DoublingCandidate[]> {
   const sessions = await db.sessions.where('cycleId').equals(cycle.id!).toArray()
   const workingSessions = sessions.filter(s => s.week !== 4 && s.status === 'completed')
@@ -90,7 +92,7 @@ export async function getCycleDoublingCandidates(
       const amrap = sets.find(s => s.type === 'main' && s.isAmrap)
       if (!amrap || amrap.reps < 1) { allOver = false; break }
 
-      const e1rm = estimated1RM(amrap.weight, amrap.reps)
+      const e1rm = estimated1RM(amrap.weight, amrap.reps, discount)
       const suggestedTm = roundToNearest5(e1rm * TM_PCT_OF_1RM)
       const delta = (suggestedTm - cycleTm.weight) / cycleTm.weight
       if (delta < CYCLE_DOUBLE_THRESHOLD) { allOver = false; break }

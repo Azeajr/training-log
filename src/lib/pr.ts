@@ -1,4 +1,5 @@
 import type { TrainingDB } from '../db/index'
+import type { HighRepDiscount } from '../types/domain'
 import { estimated1RM } from './calc'
 
 export interface AmrapPrResult {
@@ -27,8 +28,9 @@ export async function detectAmrapPRs(
   weight: number,
   reps: number,
   excludeSetId?: number,
+  discount: HighRepDiscount = 'off',
 ): Promise<AmrapPrResult> {
-  const newE1Rm = estimated1RM(weight, reps)
+  const newE1Rm = estimated1RM(weight, reps, discount)
   if (reps < 1) return { repPr: false, e1RmPr: false, newE1Rm }
 
   const sessions = await db.sessions.where('liftId').equals(liftId).toArray()
@@ -54,7 +56,7 @@ export async function detectAmrapPRs(
     : undefined
   const repPr = prevBestReps != null && reps > prevBestReps
 
-  const prevBestE1Rm = Math.max(...amrapSets.map(s => estimated1RM(s.weight, s.reps)))
+  const prevBestE1Rm = Math.max(...amrapSets.map(s => estimated1RM(s.weight, s.reps, discount)))
   const e1RmPr = newE1Rm > prevBestE1Rm
 
   return { repPr, e1RmPr, newE1Rm, prevBestReps, prevBestE1Rm }

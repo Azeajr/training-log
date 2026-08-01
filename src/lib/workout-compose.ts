@@ -4,7 +4,7 @@ import {
   supplementalSourceSetNumber, effectiveSupplementalWeek,
 } from './calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from './calc'
-import type { Set, SupplementalTemplate, DeloadSupplemental } from '../types/domain'
+import type { Set, SupplementalTemplate, DeloadSupplemental, HighRepDiscount } from '../types/domain'
 
 // The Workout screen's set derivation, lifted out of the component that renders
 // it. These were always pure — plain inputs in, plain data out, no signal reads —
@@ -104,12 +104,13 @@ export function amrapTargetsFor(
   weight: number,
   recentAmraps: Array<{ weight: number; reps: number }>,
   tm: number,
+  discount: HighRepDiscount = 'off',
 ): AmrapTarget[] {
-  const target = calcAmrapTarget(recentAmraps, weight)
+  const target = calcAmrapTarget(recentAmraps, weight, discount)
   if (target) return [target]
   if (tm <= 0) return []
   const est1RM = est1RMFromTm(tm)
-  const reps = targetReps(est1RM, weight)
+  const reps = targetReps(est1RM, weight, discount)
   if (reps === null) return []
   return [{ label: 'goal', reps, est1RM: Math.round(est1RM) }]
 }

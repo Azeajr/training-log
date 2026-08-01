@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../db/index'
 import { estimated1RM } from '../lib/calc'
+import { settings } from '../store/settings-store'
 import Rule from '../components/layout/Rule'
 
 interface RecordRow {
@@ -49,8 +50,8 @@ export default function Stats() {
       const amraps = ownSets.filter(s => s.isAmrap && s.reps >= 1)
       if (amraps.length > 0) {
         const top = amraps.reduce((a, b) =>
-          estimated1RM(b.weight, b.reps) > estimated1RM(a.weight, a.reps) ? b : a)
-        record.e1rm = Math.round(estimated1RM(top.weight, top.reps))
+          estimated1RM(b.weight, b.reps, settings.highRepDiscount) > estimated1RM(a.weight, a.reps, settings.highRepDiscount) ? b : a)
+        record.e1rm = Math.round(estimated1RM(top.weight, top.reps, settings.highRepDiscount))
         record.weight = top.weight
         record.reps = top.reps
       }

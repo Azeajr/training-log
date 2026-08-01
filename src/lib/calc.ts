@@ -1,4 +1,4 @@
-import type { PlateConfig, SupplementalTemplate, SupplementalSetType, DeloadSupplemental } from '../types/domain'
+import type { PlateConfig, SupplementalTemplate, SupplementalSetType, DeloadSupplemental, HighRepDiscount } from '../types/domain'
 
 export const MAIN_PERCENTAGES = {
   1: [0.65, 0.75, 0.85],
@@ -253,8 +253,32 @@ const WATHAN_BASE = 0.488
 const WATHAN_SCALE = 0.538
 const WATHAN_DECAY = 0.075
 
-export const estimated1RM = (weight: number, reps: number): number =>
-  reps === 1 ? weight : weight / (WATHAN_BASE + WATHAN_SCALE * Math.exp(-WATHAN_DECAY * reps))
+// Reps beyond this are treated as less trustworthy strength indicators (fatigue/
+// pacing dominate over max-effort at high rep counts) and get compressed before
+// hitting the curve — see effectiveReps.
+const HIGH_REP_THRESHOLD = 10
+
+// Reps past HIGH_REP_THRESHOLD count for this fraction of a real rep in the
+// formula: 1 = no discount, smaller = more skeptical of high-rep AMRAPs.
+// Compressing the rep count (rather than discounting the output) keeps the
+// curve strictly increasing in reps — more reps at the same weight never
+// lowers the estimate, unlike a flat post-hoc percentage knock-down would.
+const HIGH_REP_DISCOUNT_SCALE: Record<HighRepDiscount, number> = {
+  off: 1,
+  mild: 0.5,
+  moderate: 0.25,
+  aggressive: 0.1,
+}
+
+const effectiveReps = (reps: number, discount: HighRepDiscount): number =>
+  reps <= HIGH_REP_THRESHOLD
+    ? reps
+    : HIGH_REP_THRESHOLD + HIGH_REP_DISCOUNT_SCALE[discount] * (reps - HIGH_REP_THRESHOLD)
+
+export const estimated1RM = (weight: number, reps: number, discount: HighRepDiscount = 'off'): number =>
+  reps === 1
+    ? weight
+    : weight / (WATHAN_BASE + WATHAN_SCALE * Math.exp(-WATHAN_DECAY * effectiveReps(reps, discount)))
 
 // Fewest AMRAP reps at todayWeight whose e1RM reaches prev1RM, via the Wathan
 // inverse. Null when unreachable at any rep count: Wathan is asymptotic, so
@@ -263,11 +287,19 @@ export const estimated1RM = (weight: number, reps: number): number =>
 // 2: the continuous inverse can yield 1 when todayWeight is within ~1.3% of
 // prev1RM, but estimated1RM short-circuits reps===1 to plain weight, so a
 // 1-rep target below prev1RM could never reach it.
-export const targetReps = (prev1RM: number, todayWeight: number): number | null => {
+//
+// The inverse first solves for the *effective* reps (same equation as the
+// undiscounted case), then maps back through effectiveReps' inverse when that
+// comes out above the threshold — otherwise a discount setting would recommend
+// a rep count that reads as a lower e1RM than intended once run back through
+// estimated1RM.
+export const targetReps = (prev1RM: number, todayWeight: number, discount: HighRepDiscount = 'off'): number | null => {
   if (todayWeight <= 0 || todayWeight >= prev1RM) return 1
   const ratio = todayWeight / prev1RM
   if (ratio <= WATHAN_BASE) return null
-  const reps = -Math.log((ratio - WATHAN_BASE) / WATHAN_SCALE) / WATHAN_DECAY
+  const repsEff = -Math.log((ratio - WATHAN_BASE) / WATHAN_SCALE) / WATHAN_DECAY
+  const scale = HIGH_REP_DISCOUNT_SCALE[discount]
+  const reps = repsEff <= HIGH_REP_THRESHOLD ? repsEff : HIGH_REP_THRESHOLD + (repsEff - HIGH_REP_THRESHOLD) / scale
   return Math.max(2, Math.ceil(reps))
 }
 
@@ -296,8 +328,9 @@ export const SEED_WINDOW = 3
 export const seedE1Rm = (
   recentAmraps: ReadonlyArray<{ weight: number; reps: number }>,
   window = SEED_WINDOW,
+  discount: HighRepDiscount = 'off',
 ): number =>
-  median(recentAmraps.slice(0, window).map(s => estimated1RM(s.weight, s.reps)))
+  median(recentAmraps.slice(0, window).map(s => estimated1RM(s.weight, s.reps, discount)))
 
 // Single AMRAP rep target for today's weight, seeded from the robust e1RM of the
 // most recent AMRAPs (median over SEED_WINDOW). Null when there is no history, or
@@ -306,10 +339,11 @@ export const seedE1Rm = (
 export const calcAmrapTarget = (
   recentAmraps: ReadonlyArray<{ weight: number; reps: number }>,
   todayAmrapWeight: number,
+  discount: HighRepDiscount = 'off',
 ): AmrapTarget | null => {
   if (recentAmraps.length === 0) return null
-  const est = seedE1Rm(recentAmraps)
-  const reps = targetReps(est, todayAmrapWeight)
+  const est = seedE1Rm(recentAmraps, SEED_WINDOW, discount)
+  const reps = targetReps(est, todayAmrapWeight, discount)
   if (reps === null) return null
   return {
     label: 'target',

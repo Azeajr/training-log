@@ -3,6 +3,7 @@ import type { Set } from '../../types/domain'
 import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../../lib/calc'
 import { estimated1RM } from '../../lib/calc'
+import { settings } from '../../store/settings-store'
 import Stepper from '../forms/Stepper'
 import SetLogControls, { FieldRow } from '../forms/SetLogControls'
 import SetReadout from '../forms/SetReadout'
@@ -115,7 +116,7 @@ export default function SetRow(props: Props) {
           }
           trailing={
             <span class="text-faint text-xs font-mono ml-auto">
-              {estimated1RM(props.set.weight, props.set.reps).toFixed(0)}lb e1RM
+              {estimated1RM(props.set.weight, props.set.reps, settings.highRepDiscount).toFixed(0)}lb e1RM
             </span>
           }
         />
@@ -157,7 +158,7 @@ export default function SetRow(props: Props) {
             <>
               <Show when={props.loggedReps != null && props.loggedReps > 0}>
                 <span class="text-faint text-xs font-mono ml-auto">
-                  {estimated1RM(props.loggedWeight ?? props.set.weight, props.loggedReps!).toFixed(0)}lb e1RM
+                  {estimated1RM(props.loggedWeight ?? props.set.weight, props.loggedReps!, settings.highRepDiscount).toFixed(0)}lb e1RM
                 </span>
               </Show>
               <Show when={!!props.onDelete}>
