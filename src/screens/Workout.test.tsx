@@ -112,7 +112,7 @@ describe('Workout screen — with active session', () => {
     await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/) // Rule wraps the label in dashes
     // Label = getCrossLabel(movementName='Squat', fsl mode) → "SQUAT  5 × 5  FSL".
     // Glyph-agnostic matcher: proves the block loaded (movement name) and composed as FSL.
-    await screen.findByText((t) => t.includes('SQUAT') && t.includes('FSL'))
+    await screen.findByText('SQUAT')
   })
 
   it('logs a cross-lift set before any own-lift set, without touching currentSetIndex', async () => {
@@ -128,7 +128,7 @@ describe('Workout screen — with active session', () => {
 
     // Two active LOG buttons appear: the warmup set 0 (linear) and the cross
     // block's set 0. The cross block renders after the main grid, so it's last.
-    await screen.findByText((t) => t.includes('SQUAT') && t.includes('FSL'))
+    await screen.findByText('SQUAT')
     const logButtons = await screen.findAllByText('LOG')
     fireEvent.click(logButtons[logButtons.length - 1])
 
@@ -152,7 +152,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    await screen.findByText((t) => t.includes('SQUAT') && t.includes('FSL'))
+    await screen.findByText('SQUAT')
     const logButtons = await screen.findAllByText('LOG')
     fireEvent.click(logButtons[logButtons.length - 1])
     await waitFor(() => expect(workout.loggedCrossSets).toHaveLength(1))

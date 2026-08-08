@@ -630,6 +630,14 @@ export default function Workout() {
   const nextJokerWeight = () => calcNextJokerWeight(jokerBaseWeight(), jokerIncrement())
   const liftName = () => lift()?.name ?? '...'
 
+  // getSupplementalLabel/getCrossLabel join name and meta with a double space
+  // (calc.test.ts pins that format). Split there so the history underline can
+  // mark the name only — the accessory idiom — with sets×reps trailing muted.
+  const splitLabel = (label: string): [string, string | undefined] => {
+    const i = label.indexOf('  ')
+    return i < 0 ? [label, undefined] : [label.slice(0, i), label.slice(i + 2)]
+  }
+
   const supplementalLabel = () =>
     getSupplementalLabel(
       supplementalTemplate(),
@@ -653,7 +661,8 @@ export default function Workout() {
           aria-label={`View history for ${liftName()}`}
         >
           <Rule
-            label={`${liftName()} . WEEK ${workout.activeSession!.week}${workout.activeSession!.week === 4 ? ' . DELOAD' : ''}`}
+            label={liftName()}
+            labelSuffix={`. WEEK ${workout.activeSession!.week}${workout.activeSession!.week === 4 ? ' . DELOAD' : ''}`}
             class={workout.activeSession!.week === 4 ? 'text-info hover:text-info/70' : 'text-muted hover:text-text-dim'}
             labelClass="underline underline-offset-2 decoration-faint hover:decoration-accent"
           />
@@ -731,7 +740,8 @@ export default function Workout() {
               {/* The rows fold, "+ ADD SET" stays: adding another supplemental
                   set is the one thing still worth doing to a finished block. */}
               <CollapsibleSection
-                label={supplementalLabel()!}
+                label={splitLabel(supplementalLabel()!)[0]}
+                labelMeta={splitLabel(supplementalLabel()!)[1]}
                 complete={sectionComplete(fslSets().length, setOffset('fsl'))}
                 summary={`${fslSets().length} sets`}
               >
@@ -765,7 +775,8 @@ export default function Workout() {
               <For each={crossSections()}>
                 {section => (
                   <CrossBlockLog
-                    label={getCrossLabel(section.block, section.block.movementName)}
+                    label={splitLabel(getCrossLabel(section.block, section.block.movementName))[0]}
+                    labelMeta={splitLabel(getCrossLabel(section.block, section.block.movementName))[1]}
                     loading={section.block.movementLoading}
                     sets={section.sets}
                     cursor={section.cursor}

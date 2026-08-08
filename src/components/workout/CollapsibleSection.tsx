@@ -6,6 +6,12 @@ let seq = 0
 interface Props {
   label: string
   /**
+   * Non-clickable trailing info (sets × reps, weight mode). Rendered after the
+   * label but NOT underlined — the underline marks the name only, matching the
+   * accessory idiom (name underlined, meta muted).
+   */
+  labelMeta?: string
+  /**
    * True when every set in this section is behind the linear cursor. This is
    * the whole safety condition: a section is only ever collapsible once the
    * active row has left it, so collapsing can never unmount the element the
@@ -45,13 +51,21 @@ export default function CollapsibleSection(props: Props) {
   const labelButton = (extraClass?: string) => (
     <Show
       when={props.onLabelClick}
-      fallback={<SectionLabel class={extraClass}>{props.label}</SectionLabel>}
+      fallback={
+        <SectionLabel class={extraClass}>
+          {props.label}
+          <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
+        </SectionLabel>
+      }
     >
       <button
         onClick={props.onLabelClick}
         class={`text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${extraClass ?? ''}`}
       >
-        <SectionLabel class="underline underline-offset-2 decoration-faint hover:decoration-accent">{props.label}</SectionLabel>
+        <SectionLabel>
+          <span class="underline underline-offset-2 decoration-faint hover:decoration-accent">{props.label}</span>
+          <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
+        </SectionLabel>
       </button>
     </Show>
   )
@@ -74,7 +88,10 @@ export default function CollapsibleSection(props: Props) {
               aria-controls={id}
               class="w-full flex items-baseline gap-2 mb-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             >
-              <SectionLabel>{props.label}</SectionLabel>
+              <SectionLabel>
+                {props.label}
+                <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
+              </SectionLabel>
               <FoldGlyph expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs ml-auto" />
             </button>
           }

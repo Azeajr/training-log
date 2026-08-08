@@ -11,6 +11,8 @@ import CollapsibleSection from './CollapsibleSection'
 // session's own-lift work (issue #54).
 interface Props {
   label: string
+  /** Trailing sets×reps/mode info — rendered un-underlined (see CollapsibleSection). */
+  labelMeta?: string
   sets: CrossSet[]
   cursor: number
   logged: Set[]
@@ -30,6 +32,7 @@ export default function CrossBlockLog(props: Props) {
   return (
     <CollapsibleSection
       label={props.label}
+      labelMeta={props.labelMeta}
       complete={complete()}
       summary={`${props.sets.length} sets`}
       class="mb-6 md:mb-0"
