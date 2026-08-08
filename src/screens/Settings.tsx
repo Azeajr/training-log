@@ -755,7 +755,7 @@ export default function Settings() {
           <div class="py-1 border-b border-border-dim">
             <Show when={editingEx() === ex.id} fallback={
               <div class="flex items-center justify-between">
-                <span class="text-text">
+                <span class="text-text uppercase tracking-widest">
                   {ex.name}
                   <Show when={ex.category}>
                     <span class="text-faint text-xs ml-2">{CATEGORY_LABEL[ex.category!]}</span>
@@ -790,7 +790,7 @@ export default function Settings() {
             <Rule label="ARCHIVED" class="text-faint mt-4 mb-2" />
             <For each={exercisesByName(true)}>{(ex) => (
               <div class="py-1 border-b border-border-dim flex items-center justify-between">
-                <span class="text-faint text-sm">{ex.name}</span>
+                <span class="text-faint text-sm uppercase tracking-widest">{ex.name}</span>
                 <button onClick={() => handleUnarchiveExercise(ex.id!)} class="text-muted text-xs hover:text-accent">unarchive</button>
               </div>
             )}</For>
