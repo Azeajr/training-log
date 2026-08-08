@@ -38,6 +38,7 @@ import type { SessionTmRecommendation } from '../lib/tm-recommendations'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import ExerciseHistoryModal from '../components/modals/ExerciseHistoryModal'
+import LiftHistoryModal from '../components/modals/LiftHistoryModal'
 import { ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../lib/assistance'
 
 interface LoadedCrossBlock {
@@ -108,6 +109,7 @@ export default function Workout() {
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
   const [pickerSlot, setPickerSlot] = createSignal<AssistanceSlot | null>(null)
   const [historyExerciseId, setHistoryExerciseId] = createSignal<number | null>(null)
+  const [liftHistoryOpen, setLiftHistoryOpen] = createSignal(false)
   const historyExercise = () => {
     const id = historyExerciseId()
     if (id == null) return null
@@ -638,10 +640,16 @@ export default function Workout() {
       }
     >
       <div class="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
-        <Rule
-          label={`${liftName()} . WEEK ${workout.activeSession!.week}${workout.activeSession!.week === 4 ? ' . DELOAD' : ''}`}
-          class={`mb-6 ${workout.activeSession!.week === 4 ? 'text-info' : 'text-muted'}`}
-        />
+        <button
+          onClick={() => setLiftHistoryOpen(true)}
+          class="w-full text-left cursor-pointer mb-6"
+          aria-label={`View history for ${liftName()}`}
+        >
+          <Rule
+            label={`${liftName()} . WEEK ${workout.activeSession!.week}${workout.activeSession!.week === 4 ? ' . DELOAD' : ''}`}
+            class={`${workout.activeSession!.week === 4 ? 'text-info hover:text-info/70' : 'text-muted hover:text-text-dim'}`}
+          />
+        </button>
 
         <SaveFailureBanner />
 
@@ -878,6 +886,14 @@ export default function Workout() {
         </Show>
 
         <RestTimer />
+
+        <Show when={liftHistoryOpen()}>
+          <LiftHistoryModal
+            liftName={liftName()}
+            liftId={workout.activeSession!.liftId}
+            onClose={() => setLiftHistoryOpen(false)}
+          />
+        </Show>
 
         <Show when={historyExercise()}>
           {ex => (
