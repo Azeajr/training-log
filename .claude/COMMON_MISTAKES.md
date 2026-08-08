@@ -116,6 +116,19 @@ history manipulation to block it.
 
 ---
 
+### 10. `<button>` silently drops inherited `text-transform`
+
+**Symptom**: A label that rendered uppercase as a `<span>` comes back mixed-case after being
+converted to a real `<button>` — even though the parent still has Tailwind's `uppercase`.
+**Check**: Tailwind's preflight (modern-normalize) sets `button { text-transform: none }`, which
+beats inheritance from an ancestor. `uppercase` on the parent row does nothing for a `<button>`
+child.
+**Fix**: Put `uppercase` explicitly on the button. Precedent: `AccessoryLog` exercise-name button.
+Cheap live check: `getComputedStyle(el).textTransform` — class presence on the parent proves
+nothing.
+
+---
+
 **Update when**: a bug took >1h, could cause data loss, or recurred across sessions.
 
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-08-08

@@ -120,7 +120,9 @@ export default function AccessoryLog(props: Props) {
           }
         >
           <button
-            class="flex-1 text-left cursor-pointer hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            // uppercase must be explicit here: preflight sets button
+            // { text-transform: none }, which beats inheriting it from the row.
+            class="flex-1 text-left cursor-pointer uppercase hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             onClick={() => props.onExerciseClick!(props.accessory.exerciseId)}
             aria-label={`View history for ${props.accessory.exerciseName}`}
           >
