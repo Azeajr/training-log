@@ -18,6 +18,7 @@ interface Props {
   onEdit: (localIdx: number, reps: number, weight: number) => void
   onDelete: () => void
   loading?: PlateLoading | null
+  onLabelClick?: () => void
 }
 
 export default function CrossBlockLog(props: Props) {
@@ -32,6 +33,7 @@ export default function CrossBlockLog(props: Props) {
       complete={complete()}
       summary={`${props.sets.length} sets`}
       class="mb-6 md:mb-0"
+      onLabelClick={props.onLabelClick}
     >
       <For each={props.sets}>
         {(s, i) => (

@@ -109,7 +109,14 @@ export default function Workout() {
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
   const [pickerSlot, setPickerSlot] = createSignal<AssistanceSlot | null>(null)
   const [historyExerciseId, setHistoryExerciseId] = createSignal<number | null>(null)
-  const [liftHistoryOpen, setLiftHistoryOpen] = createSignal(false)
+  const [liftHistoryId, setLiftHistoryId] = createSignal<number | null>(null)
+  const liftHistoryName = () => {
+    const id = liftHistoryId()
+    if (id == null) return ''
+    if (id === workout.activeSession?.liftId) return lift()?.name ?? ''
+    const block = crossBlocks().find(b => b.movementLiftId === id)
+    return block?.movementName ?? ''
+  }
   const historyExercise = () => {
     const id = historyExerciseId()
     if (id == null) return null
@@ -641,7 +648,7 @@ export default function Workout() {
     >
       <div class="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
         <button
-          onClick={() => setLiftHistoryOpen(true)}
+          onClick={() => setLiftHistoryId(workout.activeSession!.liftId)}
           class="w-full text-left cursor-pointer mb-6"
           aria-label={`View history for ${liftName()}`}
         >
@@ -765,6 +772,7 @@ export default function Workout() {
                     onLog={(li, reps, weight) => void handleLogCross(section, li, reps, weight)}
                     onEdit={(li, reps, weight) => void handleEditCross(section, li, reps, weight)}
                     onDelete={() => void handleDeleteCross(section)}
+                    onLabelClick={() => setLiftHistoryId(section.block.movementLiftId)}
                   />
                 )}
               </For>
@@ -887,11 +895,11 @@ export default function Workout() {
 
         <RestTimer />
 
-        <Show when={liftHistoryOpen()}>
+        <Show when={liftHistoryId() != null}>
           <LiftHistoryModal
-            liftName={liftName()}
-            liftId={workout.activeSession!.liftId}
-            onClose={() => setLiftHistoryOpen(false)}
+            liftName={liftHistoryName()}
+            liftId={liftHistoryId()!}
+            onClose={() => setLiftHistoryId(null)}
           />
         </Show>
 
