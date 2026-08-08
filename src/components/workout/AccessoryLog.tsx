@@ -122,6 +122,9 @@ export default function AccessoryLog(props: Props) {
           onKeyDown={props.onExerciseClick ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onExerciseClick!(props.accessory.exerciseId) } } : undefined}
         >
           {props.accessory.exerciseName}
+          <Show when={props.onExerciseClick}>
+            <span class="text-faint ml-0.5" aria-hidden="true">→</span>
+          </Show>
           <span class="text-muted ml-2 text-xs">{ACCESSORY_SETS}x{ACCESSORY_REPS} @</span>
           <span class="text-muted text-xs font-mono ml-1">{weight()}lb</span>
         </span>

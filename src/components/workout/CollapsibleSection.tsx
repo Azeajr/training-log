@@ -53,6 +53,7 @@ export default function CollapsibleSection(props: Props) {
               class="w-full text-left cursor-pointer mb-2"
             >
               <SectionLabel>{props.label}</SectionLabel>
+              <span class="text-faint ml-1" aria-hidden="true">→</span>
             </button>
           </Show>
         }
