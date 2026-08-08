@@ -100,7 +100,9 @@ export default function AccessoryPicker(props: Props) {
           : 'border-border text-text hover:border-accent hover:text-accent'
       }`}
     >
-      <span>{row.exercise.name}{row.alreadyAdded ? ' ✓' : ''}</span>
+      {/* uppercase to match how the name renders once logged (AccessoryLog
+          header) — the exercise should look the same before and after picking */}
+      <span class="uppercase tracking-widest">{row.exercise.name}{row.alreadyAdded ? ' ✓' : ''}</span>
       <span class="text-muted">
         {row.calculatedWeight != null ? `${ACCESSORY_SETS}x${ACCESSORY_REPS} @ ${row.calculatedWeight}lb` : 'NOT SET'}
       </span>
