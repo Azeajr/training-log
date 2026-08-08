@@ -16,6 +16,7 @@ interface Props {
   summary?: string
   class?: string
   children: JSX.Element
+  onLabelClick?: () => void
 }
 
 // A finished section on the workout page is a long stretch of rows the user has
@@ -42,7 +43,19 @@ export default function CollapsibleSection(props: Props) {
     <div class={props.class}>
       <Show
         when={props.complete}
-        fallback={<SectionLabel class="mb-2">{props.label}</SectionLabel>}
+        fallback={
+          <Show
+            when={props.onLabelClick}
+            fallback={<SectionLabel class="mb-2">{props.label}</SectionLabel>}
+          >
+            <button
+              onClick={props.onLabelClick}
+              class="w-full text-left cursor-pointer mb-2"
+            >
+              <SectionLabel>{props.label}</SectionLabel>
+            </button>
+          </Show>
+        }
       >
         <button
           onClick={() => setUserExpanded(v => !v)}
