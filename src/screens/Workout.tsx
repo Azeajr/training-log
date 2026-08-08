@@ -664,7 +664,7 @@ export default function Workout() {
             label={liftName()}
             labelSuffix={`. WEEK ${workout.activeSession!.week}${workout.activeSession!.week === 4 ? ' . DELOAD' : ''}`}
             class={workout.activeSession!.week === 4 ? 'text-info hover:text-info/70' : 'text-muted hover:text-text-dim'}
-            labelClass="underline underline-offset-2 decoration-faint hover:decoration-accent"
+            labelClass={`${workout.activeSession!.week === 4 ? 'text-info' : 'text-text'} underline underline-offset-2 decoration-faint hover:decoration-accent`}
           />
         </button>
 

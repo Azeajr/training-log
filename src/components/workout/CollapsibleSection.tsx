@@ -48,12 +48,14 @@ export default function CollapsibleSection(props: Props) {
   // The history tap target (onLabelClick) must survive the fold: previously it
   // existed only in the un-complete branch, so finishing a cross block silently
   // removed its history entry point. Label and fold toggle are separate buttons.
+  // Name bright (text-text), meta muted — the AccessoryLog header idiom, so
+  // every labeled block on the page reads the same.
   const labelButton = (extraClass?: string) => (
     <Show
       when={props.onLabelClick}
       fallback={
         <SectionLabel class={extraClass}>
-          {props.label}
+          <span class="text-text">{props.label}</span>
           <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
         </SectionLabel>
       }
@@ -63,7 +65,7 @@ export default function CollapsibleSection(props: Props) {
         class={`text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${extraClass ?? ''}`}
       >
         <SectionLabel>
-          <span class="underline underline-offset-2 decoration-faint hover:decoration-accent">{props.label}</span>
+          <span class="text-text underline underline-offset-2 decoration-faint hover:decoration-accent">{props.label}</span>
           <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
         </SectionLabel>
       </button>
@@ -89,7 +91,7 @@ export default function CollapsibleSection(props: Props) {
               class="w-full flex items-baseline gap-2 mb-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             >
               <SectionLabel>
-                {props.label}
+                <span class="text-text">{props.label}</span>
                 <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
               </SectionLabel>
               <FoldGlyph expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs ml-auto" />
