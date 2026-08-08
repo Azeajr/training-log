@@ -39,43 +39,78 @@ export default function CollapsibleSection(props: Props) {
 
   const expanded = () => !props.complete || userExpanded()
 
+  // The history tap target (onLabelClick) must survive the fold: previously it
+  // existed only in the un-complete branch, so finishing a cross block silently
+  // removed its history entry point. Label and fold toggle are separate buttons.
+  const labelButton = (extraClass?: string) => (
+    <Show
+      when={props.onLabelClick}
+      fallback={<SectionLabel class={extraClass}>{props.label}</SectionLabel>}
+    >
+      <button
+        onClick={props.onLabelClick}
+        class={`text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${extraClass ?? ''}`}
+      >
+        <SectionLabel class="underline underline-offset-2 decoration-faint hover:decoration-accent">{props.label}</SectionLabel>
+      </button>
+    </Show>
+  )
+
   return (
     <div class={props.class}>
       <Show
         when={props.complete}
-        fallback={
-          <Show
-            when={props.onLabelClick}
-            fallback={<SectionLabel class="mb-2">{props.label}</SectionLabel>}
-          >
-            <button
-              onClick={props.onLabelClick}
-              class="w-full text-left cursor-pointer mb-2"
-            >
-              <SectionLabel class="underline underline-offset-2 decoration-faint hover:decoration-accent">{props.label}</SectionLabel>
-            </button>
-          </Show>
-        }
+        fallback={labelButton('mb-2')}
       >
-        <button
-          onClick={() => setUserExpanded(v => !v)}
-          aria-expanded={expanded()}
-          aria-controls={id}
-          class="w-full flex items-baseline gap-2 mb-2 text-left"
+        {/* With a history handler the row splits: label → history, triangle →
+            fold. Without one the whole row stays the fold toggle, keeping the
+            big tap target warmup/main always had. */}
+        <Show
+          when={props.onLabelClick}
+          fallback={
+            <button
+              onClick={() => setUserExpanded(v => !v)}
+              aria-expanded={expanded()}
+              aria-controls={id}
+              class="w-full flex items-baseline gap-2 mb-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              <SectionLabel>{props.label}</SectionLabel>
+              <FoldGlyph expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs ml-auto" />
+            </button>
+          }
         >
-          <SectionLabel>{props.label}</SectionLabel>
-          <Show when={!expanded() && props.summary}>
-            <span class="text-faint text-xs tracking-widest">{props.summary} done</span>
-          </Show>
-          {/* Triangles, not −/+: the steppers on this page are already covered
-              in −/+ glyphs, and a second meaning for the same character is
-              confusing on screen and ambiguous to anything querying by text. */}
-          <span class="text-faint text-xs ml-auto" aria-hidden="true">{expanded() ? '▾' : '▸'}</span>
-        </button>
+          <div class="w-full flex items-baseline gap-2 mb-2">
+            {labelButton()}
+            <button
+              onClick={() => setUserExpanded(v => !v)}
+              aria-expanded={expanded()}
+              aria-controls={id}
+              aria-label={`${expanded() ? 'Collapse' : 'Expand'} ${props.label}`}
+              class="flex items-baseline gap-2 ml-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              <FoldGlyph expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs" />
+            </button>
+          </div>
+        </Show>
       </Show>
       <div id={id} hidden={!expanded()}>
         {props.children}
       </div>
     </div>
+  )
+}
+
+// Summary chip + fold triangle, shared by both complete-branch layouts above.
+// Triangles, not −/+: the steppers on this page are already covered in −/+
+// glyphs, and a second meaning for the same character is confusing on screen
+// and ambiguous to anything querying by text.
+function FoldGlyph(props: { expanded: boolean; summary?: string; summaryClass: string; glyphClass: string }) {
+  return (
+    <>
+      <Show when={!props.expanded && props.summary}>
+        <span class={props.summaryClass}>{props.summary} done</span>
+      </Show>
+      <span class={props.glyphClass} aria-hidden="true">{props.expanded ? '▾' : '▸'}</span>
+    </>
   )
 }

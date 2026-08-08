@@ -35,8 +35,8 @@ Dated runtime-verification logs, one per claim checked against the running app.
 ## Review notes
 
 - `docs/ui-consistency-review.md` — UI/UX consistency findings from the history-modal /
-  history-label work. **UNVALIDATED**: a follow-up session must tag each finding
-  VALID/INVALID/SUPERSEDED at the cited file:line before anything gets implemented.
+  history-label work. **RESOLVED 2026-08-08**: all nine findings validated, then fixed
+  in one design-system pass; resolutions recorded inline. Kept as the rationale record.
 
 ## Not loaded automatically
 

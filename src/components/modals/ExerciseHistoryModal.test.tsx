@@ -27,7 +27,7 @@ describe('ExerciseHistoryModal', () => {
     ))
 
     await waitFor(() => {
-      expect(screen.getByText('No sessions logged with this exercise.')).toBeInTheDocument()
+      expect(screen.getByText('No sessions logged yet.')).toBeInTheDocument()
     })
   })
 
