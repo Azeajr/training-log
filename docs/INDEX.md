@@ -9,7 +9,7 @@ Every markdown doc in the repo, what it is for, and when to load it.
 | Doc | Purpose |
 |---|---|
 | `CLAUDE.md` | Stack, deploy model, the gotchas that cost time, pointers to everything else |
-| `.claude/COMMON_MISTAKES.md` | Nine recurring failure modes with symptom → check → fix |
+| `.claude/COMMON_MISTAKES.md` | Ten recurring failure modes with symptom → check → fix |
 | `.claude/QUICK_START.md` | Commands and the common workflows (new screen, schema change, calc logic) |
 
 ## Load when the task calls for it
