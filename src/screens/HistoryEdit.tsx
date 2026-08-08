@@ -468,7 +468,8 @@ export default function HistoryEdit() {
                             : 'border-border text-text hover:border-accent hover:text-accent'
                         }`}
                       >
-                        <span>{exercise.name}{alreadyAdded ? ' ✓' : ''}</span>
+                        {/* uppercase, same as AccessoryPicker rows and the logged accessory header */}
+                        <span class="uppercase tracking-widest">{exercise.name}{alreadyAdded ? ' ✓' : ''}</span>
                         <span class="text-muted text-xs uppercase">{exercise.type}</span>
                       </button>
                     )

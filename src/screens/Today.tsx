@@ -320,7 +320,8 @@ export default function Today() {
                             class="w-full text-left border border-border px-3 py-2 text-xs tracking-widest text-muted hover:border-accent hover:text-accent flex justify-between"
                           >
                             <span class="text-faint">{SECTION_LABEL[section]}</span>
-                            <span>{def() ? def()!.name : `+ CHOOSE`}</span>
+                            {/* uppercase to match the logged accessory header */}
+                            <span class="uppercase">{def() ? def()!.name : `+ CHOOSE`}</span>
                           </button>
                         </div>
                       )
