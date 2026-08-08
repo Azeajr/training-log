@@ -654,9 +654,8 @@ export default function Workout() {
         >
           <Rule
             label={`${liftName()} . WEEK ${workout.activeSession!.week}${workout.activeSession!.week === 4 ? ' . DELOAD' : ''}`}
-            class={`${workout.activeSession!.week === 4 ? 'text-info hover:text-info/70' : 'text-muted hover:text-text-dim'}`}
+            class={`${workout.activeSession!.week === 4 ? 'text-info hover:text-info/70' : 'text-muted hover:text-text-dim'} underline underline-offset-2 decoration-faint hover:decoration-accent`}
           />
-          <span class="text-faint text-xs" aria-hidden="true">→</span>
         </button>
 
         <SaveFailureBanner />
