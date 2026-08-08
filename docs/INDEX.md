@@ -32,6 +32,12 @@ Dated runtime-verification logs, one per claim checked against the running app.
 
 - `docs/verification/2026-06-27-deload-toggle.md` — the 3-WEEK / 4-WEEK cycle toggle.
 
+## Review notes
+
+- `docs/ui-consistency-review.md` — UI/UX consistency findings from the history-modal /
+  history-label work. **UNVALIDATED**: a follow-up session must tag each finding
+  VALID/INVALID/SUPERSEDED at the cited file:line before anything gets implemented.
+
 ## Not loaded automatically
 
 `.claude/completions/`, `.claude/sessions/`, and `docs/archive/` are excluded via `.claudeignore`.
