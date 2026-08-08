@@ -37,6 +37,7 @@ import { getSessionTmRecommendation } from '../lib/tm-recommendations'
 import type { SessionTmRecommendation } from '../lib/tm-recommendations'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
+import ExerciseHistoryModal from '../components/modals/ExerciseHistoryModal'
 import { ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSlot } from '../lib/assistance'
 
 interface LoadedCrossBlock {
@@ -106,6 +107,13 @@ export default function Workout() {
   const [crossBlocks, setCrossBlocks] = createSignal<LoadedCrossBlock[]>([])
   const [amrapTargets, setAmrapTargets] = createSignal<AmrapTarget[]>([])
   const [pickerSlot, setPickerSlot] = createSignal<AssistanceSlot | null>(null)
+  const [historyExerciseId, setHistoryExerciseId] = createSignal<number | null>(null)
+  const historyExercise = () => {
+    const id = historyExerciseId()
+    if (id == null) return null
+    const acc = workout.activeAccessories.find(a => a.exerciseId === id)
+    return acc ? { id, name: acc.exerciseName } : null
+  }
   // Extras = anything not in one of the three fixed slots. Catches 'extra',
   // missing slots, and any legacy/renamed slot value (e.g. a pre-rename
   // 'single_leg_core' left in an in-progress session) so nothing is orphaned.
@@ -775,7 +783,7 @@ export default function Workout() {
                       </button>
                     }
                   >
-                    <AccessoryLog accessory={acc()!} exercise={exercises().find(e => e.id === acc()!.exerciseId)} />
+                    <AccessoryLog accessory={acc()!} exercise={exercises().find(e => e.id === acc()!.exerciseId)} onExerciseClick={id => setHistoryExerciseId(id)} />
                     <button
                       onClick={() => setPickerSlot(section)}
                       class="text-faint text-xs font-mono hover:text-accent tracking-widest pl-2"
@@ -792,7 +800,7 @@ export default function Workout() {
             <div class="mb-2">
               <SectionLabel tone="text-faint" class="mb-1">EXTRA</SectionLabel>
               <For each={extraAccessories()}>
-                {acc => <AccessoryLog accessory={acc} exercise={exercises().find(e => e.id === acc.exerciseId)} />}
+                {acc => <AccessoryLog accessory={acc} exercise={exercises().find(e => e.id === acc.exerciseId)} onExerciseClick={id => setHistoryExerciseId(id)} />}
               </For>
             </div>
           </Show>
@@ -870,6 +878,16 @@ export default function Workout() {
         </Show>
 
         <RestTimer />
+
+        <Show when={historyExercise()}>
+          {ex => (
+            <ExerciseHistoryModal
+              exerciseName={ex().name}
+              exerciseId={ex().id}
+              onClose={() => setHistoryExerciseId(null)}
+            />
+          )}
+        </Show>
       </div>
     </Show>
   )

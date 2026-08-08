@@ -25,6 +25,7 @@ import InlineConfirm from '../ui/InlineConfirm'
 interface Props {
   accessory: ActiveAccessory
   exercise: Exercise | undefined
+  onExerciseClick?: (exerciseId: number) => void
 }
 
 export default function AccessoryLog(props: Props) {
@@ -111,7 +112,15 @@ export default function AccessoryLog(props: Props) {
   return (
     <div class="border border-border p-3 mb-3">
       <div class="text-text text-sm mb-1 uppercase tracking-widest flex items-center">
-        <span class="flex-1">
+        <span
+          class="flex-1"
+          classList={{ 'cursor-pointer hover:text-accent': !!props.onExerciseClick }}
+          onClick={() => props.onExerciseClick?.(props.accessory.exerciseId)}
+          role={props.onExerciseClick ? 'button' : undefined}
+          tabindex={props.onExerciseClick ? 0 : undefined}
+          aria-label={props.onExerciseClick ? `View history for ${props.accessory.exerciseName}` : undefined}
+          onKeyDown={props.onExerciseClick ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onExerciseClick!(props.accessory.exerciseId) } } : undefined}
+        >
           {props.accessory.exerciseName}
           <span class="text-muted ml-2 text-xs">{ACCESSORY_SETS}x{ACCESSORY_REPS} @</span>
           <span class="text-muted text-xs font-mono ml-1">{weight()}lb</span>
