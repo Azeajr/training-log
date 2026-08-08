@@ -2,23 +2,16 @@ import { createSignal, createMemo, createEffect, For, Show } from 'solid-js'
 import { useNavigate, useSearchParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Session, Lift, Set as TrainingSet, AccessorySet } from '../types/domain'
-import { estimated1RM, formatDuration, SET_TYPE_DISPLAY_ORDER } from '../lib/calc'
+import { estimated1RM } from '../lib/calc'
 import { formatDateShort, formatDateLong } from '../lib/format'
 import { settings } from '../store/settings-store'
 import SectionLabel from '../components/layout/SectionLabel'
-import SetReadout from '../components/forms/SetReadout'
 import NotesText from '../components/forms/NotesText'
+import ExerciseSetsBlock from '../components/forms/ExerciseSetsBlock'
+import LiftSetsByType from '../components/forms/LiftSetsByType'
 import { gapsForSession } from '../store/save-failure-store'
 
 type ViewMode = 'lift' | 'date' | 'calendar'
-
-// One accessory set's value string for SetReadout: reps, else duration, else
-// distance (compact "ft"), else empty. Mirrors the main-set "× N" idiom.
-const accSetValue = (s: AccessorySet) =>
-  s.reps != null ? `${s.reps}`
-  : s.duration != null ? formatDuration(s.duration)
-  : s.distance != null ? `${s.distance}ft`
-  : ''
 
 const dateKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -273,6 +266,11 @@ function HistorySessionRow(props: {
               </div>
             </Show>
             <div class="flex justify-end mb-1">
+              {/* Glyph atlas — one glyph per meaning, don't improvise new ones:
+                  →  navigate-to-action (EDIT →, TM-updated toast)
+                  ←  back to parent screen (HistoryEdit)
+                  ‹ › page through siblings (calendar months, below)
+                  ▸ ▾ fold/unfold in place (CollapsibleSection) */}
               <button
                 onClick={() => navigate(`/history/${sid()}/edit`)}
                 class="text-xs text-muted hover:text-accent font-mono tracking-widest"
@@ -280,61 +278,19 @@ function HistorySessionRow(props: {
                 EDIT →
               </button>
             </div>
-            <For each={SET_TYPE_DISPLAY_ORDER.filter(t => detail().sets.some(s => s.type === t))}>
-              {type => {
-                const typeSets = detail().sets.filter(s => s.type === type)
-                return (
-                  <Show when={typeSets.length > 0}>
-                    <div>
-                      <SectionLabel class="mb-0.5">{type}</SectionLabel>
-                      <For each={typeSets}>{s => (
-                        <SetReadout
-                          size="sm"
-                          alignWeight
-                          tone="text-text-dim"
-                          class="pl-2"
-                          weight={s.weight}
-                          value={`${s.reps}`}
-                          trailing={
-                            <Show when={s.isAmrap && e1rm()}>
-                              <span class="text-muted ml-2">est. 1RM: {e1rm()}lb</span>
-                            </Show>
-                          }
-                        />
-                      )}</For>
-                    </div>
-                  </Show>
-                )
-              }}
-            </For>
+            <LiftSetsByType sets={detail().sets} e1rm={e1rm()} labelVariant="section" />
             <Show when={detail().accessorySets.length > 0 || detail().notesByExercise.size > 0}>
               <For each={[...new Set([
                 ...detail().accessorySets.map(s => s.exerciseId),
                 ...detail().notesByExercise.keys(),
               ])]}>
-                {exId => {
-                  const exSets = detail().accessorySets.filter(s => s.exerciseId === exId)
-                  const exName = detail().exerciseNames.get(exId) ?? `Exercise ${exId}`
-                  const exNote = () => detail().notesByExercise.get(exId)
-                  return (
-                    <div>
-                      <SectionLabel class="mb-0.5">{exName}</SectionLabel>
-                      <For each={exSets}>{s => (
-                        <SetReadout
-                          size="sm"
-                          alignWeight
-                          tone="text-text-dim"
-                          class="pl-2"
-                          weight={s.weight != null && s.weight > 0 ? s.weight : null}
-                          value={accSetValue(s)}
-                        />
-                      )}</For>
-                      <Show when={exNote()}>
-                        <NotesText class="pl-2 text-text-dim" text={exNote()!} />
-                      </Show>
-                    </div>
-                  )
-                }}
+                {exId => (
+                  <ExerciseSetsBlock
+                    name={detail().exerciseNames.get(exId) ?? `Exercise ${exId}`}
+                    sets={detail().accessorySets.filter(s => s.exerciseId === exId)}
+                    note={detail().notesByExercise.get(exId)}
+                  />
+                )}
               </For>
             </Show>
             <Show when={detail().notes}>

@@ -649,12 +649,13 @@ export default function Workout() {
       <div class="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
         <button
           onClick={() => setLiftHistoryId(workout.activeSession!.liftId)}
-          class="w-full text-left cursor-pointer mb-6"
+          class="w-full text-left cursor-pointer mb-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           aria-label={`View history for ${liftName()}`}
         >
           <Rule
             label={`${liftName()} . WEEK ${workout.activeSession!.week}${workout.activeSession!.week === 4 ? ' . DELOAD' : ''}`}
-            class={`${workout.activeSession!.week === 4 ? 'text-info hover:text-info/70' : 'text-muted hover:text-text-dim'} underline underline-offset-2 decoration-faint hover:decoration-accent`}
+            class={workout.activeSession!.week === 4 ? 'text-info hover:text-info/70' : 'text-muted hover:text-text-dim'}
+            labelClass="underline underline-offset-2 decoration-faint hover:decoration-accent"
           />
         </button>
 

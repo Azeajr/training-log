@@ -12,14 +12,8 @@ import NotesField from '../forms/NotesField'
 import PlateDisplay from '../forms/PlateDisplay'
 import { settings } from '../../store/settings-store'
 import { resolveExerciseLoading } from '../../lib/plate-loading'
+import { accessorySetValue } from '../../lib/format'
 
-// Pre-format an accessory set's value for the readout: reps, time (s), or
-// distance (ft) — whichever the exercise type uses.
-const fmtSetValue = (s: { reps?: number | null; duration?: number | null; distance?: number | null }) =>
-  s.reps != null ? `${s.reps}`
-    : s.duration != null ? `${s.duration}s`
-    : s.distance != null ? `${s.distance}ft`
-    : ''
 import InlineConfirm from '../ui/InlineConfirm'
 
 interface Props {
@@ -112,25 +106,31 @@ export default function AccessoryLog(props: Props) {
   return (
     <div class="border border-border p-3 mb-3">
       <div class="text-text text-sm mb-1 uppercase tracking-widest flex items-center">
-        <span
-          class="flex-1"
-          classList={{ 'cursor-pointer hover:text-accent': !!props.onExerciseClick }}
-          onClick={() => props.onExerciseClick?.(props.accessory.exerciseId)}
-          role={props.onExerciseClick ? 'button' : undefined}
-          tabindex={props.onExerciseClick ? 0 : undefined}
-          aria-label={props.onExerciseClick ? `View history for ${props.accessory.exerciseName}` : undefined}
-          onKeyDown={props.onExerciseClick ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); props.onExerciseClick!(props.accessory.exerciseId) } } : undefined}
+        {/* Real <button>, not a span with role="button": keyboard support comes
+            free and it matches the other two history tap targets (Workout
+            header, CollapsibleSection label). */}
+        <Show
+          when={props.onExerciseClick}
+          fallback={
+            <span class="flex-1">
+              <span>{props.accessory.exerciseName}</span>
+              <span class="text-muted ml-2 text-xs">{ACCESSORY_SETS}x{ACCESSORY_REPS} @</span>
+              <span class="text-muted text-xs font-mono ml-1">{weight()}lb</span>
+            </span>
+          }
         >
-          <span
-            class={props.onExerciseClick
-              ? 'underline underline-offset-2 decoration-faint hover:decoration-accent'
-              : ''}
+          <button
+            class="flex-1 text-left cursor-pointer hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            onClick={() => props.onExerciseClick!(props.accessory.exerciseId)}
+            aria-label={`View history for ${props.accessory.exerciseName}`}
           >
-            {props.accessory.exerciseName}
-          </span>
-          <span class="text-muted ml-2 text-xs">{ACCESSORY_SETS}x{ACCESSORY_REPS} @</span>
-          <span class="text-muted text-xs font-mono ml-1">{weight()}lb</span>
-        </span>
+            <span class="underline underline-offset-2 decoration-faint hover:decoration-accent">
+              {props.accessory.exerciseName}
+            </span>
+            <span class="text-muted ml-2 text-xs">{ACCESSORY_SETS}x{ACCESSORY_REPS} @</span>
+            <span class="text-muted text-xs font-mono ml-1">{weight()}lb</span>
+          </button>
+        </Show>
         <InlineConfirm
           label="✕"
           ariaLabel={`Remove ${props.accessory.exerciseName}`}
@@ -178,7 +178,7 @@ export default function AccessoryLog(props: Props) {
               fallback={
                 <SetReadout
                   weight={s.weight}
-                  value={fmtSetValue(s)}
+                  value={accessorySetValue(s)}
                   leading={<span class="text-muted">Set {i() + 1}:</span>}
                   onClick={() => startEditSet(i())}
                   class="pl-2 py-0.5"

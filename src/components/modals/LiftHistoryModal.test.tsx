@@ -27,7 +27,7 @@ describe('LiftHistoryModal', () => {
     ))
 
     await waitFor(() => {
-      expect(screen.getByText('No completed sessions for this lift.')).toBeInTheDocument()
+      expect(screen.getByText('No completed sessions yet.')).toBeInTheDocument()
     })
   })
 

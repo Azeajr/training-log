@@ -1,12 +1,14 @@
 import { createSignal, Show, For, onMount } from 'solid-js'
 import { db } from '../../db/index'
 import { getLiftHistory, type LiftHistoryEntry } from '../../lib/exercise-history'
-import { SET_TYPE_DISPLAY_ORDER } from '../../lib/calc'
+import { estimated1RM } from '../../lib/calc'
+import { settings } from '../../store/settings-store'
 import { formatDateLong } from '../../lib/format'
-import SetReadout from '../forms/SetReadout'
+import LiftSetsByType from '../forms/LiftSetsByType'
 import NotesText from '../forms/NotesText'
 import SectionLabel from '../layout/SectionLabel'
 import Modal from './Modal'
+import ModalAsyncStates from './ModalAsyncStates'
 
 interface Props {
   liftName: string
@@ -37,52 +39,22 @@ export default function LiftHistoryModal(props: Props) {
       onClose={props.onClose}
       class="px-4 pb-4 overflow-y-auto"
     >
-      <Show when={error()}>
-        <div class="text-danger font-mono text-sm p-4">{error()}</div>
-      </Show>
-
-      <Show when={!error() && entries() === null}>
-        <div class="text-faint text-xs font-mono py-2">Loading...</div>
-      </Show>
-
-      <Show when={!error() && entries() !== null && entries()!.length === 0}>
-        <div class="text-faint text-xs font-mono py-2">No completed sessions for this lift.</div>
-      </Show>
-
-      <Show when={!error() && entries() !== null && entries()!.length > 0}>
+      <ModalAsyncStates error={error()} entries={entries()} emptyText="No completed sessions yet.">
         <div class="space-y-4">
           <For each={entries()}>
-            {entry => (
+            {entry => {
+              // Same derivation as the History session detail: one e1RM per
+              // session, off its AMRAP set.
+              const amrap = entry.sets.find(s => s.isAmrap)
+              const e1rm = amrap?.weight && amrap.reps
+                ? estimated1RM(amrap.weight, amrap.reps, settings.highRepDiscount).toFixed(1)
+                : null
+              return (
               <div>
                 <SectionLabel class="mb-0.5">
-                  {formatDateLong(entry.date)} — Week {entry.week}{entry.week === 4 ? ' · DELOAD' : ''}
+                  {formatDateLong(entry.date)} — Week {entry.week}{entry.week === 4 ? ' . DELOAD' : ''}
                 </SectionLabel>
-                <For each={SET_TYPE_DISPLAY_ORDER.filter(t => entry.sets.some(s => s.type === t))}>
-                  {type => {
-                    const typeSets = entry.sets.filter(s => s.type === type)
-                    const label = type.charAt(0).toUpperCase() + type.slice(1)
-                    return (
-                      <Show when={typeSets.length > 0}>
-                        <div class="mb-1">
-                          <div class="text-faint text-[10px] uppercase tracking-widest pl-2 mb-0.5">{label}</div>
-                          <For each={typeSets}>
-                            {s => (
-                              <SetReadout
-                                size="sm"
-                                alignWeight
-                                tone="text-text-dim"
-                                class="pl-2"
-                                weight={s.weight}
-                                value={`${s.reps}`}
-                                badges={s.isAmrap ? <span class="text-warn ml-1">AMRAP</span> : undefined}
-                              />
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                    )
-                  }}
-                </For>
+                <LiftSetsByType sets={entry.sets} e1rm={e1rm} labelVariant="sub" />
                 <Show when={entry.notes}>
                   <div class="mt-1">
                     <div class="text-faint text-[10px] uppercase tracking-widest pl-2 mb-0.5">Notes</div>
@@ -90,10 +62,11 @@ export default function LiftHistoryModal(props: Props) {
                   </div>
                 </Show>
               </div>
-            )}
+              )
+            }}
           </For>
         </div>
-      </Show>
+      </ModalAsyncStates>
     </Modal>
   )
 }
