@@ -40,7 +40,7 @@ export default function LiftHistoryModal(props: Props) {
       class="px-4 pb-4 overflow-y-auto"
     >
       <ModalAsyncStates error={error()} entries={entries()} emptyText="No completed sessions yet.">
-        <div class="space-y-4">
+        <div class="space-y-4 divide-y divide-accent">
           <For each={entries()}>
             {entry => {
               // Same derivation as the History session detail: one e1RM per
@@ -51,13 +51,17 @@ export default function LiftHistoryModal(props: Props) {
                 : null
               return (
               <div>
-                <SectionLabel class="mb-0.5">
-                  {formatDateLong(entry.date)} — Week {entry.week}{entry.week === 4 ? ' . DELOAD' : ''}
+                <SectionLabel tone="text-text" class="mb-1 font-semibold">
+                  {formatDateLong(entry.date)}
+                  <span class="text-accent"> — Week {entry.week}</span>
+                  <Show when={entry.week === 4}>
+                    <span class="text-warn"> . DELOAD</span>
+                  </Show>
                 </SectionLabel>
                 <LiftSetsByType sets={entry.sets} e1rm={e1rm} labelVariant="sub" />
                 <Show when={entry.notes}>
-                  <div class="mt-1">
-                    <div class="text-faint text-[10px] uppercase tracking-widest pl-2 mb-0.5">Notes</div>
+                  <div class="mt-2 pt-2 border-t border-border-dim">
+                    <div class="text-muted text-[10px] uppercase tracking-widest pl-2 mb-0.5">Notes</div>
                     <NotesText class="pl-2 text-text-dim" text={entry.notes!} />
                   </div>
                 </Show>

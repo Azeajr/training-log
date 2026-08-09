@@ -36,13 +36,16 @@ export default function ExerciseHistoryModal(props: Props) {
       class="px-4 pb-4 overflow-y-auto"
     >
       <ModalAsyncStates error={error()} entries={entries()} emptyText="No sessions logged yet.">
-        <div class="space-y-3">
+        <div class="space-y-3 divide-y divide-accent">
           <For each={entries()}>
             {entry => (
               <ExerciseSetsBlock
                 name={formatDateLong(entry.date)}
                 sets={entry.sets}
                 note={entry.notes}
+                nameTone="text-text"
+                nameClass="mb-1 font-semibold"
+                notesDivider
               />
             )}
           </For>
