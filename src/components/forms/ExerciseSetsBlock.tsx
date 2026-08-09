@@ -2,7 +2,7 @@ import { For, Show } from 'solid-js'
 import type { AccessorySet } from '../../types/domain'
 import { accessorySetValue } from '../../lib/format'
 import SetReadout from './SetReadout'
-import NotesText from './NotesText'
+import NotesBlock from './NotesBlock'
 import SectionLabel from '../layout/SectionLabel'
 
 interface Props {
@@ -15,8 +15,6 @@ interface Props {
   nameTone?: string
   /** Override the eyebrow classes (defaults to mb-0.5). */
   nameClass?: string
-  /** Render a top border + "Notes" eyebrow above the note (modal history view). */
-  notesDivider?: boolean
 }
 
 // The history view of one exercise's work: label, each set as a sm SetReadout,
@@ -39,15 +37,7 @@ export default function ExerciseSetsBlock(props: Props) {
         )}
       </For>
       <Show when={props.note}>
-        <Show
-          when={props.notesDivider}
-          fallback={<NotesText class="pl-2 text-text-dim" text={props.note!} />}
-        >
-          <div class="mt-2 pt-2 border-t border-border-dim">
-            <div class="text-muted text-[10px] uppercase tracking-widest pl-2 mb-0.5">Notes</div>
-            <NotesText class="pl-2 text-text-dim" text={props.note!} />
-          </div>
-        </Show>
+        <NotesBlock text={props.note!} />
       </Show>
     </div>
   )

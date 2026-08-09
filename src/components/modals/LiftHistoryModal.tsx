@@ -5,8 +5,9 @@ import { estimated1RM } from '../../lib/calc'
 import { settings } from '../../store/settings-store'
 import { formatDateLong } from '../../lib/format'
 import LiftSetsByType from '../forms/LiftSetsByType'
-import NotesText from '../forms/NotesText'
+import NotesBlock from '../forms/NotesBlock'
 import SectionLabel from '../layout/SectionLabel'
+import WeekBadge from '../layout/WeekBadge'
 import Modal from './Modal'
 import ModalAsyncStates from './ModalAsyncStates'
 
@@ -53,17 +54,11 @@ export default function LiftHistoryModal(props: Props) {
               <div>
                 <SectionLabel tone="text-text" class="mb-1 font-semibold">
                   {formatDateLong(entry.date)}
-                  <span class="text-accent"> — Week {entry.week}</span>
-                  <Show when={entry.week === 4}>
-                    <span class="text-warn"> . DELOAD</span>
-                  </Show>
+                  <WeekBadge week={entry.week} />
                 </SectionLabel>
-                <LiftSetsByType sets={entry.sets} e1rm={e1rm} labelVariant="sub" />
+                <LiftSetsByType sets={entry.sets} e1rm={e1rm} />
                 <Show when={entry.notes}>
-                  <div class="mt-2 pt-2 border-t border-border-dim">
-                    <div class="text-muted text-[10px] uppercase tracking-widest pl-2 mb-0.5">Notes</div>
-                    <NotesText class="pl-2 text-text-dim" text={entry.notes!} />
-                  </div>
+                  <NotesBlock text={entry.notes!} />
                 </Show>
               </div>
               )

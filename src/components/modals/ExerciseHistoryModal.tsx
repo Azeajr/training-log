@@ -45,7 +45,6 @@ export default function ExerciseHistoryModal(props: Props) {
                 note={entry.notes}
                 nameTone="text-text"
                 nameClass="mb-1 font-semibold"
-                notesDivider
               />
             )}
           </For>

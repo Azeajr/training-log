@@ -6,7 +6,8 @@ import { estimated1RM } from '../lib/calc'
 import { formatDateShort, formatDateLong } from '../lib/format'
 import { settings } from '../store/settings-store'
 import SectionLabel from '../components/layout/SectionLabel'
-import NotesText from '../components/forms/NotesText'
+import WeekBadge from '../components/layout/WeekBadge'
+import NotesBlock from '../components/forms/NotesBlock'
 import ExerciseSetsBlock from '../components/forms/ExerciseSetsBlock'
 import LiftSetsByType from '../components/forms/LiftSetsByType'
 import { gapsForSession } from '../store/save-failure-store'
@@ -240,9 +241,16 @@ function HistorySessionRow(props: {
         aria-controls={panelId()}
         class="w-full text-left border border-border px-3 py-2 text-sm flex justify-between hover:border-muted"
       >
-        <span class="text-muted">{dateStr()}</span>
+        {/* Date carries the header weight (text-text semibold) and the week
+            badge the accent, mirroring LiftHistoryModal's date header. The
+            ▸/▾ fold glyph is the house fold/unfold idiom (see atlas below). */}
+        <span class="text-text font-semibold">
+          <span class="text-muted font-normal mr-1">{props.expanded ? '▾' : '▸'}</span>
+          {dateStr()}
+        </span>
         <span class="text-text">
-          {props.row.liftName} W{props.row.session.week}
+          {props.row.liftName}
+          <WeekBadge week={props.row.session.week} short />
           <Show when={gaps().length > 0}>
             <span class="text-danger ml-2" title="Some sets failed to save">!</span>
           </Show>
@@ -278,7 +286,7 @@ function HistorySessionRow(props: {
                 EDIT →
               </button>
             </div>
-            <LiftSetsByType sets={detail().sets} e1rm={e1rm()} labelVariant="section" />
+            <LiftSetsByType sets={detail().sets} e1rm={e1rm()} />
             <Show when={detail().accessorySets.length > 0 || detail().notesByExercise.size > 0}>
               <For each={[...new Set([
                 ...detail().accessorySets.map(s => s.exerciseId),
@@ -289,15 +297,14 @@ function HistorySessionRow(props: {
                     name={detail().exerciseNames.get(exId) ?? `Exercise ${exId}`}
                     sets={detail().accessorySets.filter(s => s.exerciseId === exId)}
                     note={detail().notesByExercise.get(exId)}
+                    nameTone="text-text"
+                    nameClass="mb-1 font-semibold"
                   />
                 )}
               </For>
             </Show>
             <Show when={detail().notes}>
-              <div>
-                <SectionLabel class="mb-0.5">NOTES</SectionLabel>
-                <NotesText class="pl-2 text-text-dim" text={detail().notes!} />
-              </div>
+              <NotesBlock text={detail().notes!} />
             </Show>
           </div>
         )}
