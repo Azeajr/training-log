@@ -31,7 +31,7 @@ export default function LiftSetsByType(props: Props) {
               when={props.labelVariant === 'sub'}
               fallback={<SectionLabel class="mb-0.5">{type}</SectionLabel>}
             >
-              <div class="text-faint text-[10px] uppercase tracking-widest pl-2 mb-0.5">
+              <div class="text-muted text-[10px] uppercase tracking-widest pl-2 mb-0.5">
                 {type.charAt(0).toUpperCase() + type.slice(1)}
               </div>
             </Show>

@@ -11,6 +11,12 @@ interface Props {
   sets: AccessorySet[]
   note?: string | null
   class?: string
+  /** Override the eyebrow tone (defaults to text-muted via SectionLabel). */
+  nameTone?: string
+  /** Override the eyebrow classes (defaults to mb-0.5). */
+  nameClass?: string
+  /** Render a top border + "Notes" eyebrow above the note (modal history view). */
+  notesDivider?: boolean
 }
 
 // The history view of one exercise's work: label, each set as a sm SetReadout,
@@ -19,7 +25,7 @@ interface Props {
 export default function ExerciseSetsBlock(props: Props) {
   return (
     <div class={props.class}>
-      <SectionLabel class="mb-0.5">{props.name}</SectionLabel>
+      <SectionLabel tone={props.nameTone} class={props.nameClass ?? 'mb-0.5'}>{props.name}</SectionLabel>
       <For each={props.sets}>
         {s => (
           <SetReadout
@@ -33,7 +39,15 @@ export default function ExerciseSetsBlock(props: Props) {
         )}
       </For>
       <Show when={props.note}>
-        <NotesText class="pl-2 text-text-dim" text={props.note!} />
+        <Show
+          when={props.notesDivider}
+          fallback={<NotesText class="pl-2 text-text-dim" text={props.note!} />}
+        >
+          <div class="mt-2 pt-2 border-t border-border-dim">
+            <div class="text-muted text-[10px] uppercase tracking-widest pl-2 mb-0.5">Notes</div>
+            <NotesText class="pl-2 text-text-dim" text={props.note!} />
+          </div>
+        </Show>
       </Show>
     </div>
   )
