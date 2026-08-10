@@ -74,8 +74,9 @@ Windows Settings → System → Notifications → Chrome, DND/quiet hours, etc).
 
 Resolution: product decision — keep the SW-timer architecture (option 1 of the
 review; it is the ceiling for an offline-first, serverless app — true Web Push
-would require a backend + network at arming time, and Notification Triggers is
-still not in stable Chrome). An in-app "replay missed cue on tab focus" was
+would require a backend + network at arming time, and Notification Triggers,
+the one API that could have covered closed-browser + offline locally, had its
+development explicitly ended by Google). An in-app "replay missed cue on tab focus" was
 proposed and declined. Users who want the chime flip the OS per-app sound
 toggle; nothing to fix in the app.
 
