@@ -495,10 +495,10 @@ until SW scheduling proves inadequate in the field.
 - iOS Safari (not installed): no notification support — platform limit.
 - Browser closed / tab discarded anywhere: only Web Push reaches the user.
 
-**Watch item** — Notification Triggers (`showTrigger`), the OS-held timer API
-that would cover closed-browser + offline with no server; still not in stable
-Chrome as of 2026-08-09. One-line addition to `src/service-worker.ts` when it
-lands.
+**Dead end, don't watch** — Notification Triggers (`showTrigger`), the OS-held
+timer API that would have covered closed-browser + offline with no server.
+Google explicitly ended development (2025): no consistent cross-platform
+experience. Not a future path.
 
 ---
 
