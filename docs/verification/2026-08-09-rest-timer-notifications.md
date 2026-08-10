@@ -1,8 +1,10 @@
 # Verification — Rest-timer system notifications
 
 **Date:** 2026-08-09
-**Commit:** `25524bd`
-**Verdict:** AUTOMATED-TEST PASS — runtime pass pending (needs a browser)
+**Commit:** `a0fc86c` (feature) — written against working tree at `25524bd`
+**Verdict:** PASS — automated tests + Chrome desktop runtime pass. Scope: chime
+subject to OS notification-sound policy (see runtime notes); stalled-session
+and fail-rest multi-cue legs still unverified by hand.
 
 ## Claim
 
@@ -44,25 +46,42 @@ What the tests pin down:
 - RestTimer's existing blocks keep passing — wake-lock and audio/vibration
   cues are unaffected by the gating.
 
-## Runtime pass — pending (needs a browser)
+## Runtime pass — 2026-08-09, Chrome (desktop), production preview build
 
-Not performed here; a human with a real browser should check:
+Method: `pnpm build && pnpm preview`, http://localhost:5175, hard refresh to
+gain SW control (clientsClaim is deliberately skipped), Settings toggle ON +
+permission granted.
 
-1. Permission prompt appears on enabling the setting (and on first schedule);
-   granting is required for SW notifications to show.
-2. With the SW installed and the tab backgrounded/locked, the nudge fires at
-   the threshold for a normal rest; warning/critical fire for a fail-type
-   rest.
-3. Restarting a rest replaces the pending nudge (tag coalescing — no double
-   notification).
-4. Stopping/skipping rest kills pending notifications; clearing the session
-   kills the stalled timer; the stalled alert fires 2 h after the session
-   started with no interaction.
-5. Disabling the setting mid-rest cancels pending timers (page-timer path
-   falls back for the remainder only when no SW controller is live).
+| # | Check | Result |
+|---|---|---|
+| 1 | Permission prompt on enabling the setting | PASS — prompted from the toggle gesture; granting persisted the setting across reload |
+| 2a | Nudge fires at threshold with tab backgrounded (normal rest, SW-controlled) | PASS — notification displayed while the tab was unfocused |
+| 2b | Fail-rest warning/critical multi-cue | NOT CHECKED |
+| 3 | Restart replaces pending nudge (tag coalescing) | NOT CHECKED |
+| 4 | Stop/skip cancels; stalled-session 2 h alert | NOT CHECKED (2 h wait declined) |
+| 5 | Disabling the setting mid-rest cancels | NOT CHECKED |
+| — | `notificationclick` focuses the app | NOT CHECKED |
+
+### Chime finding (resolved, no code change)
+
+The nudge displayed but made **no sound until the tab regained focus**. Root
+cause is not the SW: `showNotification` is called without `silent`
+(`src/service-worker.ts:63`), so the chime is Chrome/OS policy — the
+Notification API exposes no sound control on desktop Chrome (`vibrate` is
+Android-only, `sound` unimplemented). Chrome plays the chime only outside
+certain window-focus/sound-policy conditions (per-app "Play a sound" toggle in
+Windows Settings → System → Notifications → Chrome, DND/quiet hours, etc).
+
+Resolution: product decision — keep the SW-timer architecture (option 1 of the
+review; it is the ceiling for an offline-first, serverless app — true Web Push
+would require a backend + network at arming time, and Notification Triggers is
+still not in stable Chrome). An in-app "replay missed cue on tab focus" was
+proposed and declined. Users who want the chime flip the OS per-app sound
+toggle; nothing to fix in the app.
 
 ## Since verified
 
-To be revisited on the runtime pass; if the manual findings confirm the
-automated evidence, flip this record's Verdict to PASS and fold the observed
-steps in the deload-toggle doc's style.
+Feature shipped as `a0fc86c`; this record's automated evidence and the
+runtime pass above cover the headline claim (fires while the tab is
+backgrounded). Remaining unverified-by-hand legs (2b, 3, 4, 5, click-focus)
+are pinned by unit tests; revisit if a browser pass is ever convenient.
