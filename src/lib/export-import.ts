@@ -102,7 +102,7 @@ const COLS = {
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],
   accessoryNotes: ['id', 'sessionId', 'exerciseId', 'notes'],
   assistanceDefaults: ['id', 'liftId', 'section', 'exerciseId'],
-  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount'],
+  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications'],
 } as const
 
 // Reject malformed table payloads BEFORE the destructive clear. Without this,

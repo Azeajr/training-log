@@ -177,5 +177,8 @@ export interface Settings {
   // completes, TMs progress and the next cycle begins, with no light week. When
   // false the deloadSupplemental setting is moot (no deload week to govern).
   hasDeloadWeek?: boolean
+  // Opt-in system notification when a rest-timer threshold is reached (off by
+  // default; permission requested from a Settings gesture, not on first load).
+  restTimerNotifications?: boolean
   highRepDiscount?: HighRepDiscount
 }

@@ -720,6 +720,24 @@ export default function Settings() {
             <button onClick={() => timerStep(field, 30)} aria-label={`Increase ${label.toLowerCase()} rest timer`} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
           </div>
         )}</For>
+        <div class="flex items-center justify-between py-1 border-t border-border-dim">
+          <span class="text-muted text-xs uppercase tracking-widest">REST NOTIFICATIONS</span>
+          <ToggleChip
+            active={settings.restTimerNotifications}
+            onClick={async () => {
+              const next = !settings.restTimerNotifications
+              if (next) {
+                const perm = await Notification.requestPermission()
+                if (perm === 'granted') void updateSettings({ restTimerNotifications: true })
+                else showToast('Notifications denied — enable in browser settings', 3000)
+              } else {
+                void updateSettings({ restTimerNotifications: false })
+              }
+            }}
+          >
+            {settings.restTimerNotifications ? 'ON' : 'OFF'}
+          </ToggleChip>
+        </div>
       </div>
 
       <div class="mb-6">

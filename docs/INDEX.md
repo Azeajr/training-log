@@ -31,6 +31,8 @@ Every markdown doc in the repo, what it is for, and when to load it.
 Dated runtime-verification logs, one per claim checked against the running app.
 
 - `docs/verification/2026-06-27-deload-toggle.md` — the 3-WEEK / 4-WEEK cycle toggle.
+- `docs/verification/2026-08-09-rest-timer-notifications.md` — rest-timer system
+  notifications (SW + page-timer fallback). Automated evidence; runtime pass pending.
 
 ## Review notes
 
