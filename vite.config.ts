@@ -53,7 +53,9 @@ export default defineConfig(() => {
       strategies: 'injectManifest',
       registerType: 'prompt',
       injectManifest: {
-        globPatterns: ['**/*.{js,css,ico,png,wasm}'],
+        // index.html is precached so the SW's navigation fallback can serve
+        // the shell offline (src/service-worker.ts fetch handler).
+        globPatterns: ['**/*.{html,js,css,ico,png,wasm}'],
         // wasm is precached via globPatterns above and served cache-first in
         // the SW fetch handler (src/service-worker.ts); no runtimeCaching here
         // because vite-plugin-pwa only supports runtimeCaching under generateSW.

@@ -727,6 +727,10 @@ export default function Settings() {
             onClick={async () => {
               const next = !settings.restTimerNotifications
               if (next) {
+                if (typeof Notification === 'undefined') {
+                  showToast('Notifications not supported in this browser', 3000)
+                  return
+                }
                 const perm = await Notification.requestPermission()
                 if (perm === 'granted') void updateSettings({ restTimerNotifications: true })
                 else showToast('Notifications denied — enable in browser settings', 3000)

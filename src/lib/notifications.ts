@@ -1,16 +1,29 @@
 // System notifications for rest-timer thresholds and stalled sessions.
 //
 // In-app cues (audio-cues.ts) are silent when the tab is backgrounded or the
-// screen locks, and the tick worker loses CPU. These schedule through the
-// service worker so alerts fire even when the page isn't visible; when no SW is
-// registered (dev preview server), they fall back to an in-page timer.
+// screen locks, and the tick worker loses CPU. Notifications are scheduled
+// page-side by default (see COMMON_MISTAKES #11: a service worker's own
+// setTimeout does not keep the worker alive, so the SW path is best-effort),
+// with the SW armed in parallel as a bonus background path.
+//
+// Fire policy:
+//   - SW controls the page → the page fires ONLY while the tab is hidden
+//     (the SW owns the visible-tab case; the in-app rest UI already alerts
+//     the user there).
+//   - no SW (dev preview, unsupported engine) → the page always fires.
+//
+// Catch-up: targets whose fireAt has passed while the page was dead fire
+// immediately when the page re-arms them on load (RestTimer mounts with the
+// persisted restStartedAt / session date). A fully closed browser can never
+// wake the SW on its own — serverless ceiling, documented in ROADMAP.
 //
 // Protocol spoken to the SW (see src/service-worker.ts):
 //   { type: 'schedule', tag, fireAt, title, body }   — arm a one-shot
 //   { type: 'cancel',   tag }                        — drop a pending one
 //
-// `tag` is the coalescing key: a new rest nudge replaces a stale one rather than
-// stacking. Rest-phase and stalled-session notifications use distinct tags.
+// `tag` is the coalescing key: a new rest nudge replaces a stale one rather
+// than stacking. Rest-phase and stalled-session notifications use distinct
+// tags.
 
 import {
   REST_FAIL_MAX,
@@ -20,6 +33,7 @@ import {
   restStatus,
 } from './calc'
 import type { RestPhase } from './calc'
+import { createNotifyTimers, type NotifyTarget } from './notify-timers'
 
 const REST_TAG = 'rest-timer'
 const STALLED_TAG = 'stalled-session'
@@ -42,12 +56,7 @@ function thresholds(restType: 'normal' | 'transition' | 'fail'): number[] {
   return [REST_NORMAL_THRESHOLD]
 }
 
-export interface NotifyTarget {
-  readonly fireAt: number   // absolute timestamp (ms)
-  readonly title: string
-  readonly body: string
-  readonly tag: string
-}
+export { type NotifyTarget }
 
 // Pure: the notification targets for one rest period. Testable without a DOM/SW.
 export function restNotificationTargets(
@@ -77,13 +86,13 @@ export function stalledSessionTarget(sessionStartedAt: number): NotifyTarget {
 
 // ── side-effecting scheduler ──────────────────────────────────────────────
 
-// In-page fallback timers keyed by tag (separate so a rest re-schedule doesn't
-// drop the stalled-session timer and vice-versa).
-const pageTimers = new Map<string, Set<ReturnType<typeof setTimeout>>>()
-
 function swController(): ServiceWorker | null {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null
   return navigator.serviceWorker.controller
+}
+
+function isPageHidden(): boolean {
+  return typeof document !== 'undefined' && document.hidden
 }
 
 function firePage(title: string, body: string, tag: string): void {
@@ -104,50 +113,46 @@ function cancelSw(tag: string): void {
   ctrl?.postMessage({ type: 'cancel', tag })
 }
 
-function schedulePage(key: string, targets: NotifyTarget[]): void {
-  clearPage(key)
-  if (targets.length === 0) return
-  const now = Date.now()
-  const set = new Set<ReturnType<typeof setTimeout>>()
-  for (const { fireAt, title, body, tag } of targets) {
-    const delay = fireAt - now
-    if (delay <= 0) {
-      firePage(title, body, tag)
-      continue
-    }
-    set.add(setTimeout(() => firePage(title, body, tag), delay))
-  }
-  pageTimers.set(key, set)
-}
+// Page-side registry: the reliable path while the tab lives. One instance for
+// both tags — cancelRest/cancelStalled/cancelAll map onto tag-scoped cancels,
+// so re-scheduling a rest never drops the stalled-session timer and vice-versa.
+const pageTimers = createNotifyTimers({
+  fire: (target) => {
+    // SW-present + visible tab: the SW owns the visible case; firing the page
+    // notification too would double the nudge.
+    if (swController() && !isPageHidden()) return
+    firePage(target.title, target.body, target.tag)
+  },
+})
 
-function clearPage(key: string): void {
-  pageTimers.get(key)?.forEach(clearTimeout)
-  pageTimers.delete(key)
+function schedulePage(key: string, targets: NotifyTarget[]): void {
+  pageTimers.cancelTag(key)
+  for (const t of targets) pageTimers.arm(t)
 }
 
 export function scheduleRest(restStartedAt: number, restType: 'normal' | 'transition' | 'fail'): void {
   cancelRest()
   const targets = restNotificationTargets(restStartedAt, restType)
   if (targets.length === 0) return
-  if (swController()) scheduleSw(targets)
-  else schedulePage(REST_TAG, targets)
+  schedulePage(REST_TAG, targets)
+  scheduleSw(targets)
 }
 
 export function scheduleStalledSession(sessionStartedAt: number): void {
   cancelStalled()
   const targets = [stalledSessionTarget(sessionStartedAt)]
-  if (swController()) scheduleSw(targets)
-  else schedulePage(STALLED_TAG, targets)
+  schedulePage(STALLED_TAG, targets)
+  scheduleSw(targets)
 }
 
 export function cancelRest(): void {
   cancelSw(REST_TAG)
-  clearPage(REST_TAG)
+  pageTimers.cancelTag(REST_TAG)
 }
 
 export function cancelStalled(): void {
   cancelSw(STALLED_TAG)
-  clearPage(STALLED_TAG)
+  pageTimers.cancelTag(STALLED_TAG)
 }
 
 export function cancelAll(): void {

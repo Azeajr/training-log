@@ -129,6 +129,21 @@ nothing.
 
 ---
 
+### 11. Service-worker `setTimeout` dies with the worker
+
+**Symptom**: A notification (or any background task) scheduled from the service worker silently
+never fires — no error, no crash. "It worked when I tested it" is usually DevTools open (devtools
+keep the worker alive) or a short delay that happened to outlive the ~30 s idle kill.
+**Check**: Browsers terminate an idle SW ~30 s after its last event; a pending `setTimeout` does
+NOT keep it alive (Chrome, Firefox, Safari). Only page-side timers (or a backend push) are
+reliable while the page lives; nothing wakes a fully closed browser without a backend
+(Notification Triggers ended development; Web Push needs a server).
+**Fix**: Timers that must fire run on the page; the SW mirrors them best-effort. Precedent:
+`src/lib/notify-timers.ts` (shared tag-keyed scheduler) + `src/lib/notifications.ts` (page-primary,
+hidden-tab fire gate, SW mirror).
+
+---
+
 **Update when**: a bug took >1h, could cause data loss, or recurred across sessions.
 
-**Last Updated**: 2026-08-08
+**Last Updated**: 2026-08-09

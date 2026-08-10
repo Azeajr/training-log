@@ -472,6 +472,8 @@ First half of the old "Push Notifications" plan, shipped 2026-08-09 (`a0fc86c`).
 
 Runtime-verified 2026-08-09 (Chrome desktop, production preview): the nudge fires with the tab backgrounded. The chime follows OS notification-sound policy — the Notification API exposes no sound control on desktop Chrome. Details: `docs/verification/2026-08-09-rest-timer-notifications.md`. The Web Push backend step is deliberately deferred — see Planned. iOS: installed PWA only, prefers Web Push; not installed = no notifications.
 
+Hardened 2026-08-09 (SW hardening pass, following a code review): the page now runs the reliable timers (a SW's own `setTimeout` does not keep the worker alive — see `.claude/COMMON_MISTAKES.md` #11) and the SW mirrors them; with SW control the page fires only while the tab is hidden, so the backgrounded case no longer depends on SW survival. `index.html` is precached and navigations are network-first with shell fallback, so offline cold launches render the app instead of a dead page. Cache eviction on activate is scoped to the `precache-` prefix. Details + browser-leg TODOs: `docs/verification/2026-08-09-swe-hardening.md`.
+
 ---
 
 ## Planned
