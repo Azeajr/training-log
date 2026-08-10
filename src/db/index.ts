@@ -31,7 +31,7 @@ class TrainingSQLiteDB {
   accessorySets = new SQLiteTable<AccessorySet>('accessorySets')
   accessoryNotes = new SQLiteTable<AccessoryNote>('accessoryNotes')
   assistanceDefaults = new SQLiteTable<AssistanceDefault>('assistanceDefaults')
-  settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'], boolFields: ['hasDeloadWeek'] })
+  settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'], boolFields: ['hasDeloadWeek', 'restTimerNotifications'] })
 
   transaction(fn: () => Promise<void>): Promise<void> {
     return sqliteClient.transaction(fn)

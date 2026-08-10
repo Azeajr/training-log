@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render } from '@solidjs/testing-library'
 import RestTimer from './RestTimer'
-import { startRest, stopRest, clearSession } from '../../store/workout-store'
+import { startRest, stopRest, startSession, clearSession } from '../../store/workout-store'
+import { updateSettings } from '../../store/settings-store'
+import type { Session } from '../../types/domain'
 
 const drain = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)) }
 const drainMicro = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
@@ -144,5 +146,114 @@ describe('RestTimer — audio/vibration cues', () => {
     startRest('normal')
     await vi.advanceTimersByTimeAsync(89_000)
     expect(vibrateMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('RestTimer — SW notification scheduling', () => {
+  let postMessage: ReturnType<typeof vi.fn>
+  let wakeLockRequest: ReturnType<typeof vi.fn>
+
+  const mkSession = (): Session => ({
+    cycleId: 1,
+    liftId: 1,
+    week: 1,
+    date: new Date(),
+    notes: null,
+    status: 'pending',
+  })
+
+  beforeEach(async () => {
+    clearSession()
+    await updateSettings({ restTimerNotifications: true })
+    postMessage = vi.fn()
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: { controller: { postMessage } },
+      writable: true,
+      configurable: true,
+    })
+    wakeLockRequest = vi.fn().mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined) })
+    Object.defineProperty(navigator, 'wakeLock', {
+      value: { request: wakeLockRequest },
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(document, 'hidden', { value: false, writable: true, configurable: true })
+  })
+
+  afterEach(async () => {
+    await updateSettings({ restTimerNotifications: false })
+    stopRest()
+    clearSession()
+    await drain()
+  })
+
+  it('posts schedule for the rest nudge when rest starts', async () => {
+    render(() => <RestTimer />)
+    await drain()
+    postMessage.mockClear()
+    startRest('normal')
+    await drain()
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'schedule',
+      tag: 'rest-timer',
+      title: 'Rest complete',
+    }))
+  })
+
+  it('posts cancel when rest stops', async () => {
+    render(() => <RestTimer />)
+    await drain()
+    startRest('normal')
+    await drain()
+    postMessage.mockClear()
+    stopRest()
+    await drain()
+    expect(postMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'rest-timer' })
+  })
+
+  it('posts cancel when rest is skipped', async () => {
+    const { getByText } = render(() => <RestTimer />)
+    await drain()
+    startRest('normal')
+    await drain()
+    postMessage.mockClear()
+    getByText('SKIP REST').click()
+    await drain()
+    expect(postMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'rest-timer' })
+  })
+
+  it('posts nothing when rest notifications are disabled, but rest still runs', async () => {
+    await updateSettings({ restTimerNotifications: false })
+    render(() => <RestTimer />)
+    await drain()
+    postMessage.mockClear()
+    startRest('normal')
+    await drain()
+    expect(postMessage).not.toHaveBeenCalled()
+    expect(wakeLockRequest).toHaveBeenCalledWith('screen')
+  })
+
+  it('schedules the stalled-session timer when a session starts', async () => {
+    render(() => <RestTimer />)
+    await drain()
+    postMessage.mockClear()
+    startSession(mkSession())
+    await drain()
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'schedule',
+      tag: 'stalled-session',
+      title: 'Session idle',
+    }))
+  })
+
+  it('cancels the stalled-session timer when the session is cleared', async () => {
+    render(() => <RestTimer />)
+    await drain()
+    startSession(mkSession())
+    await drain()
+    postMessage.mockClear()
+    clearSession()
+    await drain()
+    expect(postMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'stalled-session' })
   })
 })

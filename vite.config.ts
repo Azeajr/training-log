@@ -41,26 +41,22 @@ export default defineConfig(() => {
     solid(),
     tailwindcss(),
     VitePWA({
+      // injectManifest mode: use the audited custom SW in src/service-worker.ts
+      // instead of an auto-generated one. srcDir/filename tell the plugin where
+      // to read it; `self.__WB_MANIFEST` is injected with the precache list.
+      // The generateSW-only flags now live IN the SW file:
+      //   - cleanupOutdatedCaches() called on activate (stale precache evicted)
+      //   - clientsClaim skipped  → user keeps refresh-prompt control
+      //   - skipWaiting skipped   → refresh stays user-gated (matches CSP)
+      srcDir: 'src',
+      filename: 'service-worker.ts',
+      strategies: 'injectManifest',
       registerType: 'prompt',
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,ico,png,wasm}'],
-        // Evict stale precaches on SW update so an old (potentially
-        // tampered) bundle does not get served forever from cache.
-        cleanupOutdatedCaches: true,
-        // Don't claim clients automatically — gives the user the explicit
-        // refresh prompt configured above before a new SW takes over.
-        clientsClaim: false,
-        skipWaiting: false,
-        runtimeCaching: [
-          {
-            urlPattern: /\.wasm$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'wasm-cache',
-              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-        ],
+        // wasm is precached via globPatterns above and served cache-first in
+        // the SW fetch handler (src/service-worker.ts); no runtimeCaching here
+        // because vite-plugin-pwa only supports runtimeCaching under generateSW.
       },
       manifest: {
         name: 'Training Log',

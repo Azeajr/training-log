@@ -1,8 +1,16 @@
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js'
 import { workout, stopRest } from '../../store/workout-store'
+import { settings } from '../../store/settings-store'
 import { formatDuration, restStatus, type RestPhase } from '../../lib/calc'
 import { playCue, unlockAudio, ensureAudioCtx } from '../../lib/audio-cues'
 import { getTimerWorker } from '../../lib/rest-timer-worker'
+import {
+  scheduleRest,
+  cancelRest,
+  scheduleStalledSession,
+  cancelStalled,
+  cancelAll,
+} from '../../lib/notifications'
 
 export default function RestTimer() {
   const [elapsed, setElapsed] = createSignal(0)
@@ -36,14 +44,17 @@ export default function RestTimer() {
   createEffect(() => {
     const isResting = workout.isResting
     const restStartedAt = workout.restStartedAt
+    const notify = settings.restTimerNotifications
     if (!isResting || restStartedAt == null) {
       prevElapsed = -1
+      if (notify) cancelRest()
       getTimerWorker().postMessage({ type: 'stop' })
       return
     }
     const worker = getTimerWorker()
     worker.onmessage = (e: MessageEvent<{ elapsed: number }>) => setElapsed(e.data.elapsed)
     worker.postMessage({ type: 'start', restStartedAt })
+    if (notify) scheduleRest(restStartedAt, workout.restType)
     void requestWakeLock()
     ensureAudioCtx()
     onCleanup(() => {
@@ -57,6 +68,17 @@ export default function RestTimer() {
     getTimerWorker().postMessage({ type: isVisible() ? 'resume' : 'pause' })
     if (isVisible()) void requestWakeLock()
   })
+
+  createEffect(() => {
+    const session = workout.activeSession
+    if (!session || !settings.restTimerNotifications) {
+      cancelStalled()
+      return
+    }
+    scheduleStalledSession(new Date(session.date).getTime())
+  })
+
+  onCleanup(() => cancelAll())
 
   const phaseToCue: Record<RestPhase, 'nudge' | 'warning' | 'critical' | null> = {
     idle: null, nudge: 'nudge', warning: 'warning', critical: 'critical',

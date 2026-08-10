@@ -250,6 +250,7 @@ export const SETTINGS_DEFAULTS = {
   deloadSupplemental: 'normal' as DeloadSupplemental,
   hasDeloadWeek: true,
   highRepDiscount: 'off' as HighRepDiscount,
+  restTimerNotifications: false,
 }
 
 function resolveThemeKey(key: string | null | undefined): ThemeKey {
@@ -277,6 +278,7 @@ interface SettingsState {
   deloadSupplemental: DeloadSupplemental
   hasDeloadWeek: boolean
   highRepDiscount: HighRepDiscount
+  restTimerNotifications: boolean
 }
 
 export const [settings, setSettings] = createStore<SettingsState>({ ...SETTINGS_DEFAULTS })
@@ -295,6 +297,7 @@ export async function loadSettings() {
     deloadSupplemental: row.deloadSupplemental ?? 'normal',
     hasDeloadWeek: row.hasDeloadWeek ?? true,
     highRepDiscount: row.highRepDiscount ?? 'off',
+    restTimerNotifications: row.restTimerNotifications ?? false,
   })
 }
 

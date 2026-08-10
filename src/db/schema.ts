@@ -91,7 +91,8 @@ CREATE TABLE IF NOT EXISTS settings (
   theme TEXT,
   barWeight REAL,
   plates TEXT,
-  supplementalTemplate TEXT
+  supplementalTemplate TEXT,
+  restTimerNotifications INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_trainingMaxes_liftId ON trainingMaxes(liftId);
 CREATE INDEX IF NOT EXISTS idx_sessions_cycleId ON sessions(cycleId);
@@ -133,6 +134,7 @@ export const ADDITIVE_MIGRATIONS = [
   // migration the error is swallowed and that DB just skips the index.
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_accessoryNotes_session_exercise ON accessoryNotes(sessionId, exerciseId)`,
   `ALTER TABLE settings ADD COLUMN highRepDiscount TEXT`,
+  `ALTER TABLE settings ADD COLUMN restTimerNotifications INTEGER`,
 ] as const
 
 export const ALL_TABLES = [
