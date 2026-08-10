@@ -33,6 +33,8 @@ Dated runtime-verification logs, one per claim checked against the running app.
 - `docs/verification/2026-06-27-deload-toggle.md` — the 3-WEEK / 4-WEEK cycle toggle.
 - `docs/verification/2026-08-09-rest-timer-notifications.md` — rest-timer system
   notifications (SW + page-timer fallback). Automated evidence; runtime pass pending.
+- `docs/verification/2026-08-09-swe-hardening.md` — page-primary notification scheduling,
+  offline navigation shell, scoped cache eviction. Automated evidence; browser legs TODO.
 
 ## Review notes
 

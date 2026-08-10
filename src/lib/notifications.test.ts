@@ -66,10 +66,11 @@ describe('stalledSessionTarget', () => {
   })
 })
 
-// ─── scheduling (in-page fallback) ───────────────────────────────────────────
+// ─── scheduling (page timers + SW mirror) ─────────────────────────────────────
 
 type NotifCall = { title: string; opts: { body: string; tag: string; requireInteraction: boolean } }
 let notifCalls: NotifCall[]
+let swPostMessage: ReturnType<typeof vi.fn>
 type NotifCtor = typeof globalThis.Notification
 const notifGlobal = globalThis as unknown as { Notification: NotifCtor }
 let OrigNotification: NotifCtor
@@ -94,10 +95,25 @@ function installNoSw() {
   })
 }
 
+function installSw() {
+  swPostMessage = vi.fn()
+  Object.defineProperty(navigator, 'serviceWorker', {
+    value: { controller: { postMessage: swPostMessage } },
+    writable: true,
+    configurable: true,
+  })
+}
+
+function setPageHidden(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', { value: hidden, writable: true, configurable: true })
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW })
   installNoSw()
+  setPageHidden(false)
   notifCalls = []
+  MockNotification.permission = 'granted'
   OrigNotification = notifGlobal.Notification
   notifGlobal.Notification = MockNotification as unknown as NotifCtor
 })
@@ -108,7 +124,7 @@ afterEach(() => {
   notifGlobal.Notification = OrigNotification
 })
 
-describe('notifications — in-page fallback', () => {
+describe('notifications — page timers, no SW (dev preview fallback)', () => {
   it('fires a page Notification after the 90s threshold (normal)', () => {
     scheduleRest(NOW, 'normal')
     vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000)
@@ -138,10 +154,19 @@ describe('notifications — in-page fallback', () => {
     expect(notifCalls).toHaveLength(1)
   })
 
-  it('rest with past start time fires immediately', () => {
+  it('rest with past start time fires on the next tick', () => {
     scheduleRest(NOW - 200_000, 'normal')
+    expect(notifCalls).toHaveLength(0)          // deferred, not synchronous
+    vi.advanceTimersByTime(0)
     expect(notifCalls).toHaveLength(1)
     expect(notifCalls[0].opts.tag).toBe('rest-timer')
+  })
+
+  it('a past-due rest cancelled in the same tick never fires', () => {
+    scheduleRest(NOW - 200_000, 'normal')
+    cancelRest()
+    vi.advanceTimersByTime(0)
+    expect(notifCalls).toHaveLength(0)
   })
 
   it('schedules the stalled-session notification after 2h', () => {
@@ -174,6 +199,56 @@ describe('notifications — in-page fallback', () => {
     MockNotification.permission = 'denied'
     scheduleRest(NOW, 'normal')
     vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000)
+    expect(notifCalls).toHaveLength(0)
+  })
+})
+
+describe('notifications — SW present (production)', () => {
+  it('arms the SW and keeps the page silent while the tab is visible', () => {
+    installSw()
+    scheduleRest(NOW, 'normal')
+    expect(swPostMessage).toHaveBeenCalledWith({
+      type: 'schedule',
+      tag: 'rest-timer',
+      fireAt: NOW + REST_NORMAL_THRESHOLD * 1000,
+      title: 'Rest complete',
+      body: 'Time for your next set',
+    })
+    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000 + 1000)
+    expect(notifCalls).toHaveLength(0)             // visible tab: SW owns it
+  })
+
+  it('page also fires when the tab is hidden (SW is best-effort)', () => {
+    installSw()
+    setPageHidden(true)
+    scheduleRest(NOW, 'normal')
+    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000)
+    expect(notifCalls).toHaveLength(1)
+    expect(swPostMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'schedule' }))
+  })
+
+  it('past-due target with SW present and visible tab: page stays silent', () => {
+    installSw()
+    scheduleRest(NOW - 200_000, 'normal')
+    vi.advanceTimersByTime(0)
+    expect(notifCalls).toHaveLength(0)
+    expect(swPostMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'schedule' }))
+  })
+
+  it('past-due target with SW present and hidden tab: page fires', () => {
+    installSw()
+    setPageHidden(true)
+    scheduleRest(NOW - 200_000, 'normal')
+    vi.advanceTimersByTime(0)
+    expect(notifCalls).toHaveLength(1)
+  })
+
+  it('cancel posts to the SW and clears the page timers', () => {
+    installSw()
+    scheduleRest(NOW, 'normal')
+    cancelRest()
+    expect(swPostMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'rest-timer' })
+    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000 + 1000)
     expect(notifCalls).toHaveLength(0)
   })
 })

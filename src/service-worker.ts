@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { createNotifyTimers } from './lib/notify-timers'
 // Custom SW for rest-timer notifications. vite-plugin-pwa runs injectManifest:
 // it rewrites `sw.__WB_MANIFEST` into the precache list built from globPatterns
 // in vite.config.ts. Precaching + wasm caching are handled inline via the native
@@ -7,7 +8,16 @@
 // Security posture mirrors the audited generateSW flags:
 //   - no self.clients.claim()  → stale SW never hijacks a live tab
 //   - no self.skipWaiting()    → refresh stays via the registerSW prompt (CSP)
-//   - stale caches evicted on activate
+//   - stale precache caches evicted on activate (precache- prefix only, so a
+//     future feature cache is never wiped)
+//
+// Fetch: navigations are network-first with the precached shell as offline
+// fallback (cold offline launch of /, /workout, … renders index.html instead
+// of a dead page); precache paths are cache-first.
+//
+// Notification schedule from the page is best-effort here — see
+// COMMON_MISTAKES #11: a SW's own setTimeout does not keep the worker alive,
+// so the page runs the reliable timers and this SW mirrors them.
 //
 // tsconfig.app.json type-checks src/ under lib DOM, so the global `self` is
 // `Window`; alias it to the worker scope the SW actually runs in.
@@ -34,13 +44,34 @@ sw.addEventListener('activate', (event: ExtendableEvent) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith('precache-') && key !== CACHE_NAME)
+            .map((key) => caches.delete(key)),
+        ),
       ),
   )
 })
 
 sw.addEventListener('fetch', (event: FetchEvent) => {
-  const path = new URL(event.request.url).pathname
+  const req = event.request
+  if (req.method !== 'GET') return
+  const path = new URL(req.url).pathname
+
+  // Navigations: network-first, precached shell as offline fallback. Offline
+  // cold launches of /, /workout, … render index.html instead of a dead page.
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req)
+        .then((response) => {
+          void caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', response.clone()))
+          return response
+        })
+        .catch(() => caches.match('/index.html').then((hit) => hit ?? Response.error())),
+    )
+    return
+  }
+
   if (!PRECACHE_PATHS.includes(path)) return
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
@@ -54,33 +85,19 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
 })
 
 // ── rest-timer notification scheduler ───────────────────────────────────────
-// Timers are keyed by id so a rest phase can carry several notifications that
-// share a tag (nudge / warning / critical). `cancel(tag)` drops every pending
-// timer for that tag; a new `schedule` does not evict same-tag timers.
-const timers = new Map<ReturnType<typeof setTimeout>, string>()
+// Mirrors the page scheduler (src/lib/notify-timers.ts): timers keyed per
+// handle, tag-scoped cancel. Best-effort by design — the page owns the
+// reliable path. `cancel(tag)` drops every pending timer for that tag; a new
+// `schedule` does not evict same-tag timers (a rest phase can carry several
+// notifications that share a tag — nudge / warning / critical).
 
-function fire(tag: string, title: string, body: string) {
-  sw.registration?.showNotification(title, { body, tag, requireInteraction: false }).catch(() => {})
-}
-
-function arm(tag: string, fireAt: number, title: string, body: string) {
-  const delay = fireAt - Date.now()
-  if (delay <= 0) {
-    fire(tag, title, body)
-    return
-  }
-  const handle = setTimeout(() => fire(tag, title, body), delay)
-  timers.set(handle, tag)
-}
-
-function cancel(tag: string) {
-  for (const [handle, t] of timers) {
-    if (t === tag) {
-      clearTimeout(handle)
-      timers.delete(handle)
-    }
-  }
-}
+const notifyTimers = createNotifyTimers({
+  fire: (target) => {
+    sw.registration
+      ?.showNotification(target.title, { body: target.body, tag: target.tag, requireInteraction: false })
+      .catch(() => {})
+  },
+})
 
 sw.addEventListener('message', (event: ExtendableMessageEvent) => {
   const msg = event.data as
@@ -88,10 +105,16 @@ sw.addEventListener('message', (event: ExtendableMessageEvent) => {
     | { type: 'cancel'; tag: string }
     | undefined
   if (!msg || typeof msg.type !== 'string') return
-  if (msg.type === 'schedule' && 'fireAt' in msg && 'title' in msg && 'body' in msg) {
-    arm(msg.tag, msg.fireAt, msg.title, msg.body)
-  } else if (msg.type === 'cancel') {
-    cancel(msg.tag)
+  if (
+    msg.type === 'schedule' &&
+    typeof msg.tag === 'string' &&
+    typeof msg.fireAt === 'number' &&
+    typeof msg.title === 'string' &&
+    typeof msg.body === 'string'
+  ) {
+    notifyTimers.arm({ tag: msg.tag, fireAt: msg.fireAt, title: msg.title, body: msg.body })
+  } else if (msg.type === 'cancel' && typeof msg.tag === 'string') {
+    notifyTimers.cancelTag(msg.tag)
   }
 })
 

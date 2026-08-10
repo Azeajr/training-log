@@ -256,4 +256,50 @@ describe('RestTimer — SW notification scheduling', () => {
     await drain()
     expect(postMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'stalled-session' })
   })
+
+  it('posts two schedules for a fail rest (warning + critical)', async () => {
+    render(() => <RestTimer />)
+    await drain()
+    postMessage.mockClear()
+    startRest('fail')
+    await drain()
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'schedule',
+      tag: 'rest-timer',
+      body: 'Time for your next set',
+    }))
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'schedule',
+      tag: 'rest-timer',
+      body: 'Rest up — take your time',
+    }))
+  })
+
+  it('re-starting rest replaces the pending schedule (cancel + re-arm)', async () => {
+    render(() => <RestTimer />)
+    await drain()
+    startRest('normal')
+    await drain()
+    postMessage.mockClear()
+    startRest('normal')
+    await drain()
+    const calls = postMessage.mock.calls.map(c => c[0])
+    expect(calls.filter(c => c.type === 'cancel' && c.tag === 'rest-timer')).toHaveLength(1)
+    expect(calls.filter(c => c.type === 'schedule' && c.tag === 'rest-timer')).toHaveLength(1)
+  })
+
+  it('stopping rest cancels only the rest timer; the stalled timer stays armed', async () => {
+    render(() => <RestTimer />)
+    await drain()
+    startSession(mkSession())
+    await drain()
+    postMessage.mockClear()
+    startRest('normal')
+    await drain()
+    stopRest()
+    await drain()
+    const cancels = postMessage.mock.calls.map(c => c[0]).filter(c => c.type === 'cancel')
+    expect(cancels).toContainEqual({ type: 'cancel', tag: 'rest-timer' })
+    expect(cancels.some(c => c.tag === 'stalled-session')).toBe(false)
+  })
 })
