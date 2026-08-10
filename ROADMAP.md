@@ -466,42 +466,39 @@ Stored in `settings.supplementalTemplate`; migrated from per-lift column on firs
 
 `TmChart` in the History By Lift view refactored to dual-series SVG with shared date-based X axis. TM plotted in accent colour; estimated 1RM from each AMRAP set plotted in dashed warn colour. Legend shows each series only when it has 2+ data points. (Restyled 2026-07-17; the e1RM series switched from Epley to Wathan on the same date.)
 
+### Rest-Timer Notifications (Service Worker)
+
+First half of the old "Push Notifications" plan, shipped 2026-08-09 (`a0fc86c`). A custom injectManifest service worker (`src/service-worker.ts`) arms one-shot timers at the rest-phase thresholds (nudge / warning / critical) and the 2 h stalled-session mark, coalesced by `tag` and cancelled on rest stop/skip, session clear, or unmount. Permission is requested from the Settings toggle gesture, not on first load; with no SW controlling the page the same targets fall back to in-page `setTimeout`s. Notification bodies per the original plan table; fail-rest critical ("Rest up — take your time") differs from nudge/warning.
+
+Runtime-verified 2026-08-09 (Chrome desktop, production preview): the nudge fires with the tab backgrounded. The chime follows OS notification-sound policy — the Notification API exposes no sound control on desktop Chrome. Details: `docs/verification/2026-08-09-rest-timer-notifications.md`. The Web Push backend step is deliberately deferred — see Planned. iOS: installed PWA only, prefers Web Push; not installed = no notifications.
+
 ---
 
 ## Planned
 
-### Push Notifications
+### Push Notifications — Web Push backend (deferred)
 
-Rest timer fires audio + vibration in-app. When the screen locks or the browser backgrounds, cues go silent. Push notifications solve this.
+The SW `setTimeout` scheduling path (implementation-order steps 1–3) shipped
+2026-08-09 — see Done, Rest-Timer Notifications. What remains is step 4: a real
+Web Push leg for the cases SW timers cannot reach.
 
-**What's needed**
+**Would need**: a Cloudflare Worker + VAPID keys + a push endpoint, and the
+device **online at arming time** — a server cannot know when a rest started
+unless the page tells it. Conflicts with this app's offline-first core; parked
+until SW scheduling proves inadequate in the field.
 
-Service worker — already registered by vite-plugin-pwa. Needs a `notificationclick` handler and access to the Notification API.
+**Platform reality**
 
-Permission request — `Notification.requestPermission()` triggered by a deliberate user action (Settings toggle), not on first load. iOS 16.4+ requires the app to be installed as a PWA.
+- Desktop + Android, browser open: SW timers cover foreground and background.
+- iOS 16.4+ (installed PWA only): notifications available, but prefer Web Push —
+  SW suspension makes local timers unreliable.
+- iOS Safari (not installed): no notification support — platform limit.
+- Browser closed / tab discarded anywhere: only Web Push reaches the user.
 
-**Scheduling options**
-- `setTimeout` inside the service worker at set-log time. Survives backgrounding on Android; unreliable on iOS due to aggressive SW suspension.
-- Push API (`PushManager.subscribe`) with a backend sending a Web Push message at the right timestamp. Reliable cross-platform but requires a server component and VAPID keys.
-
-**Notification types**
-
-| Trigger | Message |
-|---|---|
-| Rest threshold reached (normal/transition) | "Time for your next set" |
-| Rest threshold reached (fail) | "Rest up — take your time" |
-| Session left open > 2 hours | "Did you finish your session?" |
-
-**Platform notes**
-- Android Chrome: full support
-- iOS 16.4+ (installed PWA only): available; prefer Web Push over SW scheduling
-- iOS Safari (not installed): no notification support
-
-**Implementation order**
-1. Settings toggle: "Notify me when rest is over" (off by default)
-2. On enable: `Notification.requestPermission()`
-3. Schedule via SW `setTimeout` (covers Android + desktop)
-4. Evaluate Web Push backend if SW scheduling proves unreliable on iOS
+**Watch item** — Notification Triggers (`showTrigger`), the OS-held timer API
+that would cover closed-browser + offline with no server; still not in stable
+Chrome as of 2026-08-09. One-line addition to `src/service-worker.ts` when it
+lands.
 
 ---
 
@@ -632,7 +629,7 @@ Separate from rest-timer notifications (covered in `Push Notifications` above). 
 weekly schedule (M / W / F at 6 PM, etc.) that fires a notification reminding the user to log
 a session.
 
-- Depends on push-notification infra being landed first
+- Reuses the shipped rest-timer SW schedule/cancel protocol (`src/service-worker.ts`) — third tag, recurring arming; Web Push still required for browsers-closed / iOS legs
 - Settings → REMINDERS UI: day-of-week checkboxes + time picker
 - Scheduled via service worker `setTimeout` chain (Android) or Web Push (iOS PWA)
 - Skipped if a session is already logged for that day
