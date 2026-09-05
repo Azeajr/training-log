@@ -1,8 +1,9 @@
-import { createSignal, createMemo, createEffect, For, Show } from 'solid-js'
+import { createSignal, createMemo, createEffect, onMount, For, Show } from 'solid-js'
 import { useNavigate, useSearchParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Session, Lift, Set as TrainingSet, AccessorySet } from '../types/domain'
 import { estimated1RM } from '../lib/calc'
+import { prSessionIds, type AmrapRecord } from '../lib/pr'
 import { formatDateShort, formatDateLong } from '../lib/format'
 import { settings } from '../store/settings-store'
 import SectionLabel from '../components/layout/SectionLabel'
@@ -10,9 +11,11 @@ import WeekBadge from '../components/layout/WeekBadge'
 import NotesBlock from '../components/forms/NotesBlock'
 import ExerciseSetsBlock from '../components/forms/ExerciseSetsBlock'
 import LiftSetsByType from '../components/forms/LiftSetsByType'
+import RecordsPanel from '../components/stats/RecordsPanel'
+import ExerciseHistoryModal from '../components/modals/ExerciseHistoryModal'
 import { gapsForSession } from '../store/save-failure-store'
 
-type ViewMode = 'lift' | 'date' | 'calendar'
+type ViewMode = 'lift' | 'date' | 'calendar' | 'records'
 
 const dateKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -33,6 +36,27 @@ interface CalendarCell {
 }
 
 const HISTORY_LIFT_KEY = 'history-lift'
+// The lift filter was remembered and the view mode wasn't, so a user who lives
+// in the calendar landed on by-lift every visit. Both, or neither.
+const HISTORY_MODE_KEY = 'history-mode'
+
+const VIEW_MODES: ViewMode[] = ['lift', 'date', 'calendar', 'records']
+
+const MODE_LABEL: Record<ViewMode, string> = {
+  lift: 'By lift',
+  date: 'By date',
+  calendar: 'Calendar',
+  records: 'Records',
+}
+
+const readStoredMode = (): ViewMode => {
+  try {
+    const stored = localStorage.getItem(HISTORY_MODE_KEY)
+    return VIEW_MODES.includes(stored as ViewMode) ? (stored as ViewMode) : 'lift'
+  } catch {
+    return 'lift'
+  }
+}
 
 interface SessionRow {
   session: Session
@@ -219,6 +243,8 @@ function HistorySessionRow(props: {
   onExpand: (id: number) => void
   expanded: boolean
   detail: Detail | null
+  isPr: boolean
+  onExerciseClick: (exerciseId: number, name: string) => void
 }) {
   const navigate = useNavigate()
   const sid = () => props.row.session.id!
@@ -256,6 +282,11 @@ function HistorySessionRow(props: {
           </Show>
         </span>
         <span class="text-muted">
+          {/* A PR was previously a 5s toast and nothing else — the log kept no
+              trace of the best moments in it. */}
+          <Show when={props.isPr}>
+            <span class="text-warn mr-2 tracking-widest" title="Personal record when logged">PR</span>
+          </Show>
           {props.row.amrapWeight && props.row.amrapReps ? `${props.row.amrapWeight}×${props.row.amrapReps} ~ ${e1rm()}lb` : ''}
         </span>
       </button>
@@ -299,6 +330,9 @@ function HistorySessionRow(props: {
                     note={detail().notesByExercise.get(exId)}
                     nameTone="text-text"
                     nameClass="mb-1 font-semibold"
+                    onNameClick={() =>
+                      props.onExerciseClick(exId, detail().exerciseNames.get(exId) ?? `Exercise ${exId}`)
+                    }
                   />
                 )}
               </For>
@@ -315,8 +349,14 @@ function HistorySessionRow(props: {
 
 export default function History() {
   const [searchParams] = useSearchParams()
-  const [mode, setMode] = createSignal<ViewMode>('lift')
+  const [mode, setModeSignal] = createSignal<ViewMode>(readStoredMode())
+  const setMode = (m: ViewMode) => {
+    setModeSignal(m)
+    try { localStorage.setItem(HISTORY_MODE_KEY, m) } catch { /* private mode */ }
+  }
   const [lifts, setLifts] = createSignal<Lift[]>([])
+  const [prSessions, setPrSessions] = createSignal<Set<number>>(new Set())
+  const [historyExercise, setHistoryExercise] = createSignal<{ id: number; name: string } | null>(null)
   const [showArchived, setShowArchived] = createSignal(false)
   // Default the lift filter to active lifts only; archived ones still carry
   // history and can be revealed on demand.
@@ -348,6 +388,35 @@ export default function History() {
   )
 
   createEffect(() => { void load(mode(), selectedLiftId()) })
+
+  // Which sessions were a PR when they happened. Computed once over the whole
+  // log rather than per view, so the calendar — which only ever loads one day —
+  // gets the same answer as the by-lift list.
+  onMount(() => { void loadPrs() })
+
+  const loadPrs = async () => {
+    const sessions = (await db.sessions.toArray()).filter(s => s.status === 'completed')
+    const ids = sessions.map(s => s.id!).filter(Boolean)
+    if (ids.length === 0) return
+    const amraps = await db.sets
+      .where('sessionId').anyOf(ids)
+      .filter(s => s.isAmrap && s.reps >= 1)
+      .toArray()
+    const byId = new Map(sessions.map(s => [s.id!, s]))
+    const records: AmrapRecord[] = []
+    for (const a of amraps) {
+      const s = byId.get(a.sessionId)
+      if (!s) continue
+      records.push({
+        sessionId: a.sessionId,
+        liftId: s.liftId,
+        date: new Date(s.date),
+        weight: a.weight,
+        reps: a.reps,
+      })
+    }
+    setPrSessions(prSessionIds(records, settings.highRepDiscount))
+  }
 
   createEffect(() => {
     if (mode() !== 'calendar') return
@@ -484,20 +553,27 @@ export default function History() {
 
   return (
     <div class="p-4 font-mono">
+      {/* RECORDS was its own nav destination answering the same question this
+          screen already answers per lift. Folded in as a fourth view. */}
       <div class="flex gap-0 mb-4 border border-border">
-        <For each={['lift', 'date', 'calendar'] as ViewMode[]}>
+        <For each={VIEW_MODES}>
           {m => (
             <button
               onClick={() => setMode(m)}
+              aria-pressed={mode() === m}
               class={`flex-1 py-2 text-xs uppercase tracking-widest ${
                 mode() === m ? 'bg-surface-high text-accent' : 'text-muted hover:text-text'
               }`}
             >
-              {m === 'calendar' ? 'Calendar' : `By ${m}`}
+              {MODE_LABEL[m]}
             </button>
           )}
         </For>
       </div>
+
+      <Show when={mode() === 'records'}>
+        <RecordsPanel />
+      </Show>
 
       <Show when={mode() === 'lift'}>
         <div class="flex gap-0 mb-4">
@@ -523,6 +599,13 @@ export default function History() {
           >
             {showArchived() ? '− hide archived' : '+ show archived'}
           </button>
+        </Show>
+        {/* Records for the lift already on screen, above its own chart — the
+            summary before the detail, instead of on another tab. */}
+        <Show when={selectedLiftId() != null}>
+          <div class="mb-4">
+            <RecordsPanel liftId={selectedLiftId()!} compact />
+          </div>
         </Show>
         <Show when={tmHistory().length > 1 || e1rmHistory().length > 1}>
           <div class="mb-4">
@@ -590,6 +673,8 @@ export default function History() {
                   onExpand={handleExpand}
                   expanded={expanded() === row.session.id}
                   detail={expanded() === row.session.id ? detail() : null}
+                  isPr={prSessions().has(row.session.id!)}
+                  onExerciseClick={(id, name) => setHistoryExercise({ id, name })}
                 />
               )}
             </For>
@@ -600,7 +685,7 @@ export default function History() {
         </Show>
       </Show>
 
-      <Show when={mode() !== 'calendar'}>
+      <Show when={mode() === 'lift' || mode() === 'date'}>
         <Show
           when={sessions().length > 0}
           fallback={<div class="text-muted text-sm">No completed sessions yet.</div>}
@@ -613,11 +698,23 @@ export default function History() {
                   onExpand={handleExpand}
                   expanded={expanded() === row.session.id}
                   detail={expanded() === row.session.id ? detail() : null}
+                  isPr={prSessions().has(row.session.id!)}
+                  onExerciseClick={(id, name) => setHistoryExercise({ id, name })}
                 />
               )}
             </For>
           </div>
         </Show>
+      </Show>
+
+      <Show when={historyExercise()}>
+        {ex => (
+          <ExerciseHistoryModal
+            exerciseName={ex().name}
+            exerciseId={ex().id}
+            onClose={() => setHistoryExercise(null)}
+          />
+        )}
       </Show>
     </div>
   )

@@ -25,14 +25,8 @@
 // than stacking. Rest-phase and stalled-session notifications use distinct
 // tags.
 
-import {
-  REST_FAIL_MAX,
-  REST_FAIL_NUDGE,
-  REST_NORMAL_THRESHOLD,
-  REST_TRANSITION_THRESHOLD,
-  restStatus,
-} from './calc'
-import type { RestPhase } from './calc'
+import { DEFAULT_REST_THRESHOLDS, restStatus } from './calc'
+import type { RestPhase, RestThresholds } from './calc'
 import { createNotifyTimers, type NotifyTarget } from './notify-timers'
 
 const REST_TAG = 'rest-timer'
@@ -48,12 +42,17 @@ const PHASE_BODY: Record<Exclude<RestPhase, 'idle'>, string> = {
 }
 
 // Phase thresholds (seconds) where restStatus flips idle→active for each type.
-// A 'fail' rest crosses two cues (warning @180s, critical @300s); normal and
-// transition each have a single nudge.
-function thresholds(restType: 'normal' | 'transition' | 'fail'): number[] {
-  if (restType === 'fail') return [REST_FAIL_NUDGE, REST_FAIL_MAX]
-  if (restType === 'transition') return [REST_TRANSITION_THRESHOLD]
-  return [REST_NORMAL_THRESHOLD]
+// A 'fail' rest crosses two cues (nudge, then the hard stop); normal and
+// transition each have a single nudge. Lengths come from the user's settings —
+// a notification that fires on a different schedule from the on-screen timer is
+// worse than none.
+function thresholds(
+  restType: 'normal' | 'transition' | 'fail',
+  t: RestThresholds,
+): number[] {
+  if (restType === 'fail') return [t.failNudge, t.failMax]
+  if (restType === 'transition') return [t.transition]
+  return [t.normal]
 }
 
 export { type NotifyTarget }
@@ -62,10 +61,11 @@ export { type NotifyTarget }
 export function restNotificationTargets(
   restStartedAt: number,
   restType: 'normal' | 'transition' | 'fail',
+  t: RestThresholds = DEFAULT_REST_THRESHOLDS,
 ): NotifyTarget[] {
-  return thresholds(restType)
+  return thresholds(restType, t)
     .map((at) => {
-      const phase = restStatus(at, restType).phase
+      const phase = restStatus(at, restType, t).phase
       const body = phase === 'idle' ? null : PHASE_BODY[phase]
       return body === null
         ? null
@@ -130,9 +130,13 @@ function schedulePage(key: string, targets: NotifyTarget[]): void {
   for (const t of targets) pageTimers.arm(t)
 }
 
-export function scheduleRest(restStartedAt: number, restType: 'normal' | 'transition' | 'fail'): void {
+export function scheduleRest(
+  restStartedAt: number,
+  restType: 'normal' | 'transition' | 'fail',
+  t: RestThresholds = DEFAULT_REST_THRESHOLDS,
+): void {
   cancelRest()
-  const targets = restNotificationTargets(restStartedAt, restType)
+  const targets = restNotificationTargets(restStartedAt, restType, t)
   if (targets.length === 0) return
   schedulePage(REST_TAG, targets)
   scheduleSw(targets)

@@ -57,7 +57,7 @@ describe('RestTimer — Screen Wake Lock', () => {
     const { getByText } = render(() => <RestTimer />)
     startRest('normal')
     await drain()
-    getByText('SKIP REST').click()
+    getByText('SKIP').click()
     await drain()
     expect(mockSentinel.release).toHaveBeenCalled()
   })
@@ -120,10 +120,14 @@ describe('RestTimer — audio/vibration cues', () => {
     expect(vibrateMock).toHaveBeenCalledWith(80)
   })
 
-  it('fires nudge cue (vibrate 80ms) at 60s for transition rest', async () => {
+  // A section change earns a longer rest than a between-sets one, and the
+  // length comes from settings.restTimer2 (default 180s) rather than a constant.
+  it('fires nudge cue (vibrate 80ms) at the configured transition rest', async () => {
     render(() => <RestTimer />)
     startRest('transition')
-    await vi.advanceTimersByTimeAsync(61_000)
+    await vi.advanceTimersByTimeAsync(91_000)
+    expect(vibrateMock).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(91_000)
     expect(vibrateMock).toHaveBeenCalledWith(80)
   })
 
@@ -217,7 +221,7 @@ describe('RestTimer — SW notification scheduling', () => {
     startRest('normal')
     await drain()
     postMessage.mockClear()
-    getByText('SKIP REST').click()
+    getByText('SKIP').click()
     await drain()
     expect(postMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'rest-timer' })
   })

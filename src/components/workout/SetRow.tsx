@@ -83,7 +83,7 @@ export default function SetRow(props: Props) {
             <PlateDisplay weight={weight()} loading={props.loading!} />
           </Show>
           <Show when={isAmrap() && props.amrapTargets && props.amrapTargets.length > 0}>
-            <AmrapTargets targets={props.amrapTargets!} />
+            <AmrapTargets targets={props.amrapTargets!} onPick={setReps} />
           </Show>
           <SetLogControls
             weight={weight()}
@@ -91,7 +91,7 @@ export default function SetRow(props: Props) {
             onLog={() => { props.onLog(reps(), weight()); setReps(props.set.reps); setWeightTouched(false) }}
           >
             <FieldRow label="reps">
-              <Stepper value={reps()} onChange={setReps} step={1} min={0} label="reps" fieldLabel="reps" />
+              <Stepper value={reps()} onChange={setReps} step={1} min={0} label="reps" fieldLabel="reps" emphasized={isAmrap()} />
             </FieldRow>
           </SetLogControls>
         </div>

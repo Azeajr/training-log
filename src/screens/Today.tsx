@@ -36,6 +36,10 @@ export default function Today() {
     Partial<Record<AssistanceSection, { exerciseId: number; name: string }>>
   >({})
   const [pickerSlot, setPickerSlot] = createSignal<AssistanceSection | null>(null)
+  // The warmup ladder and the full main-set list aren't pre-session decisions —
+  // they're the next screen's content, and inline they pushed the assistance
+  // pickers and START WORKOUT below the fold. Folded away by default.
+  const [showFullSession, setShowFullSession] = createSignal(false)
   onMount(() => { void load() })
 
   const loadAssistanceDefaults = async (liftId: number) => {
@@ -187,13 +191,24 @@ export default function Today() {
     },
   )
 
-  // Status outranks the selection arrow: selecting a finished lift must not
-  // hide that it's already done — that's the cue against an accidental redo.
+  // Status owns the colour, permanently — selecting a finished lift must not
+  // hide that it's already done, that being the cue against an accidental redo.
+  // Selection is a separate channel: a filled ground plus the ▸ the glyph atlas
+  // already assigns to "current", so both facts read at once.
   const statusLabel = (ws: WeekStatus) => {
     if (ws.status === 'completed') return 'done'
     if (ws.status === 'skipped') return 'skip'
-    if (ws.liftId === selectedLiftId()) return '->'
     return ''
+  }
+
+  const chipClass = (ws: WeekStatus) => {
+    const selected = ws.liftId === selectedLiftId()
+    const fill = selected ? 'bg-surface-high ' : ''
+    if (ws.status === 'completed') return `${fill}border-accent text-accent`
+    if (ws.status === 'skipped') return `${fill}border-danger text-danger`
+    return fill + (selected
+      ? 'border-text text-text'
+      : 'border-border text-muted hover:border-text hover:text-text')
   }
 
   return (
@@ -222,16 +237,12 @@ export default function Today() {
                 {ws => (
                   <button
                     onClick={() => void handleSelectLift(ws.liftId)}
-                    class={`border px-3 py-2 text-xs tracking-widest ${
-                      ws.liftId === selectedLiftId()
-                        ? 'border-warn text-warn'
-                        : ws.status === 'completed'
-                        ? 'border-accent text-accent'
-                        : ws.status === 'skipped'
-                        ? 'border-danger text-danger'
-                        : 'border-border text-muted hover:border-text hover:text-text'
-                    }`}
+                    aria-pressed={ws.liftId === selectedLiftId()}
+                    class={`border px-3 py-2 text-xs tracking-widest ${chipClass(ws)}`}
                   >
+                    <Show when={ws.liftId === selectedLiftId()}>
+                      <span aria-hidden="true">▸ </span>
+                    </Show>
                     {ws.name} {statusLabel(ws)}
                   </button>
                 )}
@@ -268,30 +279,39 @@ export default function Today() {
                 </Show>
 
                 <div class="space-y-4 font-mono text-sm">
-                  <div>
-                    <SectionLabel class="mb-1">WARM UP</SectionLabel>
-                    <For each={warmup()}>{s => (
-                      <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={s.weight} value={`${s.reps}`} />
-                    )}</For>
-                  </div>
-                  <div>
-                    <SectionLabel class="mb-1">MAIN</SectionLabel>
-                    <For each={main()}>{s => (
-                      <SetReadout
-                        size="sm"
-                        alignWeight
-                        tone="text-text"
-                        class="pl-2"
-                        weight={s.weight}
-                        value={`${s.reps}${s.isAmrap ? '+' : ''}`}
-                        badges={
-                          <Show when={s.isAmrap}>
-                            <span class="text-warn text-xs tracking-widest">AMRAP</span>
-                          </Show>
-                        }
-                      />
-                    )}</For>
-                  </div>
+                  <button
+                    onClick={() => setShowFullSession(v => !v)}
+                    aria-expanded={showFullSession()}
+                    class="text-faint text-xs tracking-widest hover:text-accent"
+                  >
+                    full session {showFullSession() ? '▾' : '▸'}
+                  </button>
+                  <Show when={showFullSession()}>
+                    <div>
+                      <SectionLabel class="mb-1">WARM UP</SectionLabel>
+                      <For each={warmup()}>{s => (
+                        <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={s.weight} value={`${s.reps}`} />
+                      )}</For>
+                    </div>
+                    <div>
+                      <SectionLabel class="mb-1">MAIN</SectionLabel>
+                      <For each={main()}>{s => (
+                        <SetReadout
+                          size="sm"
+                          alignWeight
+                          tone="text-text"
+                          class="pl-2"
+                          weight={s.weight}
+                          value={`${s.reps}${s.isAmrap ? '+' : ''}`}
+                          badges={
+                            <Show when={s.isAmrap}>
+                              <span class="text-warn text-xs tracking-widest">AMRAP</span>
+                            </Show>
+                          }
+                        />
+                      )}</For>
+                    </div>
+                  </Show>
                   <Show when={supplementalLabel() !== null && supplementalSets().length > 0}>
                     <div>
                       <SectionLabel class="mb-1">{supplementalLabel()}</SectionLabel>

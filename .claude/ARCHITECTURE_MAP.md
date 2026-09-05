@@ -15,24 +15,33 @@ src/
 │   ├── Today.tsx                 # lift picker, week status, session preview, assistance slots, launch
 │   ├── Workout.tsx               # active session: warmups, mains, jokers, supplementals,
 │   │                             #   cross-lift blocks, accessories, notes
-│   ├── History.tsx               # session browser; 3 modes: by-lift (TM + e1RM chart), by-date, calendar
+│   ├── History.tsx               # session browser; 4 modes: by-lift (records + TM/e1RM chart),
+│   │                             #   by-date, calendar, records. Mode persists to localStorage
 │   ├── HistoryEdit.tsx           # edit a past session: sets, accessories, notes, status
-│   ├── Stats.tsx                 # read-only: best e1RM + actual max per lift, TM progression
-│   ├── Setup.tsx                 # 3-step first-run wizard: lift roster → TMs → confirm
+│   ├── Stats.tsx                 # thin wrapper over components/stats/RecordsPanel; /stats is the
+│   │                             #   direct link to the whole-roster view (no nav tab)
+│   ├── Setup.tsx                 # 2-step first-run wizard: lift roster → TMs (+ START TRAINING)
 │   └── Settings.tsx              # rest timers, theme, plates/equipment, supplemental + cross blocks,
 │                                 #   cycle shape (deload on/off + deload supplemental), exercise
-│                                 #   library, export/import, cleanup, week skip
+│                                 #   library, export/import, cleanup, week skip/reopen. Five
+│                                 #   collapsible groups (PROGRAM/TRAINING/EQUIPMENT/APP/DATA) with a
+│                                 #   sticky jump row; every irreversible action lives in DATA
 │
 ├── components/
-│   ├── layout/                   # BottomNav, Toast, Rule (`--- LABEL ---`), SectionLabel
+│   ├── layout/                   # BottomNav (4 tabs), Toast, Rule (`--- LABEL ---`), SectionLabel
+│   ├── stats/                    # RecordsPanel — records + TM progression; whole roster, or one
+│   │                             #   lift in `compact` form for History's by-lift header
 │   ├── modals/                   # ConfirmationDialog (wired to use-confirmation), CycleCompleteModal
 │   │                             #   (old → new TMs + STRONG CYCLE doubling), TmRecommendationModal,
+│   │                             #   AccessoryTmModal (post-session accessory TM prompts),
 │   │                             #   LiftSetupModal (TM, increment, equipment, cross blocks)
 │   ├── forms/                    # Stepper, DurationInput, PlateDisplay, SetReadout,
 │   │                             #   SetLogControls/FieldRow, NotesField, NotesText, ExerciseEditor
 │   ├── ui/                       # InlineConfirm, ToggleChip
-│   └── workout/                  # RestTimer, SetRow, CrossBlockLog, AccessoryLog, AccessoryPicker,
-│                                 #   AmrapTargets
+│   └── workout/                  # RestTimer (counts *down* to the configured target), SessionBar
+│                                 #   (outstanding work + COMPLETE; shares the strip with RestTimer),
+│                                 #   SetRow, CrossBlockLog, AccessoryLog, AccessoryPicker,
+│                                 #   AmrapTargets (tappable — fills the reps field)
 │
 ├── store/                        # Solid stores — global reactive state, NOT Zustand
 │   ├── workout-store.ts          # active session, loggedSets (linear), loggedCrossSets (out-of-order),
@@ -64,7 +73,8 @@ src/
 │   ├── calc.ts                   # 5/3/1 math: main %s, warmups, jokers, FSL/SSL/BBB/BBS/+BBB combos,
 │   │                             #   cross-lift sets, plate distribution (paired|total), Wathan e1RM
 │   │                             #   + AMRAP targets, cycleFinalWeek, effectiveSupplementalWeek,
-│   │                             #   restStatus/RestPhase thresholds, formatDuration
+│   │                             #   restStatus/restThresholds/restTarget (driven by the user's
+│   │                             #   restTimer1/2/Fail settings, not constants), formatDuration
 │   ├── cycle.ts                  # computeClosedThroughWeek/syncClosedThroughWeek (high-water mark),
 │   │                             #   getNextSessionAdvancingIfDone, advanceCycleIfComplete,
 │   │                             #   applyTmProgression, applyAccessoryTmProgression, deloadTms,
@@ -84,7 +94,11 @@ src/
 │   ├── export-import.ts          # JSON export + destructive import (validate → clear → restore),
 │   │                             #   CSV export, pending-export retry via localStorage
 │   ├── pr.ts                     # detectAmrapPRs — rep-PR and e1RM-PR vs. all prior AMRAPs;
-│   │                             #   first-ever AMRAP returns e1RmPr=true (baseline)
+│   │                             #   first-ever AMRAP returns e1RmPr=true (baseline). prSessionIds —
+│   │                             #   pure: which sessions were a PR *when logged*, for History badges
+│   ├── accessory-tm.ts           # getAccessoryTmRecommendations (whole slate off-prescription →
+│   │                             #   post-session prompt) + applyAccessoryTm. Logging never writes
+│   │                             #   a training max on its own
 │   ├── format.ts                 # formatDateShort/Long/Iso (Iso is the LOCAL day, not toISOString)
 │   ├── audio-cues.ts             # module-scoped AudioContext; playCue(level), unlockAudio, ensureAudioCtx
 │   └── rest-timer-worker.ts      # module-scoped Worker factory (getTimerWorker), survives remounts
@@ -115,6 +129,8 @@ scripts/                          # debug-browser.js, migrate-history.py
 
 `/` and `/today` → Today · `/workout` → Workout · `/history` → History · `/stats` → Stats ·
 `/history/:sessionId/edit` → HistoryEdit · `/settings` → Settings · `/setup` → Setup.
+BottomNav carries four of these — TODAY, WORKOUT, HISTORY, SETTINGS. `/stats` stays routable but has
+no tab: records and TM progression live inside History, which already charted the same numbers.
 All screens are `lazy()` inside a `<Suspense>`; `AppShell` redirects to `/setup` on every navigation
 while `trainingMaxes` is empty.
 
@@ -166,6 +182,13 @@ belongs there and never in `SCHEMA`, whose exec is unguarded.
 - **Equipment / plate math**: `resolveLiftLoading` / `resolveExerciseLoading` turn `plateMode` +
   `implementBase` (falling back to the legacy `usesBarbell` flag) into `{ mode, base }`, which
   `calcPlates` distributes as pairs (`paired`) or singles (`total`).
+- **Rest**: `restThresholds(settings)` turns the three stored durations into `{ normal, transition,
+  failNudge, failMax }` (fail nudge = `FAIL_NUDGE_RATIO` × the stored fail length, so three settings
+  cover four cues). `restStatus`, `restTarget` and `restNotificationTargets` all take that object —
+  the on-screen countdown, the audio cues and the notifications cannot disagree.
+- **Session progress**: `SessionBar` renders one segment per block of work (linear sections, each
+  cross block, each assistance slot), driven by `segments()` in `Workout.tsx`. Segments scroll to
+  their block via a `data-section` attribute (`CollapsibleSection`'s `anchor` prop).
 - **Theming**: 14 `--color-*` tokens declared in `src/index.css` `@theme` and overridden at runtime by
   the `THEMES` map in `settings-store.ts` (11 themes) via `applyTheme()`. Tailwind utilities read the vars.
 - **Confirmation dialogs**: `ConfirmationContext` provided at the root in `App.tsx`; call
@@ -191,4 +214,4 @@ belongs there and never in `SCHEMA`, whose exec is unguarded.
 
 ---
 
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-09-05

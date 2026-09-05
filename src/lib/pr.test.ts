@@ -2,7 +2,7 @@
 import { beforeEach, describe, it, expect } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
-import { detectAmrapPRs } from './pr'
+import { detectAmrapPRs, prSessionIds } from './pr'
 
 beforeEach(async () => { await __resetForTest() })
 
@@ -197,5 +197,52 @@ describe('detectAmrapPRs', () => {
     const result = await detectAmrapPRs(db, 1, 200, 5)  // e1RM ≈ 233
     expect(result.e1RmPr).toBe(false)
     expect(result.prevBestE1Rm).toBe(300)
+  })
+})
+
+// History badges the session that set a record, evaluated against prior work
+// only — a bigger AMRAP six weeks later must not un-PR the one that stood.
+describe('prSessionIds', () => {
+  const rec = (sessionId: number, day: number, weight: number, reps: number, liftId = 1) => ({
+    sessionId, liftId, date: new Date(2026, 0, day), weight, reps,
+  })
+
+  it('marks a lift first successful AMRAP as the baseline record', () => {
+    expect([...prSessionIds([rec(1, 1, 200, 5)])]).toEqual([1])
+  })
+
+  it('marks an e1RM improvement and leaves a regression unmarked', () => {
+    const out = prSessionIds([rec(1, 1, 200, 5), rec(2, 8, 200, 8), rec(3, 15, 200, 3)])
+    expect(out.has(1)).toBe(true)
+    expect(out.has(2)).toBe(true)
+    expect(out.has(3)).toBe(false)
+  })
+
+  it('marks a rep record at a weight already worked', () => {
+    // Heavier single first, so the later set cannot win on e1RM alone.
+    const out = prSessionIds([rec(1, 1, 300, 3), rec(2, 8, 200, 5), rec(3, 15, 200, 9)])
+    expect(out.has(3)).toBe(true)
+  })
+
+  it('does not let a later session retroactively un-PR an earlier one', () => {
+    const out = prSessionIds([rec(1, 1, 200, 5), rec(2, 30, 250, 8)])
+    expect(out.has(1)).toBe(true)
+    expect(out.has(2)).toBe(true)
+  })
+
+  it('scores each lift against its own history', () => {
+    const out = prSessionIds([rec(1, 1, 400, 5, 2), rec(2, 8, 200, 5, 1)])
+    expect(out.has(2)).toBe(true)
+  })
+
+  it('ignores failed (0-rep) AMRAPs', () => {
+    expect([...prSessionIds([rec(1, 1, 200, 0)])]).toEqual([])
+  })
+
+  it('orders same-day sessions by id so the earlier one takes the baseline', () => {
+    const out = prSessionIds([rec(2, 1, 200, 8), rec(1, 1, 200, 5)])
+    expect(out.has(1)).toBe(true)
+    expect(out.has(2)).toBe(true)
+    expect([...prSessionIds([rec(2, 1, 200, 5), rec(1, 1, 200, 8)])].sort()).toEqual([1])
   })
 })

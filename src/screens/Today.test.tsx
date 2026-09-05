@@ -165,7 +165,7 @@ describe('Today screen', () => {
     }
     renderToday()
     await waitFor(() => expect(document.body.textContent).toContain('WEEK 1'))
-    // OHP (id 1) is auto-selected (shows '->'); the rest are pending → no 'done'.
+    // OHP (id 1) is auto-selected (marked with ▸); the rest are pending → no 'done'.
     const liftButtons = screen.getAllByRole('button').filter(b => /OHP|Deadlift|Bench|Squat/.test(b.textContent ?? ''))
     expect(liftButtons.some(b => b.textContent?.includes('done'))).toBe(false)
   })
@@ -182,11 +182,15 @@ describe('Today screen', () => {
     await screen.findByText(/DEADLIFT\s+5 × 10\s+FSL/)
   })
 
-  it("shows '->' label for the selected lift", async () => {
+  // Selection is its own channel (▸ + aria-pressed) so status keeps the colour
+  // and a completed lift still reads as done while selected.
+  it('marks the selected lift without spending the status colour on it', async () => {
     renderToday()
     await waitFor(() => {
       const btns = screen.getAllByRole('button')
-      expect(btns.some(b => b.textContent?.includes('OHP') && b.textContent?.includes('->'))).toBe(true)
+      const ohp = btns.find(b => b.textContent?.includes('OHP'))
+      expect(ohp?.textContent).toContain('▸')
+      expect(ohp?.getAttribute('aria-pressed')).toBe('true')
     })
   })
 

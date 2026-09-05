@@ -42,13 +42,13 @@ afterEach(drain)
 async function gotoTmStep() {
   await screen.findByText('OHP')
   fireEvent.click(screen.getByText('NEXT'))
-  await screen.findByText('STEP 2 OF 3 — TRAINING MAXES')
+  await screen.findByText('STEP 2 OF 2 — TRAINING MAXES')
 }
 
 describe('Setup screen — flow', () => {
   it('opens on the MAIN LIFTS step', async () => {
     renderSetup()
-    await screen.findByText('STEP 1 OF 3 — MAIN LIFTS')
+    await screen.findByText('STEP 1 OF 2 — MAIN LIFTS')
   })
 
   it('lists the seeded default lifts', async () => {
@@ -69,34 +69,25 @@ describe('Setup screen — flow', () => {
     await gotoTmStep()
   })
 
-  it('NEXT on TRAINING MAXES advances to CONFIRM', async () => {
+  // The old step 3 restated step 2's values read-only and asked for no
+  // decision, so the training-max list is now the review and carries START.
+  it('finishes on the TRAINING MAXES step — no separate confirm step', async () => {
     renderSetup()
     await gotoTmStep()
-    fireEvent.click(screen.getByText('NEXT'))
-    await screen.findByText('STEP 3 OF 3 — CONFIRM')
-  })
-
-  it('BACK from CONFIRM returns to TRAINING MAXES', async () => {
-    renderSetup()
-    await gotoTmStep()
-    fireEvent.click(screen.getByText('NEXT'))
-    await screen.findByText('STEP 3 OF 3 — CONFIRM')
-    fireEvent.click(screen.getByText('BACK'))
-    await screen.findByText('STEP 2 OF 3 — TRAINING MAXES')
+    expect(screen.queryByText('NEXT')).toBeNull()
+    await screen.findByText('START TRAINING')
   })
 
   it('BACK from TRAINING MAXES returns to MAIN LIFTS', async () => {
     renderSetup()
     await gotoTmStep()
     fireEvent.click(screen.getByText('BACK'))
-    await screen.findByText('STEP 1 OF 3 — MAIN LIFTS')
+    await screen.findByText('STEP 1 OF 2 — MAIN LIFTS')
   })
 
   it('START TRAINING creates one TM per lift and navigates', async () => {
     renderSetup()
     await gotoTmStep()
-    fireEvent.click(screen.getByText('NEXT'))
-    await screen.findByText('STEP 3 OF 3 — CONFIRM')
     fireEvent.click(await screen.findByText('START TRAINING'))
 
     await waitFor(async () => {
@@ -106,7 +97,7 @@ describe('Setup screen — flow', () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today', { replace: true }))
   })
 
-  it('clicking + on a TM Stepper updates the value and carries to confirm', async () => {
+  it('clicking + on a TM Stepper updates the value it saves', async () => {
     renderSetup()
     await gotoTmStep()
 
@@ -118,8 +109,6 @@ describe('Setup screen — flow', () => {
     fireEvent.click(plusBtns[0]) // OHP baseWeight=95, step=5 → 100
     await waitFor(() => expect(document.body.textContent).toContain('100'))
 
-    fireEvent.click(screen.getByText('NEXT'))
-    await screen.findByText('STEP 3 OF 3 — CONFIRM')
     fireEvent.click(screen.getByText('START TRAINING'))
     await waitFor(async () => {
       const ohpTm = (await db.trainingMaxes.toArray()).find(t => t.liftId === 1)
@@ -218,7 +207,7 @@ describe('Setup screen — roster editing', () => {
     // onCancel must hit the `else → setSetupLiftId(null)` arm, not the draft arm.
     renderSetup()
     await screen.findByText('OHP')
-    fireEvent.click(screen.getAllByText('setup')[0])
+    fireEvent.click(screen.getAllByText('advanced')[0])
 
     await screen.findByText('DONE')
     fireEvent.click(screen.getByText('CANCEL'))

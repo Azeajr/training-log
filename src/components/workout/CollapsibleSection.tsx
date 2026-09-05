@@ -20,6 +20,11 @@ interface Props {
   complete: boolean
   /** Shown in place of the content when collapsed, e.g. "3 sets". */
   summary?: string
+  /**
+   * Scroll target id for the session bar (`data-section`). Set it on any block
+   * the bar reports progress for, so tapping that segment lands here.
+   */
+  anchor?: string
   class?: string
   children: JSX.Element
   onLabelClick?: () => void
@@ -73,7 +78,7 @@ export default function CollapsibleSection(props: Props) {
   )
 
   return (
-    <div class={props.class}>
+    <div class={props.class} data-section={props.anchor}>
       <Show
         when={props.complete}
         fallback={labelButton('mb-2')}

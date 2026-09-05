@@ -14,7 +14,7 @@ import LiftSetupModal, { type DraftLiftFields } from '../components/modals/LiftS
 
 export default function Setup() {
   const navigate = useNavigate()
-  const [step, setStep] = createSignal<1 | 2 | 3>(1)
+  const [step, setStep] = createSignal<1 | 2>(1)
   const [tmValues, setTmValues] = createSignal<Record<number, number>>({})
   const [saving, setSaving] = createSignal(false)
   const [importError, setImportError] = createSignal<string | null>(null)
@@ -136,10 +136,11 @@ export default function Setup() {
     }
   }
 
+  // Two steps, not three: the old step 3 restated the training maxes entered on
+  // step 2, read-only, and asked for no decision. The list on step 2 is the
+  // review — so it carries START TRAINING itself.
   const stepTitle = () =>
-    step() === 1 ? 'STEP 1 OF 3 — MAIN LIFTS'
-    : step() === 2 ? 'STEP 2 OF 3 — TRAINING MAXES'
-    : 'STEP 3 OF 3 — CONFIRM'
+    step() === 1 ? 'STEP 1 OF 2 — MAIN LIFTS' : 'STEP 2 OF 2 — TRAINING MAXES'
 
   return (
     <div class="max-w-md mx-auto px-4 py-8">
@@ -150,7 +151,7 @@ export default function Setup() {
             encodes true progress — done / current / upcoming. Decorative
             reinforcement of the STEP N title, hidden from SR to avoid echo. */}
         <div class="flex items-center gap-2" aria-hidden="true">
-          <For each={[1, 2, 3] as const}>
+          <For each={[1, 2] as const}>
             {n => (
               <>
                 <Show when={n > 1}>
@@ -175,9 +176,13 @@ export default function Setup() {
 
       {/* ── Step 1: roster ─────────────────────────────────────────────── */}
       <Show when={step() === 1}>
+        {/* No mention of equipment or cross-lift work here: the defaults — the
+            classic four, a standard bar, no cross blocks — are right for almost
+            every new lifter, and the modal behind `advanced` is program design
+            for someone who hasn't trained a single session yet. */}
         <p class="text-muted text-xs mb-6">
           Set up your main lifts. The classic 5/3/1 four are ready to go — rename, reorder,
-          remove, or add your own. Tap SETUP on a lift for cross-lift work and equipment.
+          remove, or add your own.
         </p>
 
         <Rule label="MAIN LIFTS" class="text-muted mb-3" />
@@ -212,11 +217,11 @@ export default function Setup() {
                     </span>
                   </Show>
                   <span class="text-faint text-xs">+{l.progressionIncrement}</span>
-                  <button onClick={() => setSetupLiftId(l.id!)} class="text-muted text-xs hover:text-accent">setup</button>
                   <button
                     onClick={() => { setEditingLift(l.id!); setEditLiftName(l.name); setEditLiftIncrement(l.progressionIncrement) }}
                     class="text-muted text-xs hover:text-accent"
                   >rename</button>
+                  <button onClick={() => setSetupLiftId(l.id!)} class="text-faint text-xs hover:text-accent">advanced</button>
                   <Show when={(lifts()?.length ?? 0) > 1}>
                     <button onClick={() => void handleRemoveLift(l.id!)} class="text-muted text-xs hover:text-danger">remove</button>
                   </Show>
@@ -314,7 +319,8 @@ export default function Setup() {
       {/* ── Step 2: training maxes ─────────────────────────────────────── */}
       <Show when={step() === 2}>
         <p class="text-muted text-xs mb-6">
-          Enter your estimated 1-rep max for each lift. The program will calculate working weights from these.
+          Enter your estimated 1-rep max for each lift. The program calculates working weights from
+          these, and you can change everything any time in Settings.
         </p>
 
         <Rule label="LIFTS" class="text-muted mb-3" />
@@ -338,39 +344,6 @@ export default function Setup() {
 
         <div class="mt-8 flex flex-col gap-3">
           <button
-            onClick={() => setStep(3)}
-            class="border border-accent text-accent px-4 py-2 text-sm uppercase tracking-widest disabled:opacity-40"
-          >
-            NEXT
-          </button>
-          <button
-            onClick={() => setStep(1)}
-            class="text-muted text-xs uppercase tracking-widest py-2"
-          >
-            BACK
-          </button>
-        </div>
-      </Show>
-
-      {/* ── Step 3: confirm ────────────────────────────────────────────── */}
-      <Show when={step() === 3}>
-        <p class="text-muted text-xs mb-6">
-          Review your training maxes. You can change everything any time in Settings.
-        </p>
-
-        <Rule label="TRAINING MAXES" class="text-muted mb-3" />
-
-        <For each={lifts()}>
-          {(lift) => (
-            <div class="flex items-center justify-between py-2 border-b border-border-dim">
-              <span class="text-text text-sm uppercase tracking-widest">{lift.name}</span>
-              <span class="text-accent font-mono">{tmValues()[lift.id!] ?? lift.baseWeight} lb</span>
-            </div>
-          )}
-        </For>
-
-        <div class="mt-8 flex flex-col gap-3">
-          <button
             onClick={handleStart}
             disabled={saving()}
             class="border border-accent text-accent px-4 py-2 text-sm uppercase tracking-widest disabled:opacity-40"
@@ -378,7 +351,7 @@ export default function Setup() {
             {saving() ? 'STARTING…' : 'START TRAINING'}
           </button>
           <button
-            onClick={() => setStep(2)}
+            onClick={() => setStep(1)}
             class="text-muted text-xs uppercase tracking-widest py-2"
           >
             BACK

@@ -1,9 +1,7 @@
 import { createSignal, createMemo, For, Show } from 'solid-js'
 import { logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory, startRest, setAccessoryNotes, type ActiveAccessory } from '../../store/workout-store'
 import type { AccessorySet, Exercise } from '../../types/domain'
-import { db } from '../../db/index'
-import { ACCESSORY_PERCENTAGE, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB, roundToNearest5 } from '../../lib/calc'
-import { showToast } from '../../store/toast-store'
+import { ACCESSORY_SETS, ACCESSORY_REPS } from '../../lib/calc'
 import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
 import SetLogControls, { FieldRow } from '../forms/SetLogControls'
@@ -68,26 +66,11 @@ export default function AccessoryLog(props: Props) {
     setEditingSetIdx(null)
   }
 
-  const handleLog = async () => {
-    if (props.accessory.loggedSets.length === 0 && weight() !== (props.accessory.calculatedWeight ?? 0)) {
-      const newTm = roundToNearest5(weight() / ACCESSORY_PERCENTAGE)
-      const tms = await db.accessoryTrainingMaxes
-        .where('exerciseId').equals(props.accessory.exerciseId)
-        .sortBy('setAt')
-      const currentTm = tms[tms.length - 1]
-      try {
-        await db.accessoryTrainingMaxes.add({
-          exerciseId: props.accessory.exerciseId,
-          weight: newTm,
-          incrementLb: currentTm?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB,
-          setAt: new Date(),
-        })
-        showToast(`${props.accessory.exerciseName} TM updated → ${newTm}lb`)
-      } catch {
-        showToast('Failed to save training max')
-        return
-      }
-    }
+  // Logging changes no program state. A weight the user dialled in stands as
+  // what they lifted; whether it should become the new training max is asked
+  // once, at the end of the session (see lib/accessory-tm.ts) — the same way
+  // main lifts handle it.
+  const handleLog = () => {
     const set: Partial<AccessorySet> = {
       exerciseId: props.accessory.exerciseId,
       setNumber: nextSet(),
@@ -232,7 +215,7 @@ export default function AccessoryLog(props: Props) {
           <SetLogControls
             weight={weight()}
             onWeightChange={setWeight}
-            onLog={() => { void handleLog(); setAddingExtra(false) }}
+            onLog={() => { handleLog(); setAddingExtra(false) }}
           >
             <Show when={type() === 'reps'}>
               <FieldRow label="reps">

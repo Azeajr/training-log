@@ -74,22 +74,84 @@ export function applySupplementalOverride<T extends { type: string; weight: numb
 export type RestPhase = 'idle' | 'nudge' | 'warning' | 'critical'
 export interface RestStatus { phase: RestPhase; message: string }
 
+// Fallback lengths, used only where no settings are in hand (pure tests, a
+// call site that predates the wiring). The live thresholds come from the
+// user's settings via restThresholds() — see below.
 export const REST_NORMAL_THRESHOLD = 90
-export const REST_TRANSITION_THRESHOLD = 60
+export const REST_TRANSITION_THRESHOLD = 180
 export const REST_FAIL_NUDGE = 180
 export const REST_FAIL_MAX = 300
 
-export function restStatus(elapsed: number, type: 'normal' | 'transition' | 'fail'): RestStatus {
+export interface RestThresholds {
+  /** Same section, next set. */
+  normal: number
+  /** Section change — warmup → main, main → supplemental. */
+  transition: number
+  /** First cue after a missed set. */
+  failNudge: number
+  /** Hard stop after a missed set; also the countdown target. */
+  failMax: number
+}
+
+export const DEFAULT_REST_THRESHOLDS: RestThresholds = {
+  normal: REST_NORMAL_THRESHOLD,
+  transition: REST_TRANSITION_THRESHOLD,
+  failNudge: REST_FAIL_NUDGE,
+  failMax: REST_FAIL_MAX,
+}
+
+// A missed set earns two cues: a nudge partway in, then the hard stop at the
+// configured length. One stored number drives both, so the settings screen
+// keeps three rows rather than four (and no schema change).
+export const FAIL_NUDGE_RATIO = 0.6
+
+// The user's three settings, in the shape the timer actually needs. This is the
+// join that was missing: restTimer1/2/Fail were stored, exported and editable,
+// while restStatus ran off constants and ignored them entirely.
+export function restThresholds(s: {
+  restTimer1: number
+  restTimer2: number
+  restTimerFail: number
+}): RestThresholds {
+  return {
+    normal: s.restTimer1,
+    transition: s.restTimer2,
+    failNudge: Math.round(s.restTimerFail * FAIL_NUDGE_RATIO),
+    failMax: s.restTimerFail,
+  }
+}
+
+// What this rest is aiming at — the number the timer counts down to.
+export function restTarget(
+  type: 'normal' | 'transition' | 'fail',
+  t: RestThresholds = DEFAULT_REST_THRESHOLDS,
+): number {
+  return type === 'fail' ? t.failMax : type === 'transition' ? t.transition : t.normal
+}
+
+// Names the user can act on. The three rest lengths differ by a rule the screen
+// never used to state, which made them look arbitrary.
+export const REST_TYPE_LABEL: Record<'normal' | 'transition' | 'fail', string> = {
+  normal: 'BETWEEN SETS',
+  transition: 'BETWEEN EXERCISES',
+  fail: 'AFTER A MISSED SET',
+}
+
+export function restStatus(
+  elapsed: number,
+  type: 'normal' | 'transition' | 'fail',
+  t: RestThresholds = DEFAULT_REST_THRESHOLDS,
+): RestStatus {
   if (type === 'fail') {
-    if (elapsed >= REST_FAIL_MAX) return { phase: 'critical', message: 'REST UP — SET FAILED' }
-    if (elapsed >= REST_FAIL_NUDGE) return { phase: 'warning', message: 'TIME FOR YOUR NEXT SET' }
+    if (elapsed >= t.failMax) return { phase: 'critical', message: 'REST UP — SET FAILED' }
+    if (elapsed >= t.failNudge) return { phase: 'warning', message: 'TIME FOR YOUR NEXT SET' }
     return { phase: 'idle', message: '' }
   }
   if (type === 'transition') {
-    if (elapsed >= REST_TRANSITION_THRESHOLD) return { phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' }
+    if (elapsed >= t.transition) return { phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' }
     return { phase: 'idle', message: '' }
   }
-  if (elapsed >= REST_NORMAL_THRESHOLD) return { phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' }
+  if (elapsed >= t.normal) return { phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' }
   return { phase: 'idle', message: '' }
 }
 

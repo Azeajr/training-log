@@ -33,6 +33,9 @@ import {
   REST_TRANSITION_THRESHOLD,
   REST_FAIL_NUDGE,
   REST_FAIL_MAX,
+  FAIL_NUDGE_RATIO,
+  restThresholds,
+  restTarget,
   calcSupplementalSets,
   getSupplementalLabel,
   isSupplementalType,
@@ -779,7 +782,11 @@ describe('restStatus', () => {
     })
     it('nudge at and after threshold', () => {
       expect(restStatus(REST_TRANSITION_THRESHOLD,      'transition')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
-      expect(restStatus(REST_NORMAL_THRESHOLD,          'transition')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
+      expect(restStatus(REST_TRANSITION_THRESHOLD + 30, 'transition')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
+    })
+    it('rests longer than a between-sets rest — a section change earns more', () => {
+      expect(REST_TRANSITION_THRESHOLD).toBeGreaterThan(REST_NORMAL_THRESHOLD)
+      expect(restStatus(REST_NORMAL_THRESHOLD, 'transition')).toEqual({ phase: 'idle', message: '' })
     })
   })
 
@@ -795,6 +802,42 @@ describe('restStatus', () => {
     it('critical at and after max threshold', () => {
       expect(restStatus(REST_FAIL_MAX,       'fail')).toEqual({ phase: 'critical', message: 'REST UP — SET FAILED' })
       expect(restStatus(REST_FAIL_MAX + 60,   'fail')).toEqual({ phase: 'critical', message: 'REST UP — SET FAILED' })
+    })
+  })
+
+  // The settings row that governs every rest in the session used to be wired to
+  // nothing — the values were stored and ignored. These pin the join.
+  describe('user-configured thresholds', () => {
+    const settings = { restTimer1: 60, restTimer2: 240, restTimerFail: 400 }
+
+    it('maps the three stored settings onto the four thresholds', () => {
+      expect(restThresholds(settings)).toEqual({
+        normal: 60,
+        transition: 240,
+        failNudge: Math.round(400 * FAIL_NUDGE_RATIO),
+        failMax: 400,
+      })
+    })
+
+    it('drives restStatus off the configured values, not the constants', () => {
+      const t = restThresholds(settings)
+      expect(restStatus(60, 'normal', t).phase).toBe('nudge')
+      expect(restStatus(REST_NORMAL_THRESHOLD, 'transition', t).phase).toBe('idle')
+      expect(restStatus(240, 'transition', t).phase).toBe('nudge')
+      expect(restStatus(400, 'fail', t).phase).toBe('critical')
+    })
+
+    it('reports the countdown target for each rest context', () => {
+      const t = restThresholds(settings)
+      expect(restTarget('normal', t)).toBe(60)
+      expect(restTarget('transition', t)).toBe(240)
+      expect(restTarget('fail', t)).toBe(400)
+    })
+
+    it('falls back to the built-in lengths when no settings are passed', () => {
+      expect(restTarget('normal')).toBe(REST_NORMAL_THRESHOLD)
+      expect(restTarget('transition')).toBe(REST_TRANSITION_THRESHOLD)
+      expect(restTarget('fail')).toBe(REST_FAIL_MAX)
     })
   })
 })

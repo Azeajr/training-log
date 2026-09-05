@@ -9,6 +9,7 @@ import {
   applyMainCascadeToSupplemental, supplementalSourceSetNumber,
   calcCrossSets, getCrossLabel, effectiveSupplementalWeek,
 } from '../lib/calc'
+import { ACCESSORY_SETS } from '../lib/calc'
 import { composeAllSets, amrapTargetsFor } from '../lib/workout-compose'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
@@ -29,10 +30,14 @@ import AccessoryLog from '../components/workout/AccessoryLog'
 import CrossBlockLog from '../components/workout/CrossBlockLog'
 import { resolveLiftLoading, type PlateLoading } from '../lib/plate-loading'
 import RestTimer from '../components/workout/RestTimer'
+import SessionBar, { isOutstanding, scrollToSection, type SessionSegment } from '../components/workout/SessionBar'
 import NotesField from '../components/forms/NotesField'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
 import TmRecommendationModal from '../components/modals/TmRecommendationModal'
+import AccessoryTmModal from '../components/modals/AccessoryTmModal'
+import { getAccessoryTmRecommendations, applyAccessoryTm } from '../lib/accessory-tm'
+import type { AccessoryTmRecommendation } from '../lib/accessory-tm'
 import { getSessionTmRecommendation } from '../lib/tm-recommendations'
 import type { SessionTmRecommendation } from '../lib/tm-recommendations'
 import Rule from '../components/layout/Rule'
@@ -132,6 +137,13 @@ export default function Workout() {
   const [exercises, setExercises] = createSignal<Exercise[]>([])
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
   const [tmRecommendation, setTmRecommendation] = createSignal<SessionTmRecommendation | null>(null)
+  const [accessoryTms, setAccessoryTms] = createSignal<AccessoryTmRecommendation[]>([])
+  // The session being finalized, held across the post-session modal chain.
+  const [pendingFinish, setPendingFinish] = createSignal<{ session: Session; sessionId: number } | null>(null)
+  // Skip and Exit live behind this. Both end the session without keeping it, and
+  // sitting them beside COMPLETE gave the two exceptional actions the same
+  // weight as the routine one, at the moment the user is most tired.
+  const [showOptions, setShowOptions] = createSignal(false)
 
   const [recentWorkingSets, setRecentWorkingSets] = createSignal<Array<{ weight: number; reps: number }>>([])
   const [tmWeight, setTmWeight] = createSignal(0)
@@ -487,6 +499,37 @@ export default function Workout() {
     await proceedAfterSession()
   }
 
+  // Step 2 of finishing: the main lift's own TM prompt, then the cycle roll-up.
+  const afterAccessoryStep = async (session: Session, sessionId: number) => {
+    if (session.week !== 4) {
+      const l = lift()
+      if (l) {
+        const rec = await getSessionTmRecommendation(db, sessionId, session.liftId, l.name, settings.highRepDiscount)
+        if (rec) { setTmRecommendation(rec); return }
+      }
+    }
+    await proceedAfterSession()
+  }
+
+  const handleAccessoryTmAccept = async (accepted: AccessoryTmRecommendation[]) => {
+    for (const r of accepted) {
+      try {
+        await applyAccessoryTm(db, r.exerciseId, r.suggestedTm)
+      } catch {
+        showToast(`Failed to update ${r.exerciseName} training max`)
+      }
+    }
+    setAccessoryTms([])
+    const p = pendingFinish()
+    if (p) await afterAccessoryStep(p.session, p.sessionId)
+  }
+
+  const handleAccessoryTmDismiss = async () => {
+    setAccessoryTms([])
+    const p = pendingFinish()
+    if (p) await afterAccessoryStep(p.session, p.sessionId)
+  }
+
   const handleTmRecommendationAccept = async (newTm: number) => {
     const rec = tmRecommendation()
     if (rec) await setTm(db, rec.liftId, newTm)
@@ -543,14 +586,15 @@ export default function Workout() {
       if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
       if (notesToSave.length > 0) await db.accessoryNotes.bulkAdd(notesToSave)
     })
-    if (session.week !== 4) {
-      const l = lift()
-      if (l) {
-        const rec = await getSessionTmRecommendation(db, sessionId, session.liftId, l.name, settings.highRepDiscount)
-        if (rec) { setTmRecommendation(rec); return }
-      }
+    // Accessory training maxes are asked about, not assumed — a weight dialled
+    // in mid-set is a per-set decision until the whole slate says otherwise.
+    const accRecs = getAccessoryTmRecommendations(workout.activeAccessories)
+    setPendingFinish({ session, sessionId })
+    if (accRecs.length > 0) {
+      setAccessoryTms(accRecs)
+      return
     }
-    await proceedAfterSession()
+    await afterAccessoryStep(session, sessionId)
   }
 
   const handleExit = () => runFinishing(async () => {
@@ -645,12 +689,83 @@ export default function Workout() {
       effectiveSupplementalWeek(workout.activeSession?.week ?? 1, settings.deloadSupplemental) ?? 1,
     )
 
+  // Every block of work in the session, linear and independent alike, in the
+  // order it appears on the page. Feeds the session bar: what's logged, what's
+  // still owed, and where to scroll to get there. An assistance slot nobody
+  // filled reports total 0 — optional, not outstanding.
+  const segments = (): SessionSegment[] => {
+    const out: SessionSegment[] = []
+    const linear = (id: string, label: string, count: number, offset: number) => {
+      if (count === 0) return
+      out.push({
+        id,
+        label,
+        done: Math.max(0, Math.min(count, workout.currentSetIndex - offset)),
+        total: count,
+      })
+    }
+    linear('warmup', 'WARMUP', warmupCount(), 0)
+    linear('main', 'MAIN', mainCount(), setOffset('main'))
+    linear('joker', 'JOKER', jokerCount(), setOffset('joker'))
+    const suppLabel = supplementalLabel()
+    if (suppLabel !== null) {
+      linear('supplemental', splitLabel(suppLabel)[0], fslSets().length, setOffset('fsl'))
+    }
+    for (const s of crossSections()) {
+      out.push({
+        id: `cross-${s.block.movementLiftId}`,
+        label: s.block.movementName.toUpperCase(),
+        done: Math.min(s.cursor, s.sets.length),
+        total: s.sets.length,
+      })
+    }
+    for (const section of ASSISTANCE_SECTIONS) {
+      const acc = workout.activeAccessories.find(a => a.slot === section)
+      out.push({
+        id: `assist-${section}`,
+        label: SECTION_LABEL[section],
+        done: acc ? acc.loggedSets.length : 0,
+        total: acc ? ACCESSORY_SETS : 0,
+      })
+    }
+    for (const acc of extraAccessories()) {
+      out.push({
+        id: `assist-extra-${acc.exerciseId}`,
+        label: acc.exerciseName.toUpperCase(),
+        done: acc.loggedSets.length,
+        total: ACCESSORY_SETS,
+      })
+    }
+    return out
+  }
+
+  // The linear cursor guides the page until it runs off the end — after which
+  // roughly half the session's sets can still be unlogged, in blocks that don't
+  // report a position. Hand off once, to the first block still owed.
+  createEffect(on(
+    () => allSets().length > 0 && workout.currentSetIndex >= allSets().length,
+    ended => {
+      if (!ended) return
+      const next = segments().find(isOutstanding)
+      if (next) scrollToSection(next.id)
+    },
+    { defer: true },
+  ))
+
   return (
     <Show
       when={workout.activeSession}
       fallback={
         <div class="p-6 font-mono text-muted">
-          No active session. Go to <span class="text-accent">TODAY</span> to start one.
+          <p class="mb-4">No active session.</p>
+          {/* Was a bare span styled like a link. The accent colour means
+              "tappable" everywhere else in the app; make it true here. */}
+          <button
+            onClick={() => navigate('/today')}
+            class="border border-accent text-accent px-5 py-3 text-xs tracking-widest"
+          >
+            GO TO TODAY
+          </button>
         </div>
       }
     >
@@ -676,6 +791,7 @@ export default function Workout() {
             complete={sectionComplete(warmupCount(), 0)}
             summary={`${warmupCount()} sets`}
             class="mb-6 md:mb-0"
+            anchor="warmup"
           >
             <SetSection
               sets={warmupSets}
@@ -694,6 +810,7 @@ export default function Workout() {
               label="MAIN"
               complete={sectionComplete(mainCount(), setOffset('main'))}
               summary={`${mainCount()} sets`}
+              anchor="main"
             >
               <SetSection
                 sets={mainSets}
@@ -713,6 +830,7 @@ export default function Workout() {
                 complete={sectionComplete(jokerCount(), setOffset('joker'))}
                 summary={`${jokerCount()} sets`}
                 class="mt-4"
+                anchor="joker"
               >
                 <SetSection
                   sets={jokerSetsRendered}
@@ -744,6 +862,7 @@ export default function Workout() {
                 labelMeta={splitLabel(supplementalLabel()!)[1]}
                 complete={sectionComplete(fslSets().length, setOffset('fsl'))}
                 summary={`${fslSets().length} sets`}
+                anchor="supplemental"
               >
                 <SetSection
                   sets={fslSets}
@@ -775,6 +894,7 @@ export default function Workout() {
               <For each={crossSections()}>
                 {section => (
                   <CrossBlockLog
+                    anchor={`cross-${section.block.movementLiftId}`}
                     label={splitLabel(getCrossLabel(section.block, section.block.movementName))[0]}
                     labelMeta={splitLabel(getCrossLabel(section.block, section.block.movementName))[1]}
                     loading={section.block.movementLoading}
@@ -798,7 +918,7 @@ export default function Workout() {
             {section => {
               const acc = () => workout.activeAccessories.find(a => a.slot === section)
               return (
-                <div class="mb-3">
+                <div class="mb-3" data-section={`assist-${section}`}>
                   <SectionLabel class="mb-1">{SECTION_LABEL[section]}</SectionLabel>
                   <Show
                     when={acc()}
@@ -828,7 +948,11 @@ export default function Workout() {
             <div class="mb-2">
               <SectionLabel tone="text-faint" class="mb-1">EXTRA</SectionLabel>
               <For each={extraAccessories()}>
-                {acc => <AccessoryLog accessory={acc} exercise={exercises().find(e => e.id === acc.exerciseId)} onExerciseClick={id => setHistoryExerciseId(id)} />}
+                {acc => (
+                  <div data-section={`assist-extra-${acc.exerciseId}`}>
+                    <AccessoryLog accessory={acc} exercise={exercises().find(e => e.id === acc.exerciseId)} onExerciseClick={id => setHistoryExerciseId(id)} />
+                  </div>
+                )}
               </For>
             </div>
           </Show>
@@ -851,31 +975,42 @@ export default function Workout() {
           />
         </div>
 
-        <div class="flex gap-3">
-          <button
-            onClick={() => void handleComplete()}
-            disabled={finishing()}
-            class="flex-1 border border-accent text-accent py-4 font-mono text-sm tracking-widest disabled:opacity-40"
-          >
-            COMPLETE SESSION
-          </button>
-          <button
-            onClick={() => void handleSkip()}
-            disabled={finishing()}
-            class="border border-danger text-danger px-5 py-4 font-mono text-sm disabled:opacity-40"
-          >
-            SKIP LIFT
-          </button>
-        </div>
+        <button
+          onClick={() => void handleComplete()}
+          disabled={finishing()}
+          class="w-full border border-accent text-accent py-4 font-mono text-sm tracking-widest disabled:opacity-40"
+        >
+          COMPLETE SESSION
+        </button>
 
-        <div class="flex justify-end mt-3">
+        {/* The two ways to end a session without keeping it, one deliberate tap
+            back from the one way to keep it. */}
+        <div class="mt-3">
           <button
-            onClick={() => void handleExit()}
-            disabled={finishing()}
-            class="text-muted hover:text-text-dim font-mono text-xs tracking-widest disabled:opacity-40"
+            onClick={() => setShowOptions(v => !v)}
+            aria-expanded={showOptions()}
+            class="text-faint hover:text-text-dim font-mono text-xs tracking-widest"
           >
-            EXIT WITHOUT SAVING
+            session options {showOptions() ? '▾' : '▸'}
           </button>
+          <Show when={showOptions()}>
+            <div class="flex gap-3 mt-3">
+              <button
+                onClick={() => void handleSkip()}
+                disabled={finishing()}
+                class="flex-1 border border-danger text-danger py-3 font-mono text-xs tracking-widest disabled:opacity-40"
+              >
+                SKIP LIFT
+              </button>
+              <button
+                onClick={() => void handleExit()}
+                disabled={finishing()}
+                class="flex-1 border border-border text-muted py-3 font-mono text-xs tracking-widest hover:border-danger hover:text-danger disabled:opacity-40"
+              >
+                EXIT WITHOUT SAVING
+              </button>
+            </div>
+          </Show>
         </div>
 
         <Show when={pickerSlot() !== null && lift()}>
@@ -905,7 +1040,23 @@ export default function Workout() {
           )}
         </Show>
 
+        <Show when={accessoryTms().length > 0}>
+          <AccessoryTmModal
+            recommendations={accessoryTms()}
+            onAccept={recs => void handleAccessoryTmAccept(recs)}
+            onDismiss={() => void handleAccessoryTmDismiss()}
+          />
+        </Show>
+
+        {/* One fixed strip, two jobs: the rest countdown while resting, the
+            session's outstanding work and its finish action the rest of the
+            time. Each renders only when the other doesn't. */}
         <RestTimer />
+        <SessionBar
+          segments={segments()}
+          disabled={finishing()}
+          onComplete={() => void handleComplete()}
+        />
 
         <Show when={liftHistoryId() != null}>
           <LiftHistoryModal

@@ -12,6 +12,11 @@ interface Props {
   // "bar weight"). Names the −/+ buttons and the value announcement; without it
   // a screen reader gets "minus, button" with no indication of what it changes.
   fieldLabel?: string
+  // Marks the value as directly editable. The value has always opened a numeric
+  // keypad on tap — the fastest way to enter a number far from the current one —
+  // but rendered as a plain readout nobody thought to press. Set this where the
+  // jump is large and routine (an AMRAP's reps).
+  emphasized?: boolean
 }
 
 const fmt = (v: number) => v % 1 === 0 ? String(v) : v.toFixed(1)
@@ -100,7 +105,11 @@ export default function Stepper(props: Props) {
             data-testid="stepper-value"
             onClick={() => { setRaw(fmt(props.value)); setEditing(true) }}
             aria-label={props.fieldLabel ? `Edit ${props.fieldLabel}, currently ${fmt(props.value)}` : undefined}
-            class="bg-surface border-y border-border text-text font-mono px-3 py-3 min-w-[2.5rem] text-center select-none touch-manipulation [-webkit-touch-callout:none]"
+            class={`bg-surface border-y text-text font-mono px-3 py-3 min-w-[2.5rem] text-center select-none touch-manipulation [-webkit-touch-callout:none] ${
+              props.emphasized
+                ? 'border-accent underline decoration-dotted decoration-faint underline-offset-4'
+                : 'border-border'
+            }`}
           >
             {fmt(props.value)}
           </button>

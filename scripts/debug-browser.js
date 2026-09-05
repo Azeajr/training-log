@@ -84,12 +84,8 @@ async function runSetupWizard(page) {
   for (let i = 0; i < inputs.length; i++) {
     await inputs[i].fill(String(defaults[i] ?? 100))
   }
-  await page.click('button:has-text("NEXT")')
-  await page.waitForTimeout(600)
-
-  // Step 3 — CONFIRM.
-  if (!await waitForText(page, 'STEP 3')) return
-  console.log('  [setup] Step 3 — confirm → START TRAINING')
+  // Step 2 carries START TRAINING itself — the old read-only confirm step is gone.
+  console.log('  [setup] Step 2 — START TRAINING')
   await page.click('button:has-text("START TRAINING")')
   await page.waitForTimeout(1500)
 }

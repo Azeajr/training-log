@@ -21,6 +21,8 @@ interface Props {
   onDelete: () => void
   loading?: PlateLoading | null
   onLabelClick?: () => void
+  /** Scroll target id for the session bar. */
+  anchor?: string
 }
 
 export default function CrossBlockLog(props: Props) {
@@ -36,6 +38,7 @@ export default function CrossBlockLog(props: Props) {
       complete={complete()}
       summary={`${props.sets.length} sets`}
       class="mb-6 md:mb-0"
+      anchor={props.anchor}
       onLabelClick={props.onLabelClick}
     >
       <For each={props.sets}>

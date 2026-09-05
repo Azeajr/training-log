@@ -129,19 +129,21 @@ describe('Settings — skip to week', () => {
   it('hides CYCLE section when no cycle exists', async () => {
     renderSettings()
     await drain()
-    expect(screen.queryByRole('button', { name: 'Week 2' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /SKIP TO WEEK 2/ })).not.toBeInTheDocument()
   })
 
-  it('disables current week button, enables future weeks', async () => {
+  // One row of identical squares used to reopen on a left tap and skip on a
+  // right one. Now each direction is its own labelled action, and the current
+  // week is a readout rather than a disabled button.
+  it('states the current week and offers only forward skips from it', async () => {
     await seedLifts()
     await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
 
     renderSettings()
 
-    const btn1 = await screen.findByRole('button', { name: 'Week 1' })
-    const btn2 = screen.getByRole('button', { name: 'Week 2' })
-    expect(btn1).toBeDisabled()
-    expect(btn2).not.toBeDisabled()
+    await screen.findByText(/Week 1 of/)
+    expect(screen.getByRole('button', { name: /SKIP TO WEEK 2/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /REOPEN/ })).not.toBeInTheDocument()
   })
 
   it('cancel does not create sessions', async () => {
@@ -149,7 +151,7 @@ describe('Settings — skip to week', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
 
     renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: 'Week 2' }))
+    fireEvent.click(await screen.findByRole('button', { name: /SKIP TO WEEK 2/ }))
     fireEvent.click(await screen.findByText('CANCEL'))
 
     const sessions = await db.sessions.where('cycleId').equals(cycleId).toArray()
@@ -161,7 +163,7 @@ describe('Settings — skip to week', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
 
     renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: 'Week 2' }))
+    fireEvent.click(await screen.findByRole('button', { name: /SKIP TO WEEK 2/ }))
     fireEvent.click(await screen.findByText('SKIP'))
 
     await waitFor(async () => {
@@ -176,10 +178,10 @@ describe('Settings — skip to week', () => {
     await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
 
     renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: 'Week 2' }))
+    fireEvent.click(await screen.findByRole('button', { name: /SKIP TO WEEK 2/ }))
     fireEvent.click(await screen.findByText('SKIP'))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 2' })).toBeDisabled())
+    await waitFor(() => expect(screen.getByText(/Week 2 of/)).toBeInTheDocument())
   })
 
   // Regression: a lift can own >1 row in a week (a completed set plus a stray
@@ -193,10 +195,10 @@ describe('Settings — skip to week', () => {
     await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'pending' })
 
     renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: 'Week 2' }))
+    fireEvent.click(await screen.findByRole('button', { name: /SKIP TO WEEK 2/ }))
     fireEvent.click(await screen.findByText('SKIP'))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 2' })).toBeDisabled())
+    await waitFor(() => expect(screen.getByText(/Week 2 of/)).toBeInTheDocument())
     const week1 = (await db.sessions.where('cycleId').equals(cycleId).toArray()).filter(s => s.week === 1)
     expect(week1.some(s => s.status === 'pending')).toBe(false)
   })
@@ -206,7 +208,7 @@ describe('Settings — skip to week', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
 
     renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: 'Week 3' }))
+    fireEvent.click(await screen.findByRole('button', { name: /SKIP TO WEEK 3/ }))
     fireEvent.click(await screen.findByText('SKIP'))
 
     await waitFor(async () => {
@@ -221,7 +223,7 @@ describe('Settings — skip to week', () => {
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'pending' })
 
     renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: 'Week 2' }))
+    fireEvent.click(await screen.findByRole('button', { name: /SKIP TO WEEK 2/ }))
     fireEvent.click(await screen.findByText('SKIP'))
 
     await waitFor(async () => {
@@ -236,7 +238,7 @@ describe('Settings — skip to week', () => {
     const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
 
     renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: 'Week 2' }))
+    fireEvent.click(await screen.findByRole('button', { name: /SKIP TO WEEK 2/ }))
     fireEvent.click(await screen.findByText('SKIP'))
 
     await waitFor(async () => {
@@ -252,7 +254,7 @@ describe('Settings — skip to week', () => {
     const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
 
     renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: 'Week 3' }))
+    fireEvent.click(await screen.findByRole('button', { name: /SKIP TO WEEK 3/ }))
     fireEvent.click(await screen.findByText('SKIP'))
 
     await waitFor(async () => {
@@ -1139,8 +1141,8 @@ describe('Settings — current week (issue #52) + reopen', () => {
 
     renderSettings()
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 2' })).toBeDisabled())
-    expect(screen.getByRole('button', { name: 'Week 1' })).not.toBeDisabled()
+    await waitFor(() => expect(screen.getByText(/Week 2 of/)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /REOPEN WEEK 1/ })).toBeInTheDocument()
   })
 
   it('reopen drops the high-water mark and adds fresh pending sessions without editing history', async () => {
@@ -1151,9 +1153,9 @@ describe('Settings — current week (issue #52) + reopen', () => {
     await completeWeek(cycleId, ids, 2)
 
     renderSettings()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 3' })).toBeDisabled())
+    await waitFor(() => expect(screen.getByText(/Week 3 of/)).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Week 1' }))
+    fireEvent.click(screen.getByRole('button', { name: /REOPEN WEEK 1/ }))
     fireEvent.click(await screen.findByText('REOPEN'))
 
     await waitFor(async () => {
@@ -1167,7 +1169,7 @@ describe('Settings — current week (issue #52) + reopen', () => {
     // Week 2 is untouched, and the UI now sits on week 1.
     const week2 = await db.sessions.where('cycleId').equals(cycleId).filter(s => s.week === 2).toArray()
     expect(week2.every(s => s.status === 'completed')).toBe(true)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 1' })).toBeDisabled())
+    await waitFor(() => expect(screen.getByText(/Week 1 of/)).toBeInTheDocument())
   })
 
   it('cancelling reopen leaves data unchanged', async () => {
@@ -1177,9 +1179,9 @@ describe('Settings — current week (issue #52) + reopen', () => {
     await completeWeek(cycleId, ids, 2)
 
     renderSettings()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Week 3' })).toBeDisabled())
+    await waitFor(() => expect(screen.getByText(/Week 3 of/)).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Week 1' }))
+    fireEvent.click(screen.getByRole('button', { name: /REOPEN WEEK 1/ }))
     fireEvent.click(await screen.findByText('CANCEL'))
 
     const cycle = await db.cycles.get(cycleId)
@@ -1447,7 +1449,7 @@ describe('Settings — cycle shape reconcile', () => {
     await waitFor(async () => expect(await db.cycles.count()).toBe(1)) // no rollover
     expect(document.body.textContent).not.toContain('CYCLE COMPLETE')
     // Week picker drops to 1-3.
-    expect(screen.queryByLabelText('Week 4')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /WEEK 4/ })).not.toBeInTheDocument()
   })
 
   it('3→4 extends the current cycle with a deload week', async () => {
@@ -1457,14 +1459,14 @@ describe('Settings — cycle shape reconcile', () => {
     await seedThroughWeek3()
 
     renderSettings()
-    // 3-week cycle finished through its final week; no week 4 offered yet.
+    // 3-week cycle finished through its final week; no week 4 exists yet.
     await screen.findByText('SUPPLEMENTAL AT NORMAL %')
-    expect(screen.queryByLabelText('Week 4')).not.toBeInTheDocument()
+    await screen.findByText(/Week 3 of 3/)
 
     fireEvent.click(screen.getByText('SUPPLEMENTAL AT NORMAL %'))
 
-    // Cycle extends in place — week 4 appears, nothing rolls over.
-    await waitFor(() => expect(screen.queryByLabelText('Week 4')).toBeInTheDocument())
+    // Cycle extends in place — week 4 opens, nothing rolls over.
+    await waitFor(() => expect(screen.getByText(/Week 4 of 4/)).toBeInTheDocument())
     expect(await db.cycles.count()).toBe(1)
     expect(document.body.textContent).not.toContain('CYCLE COMPLETE')
   })

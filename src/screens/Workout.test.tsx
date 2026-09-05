@@ -44,6 +44,7 @@ beforeEach(async () => {
     db.lifts.clear(), db.trainingMaxes.clear(),
     db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
     db.exercises.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
+    db.accessoryTrainingMaxes.clear(),
     db.liftSupplementals.clear(), db.settings.clear(),
   ])
   mockNavigate.mockClear()
@@ -59,6 +60,16 @@ afterEach(async () => {
   clearSession()
   await drain()
 })
+
+// SKIP LIFT and EXIT WITHOUT SAVING moved behind the `session options`
+// disclosure — one deliberate tap back from COMPLETE, which is the routine
+// action they used to sit beside at equal weight.
+async function findSessionOption(label: string) {
+  if (!screen.queryByText(label)) {
+    fireEvent.click(await screen.findByText(/session options/))
+  }
+  return screen.findByText(label)
+}
 
 describe('Workout screen — no active session', () => {
   it('shows fallback message when no session is active', () => {
@@ -112,7 +123,7 @@ describe('Workout screen — with active session', () => {
     await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/) // Rule wraps the label in dashes
     // Label = getCrossLabel(movementName='Squat', fsl mode) → "SQUAT  5 × 5  FSL".
     // Glyph-agnostic matcher: proves the block loaded (movement name) and composed as FSL.
-    await screen.findByText('SQUAT')
+    await screen.findAllByText('SQUAT')
   })
 
   it('logs a cross-lift set before any own-lift set, without touching currentSetIndex', async () => {
@@ -128,7 +139,7 @@ describe('Workout screen — with active session', () => {
 
     // Two active LOG buttons appear: the warmup set 0 (linear) and the cross
     // block's set 0. The cross block renders after the main grid, so it's last.
-    await screen.findByText('SQUAT')
+    await screen.findAllByText('SQUAT')
     const logButtons = await screen.findAllByText('LOG')
     fireEvent.click(logButtons[logButtons.length - 1])
 
@@ -152,7 +163,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    await screen.findByText('SQUAT')
+    await screen.findAllByText('SQUAT')
     const logButtons = await screen.findAllByText('LOG')
     fireEvent.click(logButtons[logButtons.length - 1])
     await waitFor(() => expect(workout.loggedCrossSets).toHaveLength(1))
@@ -172,13 +183,13 @@ describe('Workout screen — with active session', () => {
   it('renders EXIT button', async () => {
     startSession(BENCH)
     renderWorkout()
-    await screen.findByText('EXIT WITHOUT SAVING')
+    await findSessionOption('EXIT WITHOUT SAVING')
   })
 
   it('renders SKIP button', async () => {
     startSession(BENCH)
     renderWorkout()
-    await screen.findByText('SKIP LIFT')
+    await findSessionOption('SKIP LIFT')
   })
 
   it('renders COMPLETE SESSION button', async () => {
@@ -197,7 +208,7 @@ describe('Workout screen — with active session', () => {
   it('EXIT button opens confirmation dialog', async () => {
     startSession(BENCH)
     renderWorkout()
-    const exitBtn = await screen.findByText('EXIT WITHOUT SAVING')
+    const exitBtn = await findSessionOption('EXIT WITHOUT SAVING')
     fireEvent.click(exitBtn)
     await screen.findByText('Discard this attempt?')
   })
@@ -205,7 +216,7 @@ describe('Workout screen — with active session', () => {
   it('SKIP button opens confirmation dialog', async () => {
     startSession(BENCH)
     renderWorkout()
-    const skipBtn = await screen.findByText('SKIP LIFT')
+    const skipBtn = await findSessionOption('SKIP LIFT')
     fireEvent.click(skipBtn)
     await screen.findByText('Skip this lift?')
   })
@@ -258,6 +269,69 @@ describe('Workout screen — with active session', () => {
     })
   })
 
+  // Logging an accessory at a different weight used to write a new training max
+  // on the spot, from the same LOG button pressed twenty times a session. It is
+  // now asked about once, after the session, like a main lift's.
+  describe('accessory training max prompt', () => {
+    const seedDriftedAccessory = async () => {
+      await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+      await db.accessoryTrainingMaxes.add({ exerciseId: 10, weight: 60, incrementLb: 5, setAt: new Date() })
+      addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 60, calculatedWeight: 45, loggedSets: [] })
+      for (let i = 1; i <= 3; i++) {
+        logAccessorySet(10, { setNumber: i, weight: 60, reps: 10, duration: null, distance: null })
+      }
+    }
+
+    it('offers the new TM instead of writing it, and applies it on accept', async () => {
+      startSession(BENCH)
+      await seedDriftedAccessory()
+
+      renderWorkout()
+      fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+
+      // Nothing written yet — the prompt is the decision point.
+      await screen.findByText('ACCESSORY TM')
+      expect(await db.accessoryTrainingMaxes.where('exerciseId').equals(10).toArray()).toHaveLength(1)
+
+      fireEvent.click(screen.getByText('UPDATE TM'))
+
+      await waitFor(async () => {
+        const rows = await db.accessoryTrainingMaxes.where('exerciseId').equals(10).sortBy('setAt')
+        expect(rows).toHaveLength(2)
+        expect(rows[1].weight).toBe(80) // 60 / 0.75
+      })
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    })
+
+    it('leaves the training max alone when dismissed', async () => {
+      startSession(BENCH)
+      await seedDriftedAccessory()
+
+      renderWorkout()
+      fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+      fireEvent.click(await screen.findByText('NOT NOW'))
+
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+      expect(await db.accessoryTrainingMaxes.where('exerciseId').equals(10).toArray()).toHaveLength(1)
+    })
+
+    it('does not prompt for work done at the prescribed weight', async () => {
+      startSession(BENCH)
+      await db.exercises.add({ id: 11, name: 'Dip', type: 'reps' })
+      await db.accessoryTrainingMaxes.add({ exerciseId: 11, weight: 60, incrementLb: 5, setAt: new Date() })
+      addAccessory({ exerciseId: 11, exerciseName: 'Dip', tm: 60, calculatedWeight: 45, loggedSets: [] })
+      for (let i = 1; i <= 3; i++) {
+        logAccessorySet(11, { setNumber: i, weight: 45, reps: 10, duration: null, distance: null })
+      }
+
+      renderWorkout()
+      fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+      expect(screen.queryByText('ACCESSORY TM')).toBeNull()
+    })
+  })
+
   it('clicking LOG on active warmup set saves it to DB', async () => {
     startSession(BENCH)
     renderWorkout()
@@ -292,7 +366,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('EXIT WITHOUT SAVING'))
+    fireEvent.click(await findSessionOption('EXIT WITHOUT SAVING'))
     await screen.findByText('Discard this attempt?')
     fireEvent.click(screen.getByText('EXIT'))
 
@@ -311,7 +385,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('EXIT WITHOUT SAVING'))
+    fireEvent.click(await findSessionOption('EXIT WITHOUT SAVING'))
     await screen.findByText('Discard this attempt?')
     fireEvent.click(screen.getByText('EXIT'))
 
@@ -329,7 +403,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('EXIT WITHOUT SAVING'))
+    fireEvent.click(await findSessionOption('EXIT WITHOUT SAVING'))
     await screen.findByText('Discard this attempt?')
     fireEvent.click(screen.getByText('EXIT'))
 
@@ -342,7 +416,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('EXIT WITHOUT SAVING'))
+    fireEvent.click(await findSessionOption('EXIT WITHOUT SAVING'))
     await screen.findByText('Discard this attempt?')
     fireEvent.click(screen.getByText('CANCEL'))
 
@@ -367,7 +441,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('SKIP LIFT'))
+    fireEvent.click(await findSessionOption('SKIP LIFT'))
     await screen.findByText('Skip this lift?')
 
     expect((screen.getByText('COMPLETE SESSION') as HTMLButtonElement).disabled).toBe(true)
@@ -383,7 +457,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('SKIP LIFT'))
+    fireEvent.click(await findSessionOption('SKIP LIFT'))
     await screen.findByText('Skip this lift?')
     fireEvent.click(screen.getByText('SKIP'))
 
@@ -400,7 +474,7 @@ describe('Workout screen — with active session', () => {
     startSession(BENCH)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('SKIP LIFT'))
+    fireEvent.click(await findSessionOption('SKIP LIFT'))
     await screen.findByText('Skip this lift?')
     fireEvent.click(screen.getByText('CANCEL'))
 
@@ -1280,7 +1354,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('SKIP LIFT'))
+    fireEvent.click(await findSessionOption('SKIP LIFT'))
     await screen.findByText('Skip this lift?')
     fireEvent.click(screen.getByText('SKIP'))
 

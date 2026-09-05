@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from 'solid-js'
+import { createSignal, onMount, For, Show, type JSX } from 'solid-js'
 import { db } from '../db/index'
 import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode, DeloadSupplemental } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
@@ -21,6 +21,50 @@ import SectionLabel from '../components/layout/SectionLabel'
 import ToggleChip from '../components/ui/ToggleChip'
 import Stepper from '../components/forms/Stepper'
 import ExerciseEditor from '../components/forms/ExerciseEditor'
+
+const GROUPS = [
+  { id: 'program', label: 'Program' },
+  { id: 'training', label: 'Training' },
+  { id: 'equipment', label: 'Equipment' },
+  { id: 'app', label: 'App' },
+  { id: 'data', label: 'Data' },
+] as const
+
+function jumpTo(id: string) {
+  const el = document.getElementById(`settings-${id}`)
+  if (!el) return
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+}
+
+// A settings group. Two levels of heading where there used to be one: the group
+// rule is the bright divider, the blocks inside it carry SectionLabels. Groups
+// that hold a decision made once ever open collapsed.
+function Group(props: {
+  id: string
+  label: string
+  defaultCollapsed?: boolean
+  tone?: string
+  children: JSX.Element
+}) {
+  const [open, setOpen] = createSignal(!props.defaultCollapsed)
+  return (
+    <section id={`settings-${props.id}`} class="mb-10 scroll-mt-14">
+      <button
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open()}
+        aria-controls={`settings-body-${props.id}`}
+        class="w-full flex items-baseline gap-2 mb-3 text-left"
+      >
+        <Rule label={props.label} class={`flex-1 ${props.tone ?? 'text-text'}`} />
+        <span class="text-faint text-xs" aria-hidden="true">{open() ? '▾' : '▸'}</span>
+      </button>
+      <div id={`settings-body-${props.id}`} hidden={!open()}>
+        {props.children}
+      </div>
+    </section>
+  )
+}
 
 export default function Settings() {
   const { confirm, confirmWithChoice } = useConfirmation()
@@ -434,501 +478,563 @@ export default function Settings() {
 
 
   return (
-    <div class="p-4 font-mono text-sm">
-
-      <div class="mb-6">
-        <Rule label="MAIN LIFTS" class="text-muted mb-2" />
-        <For each={activeLifts()}>{(l, i) => (
-          <div class="py-1 border-b border-border-dim">
-            <Show when={editingLift() === l.id} fallback={
-              <div class="flex items-center gap-2">
-                <div class="flex flex-col">
-                  <button
-                    onClick={() => void handleMoveLift(l.id!, 'up')}
-                    disabled={i() === 0}
-                    class="text-faint text-xs leading-none hover:text-accent disabled:opacity-30"
-                    aria-label="Move up"
-                  >▲</button>
-                  <button
-                    onClick={() => void handleMoveLift(l.id!, 'down')}
-                    disabled={i() === activeLifts().length - 1}
-                    class="text-faint text-xs leading-none hover:text-accent disabled:opacity-30"
-                    aria-label="Move down"
-                  >▼</button>
-                </div>
-                <span class="text-text uppercase tracking-widest text-xs flex-1">{l.name}</span>
-                <span class="text-faint text-xs">+{l.progressionIncrement}</span>
-                <button onClick={() => setSetupLiftId(l.id!)} class="text-muted text-xs hover:text-accent">setup</button>
-                <button
-                  onClick={() => { setEditingLift(l.id!); setEditLiftName(l.name); setEditLiftIncrement(l.progressionIncrement) }}
-                  class="text-muted text-xs hover:text-accent"
-                >rename</button>
-                <button onClick={() => void handleArchiveLift(l.id!)} class="text-muted text-xs hover:text-danger">archive</button>
-              </div>
-            }>
-              <div class="flex flex-col gap-2">
-                <input
-                  type="text"
-                  value={editLiftName()}
-                  onInput={e => setEditLiftName(e.currentTarget.value)}
-                  class="bg-surface border border-border text-text px-2 py-1 focus:outline-none focus:border-accent"
-                />
-                <div class="flex items-center gap-2">
-                  <span class="text-muted text-xs w-20">increment</span>
-                  <Stepper value={editLiftIncrement()} onChange={setEditLiftIncrement} step={5} min={0} max={50} fieldLabel="progression increment" />
-                  <span class="text-muted text-xs">lb</span>
-                </div>
-                <div class="flex gap-3">
-                  <button onClick={() => void handleSaveLiftEdit(l.id!)} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase">SAVE</button>
-                  <button onClick={() => setEditingLift(null)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
-                </div>
-              </div>
-            </Show>
-          </div>
-        )}</For>
-
-        <Show when={showAddLift()} fallback={
+    <div class="p-4 font-mono text-sm pb-24">
+      {/* Frequency, not alphabet: what a lifter revisits mid-cycle sits above
+          what they set once, and every irreversible operation is gathered into
+          the last group instead of scattered inline beside theme swatches. */}
+      <nav class="sticky top-0 z-10 bg-bg -mx-4 px-4 py-2 mb-6 border-b border-border-dim flex gap-2 overflow-x-auto">
+        <For each={GROUPS}>{g => (
           <button
-            onClick={() => setShowAddLift(true)}
-            class="mt-2 border border-border text-muted px-3 py-2 text-xs tracking-widest uppercase hover:border-accent hover:text-accent"
+            onClick={() => jumpTo(g.id)}
+            class="shrink-0 text-xs tracking-widest uppercase text-muted hover:text-accent"
           >
-            + ADD LIFT
+            {g.label}
           </button>
-        }>
-          <div class="flex flex-col gap-2 mt-2">
-            <input
-              type="text"
-              value={newLiftName()}
-              onInput={e => setNewLiftName(e.currentTarget.value)}
-              placeholder="Lift name"
-              class="bg-surface border border-border text-text px-2 py-1 focus:outline-none focus:border-accent"
-            />
-            <div class="flex items-center gap-2">
-              <span class="text-muted text-xs w-20">increment</span>
-              <Stepper value={newLiftIncrement()} onChange={setNewLiftIncrement} step={5} min={0} max={50} fieldLabel="progression increment" />
-              <span class="text-muted text-xs">lb</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-muted text-xs w-20">base wt</span>
-              <Stepper value={newLiftBase()} onChange={setNewLiftBase} step={5} min={0} max={500} fieldLabel="base weight" />
-              <span class="text-muted text-xs">lb</span>
-            </div>
-            <div class="flex gap-2">
-              <For each={(['upper', 'lower'] as const)}>{type => (
-                <ToggleChip active={newLiftType() === type} onClick={() => setNewLiftType(type)}>
-                  {type}
-                </ToggleChip>
-              )}</For>
-            </div>
-            <div class="flex gap-3">
-              <button onClick={handleAddLift} disabled={!newLiftName().trim()} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase disabled:border-border disabled:text-muted">ADD</button>
-              <button onClick={() => setShowAddLift(false)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
-            </div>
-          </div>
-        </Show>
+        )}</For>
+      </nav>
 
-        <Show when={archivedLifts().length > 0}>
-          <Rule label="ARCHIVED LIFTS" class="text-faint mt-4 mb-2" />
-          <For each={archivedLifts()}>{(l) => (
-            <div class="py-1 border-b border-border-dim flex items-center justify-between">
-              <span class="text-faint text-sm uppercase tracking-widest">{l.name}</span>
-              <button onClick={() => void handleUnarchiveLift(l.id!)} class="text-muted text-xs hover:text-accent">unarchive</button>
-            </div>
-          )}</For>
-        </Show>
-      </div>
-
-      <div class="mb-6">
-        <Rule label="TRAINING MAXES" class="text-muted mb-2" />
-        <For each={activeLifts()}>{(l) => (
-          <div class="py-1 border-b border-border-dim">
-            <div class="flex items-center gap-3">
-              <span class="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
-              <Show when={editingTm() === l.id} fallback={
-                <>
-                  <span class="text-text">{tms()[l.id!] ?? '—'} lb</span>
+      <Group id="program" label="PROGRAM">
+        <div class="mb-6">
+          <SectionLabel class="mb-2">MAIN LIFTS</SectionLabel>
+          <For each={activeLifts()}>{(l, i) => (
+            <div class="py-1 border-b border-border-dim">
+              <Show when={editingLift() === l.id} fallback={
+                <div class="flex items-center gap-2">
+                  <div class="flex flex-col">
+                    <button
+                      onClick={() => void handleMoveLift(l.id!, 'up')}
+                      disabled={i() === 0}
+                      class="text-faint text-xs leading-none hover:text-accent disabled:opacity-30"
+                      aria-label="Move up"
+                    >▲</button>
+                    <button
+                      onClick={() => void handleMoveLift(l.id!, 'down')}
+                      disabled={i() === activeLifts().length - 1}
+                      class="text-faint text-xs leading-none hover:text-accent disabled:opacity-30"
+                      aria-label="Move down"
+                    >▼</button>
+                  </div>
+                  <span class="text-text uppercase tracking-widest text-xs flex-1">{l.name}</span>
+                  <span class="text-faint text-xs">+{l.progressionIncrement}</span>
+                  <button onClick={() => setSetupLiftId(l.id!)} class="text-muted text-xs hover:text-accent">setup</button>
                   <button
-                    onClick={() => { setEditingTm(l.id!); setTmInput(tms()[l.id!] ?? 0) }}
+                    onClick={() => { setEditingLift(l.id!); setEditLiftName(l.name); setEditLiftIncrement(l.progressionIncrement) }}
                     class="text-muted text-xs hover:text-accent"
-                  >
-                    edit
-                  </button>
-                </>
+                  >rename</button>
+                  <button onClick={() => void handleArchiveLift(l.id!)} class="text-muted text-xs hover:text-danger">archive</button>
+                </div>
               }>
-                <div class="flex flex-col gap-2 flex-1">
+                <div class="flex flex-col gap-2">
+                  <input
+                    type="text"
+                    value={editLiftName()}
+                    onInput={e => setEditLiftName(e.currentTarget.value)}
+                    class="bg-surface border border-border text-text px-2 py-1 focus:outline-none focus:border-accent"
+                  />
                   <div class="flex items-center gap-2">
-                    <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} fieldLabel="training max" />
+                    <span class="text-muted text-xs w-20">increment</span>
+                    <Stepper value={editLiftIncrement()} onChange={setEditLiftIncrement} step={5} min={0} max={50} fieldLabel="progression increment" />
                     <span class="text-muted text-xs">lb</span>
                   </div>
                   <div class="flex gap-3">
-                    <button onClick={() => handleSaveTm(l.id!)} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase font-mono">SAVE</button>
-                    <button onClick={() => setEditingTm(null)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
+                    <button onClick={() => void handleSaveLiftEdit(l.id!)} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase">SAVE</button>
+                    <button onClick={() => setEditingLift(null)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
                   </div>
                 </div>
               </Show>
             </div>
-            <Show when={editingTm() === l.id && tmInput() > 0}>
-              <div class="text-faint text-xs font-mono mt-1 ml-24">
-                {'W1: ' + calcMainSets(tmInput(), 1, settings.barWeight).map(s => s.weight).join(' · ') + ' lb'}
+          )}</For>
+
+          <Show when={showAddLift()} fallback={
+            <button
+              onClick={() => setShowAddLift(true)}
+              class="mt-2 border border-border text-muted px-3 py-2 text-xs tracking-widest uppercase hover:border-accent hover:text-accent"
+            >
+              + ADD LIFT
+            </button>
+          }>
+            <div class="flex flex-col gap-2 mt-2">
+              <input
+                type="text"
+                value={newLiftName()}
+                onInput={e => setNewLiftName(e.currentTarget.value)}
+                placeholder="Lift name"
+                class="bg-surface border border-border text-text px-2 py-1 focus:outline-none focus:border-accent"
+              />
+              <div class="flex items-center gap-2">
+                <span class="text-muted text-xs w-20">increment</span>
+                <Stepper value={newLiftIncrement()} onChange={setNewLiftIncrement} step={5} min={0} max={50} fieldLabel="progression increment" />
+                <span class="text-muted text-xs">lb</span>
               </div>
-            </Show>
-          </div>
-        )}</For>
-        <div class="mt-3">
-          <button
-            onClick={() => void handleDeload()}
-            class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
-          >
-            CUT ALL TMS  −10%
-          </button>
-        </div>
-      </div>
-
-      <div class="mb-6">
-        <Rule label="SUPPLEMENTAL" class="text-muted mb-2" />
-        <div class="flex gap-1 flex-wrap">
-          <For each={(['fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'none'] as const)}>{(t) => (
-            <ToggleChip
-              active={(settings.supplementalTemplate ?? 'fsl+bbb') === t}
-              onClick={() => void handleSaveTemplate(t)}
-            >
-              {t.toUpperCase()}
-            </ToggleChip>
-          )}</For>
-        </div>
-
-        {/* Cycle shape — one list instead of two dependent controls. The old UI
-            hid the supplemental modes until the deload week was toggled on, so
-            their existence was undiscoverable; flattening makes the whole option
-            space visible at once. Selecting 3-WEEK deliberately leaves
-            deloadSupplemental untouched, so switching back restores the prior
-            choice. Both settings fields stay separate in the DB — only the
-            control is merged. */}
-        <SectionLabel class="mt-3 mb-1">Cycle shape</SectionLabel>
-        <div class="flex flex-col gap-1">
-          <ToggleChip
-            class="w-full text-left"
-            active={!settings.hasDeloadWeek}
-            onClick={() => void handleCycleShapeChange({ hasDeloadWeek: false })}
-          >
-            3-WEEK · NO DELOAD WEEK
-          </ToggleChip>
-          {/* Two-tier row: cycle shape on top, what supplemental does on the
-              deload underneath on its own line. Both lines fit unwrapped at
-              360px — verified in a phone viewport, not assumed. */}
-          <For each={([
-            ['skip',   'NO SUPPLEMENTAL'],
-            ['deload', 'SUPPLEMENTAL AT DELOAD %'],
-            ['normal', 'SUPPLEMENTAL AT NORMAL %'],
-          ] as const)}>{([m, detail]) => (
-            <ToggleChip
-              class="w-full text-left"
-              active={settings.hasDeloadWeek && (settings.deloadSupplemental ?? 'normal') === m}
-              onClick={() => void handleCycleShapeChange({ hasDeloadWeek: true, deloadSupplemental: m })}
-            >
-              <span class="block">4-WEEK · DELOAD</span>
-              <span class="block">{detail}</span>
-            </ToggleChip>
-          )}</For>
-        </div>
-        <p class="text-faint text-xs mt-1">
-          3-week: TMs progress after week 3.
-          <br />
-          4-week: week 4 is a light deload, and the mode sets what supplemental +
-          cross-lift work does that week — skip it, run it at deload %, or at
-          normal (~65%) weights.
-        </p>
-      </div>
-
-      <div class="mb-6">
-        <Rule label="e1RM HIGH-REP DISCOUNT" class="text-muted mb-2" />
-        <div class="flex gap-1 flex-wrap">
-          <For each={(['off', 'mild', 'moderate', 'aggressive'] as const)}>{(d) => (
-            <ToggleChip
-              active={(settings.highRepDiscount ?? 'off') === d}
-              onClick={() => void updateSettings({ highRepDiscount: d })}
-            >
-              {d.toUpperCase()}
-            </ToggleChip>
-          )}</For>
-        </div>
-        <p class="text-faint text-xs mt-1">
-          Reps over 10 on an AMRAP set are less reliable strength indicators — higher
-          settings trust them less when estimating your 1RM. Off leaves the Wathan
-          formula unchanged.
-        </p>
-      </div>
-
-      <Show when={currentCycleWeek() !== null}>
-        <div class="mb-6">
-          <Rule label="CYCLE" class="text-muted mb-2" />
-          <div class="flex items-center gap-4 py-1">
-            <span class="text-muted text-xs uppercase tracking-widest w-20">Week</span>
-            <div class="flex gap-2">
-              <For each={(finalWeek() === 4 ? [1, 2, 3, 4] : [1, 2, 3]) as Array<1 | 2 | 3 | 4>}>{(w) => (
-                <button
-                  aria-label={`Week ${w}`}
-                  onClick={() => {
-                    const cur = currentCycleWeek()
-                    if (cur && w < cur) void handleReopenWeek(w)
-                    else void handleSkipToWeek(w)
-                  }}
-                  disabled={w === currentCycleWeek()}
-                  class={`w-8 h-8 border font-mono text-sm ${
-                    w === currentCycleWeek()
-                      ? 'border-accent text-accent'
-                      : w < (currentCycleWeek() ?? 5)
-                        ? 'border-border-dim text-muted hover:border-warn hover:text-warn'
-                        : 'border-border text-muted hover:border-warn hover:text-warn'
-                  }`}
-                >
-                  {w}
-                </button>
-              )}</For>
-            </div>
-          </div>
-          <Show when={currentCycleWeek() === finalWeek()}>
-            <div class="flex items-start gap-4 py-1">
-              <span class="w-20 shrink-0" />
-              <div>
-                <button
-                  onClick={() => void handleSkipDeload()}
-                  class="border border-border text-muted text-xs tracking-widest px-3 py-1.5 hover:border-danger hover:text-danger"
-                >
-                  END CYCLE NOW
-                </button>
-                <p class="text-faint text-xs mt-1">
-                  Skips what's left of the week; TMs progress.
-                </p>
+              <div class="flex items-center gap-2">
+                <span class="text-muted text-xs w-20">base wt</span>
+                <Stepper value={newLiftBase()} onChange={setNewLiftBase} step={5} min={0} max={500} fieldLabel="base weight" />
+                <span class="text-muted text-xs">lb</span>
+              </div>
+              <div class="flex gap-2">
+                <For each={(['upper', 'lower'] as const)}>{type => (
+                  <ToggleChip active={newLiftType() === type} onClick={() => setNewLiftType(type)}>
+                    {type}
+                  </ToggleChip>
+                )}</For>
+              </div>
+              <div class="flex gap-3">
+                <button onClick={handleAddLift} disabled={!newLiftName().trim()} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase disabled:border-border disabled:text-muted">ADD</button>
+                <button onClick={() => setShowAddLift(false)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
               </div>
             </div>
           </Show>
-        </div>
-      </Show>
 
-      <div class="mb-6">
-        <Rule label="REST TIMERS" class="text-muted mb-2" />
-        <For each={[
-          { label: 'First',  field: 'restTimer1'   as const, value: settings.restTimer1 },
-          { label: 'Second', field: 'restTimer2'   as const, value: settings.restTimer2 },
-          { label: 'Failed', field: 'restTimerFail' as const, value: settings.restTimerFail },
-        ]}>{({ label, field, value }) => (
-          <div class="flex items-center gap-3 py-1 border-b border-border-dim">
-            <span class="text-muted w-16 text-xs uppercase tracking-widest">{label}</span>
-            <button onClick={() => timerStep(field, -30)} aria-label={`Decrease ${label.toLowerCase()} rest timer`} class="border border-border px-2 py-0.5 text-muted hover:text-text">-</button>
-            <span class="text-text w-12 text-center">{formatDuration(value)}</span>
-            <button onClick={() => timerStep(field, 30)} aria-label={`Increase ${label.toLowerCase()} rest timer`} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
-          </div>
-        )}</For>
-        <div class="flex items-center justify-between py-1 border-t border-border-dim">
-          <span class="text-muted text-xs uppercase tracking-widest">REST NOTIFICATIONS</span>
-          <ToggleChip
-            active={settings.restTimerNotifications}
-            onClick={async () => {
-              const next = !settings.restTimerNotifications
-              if (next) {
-                if (typeof Notification === 'undefined') {
-                  showToast('Notifications not supported in this browser', 3000)
-                  return
-                }
-                const perm = await Notification.requestPermission()
-                if (perm === 'granted') void updateSettings({ restTimerNotifications: true })
-                else showToast('Notifications denied — enable in browser settings', 3000)
-              } else {
-                void updateSettings({ restTimerNotifications: false })
-              }
-            }}
-          >
-            {settings.restTimerNotifications ? 'ON' : 'OFF'}
-          </ToggleChip>
-        </div>
-      </div>
-
-      <div class="mb-6">
-        <Rule label="THEME" class="text-muted mb-3" />
-        <div class="flex flex-wrap gap-x-4 gap-y-3">
-          <For each={Object.entries(THEMES) as [string, typeof THEMES[keyof typeof THEMES]][]}>{([key, t]) => (
-            <button onClick={() => updateSettings({ theme: key })} class="flex flex-col items-center gap-1.5">
-              <div
-                class="w-14 h-10 p-1 rounded-sm border-2 flex flex-col gap-1 transition-all"
-                style={{
-                  'background-color': t.vars['--color-bg'],
-                  'border-color': settings.theme === key ? t.vars['--color-accent'] : 'transparent',
-                }}
-              >
-                <div class="flex-1 rounded-sm" style={{ 'background-color': t.vars['--color-surface'] }} />
-                <div class="h-1 w-1/2 rounded-full" style={{ 'background-color': t.vars['--color-accent'] }} />
-              </div>
-              <span
-                class="text-xs uppercase tracking-widest"
-                style={{ color: settings.theme === key ? 'var(--color-accent)' : 'var(--color-muted)' }}
-              >
-                {t.label}
-              </span>
-            </button>
-          )}</For>
-        </div>
-      </div>
-
-      <div class="mb-6">
-        <Rule label="EXERCISES" class="text-muted mb-2" />
-
-        <For each={exercisesByName(false)}>{(ex) => (
-          <div class="py-1 border-b border-border-dim">
-            <Show when={editingEx() === ex.id} fallback={
-              <div class="flex items-center justify-between">
-                <span class="text-text uppercase tracking-widest">
-                  {ex.name}
-                  <Show when={ex.category}>
-                    <span class="text-faint text-xs ml-2">{CATEGORY_LABEL[ex.category!]}</span>
-                  </Show>
-                </span>
-                <div class="flex items-center gap-4">
-                  <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExCategory(ex.category ?? 'push'); setEditExPlateMode(ex.plateMode ?? (ex.usesBarbell === true ? 'paired' : 'none')); setEditExImplementBase(ex.implementBase ?? (ex.plateMode === 'total' ? 0 : settings.barWeight)); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
-                  <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
-                </div>
-              </div>
-            }>
-              <ExerciseEditor
-                name={editExName()}
-                onNameChange={setEditExName}
-                category={editExCategory()}
-                onCategoryChange={setEditExCategory}
-                plateMode={editExPlateMode()}
-                onPlateModeChange={setEditExPlateMode}
-                implementBase={editExImplementBase()}
-                onImplementBaseChange={setEditExImplementBase}
-                increment={accessoryIncrements()[ex.id!] ? editExIncrement() : null}
-                onIncrementChange={setEditExIncrement}
-                onSave={() => handleRenameExercise(ex.id!)}
-                onCancel={() => setEditingEx(null)}
-              />
-            </Show>
-          </div>
-        )}</For>
-
-        <Show when={exercises().some(ex => ex.archived)}>
-          <>
-            <Rule label="ARCHIVED" class="text-faint mt-4 mb-2" />
-            <For each={exercisesByName(true)}>{(ex) => (
+          <Show when={archivedLifts().length > 0}>
+            <SectionLabel tone="text-faint" class="mt-4 mb-2">ARCHIVED LIFTS</SectionLabel>
+            <For each={archivedLifts()}>{(l) => (
               <div class="py-1 border-b border-border-dim flex items-center justify-between">
-                <span class="text-faint text-sm uppercase tracking-widest">{ex.name}</span>
-                <button onClick={() => handleUnarchiveExercise(ex.id!)} class="text-muted text-xs hover:text-accent">unarchive</button>
+                <span class="text-faint text-sm uppercase tracking-widest">{l.name}</span>
+                <button onClick={() => void handleUnarchiveLift(l.id!)} class="text-muted text-xs hover:text-accent">unarchive</button>
               </div>
             )}</For>
-          </>
-        </Show>
+          </Show>
+        </div>
 
-        <Show when={showAddEx()} fallback={
-          <button
-            onClick={() => setShowAddEx(true)}
-            class="mt-2 border border-border text-muted px-3 py-2 text-xs tracking-widest uppercase hover:border-accent hover:text-accent"
-          >
-            + ADD EXERCISE
-          </button>
-        }>
-          <div class="flex flex-col gap-2 mt-2">
-            <div class="flex gap-2">
+        <div class="mb-6">
+          <SectionLabel class="mb-2">TRAINING MAXES</SectionLabel>
+          <For each={activeLifts()}>{(l) => (
+            <div class="py-1 border-b border-border-dim">
+              <div class="flex items-center gap-3">
+                <span class="text-muted w-20 uppercase tracking-widest text-xs">{l.name}</span>
+                <Show when={editingTm() === l.id} fallback={
+                  <>
+                    <span class="text-text">{tms()[l.id!] ?? '—'} lb</span>
+                    <button
+                      onClick={() => { setEditingTm(l.id!); setTmInput(tms()[l.id!] ?? 0) }}
+                      class="text-muted text-xs hover:text-accent"
+                    >
+                      edit
+                    </button>
+                  </>
+                }>
+                  <div class="flex flex-col gap-2 flex-1">
+                    <div class="flex items-center gap-2">
+                      <Stepper value={tmInput()} onChange={setTmInput} step={5} min={0} fieldLabel="training max" />
+                      <span class="text-muted text-xs">lb</span>
+                    </div>
+                    <div class="flex gap-3">
+                      <button onClick={() => handleSaveTm(l.id!)} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase font-mono">SAVE</button>
+                      <button onClick={() => setEditingTm(null)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
+                    </div>
+                  </div>
+                </Show>
+              </div>
+              <Show when={editingTm() === l.id && tmInput() > 0}>
+                <div class="text-faint text-xs font-mono mt-1 ml-24">
+                  {'W1: ' + calcMainSets(tmInput(), 1, settings.barWeight).map(s => s.weight).join(' · ') + ' lb'}
+                </div>
+              </Show>
+            </div>
+          )}</For>
+        </div>
+
+        <div class="mb-6">
+          <SectionLabel class="mb-2">SUPPLEMENTAL</SectionLabel>
+          <div class="flex gap-1 flex-wrap">
+            <For each={(['fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'none'] as const)}>{(t) => (
+              <ToggleChip
+                active={(settings.supplementalTemplate ?? 'fsl+bbb') === t}
+                onClick={() => void handleSaveTemplate(t)}
+              >
+                {t.toUpperCase()}
+              </ToggleChip>
+            )}</For>
+          </div>
+
+          {/* Cycle shape — one list instead of two dependent controls. The old UI
+              hid the supplemental modes until the deload week was toggled on, so
+              their existence was undiscoverable; flattening makes the whole option
+              space visible at once. Selecting 3-WEEK deliberately leaves
+              deloadSupplemental untouched, so switching back restores the prior
+              choice. Both settings fields stay separate in the DB — only the
+              control is merged. */}
+          <SectionLabel class="mt-3 mb-1">Cycle shape</SectionLabel>
+          <div class="flex flex-col gap-1">
+            <ToggleChip
+              class="w-full text-left"
+              active={!settings.hasDeloadWeek}
+              onClick={() => void handleCycleShapeChange({ hasDeloadWeek: false })}
+            >
+              3-WEEK · NO DELOAD WEEK
+            </ToggleChip>
+            {/* Two-tier row: cycle shape on top, what supplemental does on the
+                deload underneath on its own line. Both lines fit unwrapped at
+                360px — verified in a phone viewport, not assumed. */}
+            <For each={([
+              ['skip',   'NO SUPPLEMENTAL'],
+              ['deload', 'SUPPLEMENTAL AT DELOAD %'],
+              ['normal', 'SUPPLEMENTAL AT NORMAL %'],
+            ] as const)}>{([m, detail]) => (
+              <ToggleChip
+                class="w-full text-left"
+                active={settings.hasDeloadWeek && (settings.deloadSupplemental ?? 'normal') === m}
+                onClick={() => void handleCycleShapeChange({ hasDeloadWeek: true, deloadSupplemental: m })}
+              >
+                <span class="block">4-WEEK · DELOAD</span>
+                <span class="block">{detail}</span>
+              </ToggleChip>
+            )}</For>
+          </div>
+          <p class="text-faint text-xs mt-1">
+            3-week: TMs progress after week 3.
+            <br />
+            4-week: week 4 is a light deload, and the mode sets what supplemental +
+            cross-lift work does that week — skip it, run it at deload %, or at
+            normal (~65%) weights.
+          </p>
+        </div>
+
+        <Show when={currentCycleWeek() !== null}>
+          <div class="mb-6">
+            <SectionLabel class="mb-2">CYCLE</SectionLabel>
+            {/* One row of identical squares used to do two opposite things:
+                tapping a lower number reopened a finished week, a higher one
+                marked the weeks between as skipped. Same control, opposite
+                semantics, discoverable only by tapping it. Split by intent, with
+                the consequence in the label rather than only in the confirm. */}
+            <div class="py-1">
+              <div class="text-text text-sm tracking-widest uppercase mb-3">
+                Week {currentCycleWeek()} of {finalWeek()}
+              </div>
+              <div class="flex flex-col gap-3 items-start">
+                <For each={(finalWeek() === 4 ? [1, 2, 3, 4] : [1, 2, 3]) as Array<1 | 2 | 3 | 4>}>{(w) => (
+                  <>
+                    <Show when={w < (currentCycleWeek() ?? 1)}>
+                      <div>
+                        <button
+                          onClick={() => void handleReopenWeek(w)}
+                          class="border border-border text-muted px-3 py-1.5 text-xs tracking-widest hover:border-warn hover:text-warn"
+                        >
+                          ‹ REOPEN WEEK {w}
+                        </button>
+                        <p class="text-faint text-xs mt-1">Redo it — past entries are kept.</p>
+                      </div>
+                    </Show>
+                    <Show when={w > (currentCycleWeek() ?? 1)}>
+                      <div>
+                        <button
+                          onClick={() => void handleSkipToWeek(w)}
+                          class="border border-border text-muted px-3 py-1.5 text-xs tracking-widest hover:border-danger hover:text-danger"
+                        >
+                          SKIP TO WEEK {w} ›
+                        </button>
+                        <p class="text-faint text-xs mt-1">
+                          {w - (currentCycleWeek() ?? 1) > 1
+                            ? `Weeks ${currentCycleWeek()}–${w - 1} are marked skipped.`
+                            : `Week ${currentCycleWeek()} is marked skipped.`}
+                        </p>
+                      </div>
+                    </Show>
+                  </>
+                )}</For>
+              </div>
+            </div>
+            <Show when={currentCycleWeek() === finalWeek()}>
+              <div class="flex items-start gap-4 py-1">
+                <span class="w-20 shrink-0" />
+                <div>
+                  <button
+                    onClick={() => void handleSkipDeload()}
+                    class="border border-border text-muted text-xs tracking-widest px-3 py-1.5 hover:border-danger hover:text-danger"
+                  >
+                    END CYCLE NOW
+                  </button>
+                  <p class="text-faint text-xs mt-1">
+                    Skips what's left of the week; TMs progress.
+                  </p>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </Show>
+      </Group>
+
+      <Group id="training" label="TRAINING">
+        <div class="mb-6">
+          <SectionLabel class="mb-2">REST TIMERS</SectionLabel>
+          {/* These three now drive the timer. They always looked like they did —
+              they were stored, exported and editable while restStatus ran off
+              hardcoded constants — and their old names ("First", "Second",
+              "Failed") described a sequence the app never had. Each is a rest
+              *context*, which is what actually decides the length. */}
+          <For each={[
+            { label: 'Between sets', hint: 'same block, next set', field: 'restTimer1' as const, value: settings.restTimer1 },
+            { label: 'Between exercises', hint: 'warmup → main, main → supplemental', field: 'restTimer2' as const, value: settings.restTimer2 },
+            { label: 'After a missed set', hint: 'nudge at 60% of this, then time up', field: 'restTimerFail' as const, value: settings.restTimerFail },
+          ]}>{({ label, hint, field, value }) => (
+            <div class="py-2 border-b border-border-dim">
+              <div class="flex items-center gap-3">
+                <span class="text-muted flex-1 text-xs uppercase tracking-widest">{label}</span>
+                <button onClick={() => timerStep(field, -30)} aria-label={`Decrease ${label.toLowerCase()} rest timer`} class="border border-border px-2 py-0.5 text-muted hover:text-text">-</button>
+                <span class="text-text w-12 text-center">{formatDuration(value)}</span>
+                <button onClick={() => timerStep(field, 30)} aria-label={`Increase ${label.toLowerCase()} rest timer`} class="border border-border px-2 py-0.5 text-muted hover:text-text">+</button>
+              </div>
+              <div class="text-faint text-xs mt-0.5">{hint}</div>
+            </div>
+          )}</For>
+          <div class="flex items-center justify-between py-1 border-t border-border-dim">
+            <span class="text-muted text-xs uppercase tracking-widest">REST NOTIFICATIONS</span>
+            <ToggleChip
+              active={settings.restTimerNotifications}
+              onClick={async () => {
+                const next = !settings.restTimerNotifications
+                if (next) {
+                  if (typeof Notification === 'undefined') {
+                    showToast('Notifications not supported in this browser', 3000)
+                    return
+                  }
+                  const perm = await Notification.requestPermission()
+                  if (perm === 'granted') void updateSettings({ restTimerNotifications: true })
+                  else showToast('Notifications denied — enable in browser settings', 3000)
+                } else {
+                  void updateSettings({ restTimerNotifications: false })
+                }
+              }}
+            >
+              {settings.restTimerNotifications ? 'ON' : 'OFF'}
+            </ToggleChip>
+          </div>
+        </div>
+
+        <div class="mb-6">
+          <SectionLabel class="mb-2">e1RM HIGH-REP DISCOUNT</SectionLabel>
+          <div class="flex gap-1 flex-wrap">
+            <For each={(['off', 'mild', 'moderate', 'aggressive'] as const)}>{(d) => (
+              <ToggleChip
+                active={(settings.highRepDiscount ?? 'off') === d}
+                onClick={() => void updateSettings({ highRepDiscount: d })}
+              >
+                {d.toUpperCase()}
+              </ToggleChip>
+            )}</For>
+          </div>
+          <p class="text-faint text-xs mt-1">
+            Reps over 10 on an AMRAP set are less reliable strength indicators — higher
+            settings trust them less when estimating your 1RM. Off leaves the Wathan
+            formula unchanged.
+          </p>
+        </div>
+      </Group>
+
+      <Group id="equipment" label="EQUIPMENT" defaultCollapsed>
+        <div class="mb-6">
+          <SectionLabel class="mb-2">PLATES</SectionLabel>
+          <div class="flex items-center gap-3 py-1 border-b border-border-dim">
+            <span class="text-muted w-20 uppercase tracking-widest text-xs">Bar</span>
+            <Stepper value={settings.barWeight} onChange={v => updateSettings({ barWeight: v })} step={2.5} min={10} max={100} fieldLabel="bar weight" />
+            <span class="text-muted text-xs">lb</span>
+          </div>
+          <For each={DEFAULT_PLATES}>{({ weight }) => {
+            const plate = () => settings.plates.find(p => p.weight === weight) ?? { weight, count: 0 }
+            return (
+              <div class="flex items-center gap-3 py-1 border-b border-border-dim">
+                <span class="text-muted w-20 text-right font-mono text-xs">{weight} lb</span>
+                <Stepper
+                  value={plate().count}
+                  onChange={v => {
+                    const next = settings.plates.some(p => p.weight === weight)
+                      ? settings.plates.map(p => p.weight === weight ? { ...p, count: v } : p)
+                      : [...settings.plates, { weight, count: v }]
+                    void updateSettings({ plates: next })
+                  }}
+                  step={1}
+                  min={0}
+                />
+              </div>
+            )
+          }}</For>
+        </div>
+
+        <div class="mb-6">
+          <SectionLabel class="mb-2">EXERCISES</SectionLabel>
+
+          <For each={exercisesByName(false)}>{(ex) => (
+            <div class="py-1 border-b border-border-dim">
+              <Show when={editingEx() === ex.id} fallback={
+                <div class="flex items-center justify-between">
+                  <span class="text-text uppercase tracking-widest">
+                    {ex.name}
+                    <Show when={ex.category}>
+                      <span class="text-faint text-xs ml-2">{CATEGORY_LABEL[ex.category!]}</span>
+                    </Show>
+                  </span>
+                  <div class="flex items-center gap-4">
+                    <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExCategory(ex.category ?? 'push'); setEditExPlateMode(ex.plateMode ?? (ex.usesBarbell === true ? 'paired' : 'none')); setEditExImplementBase(ex.implementBase ?? (ex.plateMode === 'total' ? 0 : settings.barWeight)); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
+                    <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
+                  </div>
+                </div>
+              }>
+                <ExerciseEditor
+                  name={editExName()}
+                  onNameChange={setEditExName}
+                  category={editExCategory()}
+                  onCategoryChange={setEditExCategory}
+                  plateMode={editExPlateMode()}
+                  onPlateModeChange={setEditExPlateMode}
+                  implementBase={editExImplementBase()}
+                  onImplementBaseChange={setEditExImplementBase}
+                  increment={accessoryIncrements()[ex.id!] ? editExIncrement() : null}
+                  onIncrementChange={setEditExIncrement}
+                  onSave={() => handleRenameExercise(ex.id!)}
+                  onCancel={() => setEditingEx(null)}
+                />
+              </Show>
+            </div>
+          )}</For>
+
+          <Show when={exercises().some(ex => ex.archived)}>
+            <>
+              <SectionLabel tone="text-faint" class="mt-4 mb-2">ARCHIVED</SectionLabel>
+              <For each={exercisesByName(true)}>{(ex) => (
+                <div class="py-1 border-b border-border-dim flex items-center justify-between">
+                  <span class="text-faint text-sm uppercase tracking-widest">{ex.name}</span>
+                  <button onClick={() => handleUnarchiveExercise(ex.id!)} class="text-muted text-xs hover:text-accent">unarchive</button>
+                </div>
+              )}</For>
+            </>
+          </Show>
+
+          <Show when={showAddEx()} fallback={
+            <button
+              onClick={() => setShowAddEx(true)}
+              class="mt-2 border border-border text-muted px-3 py-2 text-xs tracking-widest uppercase hover:border-accent hover:text-accent"
+            >
+              + ADD EXERCISE
+            </button>
+          }>
+            {/* Chips, not native selects. A select opens the OS picker — a
+                different interaction model and a different visual world — for
+                the same pick-one decision the rest of the app makes inline. */}
+            <div class="flex flex-col gap-2 mt-2">
               <input
                 type="text"
                 value={newExName()}
                 onInput={e => setNewExName(e.currentTarget.value)}
                 placeholder="Exercise name"
-                class="bg-surface border border-border text-text px-2 py-1 flex-1 focus:outline-none focus:border-accent"
+                class="bg-surface border border-border text-text px-2 py-1 focus:outline-none focus:border-accent"
               />
-              <select
-                value={newExType()}
-                onChange={e => setNewExType(e.currentTarget.value as 'reps' | 'timed' | 'distance')}
-                class="bg-surface border border-border text-text px-2 py-1 focus:outline-none"
-              >
-                <option value="reps">reps</option>
-                <option value="timed">timed</option>
-                <option value="distance">distance</option>
-              </select>
+              <div class="flex items-center gap-2">
+                <span class="text-muted text-xs uppercase tracking-widest w-20">Measured</span>
+                <div class="flex gap-1 flex-wrap">
+                  <For each={(['reps', 'timed', 'distance'] as const)}>{t => (
+                    <ToggleChip active={newExType() === t} onClick={() => setNewExType(t)}>
+                      {t.toUpperCase()}
+                    </ToggleChip>
+                  )}</For>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-muted text-xs uppercase tracking-widest w-20">Category</span>
+                <div class="flex gap-1 flex-wrap">
+                  <For each={EXERCISE_CATEGORIES}>{c => (
+                    <ToggleChip active={newExCategory() === c} onClick={() => setNewExCategory(c)}>
+                      {CATEGORY_LABEL[c].toUpperCase()}
+                    </ToggleChip>
+                  )}</For>
+                </div>
+              </div>
+              <div class="flex gap-3">
+                <button onClick={handleAddExercise} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase">ADD</button>
+                <button onClick={() => setShowAddEx(false)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
+              </div>
             </div>
-            <select
-              value={newExCategory()}
-              onChange={e => setNewExCategory(e.currentTarget.value as ExerciseCategory)}
-              class="bg-surface border border-border text-text px-2 py-1 focus:outline-none w-full"
-            >
-              <For each={EXERCISE_CATEGORIES}>{(c) => (
-                <option value={c}>{CATEGORY_LABEL[c]}</option>
-              )}</For>
-            </select>
-            <div class="flex gap-3">
-              <button onClick={handleAddExercise} class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase">ADD</button>
-              <button onClick={() => setShowAddEx(false)} class="text-muted px-3 py-2 text-xs tracking-widest uppercase">cancel</button>
-            </div>
+          </Show>
+        </div>
+      </Group>
+
+      <Group id="app" label="APP">
+        <div class="mb-6">
+          <SectionLabel class="mb-3">THEME</SectionLabel>
+          <div class="flex flex-wrap gap-x-4 gap-y-3">
+            <For each={Object.entries(THEMES) as [string, typeof THEMES[keyof typeof THEMES]][]}>{([key, t]) => (
+              <button onClick={() => updateSettings({ theme: key })} class="flex flex-col items-center gap-1.5">
+                <div
+                  class="w-14 h-10 p-1 rounded-sm border-2 flex flex-col gap-1 transition-all"
+                  style={{
+                    'background-color': t.vars['--color-bg'],
+                    'border-color': settings.theme === key ? t.vars['--color-accent'] : 'transparent',
+                  }}
+                >
+                  <div class="flex-1 rounded-sm" style={{ 'background-color': t.vars['--color-surface'] }} />
+                  <div class="h-1 w-1/2 rounded-full" style={{ 'background-color': t.vars['--color-accent'] }} />
+                </div>
+                <span
+                  class="text-xs uppercase tracking-widest"
+                  style={{ color: settings.theme === key ? 'var(--color-accent)' : 'var(--color-muted)' }}
+                >
+                  {t.label}
+                </span>
+              </button>
+            )}</For>
           </div>
-        </Show>
-      </div>
-
-      <div class="mb-6">
-        <Rule label="PLATES" class="text-muted mb-2" />
-        <div class="flex items-center gap-3 py-1 border-b border-border-dim">
-          <span class="text-muted w-20 uppercase tracking-widest text-xs">Bar</span>
-          <Stepper value={settings.barWeight} onChange={v => updateSettings({ barWeight: v })} step={2.5} min={10} max={100} fieldLabel="bar weight" />
-          <span class="text-muted text-xs">lb</span>
         </div>
-        <For each={DEFAULT_PLATES}>{({ weight }) => {
-          const plate = () => settings.plates.find(p => p.weight === weight) ?? { weight, count: 0 }
-          return (
-            <div class="flex items-center gap-3 py-1 border-b border-border-dim">
-              <span class="text-muted w-20 text-right font-mono text-xs">{weight} lb</span>
-              <Stepper
-                value={plate().count}
-                onChange={v => {
-                  const next = settings.plates.some(p => p.weight === weight)
-                    ? settings.plates.map(p => p.weight === weight ? { ...p, count: v } : p)
-                    : [...settings.plates, { weight, count: v }]
-                  void updateSettings({ plates: next })
-                }}
-                step={1}
-                min={0}
-              />
-            </div>
-          )
-        }}</For>
-      </div>
+      </Group>
 
-      <div>
-        <Rule label="DATA" class="text-muted mb-3" />
-        <div class="flex flex-wrap gap-3 mb-4">
-          <button onClick={() => void exportJson(db)} class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent">
-            EXPORT JSON
-          </button>
-          <button onClick={() => void exportCsv(db)} class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent">
-            EXPORT CSV
-          </button>
-          <button
-            onClick={() => fileInputRef.click()}
-            class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
-          >
-            IMPORT JSON
-          </button>
-          <button
-            onClick={() => void handleCleanupAccessoryData()}
-            class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-danger hover:text-danger"
-          >
-            CLEANUP ORPHANS
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            class="hidden"
-            onChange={handleFileSelected}
-          />
+      <Group id="data" label="DATA" tone="text-danger">
+        <div>
+          <SectionLabel class="mb-3">BACKUP</SectionLabel>
+          <div class="flex flex-wrap gap-3 mb-4">
+            <button onClick={() => void exportJson(db)} class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent">
+              EXPORT JSON
+            </button>
+            <button onClick={() => void exportCsv(db)} class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent">
+              EXPORT CSV
+            </button>
+            <button
+              onClick={() => fileInputRef.click()}
+              class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
+            >
+              IMPORT JSON
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              class="hidden"
+              onChange={handleFileSelected}
+            />
+          </div>
+
+          <Show when={importError()}>
+            <div class="text-danger text-xs mb-3">{importError()}</div>
+          </Show>
+
+          <div class="text-faint text-xs leading-relaxed mb-8">
+            JSON backup restores all history. CSV exports completed sessions for spreadsheets.
+          </div>
+
+          {/* Everything below rewrites data and cannot be undone. Gathered here
+              rather than sitting inline between a training max and a theme
+              swatch, where a thumb-scroll could reach it. */}
+          <SectionLabel tone="text-danger" class="mb-2">IRREVERSIBLE</SectionLabel>
+          <div class="border border-danger/40 p-3">
+            <button
+              onClick={() => void handleCleanupAccessoryData()}
+              class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
+            >
+              CLEANUP ORPHANS
+            </button>
+            <p class="text-faint text-xs mt-1 mb-4">
+              Deletes accessory rows with no session and archives exercises nothing uses.
+            </p>
+            <button
+              onClick={() => void handleDeload()}
+              class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
+            >
+              CUT ALL TMS  −10%
+            </button>
+            <p class="text-faint text-xs mt-1">
+              Drops every lift's training max by 10%, effective from your next session.
+            </p>
+          </div>
         </div>
-
-        <Show when={importError()}>
-          <div class="text-danger text-xs mb-3">{importError()}</div>
-        </Show>
-
-        <div class="text-faint text-xs leading-relaxed">
-          JSON backup restores all history. CSV exports completed sessions for spreadsheets.
-        </div>
-      </div>
+      </Group>
 
       <CycleCompleteModal
         data={cycleCompleteData()}

@@ -27,6 +27,10 @@ export default function BottomNav() {
           <span class="w-1.5 h-1.5 rounded-full bg-accent inline-block" />
         </Show>
       </A>
+      {/* No STATS tab: records and TM progression live inside HISTORY, which
+          already charted the same numbers per lift. One destination for
+          progress, one for the log. /stats stays routable as the direct link to
+          the whole-roster records view. */}
       <A
         href="/history"
         end={false}
@@ -35,14 +39,6 @@ export default function BottomNav() {
         inactiveClass="text-muted hover:text-text"
       >
         HISTORY
-      </A>
-      <A
-        href="/stats"
-        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors"
-        activeClass="text-accent border-t border-accent -mt-px"
-        inactiveClass="text-muted hover:text-text"
-      >
-        STATS
       </A>
       <A
         href="/settings"

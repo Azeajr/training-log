@@ -1,5 +1,6 @@
 import { Show, For } from 'solid-js'
 import Stepper from './Stepper'
+import ToggleChip from '../ui/ToggleChip'
 import type { ExerciseCategory, PlateMode } from '../../types/domain'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../../lib/assistance'
 import { PLATE_MODE_LABEL, PLATE_MODES } from '../../lib/plate-loading'
@@ -34,15 +35,16 @@ export default function ExerciseEditor(props: Props) {
       <Show when={props.onCategoryChange}>
         <div class="flex items-center gap-2">
           <span class="text-muted text-xs uppercase tracking-widest w-20">Category</span>
-          <select
-            value={props.category ?? 'push'}
-            onChange={e => props.onCategoryChange!(e.currentTarget.value as ExerciseCategory)}
-            class="bg-surface border border-border text-text px-2 py-0.5 text-xs focus:outline-none"
-          >
+          <div class="flex gap-1 flex-wrap">
             <For each={EXERCISE_CATEGORIES}>{(c) => (
-              <option value={c}>{CATEGORY_LABEL[c]}</option>
+              <ToggleChip
+                active={(props.category ?? 'push') === c}
+                onClick={() => props.onCategoryChange!(c)}
+              >
+                {CATEGORY_LABEL[c].toUpperCase()}
+              </ToggleChip>
             )}</For>
-          </select>
+          </div>
         </div>
       </Show>
       <Show when={props.onPlateModeChange}>
@@ -51,12 +53,12 @@ export default function ExerciseEditor(props: Props) {
           <div class="flex gap-1">
             <For each={PLATE_MODES}>
               {m => (
-                <button
+                <ToggleChip
+                  active={(props.plateMode ?? 'none') === m}
                   onClick={() => props.onPlateModeChange!(m)}
-                  class={`px-2 py-0.5 text-xs border ${(props.plateMode ?? 'none') === m ? 'border-accent text-accent' : 'border-border text-muted'}`}
                 >
                   {PLATE_MODE_LABEL[m]}
-                </button>
+                </ToggleChip>
               )}
             </For>
           </div>

@@ -2,6 +2,61 @@
 
 ## Done
 
+### UX Audit Pass — Interaction, Navigation, IA (2026-09-05)
+
+Seventeen findings from a workflow audit, addressed in one pass. The terminal/logbook aesthetic is
+unchanged throughout; every change is to interaction, not visual identity.
+
+**Critical**
+
+- **Rest-timer settings were wired to nothing.** `restTimer1/2/Fail` were stored, validated on
+  import, exported — and never read: `restStatus` ran off four constants. `restThresholds(settings)`
+  now feeds `restStatus`, `restTarget` and `restNotificationTargets` alike. The rows are relabelled
+  to the contexts they actually control (Between sets / Between exercises / After a missed set), and
+  the transition rest is now *longer* than the between-sets rest, not shorter.
+
+**High**
+
+- **Rest timer counts down** to that target, names the context, shows a depleting rule, and offers
+  `+30s`. It was a stopwatch whose finish line was invisible.
+- **`SessionBar`** — the strip the rest timer occupies now shows what's still owed when no rest is
+  running (`WARMUP 3/3 · MAIN 1/3 · ROW 0/5 …`, each segment scrolling to its block), and becomes
+  `COMPLETE SESSION` once everything is logged. Finishing was previously a button at the bottom of a
+  long document, with no signal that an untouched block existed.
+- **Accessory weight changes no longer rewrite the training max.** Logging set 1 at an unprescribed
+  weight used to write a new `accessoryTrainingMaxes` row with no confirm and no undo. Now the whole
+  slate has to run at the same off-prescription weight, and it is *offered* after the session
+  (`AccessoryTmModal`) — the rule main lifts already followed.
+- **Settings grouped by decision frequency** — PROGRAM / TRAINING / EQUIPMENT / APP / DATA, sticky
+  jump row, EQUIPMENT collapsed. `CUT ALL TMS`, `CLEANUP ORPHANS` and `IMPORT` are gathered into one
+  labelled irreversible block instead of sitting inline beside the theme swatches.
+- **Onboarding is two steps.** The old step 3 restated step 2's values read-only; the training-max
+  list is the review and carries START TRAINING. Per-lift equipment/cross-block setup is demoted to
+  `advanced` — it was program design offered before the first session.
+
+**Medium**
+
+- SKIP LIFT and EXIT WITHOUT SAVING moved behind a `session options` disclosure; COMPLETE is alone.
+- Stats folded into History as a RECORDS mode plus a per-lift header above the chart; the STATS tab
+  is gone (`/stats` stays routable). Two destinations answered the same question.
+- The cycle-week squares — which reopened on a left tap and skipped on a right one — are now labelled
+  `‹ REOPEN WEEK n` / `SKIP TO WEEK n ›` with the consequence in the label.
+- One pick-one idiom: `ToggleChip` everywhere, all native `<select>`s retired.
+- AMRAP targets are tappable (one tap fills the reps field) and the reps stepper is marked as
+  directly editable; a 5 → 14 AMRAP was nine taps.
+- When the linear cursor runs off the end, the page scrolls once to the first unfinished independent
+  block instead of going quiet.
+- Today folds the warmup ladder and full main list behind `full session ▸`; assistance and START now
+  sit above the fold.
+- Lift chips: status keeps the colour permanently, selection moved to a fill plus `▸`.
+
+**Low**
+
+- `/workout` with no session offers a real button instead of a span styled like a link.
+- History badges the sessions that set a PR, evaluated against prior work only (`prSessionIds`).
+- History's view mode persists alongside its lift filter.
+- Exercise names in History's session detail open their history, matching the rest of the app.
+
 ### Mutation Testing Restored + First Post-pnpm Baseline (2026-07-29)
 
 `pnpm test:mutation` had been dead since the pnpm migration (2026-07-17), failing before it read any

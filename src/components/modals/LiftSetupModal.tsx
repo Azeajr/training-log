@@ -7,6 +7,7 @@ import { noteTrainingMaxAdded } from '../../lib/training-max'
 import { settings } from '../../store/settings-store'
 import Rule from '../layout/Rule'
 import Stepper from '../forms/Stepper'
+import ToggleChip from '../ui/ToggleChip'
 import Modal from './Modal'
 
 export interface DraftLiftFields {
@@ -182,12 +183,13 @@ export default function LiftSetupModal(props: Props) {
         <div class="flex gap-2 mb-2">
           <For each={PLATE_MODES}>
             {m => (
-              <button
+              <ToggleChip
+                class="flex-1"
+                active={plateMode() === m}
                 onClick={() => { setPlateMode(m); if (m !== 'none') setImplementBase(m === 'paired' ? settings.barWeight : 0) }}
-                class={`flex-1 px-2 py-1 text-xs border ${plateMode() === m ? 'border-accent text-accent' : 'border-border text-muted'}`}
               >
                 {PLATE_MODE_LABEL[m]}
-              </button>
+              </ToggleChip>
             )}
           </For>
         </div>
@@ -216,12 +218,12 @@ export default function LiftSetupModal(props: Props) {
               <div class="flex gap-2 mb-2">
                 <For each={(['fsl', 'percent'] as const)}>
                   {mode => (
-                    <button
+                    <ToggleChip
+                      active={block().weightMode === mode}
                       onClick={() => patchBlock(i, { weightMode: mode, percent: mode === 'percent' ? (block().percent ?? 0.75) : null })}
-                      class={`px-2 py-0.5 text-xs border ${block().weightMode === mode ? 'border-accent text-accent' : 'border-border text-muted'}`}
                     >
                       {mode === 'fsl' ? 'FSL' : '% TM'}
-                    </button>
+                    </ToggleChip>
                   )}
                 </For>
               </div>
@@ -250,23 +252,26 @@ export default function LiftSetupModal(props: Props) {
         }>
           <div class="border border-border p-2 mt-1">
             <div class="text-muted text-xs uppercase tracking-widest mb-2">add block</div>
-            <select
-              value={newMovementId() ?? ''}
-              onChange={e => setNewMovementId(Number(e.currentTarget.value) || null)}
-              class="bg-surface border border-border text-text px-2 py-1 text-xs w-full mb-2 focus:outline-none"
-            >
-              <option value="">movement lift…</option>
-              <For each={movementOptions()}>{l => <option value={l.id}>{l.name}</option>}</For>
-            </select>
+            {/* Chips, not a select: same pick-one idiom as everywhere else, and
+                no OS picker interrupting a modal. */}
+            <div class="flex gap-1 flex-wrap mb-2">
+              <For each={movementOptions()}>
+                {l => (
+                  <ToggleChip
+                    active={newMovementId() === l.id}
+                    onClick={() => setNewMovementId(newMovementId() === l.id ? null : l.id!)}
+                  >
+                    {l.name.toUpperCase()}
+                  </ToggleChip>
+                )}
+              </For>
+            </div>
             <div class="flex gap-2 mb-2">
               <For each={(['fsl', 'percent'] as const)}>
                 {mode => (
-                  <button
-                    onClick={() => setNewMode(mode)}
-                    class={`px-2 py-0.5 text-xs border ${newMode() === mode ? 'border-accent text-accent' : 'border-border text-muted'}`}
-                  >
+                  <ToggleChip active={newMode() === mode} onClick={() => setNewMode(mode)}>
                     {mode === 'fsl' ? 'FSL' : '% TM'}
-                  </button>
+                  </ToggleChip>
                 )}
               </For>
             </div>
