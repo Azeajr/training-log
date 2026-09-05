@@ -38,7 +38,7 @@ export default function SessionBar(props: Props) {
 
   return (
     <Show when={!workout.isResting}>
-      <div class="fixed bottom-16 left-0 right-0 bg-bg border-t-2 border-border px-4 py-2">
+      <div class="fixed bottom-[var(--nav-h)] left-0 right-0 bg-bg border-t-2 border-border px-4 py-2">
         <div class="max-w-3xl mx-auto">
           <Show
             when={allDone()}

@@ -7,10 +7,10 @@ export default function Toast() {
   // one or the other, whenever a session is active. Raise the toast above
   // whichever is showing so the text isn't hidden behind it.
   const bottom = () => workout.isResting
-    ? 'calc(env(safe-area-inset-bottom, 0px) + 10rem)'
+    ? 'calc(var(--nav-h) + 6.5rem)'
     : workout.activeSession
-      ? 'calc(env(safe-area-inset-bottom, 0px) + 8.5rem)'
-      : 'calc(env(safe-area-inset-bottom, 0px) + 4.25rem)'
+      ? 'calc(var(--nav-h) + 5rem)'
+      : 'calc(var(--nav-h) + 0.75rem)'
 
   // The live region is always mounted, not swapped in with the toast: a region
   // inserted into the DOM at the same time as its text is inconsistently

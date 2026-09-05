@@ -141,7 +141,7 @@ export default function RestTimer() {
 
   return (
     <Show when={workout.isResting}>
-      <div class="fixed bottom-16 left-0 right-0 bg-bg border-t-2 border-border px-4 py-3">
+      <div class="fixed bottom-[var(--nav-h)] left-0 right-0 bg-bg border-t-2 border-border px-4 py-3">
         <div class="max-w-3xl mx-auto">
           <div class="flex items-end justify-between gap-4">
             <div class="min-w-0">

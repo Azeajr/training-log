@@ -70,7 +70,7 @@ function AppShell(props: ParentProps) {
     >
       <main
         class="flex-1 overflow-y-auto"
-        style={{ 'padding-bottom': 'calc(env(safe-area-inset-bottom, 0px) + 3.5rem)' }}
+        style={{ 'padding-bottom': 'var(--nav-h)' }}
       >
         <Suspense fallback={<ScreenFallback />}>
           {props.children}

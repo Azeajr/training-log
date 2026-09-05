@@ -5,12 +5,12 @@ import { workout } from '../../store/workout-store'
 export default function BottomNav() {
   return (
     <nav
-      class="fixed bottom-0 left-0 right-0 bg-bg border-t border-border flex"
+      class="fixed bottom-0 left-0 right-0 bg-bg border-t border-border flex h-[var(--nav-h)]"
       style={{ 'padding-bottom': 'env(safe-area-inset-bottom, 0px)' }}
     >
       <A
         href="/today"
-        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors"
+        class="flex-1 inline-flex items-center justify-center text-xs tracking-wider transition-colors"
         activeClass="text-accent border-t border-accent -mt-px"
         inactiveClass="text-muted hover:text-text"
       >
@@ -18,7 +18,7 @@ export default function BottomNav() {
       </A>
       <A
         href="/workout"
-        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors inline-flex items-center justify-center gap-1"
+        class="flex-1 inline-flex items-center justify-center gap-1 text-xs tracking-wider transition-colors"
         activeClass="text-accent border-t border-accent -mt-px"
         inactiveClass="text-muted hover:text-text"
       >
@@ -34,7 +34,7 @@ export default function BottomNav() {
       <A
         href="/history"
         end={false}
-        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors"
+        class="flex-1 inline-flex items-center justify-center text-xs tracking-wider transition-colors"
         activeClass="text-accent border-t border-accent -mt-px"
         inactiveClass="text-muted hover:text-text"
       >
@@ -42,7 +42,7 @@ export default function BottomNav() {
       </A>
       <A
         href="/settings"
-        class="flex-1 py-4 text-center text-xs tracking-wider transition-colors"
+        class="flex-1 inline-flex items-center justify-center text-xs tracking-wider transition-colors"
         activeClass="text-accent border-t border-accent -mt-px"
         inactiveClass="text-muted hover:text-text"
       >

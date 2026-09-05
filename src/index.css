@@ -17,6 +17,10 @@
   --color-info:         #60a5fa;
 }
 
+:root {
+  --nav-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* Selection is suppressed on interactive chrome only, never on content.
    AppShell used to set `user-select: none` on the app root, which caught the
    things a training log exists to hold — session notes, training maxes,
