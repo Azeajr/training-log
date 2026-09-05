@@ -3,12 +3,14 @@ import { toast } from '../../store/toast-store'
 import { workout } from '../../store/workout-store'
 
 export default function Toast() {
-  // When the RestTimer card is showing it occupies the strip just above the
-  // BottomNav. Raise the toast above the timer card so the text isn't
-  // hidden behind it.
+  // RestTimer and SessionBar both occupy the strip just above the BottomNav,
+  // one or the other, whenever a session is active. Raise the toast above
+  // whichever is showing so the text isn't hidden behind it.
   const bottom = () => workout.isResting
     ? 'calc(env(safe-area-inset-bottom, 0px) + 10rem)'
-    : 'calc(env(safe-area-inset-bottom, 0px) + 4.25rem)'
+    : workout.activeSession
+      ? 'calc(env(safe-area-inset-bottom, 0px) + 8.5rem)'
+      : 'calc(env(safe-area-inset-bottom, 0px) + 4.25rem)'
 
   // The live region is always mounted, not swapped in with the toast: a region
   // inserted into the DOM at the same time as its text is inconsistently

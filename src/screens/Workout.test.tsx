@@ -61,6 +61,13 @@ afterEach(async () => {
   await drain()
 })
 
+// SessionBar's one finish control reads FINISH while work is outstanding and
+// COMPLETE SESSION once every segment is logged — same handler either way.
+// Fresh sessions in these tests rarely log everything first, so match either.
+const FINISH_CONTROL = /^(FINISH|COMPLETE SESSION)$/
+const findFinishButton = () => screen.findByText(FINISH_CONTROL)
+const getFinishButton = () => screen.getByText(FINISH_CONTROL)
+
 // SKIP LIFT and EXIT WITHOUT SAVING moved behind the `session options`
 // disclosure — one deliberate tap back from COMPLETE, which is the routine
 // action they used to sit beside at equal weight.
@@ -192,10 +199,10 @@ describe('Workout screen — with active session', () => {
     await findSessionOption('SKIP LIFT')
   })
 
-  it('renders COMPLETE SESSION button', async () => {
+  it('renders the session-finish control', async () => {
     startSession(BENCH)
     renderWorkout()
-    await screen.findByText('COMPLETE SESSION')
+    await findFinishButton()
   })
 
   it('shows DELOAD label for week 4', async () => {
@@ -224,7 +231,7 @@ describe('Workout screen — with active session', () => {
   it('COMPLETE SESSION marks session completed in DB and navigates', async () => {
     startSession(BENCH)
     renderWorkout()
-    const completeBtn = await screen.findByText('COMPLETE SESSION')
+    const completeBtn = await findFinishButton()
     fireEvent.click(completeBtn)
     await waitFor(async () => {
       const session = await db.sessions.get(1)
@@ -242,7 +249,7 @@ describe('Workout screen — with active session', () => {
     logAccessorySet(10, { setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
 
     renderWorkout()
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
 
     await waitFor(async () => {
       const accSets = await db.accessorySets.toArray()
@@ -260,7 +267,7 @@ describe('Workout screen — with active session', () => {
     addAccessory({ exerciseId: 11, exerciseName: 'Dip', tm: 50, calculatedWeight: 50, loggedSets: [], notes: '  ' })
 
     renderWorkout()
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
 
     await waitFor(async () => {
       const notes = await db.accessoryNotes.toArray()
@@ -287,7 +294,7 @@ describe('Workout screen — with active session', () => {
       await seedDriftedAccessory()
 
       renderWorkout()
-      fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+      fireEvent.click(await findFinishButton())
 
       // Nothing written yet — the prompt is the decision point.
       await screen.findByText('ACCESSORY TM')
@@ -308,7 +315,7 @@ describe('Workout screen — with active session', () => {
       await seedDriftedAccessory()
 
       renderWorkout()
-      fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+      fireEvent.click(await findFinishButton())
       fireEvent.click(await screen.findByText('NOT NOW'))
 
       await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
@@ -325,7 +332,7 @@ describe('Workout screen — with active session', () => {
       }
 
       renderWorkout()
-      fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+      fireEvent.click(await findFinishButton())
 
       await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
       expect(screen.queryByText('ACCESSORY TM')).toBeNull()
@@ -444,12 +451,12 @@ describe('Workout screen — with active session', () => {
     fireEvent.click(await findSessionOption('SKIP LIFT'))
     await screen.findByText('Skip this lift?')
 
-    expect((screen.getByText('COMPLETE SESSION') as HTMLButtonElement).disabled).toBe(true)
+    expect((getFinishButton() as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('EXIT WITHOUT SAVING') as HTMLButtonElement).disabled).toBe(true)
 
     fireEvent.click(screen.getByText('CANCEL'))
     await waitFor(() =>
-      expect((screen.getByText('COMPLETE SESSION') as HTMLButtonElement).disabled).toBe(false)
+      expect((getFinishButton() as HTMLButtonElement).disabled).toBe(false)
     )
   })
 
@@ -547,7 +554,7 @@ describe('Workout screen — with active session', () => {
     logAccessorySet(20, { duration: 30 }) // no setNumber → s.setNumber != null is false
 
     renderWorkout()
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
 
     await waitFor(async () => {
       const accSets = await db.accessorySets.toArray()
@@ -1320,7 +1327,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
   })
@@ -1330,7 +1337,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
 
     fireEvent.click(screen.getByText('CONTINUE'))
@@ -1342,7 +1349,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
 
     fireEvent.click(screen.getByText(/CUT ALL TMS INSTEAD/))
@@ -1366,7 +1373,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'))
   })
 
@@ -1375,7 +1382,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'))
     await screen.findByText('+10 LBS')
   })
@@ -1385,7 +1392,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('205')) // normal progression applied
 
     fireEvent.click(await screen.findByText('+10 LBS'))
@@ -1399,7 +1406,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'))
     fireEvent.click(await screen.findByText('+10 LBS'))
 
@@ -1414,7 +1421,7 @@ describe('Workout screen — cycle complete', () => {
     startSession(session4)
     renderWorkout()
 
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('STRONG CYCLE'))
     fireEvent.click(await screen.findByText('+10 LBS'))
 
@@ -1440,14 +1447,14 @@ describe('Workout screen — TM recommendation modal', () => {
   it('COMPLETE SESSION shows TM ADJUSTMENT modal when AMRAP delta ≥ 15%', async () => {
     startSession(BENCH)
     renderWorkout()
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
   })
 
   it('KEEP CURRENT dismisses TM modal and navigates to /today', async () => {
     startSession(BENCH)
     renderWorkout()
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
 
     fireEvent.click(screen.getByText('KEEP CURRENT'))
@@ -1461,7 +1468,7 @@ describe('Workout screen — TM recommendation modal', () => {
   it('UPDATE TM applies suggestedTm and navigates to /today', async () => {
     startSession(BENCH)
     renderWorkout()
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
 
     fireEvent.click(screen.getByText('UPDATE TM'))
@@ -1478,7 +1485,7 @@ describe('Workout screen — TM recommendation modal', () => {
     await db.lifts.add({ name: 'OHP', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     startSession({ ...BENCH, week: 4 })
     renderWorkout()
-    fireEvent.click(await screen.findByText('COMPLETE SESSION'))
+    fireEvent.click(await findFinishButton())
 
     // Week 4 skips TM recommendation check entirely
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))

@@ -693,7 +693,14 @@ export default function Workout() {
   // order it appears on the page. Feeds the session bar: what's logged, what's
   // still owed, and where to scroll to get there. An assistance slot nobody
   // filled reports total 0 — optional, not outstanding.
+  //
+  // allSets() is empty until loadData()'s async chain resolves. Every real
+  // session has warmup+main sets, so an empty allSets() unambiguously means
+  // "not loaded yet" — report no segments rather than let an already-logged
+  // accessory (restored before the own-lift plan arrives) read as the whole
+  // session, which briefly flipped the bar to ALL WORK LOGGED on mount.
   const segments = (): SessionSegment[] => {
+    if (allSets().length === 0) return []
     const out: SessionSegment[] = []
     const linear = (id: string, label: string, count: number, offset: number) => {
       if (count === 0) return
@@ -974,14 +981,6 @@ export default function Workout() {
             textareaClass="w-full bg-surface border border-border text-text font-mono px-3 py-3 text-sm focus:outline-none focus:border-accent resize-none"
           />
         </div>
-
-        <button
-          onClick={() => void handleComplete()}
-          disabled={finishing()}
-          class="w-full border border-accent text-accent py-4 font-mono text-sm tracking-widest disabled:opacity-40"
-        >
-          COMPLETE SESSION
-        </button>
 
         {/* The two ways to end a session without keeping it, one deliberate tap
             back from the one way to keep it. */}
