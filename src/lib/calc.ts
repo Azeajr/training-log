@@ -404,6 +404,10 @@ export const calcAmrapTarget = (
 ): AmrapTarget | null => {
   if (recentPerformances.length === 0) return null
   const est = seedE1Rm(recentPerformances, SEED_WINDOW, discount)
+  // A non-positive seed carries no signal, and targetReps would answer 1 for it
+  // (any weight already clears a 0 e1RM) — a "target 1 @ est. 0" readout. Null
+  // instead, so callers fall back to the TM-implied goal.
+  if (est <= 0) return null
   const reps = targetReps(est, todayAmrapWeight, discount)
   if (reps === null) return null
   return {

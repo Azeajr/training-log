@@ -294,21 +294,32 @@ export async function getRecentWorkingSets(
   ownSets.filter(s => s.type !== 'cross' && isWorkingPerformance(s)).forEach(add)
   crossSets.filter(s => s.type === 'cross' && isWorkingPerformance(s) && sessionById.has(s.sessionId)).forEach(add)
 
-  // At most one performance per (cycle, week) in the window. Sessions are
-  // date-desc, so a newer redo wins when it contains qualifying work; a redo
-  // with no work falls through to the older attempt.
-  const seenWeeks = new Set<string>()
-  const recent: Array<{ weight: number; reps: number }> = []
+  // At most one performance per (cycle, week) in the window. Two things decide
+  // which session in a week supplies it:
+  //
+  //   1. The lift's own session outranks another lift's session that merely
+  //      carries cross work for this lift. Cross blocks are prescribed volume,
+  //      so without this rank a cross-lift day later in the same week would
+  //      claim the week's slot and hide the real top set — seeding the target
+  //      from submaximal work.
+  //   2. Sessions are date-desc, so among equally ranked sessions the newer one
+  //      wins: a redo supersedes the attempt it replaces, and a redo with no
+  //      qualifying work falls through to the older attempt.
+  //
+  // Weeks are ordered by their newest qualifying session, then cut to the
+  // window — an own-session upgrade never moves a week's position.
+  const byWeek = new Map<string, { own: boolean; perf: { weight: number; reps: number } }>()
+  const weekOrder: string[] = []
   for (const session of sessions) {
-    if (recent.length >= window) break
     if (!session.id) continue
-    const key = `${session.cycleId}-${session.week}`
-    if (seenWeeks.has(key)) continue
     const best = bestEstimatedPerformance(setsBySession.get(session.id) ?? [], discount)
-    if (best) {
-      recent.push({ weight: best.weight, reps: best.reps })
-      seenWeeks.add(key)
-    }
+    if (!best) continue
+    const key = `${session.cycleId}-${session.week}`
+    const own = session.liftId === liftId
+    const held = byWeek.get(key)
+    if (!held) weekOrder.push(key)
+    else if (held.own || !own) continue
+    byWeek.set(key, { own, perf: { weight: best.weight, reps: best.reps } })
   }
-  return recent
+  return weekOrder.slice(0, window).map(key => byWeek.get(key)!.perf)
 }

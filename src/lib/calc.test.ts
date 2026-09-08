@@ -405,6 +405,10 @@ describe('calcAmrapTarget', () => {
     expect(target.reps).toBe(targetReps(target.est1RM, 170))
   })
 
+  it('null when the seed e1RM is 0 \u2014 callers fall back to the TM goal instead of \u201Ctarget 1 @ est. 0\u201D', () => {
+    expect(calcAmrapTarget([{ weight: 0, reps: 8 }], 170)).toBeNull()
+  })
+
   it('clamps the rep target to 1 when today weight is above the seed e1RM', () => {
     // 200×5 -> e1RM 233.33; today's AMRAP overridden to 245 -> raw back-calc negative
     const target = calcAmrapTarget([{ weight: 200, reps: 5 }], 245)!
