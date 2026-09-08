@@ -207,7 +207,7 @@ describe('prSessionIds', () => {
     sessionId, liftId, date: new Date(2026, 0, day), weight, reps,
   })
 
-  it('marks a lift first successful AMRAP as the baseline record', () => {
+  it('marks a lift first successful session as the baseline record', () => {
     expect([...prSessionIds([rec(1, 1, 200, 5)])]).toEqual([1])
   })
 
@@ -218,10 +218,31 @@ describe('prSessionIds', () => {
     expect(out.has(3)).toBe(false)
   })
 
-  it('marks a rep record at a weight already worked', () => {
-    // Heavier single first, so the later set cannot win on e1RM alone.
-    const out = prSessionIds([rec(1, 1, 300, 3), rec(2, 8, 200, 5), rec(3, 15, 200, 9)])
-    expect(out.has(3)).toBe(true)
+  it('marks a heaviest-weight record even when the e1RM does not improve', () => {
+    // 200x10 estimates to ~269.5; the later 250x1 estimates to a flat 250
+    // (reps === 1 short-circuits), so it wins on load alone.
+    const out = prSessionIds([rec(1, 1, 200, 10), rec(2, 8, 250, 1)])
+    expect(out.has(2)).toBe(true)
+  })
+
+  it('leaves a session that beats neither record unmarked', () => {
+    // Lighter than session 1 and a lower estimate than session 2.
+    const out = prSessionIds([rec(1, 1, 300, 3), rec(2, 8, 200, 12), rec(3, 15, 200, 5)])
+    expect(out.has(3)).toBe(false)
+  })
+
+  it('folds a session to its best set — a joker carries the whole session', () => {
+    // Session 2's own top set is a regression; the joker logged alongside it is
+    // both a heavier load and a bigger estimate than session 1.
+    const out = prSessionIds([
+      rec(1, 1, 250, 5),
+      rec(2, 8, 200, 3), rec(2, 8, 275, 3),
+    ])
+    expect(out.has(2)).toBe(true)
+  })
+
+  it('ignores 0lb rows the way every other e1RM read does', () => {
+    expect([...prSessionIds([rec(1, 1, 0, 8)])]).toEqual([])
   })
 
   it('does not let a later session retroactively un-PR an earlier one', () => {
@@ -235,7 +256,7 @@ describe('prSessionIds', () => {
     expect(out.has(2)).toBe(true)
   })
 
-  it('ignores failed (0-rep) AMRAPs', () => {
+  it('ignores failed (0-rep) sets', () => {
     expect([...prSessionIds([rec(1, 1, 200, 0)])]).toEqual([])
   })
 

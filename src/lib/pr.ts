@@ -10,7 +10,9 @@ export interface AmrapPrResult {
   prevBestE1Rm?: number
 }
 
-export interface AmrapRecord {
+// One logged working set, already attributed to the lift it trains (a cross
+// block belongs to its movement, not to the session it was logged in).
+export interface PerformanceRecord {
   sessionId: number
   liftId: number
   date: Date
@@ -20,37 +22,51 @@ export interface AmrapRecord {
 
 // Which sessions set a PR *at the time they were logged*. A PR used to exist
 // only as a five-second toast mid-set; History can now badge the session that
-// earned it. Evaluated against prior work only — a bigger AMRAP six weeks later
-// must not retroactively un-PR the one that stood on the day.
+// earned it. Evaluated against prior work only — a bigger session six weeks
+// later must not retroactively un-PR the one that stood on the day.
 //
-// Same two flavours as detectAmrapPRs, and the same baseline rule: a lift's
-// first successful AMRAP is a record. Ties within a single day are resolved by
-// sessionId, so the order is stable rather than dependent on query order.
+// The badge tracks the two records a lifter actually keeps: **best estimated
+// 1RM** and **heaviest weight moved**. Neither is an AMRAP-specific idea, so
+// every working set counts — a joker chained above the top set is exactly the
+// kind of thing that sets both, and judging only the AMRAP missed it. The
+// heaviest-weight flavour replaces the old "more reps at this exact weight"
+// rule, which was only ever a proxy for progress on the AMRAP set.
+//
+// Sets are folded into their session first, so a session is a record if its
+// best set beats every earlier session — within-session logging order never
+// matters. A lift's first session is a record on both counts. Ties within a
+// single day are resolved by sessionId, so the order is stable rather than
+// dependent on query order.
 export function prSessionIds(
-  records: ReadonlyArray<AmrapRecord>,
+  records: ReadonlyArray<PerformanceRecord>,
   discount: HighRepDiscount = 'off',
 ): Set<number> {
-  const out = new Set<number>()
-  const byLift = new Map<number, AmrapRecord[]>()
+  interface SessionBest { date: Date; e1rm: number; weight: number }
+  const byLift = new Map<number, Map<number, SessionBest>>()
   for (const r of records) {
-    if (r.reps < 1) continue
-    const arr = byLift.get(r.liftId) ?? []
-    arr.push(r)
-    byLift.set(r.liftId, arr)
+    if (r.reps < 1 || r.weight <= 0) continue
+    let sessions = byLift.get(r.liftId)
+    if (!sessions) { sessions = new Map(); byLift.set(r.liftId, sessions) }
+    const e1rm = estimated1RM(r.weight, r.reps, discount)
+    const held = sessions.get(r.sessionId)
+    if (!held) sessions.set(r.sessionId, { date: r.date, e1rm, weight: r.weight })
+    else {
+      if (e1rm > held.e1rm) held.e1rm = e1rm
+      if (r.weight > held.weight) held.weight = r.weight
+    }
   }
 
-  for (const arr of byLift.values()) {
-    arr.sort((a, b) => a.date.getTime() - b.date.getTime() || a.sessionId - b.sessionId)
+  const out = new Set<number>()
+  for (const sessions of byLift.values()) {
+    const ordered = [...sessions.entries()].sort(
+      (a, b) => a[1].date.getTime() - b[1].date.getTime() || a[0] - b[0]
+    )
     let bestE1Rm = -Infinity
-    const bestRepsAtWeight = new Map<number, number>()
-    for (const r of arr) {
-      const e1rm = estimated1RM(r.weight, r.reps, discount)
-      const prevReps = bestRepsAtWeight.get(r.weight)
-      const repPr = prevReps != null && r.reps > prevReps
-      const e1RmPr = bestE1Rm === -Infinity || e1rm > bestE1Rm
-      if (repPr || e1RmPr) out.add(r.sessionId)
-      if (e1rm > bestE1Rm) bestE1Rm = e1rm
-      if (prevReps == null || r.reps > prevReps) bestRepsAtWeight.set(r.weight, r.reps)
+    let bestWeight = -Infinity
+    for (const [sessionId, best] of ordered) {
+      if (best.e1rm > bestE1Rm || best.weight > bestWeight) out.add(sessionId)
+      if (best.e1rm > bestE1Rm) bestE1Rm = best.e1rm
+      if (best.weight > bestWeight) bestWeight = best.weight
     }
   }
   return out
