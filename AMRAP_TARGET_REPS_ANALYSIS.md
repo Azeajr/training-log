@@ -84,8 +84,10 @@ whole path is weeks 1-3 only, deload week or not.
   joker *single* does not inflate it: `estimated1RM` short-circuits `reps === 1` to the bare weight,
   which lands below a multi-rep AMRAP at the same load. Cross blocks in the session are attributed to
   the movement they train and never touch this lift's TM.
-- `getCycleDoublingCandidates` is still AMRAP-only, deliberately: the double-increment gate is a
-  bigger lever and is left on the stricter signal.
+- `getCycleDoublingCandidates` reads the same way, via the shared `bestSessionPerformance` helper, so
+  a week carried by a joker counts toward the double-increment gate. The gate itself is unchanged:
+  every working week in the cycle must still clear `CYCLE_DOUBLE_THRESHOLD` against the TM in effect
+  at cycle start, with no mid-cycle bump.
 
 ---
 

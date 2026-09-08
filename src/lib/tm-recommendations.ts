@@ -21,6 +21,28 @@ export interface DoublingCandidate {
   progressionIncrement: number
 }
 
+// A session's best real work, attributed to one lift. Not just its AMRAP:
+// jokers chain *above* the top set, so on a week they're run they're often the
+// truer read on current strength, and judging a week by its best set is already
+// how the AMRAP target seeds itself (see getRecentWorkingSets). This cuts both
+// ways — estimated1RM short-circuits reps === 1 to the bare weight, so a joker
+// single scores below a multi-rep AMRAP at the same load and simply doesn't
+// win. Supplemental work is eligible too but sits far below either threshold at
+// its prescribed percentages. Cross sets belong to the movement they train, so
+// only the ones tagged with this lift count toward this lift's TM.
+async function bestSessionPerformance(
+  db: TrainingDB,
+  sessionId: number,
+  liftId: number,
+  discount: HighRepDiscount,
+) {
+  const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
+  return bestEstimatedPerformance(
+    sets.filter(s => (s.type !== 'cross' || s.liftId === liftId) && isWorkingPerformance(s)),
+    discount,
+  )
+}
+
 export async function getSessionTmRecommendation(
   db: TrainingDB,
   sessionId: number,
@@ -28,18 +50,7 @@ export async function getSessionTmRecommendation(
   liftName: string,
   discount: HighRepDiscount = 'off',
 ): Promise<SessionTmRecommendation | null> {
-  // The session's best real work, not just its AMRAP. Jokers chain *above* the
-  // top set, so on a week they're run they're often the truer read on current
-  // strength — and judging a week by its best set is already how the AMRAP
-  // target seeds itself (see getRecentWorkingSets). This cuts both ways:
-  // estimated1RM short-circuits reps === 1 to the bare weight, so a joker single
-  // scores below a multi-rep AMRAP at the same load and simply doesn't win.
-  // Supplemental work is eligible too but sits far below the threshold at its
-  // prescribed percentages. Cross sets belong to the movement they train, so
-  // only ones tagged with this lift count toward this lift's TM.
-  const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
-  const own = sets.filter(s => (s.type !== 'cross' || s.liftId === liftId) && isWorkingPerformance(s))
-  const best = bestEstimatedPerformance(own, discount)
+  const best = await bestSessionPerformance(db, sessionId, liftId, discount)
   if (!best) return null
 
   const currentTm = await getCurrentTm(db, liftId)
@@ -99,11 +110,12 @@ export async function getCycleDoublingCandidates(
 
     let allOver = true
     for (const session of liftSessions) {
-      const sets = await db.sets.where('sessionId').equals(session.id!).toArray()
-      const amrap = sets.find(s => s.type === 'main' && s.isAmrap)
-      if (!amrap || amrap.reps < 1) { allOver = false; break }
+      // Same best-working-set read as the session prompt — a week carried by a
+      // joker still counts toward the gate, and every week must clear it.
+      const best = await bestSessionPerformance(db, session.id!, liftId, discount)
+      if (!best) { allOver = false; break }
 
-      const e1rm = estimated1RM(amrap.weight, amrap.reps, discount)
+      const e1rm = estimated1RM(best.weight, best.reps, discount)
       const suggestedTm = roundToNearest5(e1rm * TM_PCT_OF_1RM)
       const delta = (suggestedTm - cycleTm.weight) / cycleTm.weight
       if (delta < CYCLE_DOUBLE_THRESHOLD) { allOver = false; break }

@@ -317,6 +317,41 @@ describe('getCycleDoublingCandidates', () => {
     expect(result.map(c => c.liftId)).toEqual([liftId])
   })
 
+  it('a joker carries a week that its AMRAP alone would have failed', async () => {
+    // Week 1 at 170x12 is a 7.5% delta and blocks the whole lift. A joker at
+    // 210x5 on that same day estimates to ~244.8 → suggestedTm 220, delta 10%,
+    // so the week clears on its best set and all three qualify.
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    const cycle = await buildCycle({
+      liftId,
+      weeks: [
+        { week: 1, weight: 170, reps: 12 }, // 7.5% on its own
+        { week: 2, weight: 180, reps: 11 },
+        { week: 3, weight: 190, reps: 9 },
+      ],
+    })
+    const week1 = (await db.sessions.toArray()).find(x => x.week === 1 && x.liftId === liftId)!
+    await db.sets.add({ sessionId: week1.id!, type: 'joker', setNumber: 1, weight: 210, reps: 5, isAmrap: false })
+    expect((await getCycleDoublingCandidates(db, cycle)).map(c => c.liftId)).toEqual([liftId])
+  })
+
+  it('a cross block for another lift cannot carry a week', async () => {
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    const cycle = await buildCycle({
+      liftId,
+      weeks: [
+        { week: 1, weight: 170, reps: 12 }, // 7.5% — still fails
+        { week: 2, weight: 180, reps: 11 },
+        { week: 3, weight: 190, reps: 9 },
+      ],
+    })
+    const week1 = (await db.sessions.toArray()).find(x => x.week === 1 && x.liftId === liftId)!
+    await db.sets.add({ sessionId: week1.id!, type: 'cross', setNumber: 1, weight: 400, reps: 5, isAmrap: false, liftId: lifts[1].id! })
+    expect(await getCycleDoublingCandidates(db, cycle)).toEqual([])
+  })
+
   it('returns [] when a mid-cycle TM bump occurred (>60s after cycle start)', async () => {
     const lifts = await seedLifts()
     const bumpDate = new Date(CYCLE_START.getTime() + 120_000) // 2 min after start
