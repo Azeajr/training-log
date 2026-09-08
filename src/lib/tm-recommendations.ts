@@ -1,4 +1,5 @@
 import { estimated1RM, TM_PCT_OF_1RM, roundToNearest5 } from './calc'
+import { bestEstimatedPerformance, isWorkingPerformance } from './performance'
 import { getCurrentTm } from './training-max'
 import type { TrainingDB } from '../db/index'
 import type { Cycle, HighRepDiscount } from '../types/domain'
@@ -27,14 +28,24 @@ export async function getSessionTmRecommendation(
   liftName: string,
   discount: HighRepDiscount = 'off',
 ): Promise<SessionTmRecommendation | null> {
+  // The session's best real work, not just its AMRAP. Jokers chain *above* the
+  // top set, so on a week they're run they're often the truer read on current
+  // strength — and judging a week by its best set is already how the AMRAP
+  // target seeds itself (see getRecentWorkingSets). This cuts both ways:
+  // estimated1RM short-circuits reps === 1 to the bare weight, so a joker single
+  // scores below a multi-rep AMRAP at the same load and simply doesn't win.
+  // Supplemental work is eligible too but sits far below the threshold at its
+  // prescribed percentages. Cross sets belong to the movement they train, so
+  // only ones tagged with this lift count toward this lift's TM.
   const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
-  const amrap = sets.find(s => s.type === 'main' && s.isAmrap)
-  if (!amrap || amrap.reps < 1) return null
+  const own = sets.filter(s => (s.type !== 'cross' || s.liftId === liftId) && isWorkingPerformance(s))
+  const best = bestEstimatedPerformance(own, discount)
+  if (!best) return null
 
   const currentTm = await getCurrentTm(db, liftId)
   if (!currentTm) return null
 
-  const e1rm = estimated1RM(amrap.weight, amrap.reps, discount)
+  const e1rm = estimated1RM(best.weight, best.reps, discount)
   const suggestedTm = roundToNearest5(e1rm * TM_PCT_OF_1RM)
   const delta = (suggestedTm - currentTm) / currentTm
 

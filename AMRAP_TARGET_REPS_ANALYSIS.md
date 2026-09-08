@@ -79,6 +79,13 @@ whole path is weeks 1-3 only, deload week or not.
   goal. `SetRow` renders `AmrapTargets`, and tapping a target fills the rep field.
 - Hitting the target means the set's e1RM is at least the seed, which is what the TM-increase prompt
   keys off (alongside the current TM).
+- `getSessionTmRecommendation` judges the session by its **best working set**, the same rule the seed
+  uses — so a joker chained above the top set drives the TM prompt when it outscores the AMRAP. A
+  joker *single* does not inflate it: `estimated1RM` short-circuits `reps === 1` to the bare weight,
+  which lands below a multi-rep AMRAP at the same load. Cross blocks in the session are attributed to
+  the movement they train and never touch this lift's TM.
+- `getCycleDoublingCandidates` is still AMRAP-only, deliberately: the double-increment gate is a
+  bigger lever and is left on the stricter signal.
 
 ---
 
