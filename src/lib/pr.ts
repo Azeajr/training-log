@@ -25,35 +25,35 @@ export interface PerformanceRecord {
 // earned it. Evaluated against prior work only — a bigger session six weeks
 // later must not retroactively un-PR the one that stood on the day.
 //
-// The badge tracks the two records a lifter actually keeps: **best estimated
-// 1RM** and **heaviest weight moved**. Neither is an AMRAP-specific idea, so
-// every working set counts — a joker chained above the top set is exactly the
-// kind of thing that sets both, and judging only the AMRAP missed it. The
-// heaviest-weight flavour replaces the old "more reps at this exact weight"
-// rule, which was only ever a proxy for progress on the AMRAP set.
+// The record is estimated 1RM, which is the strength measure. Heaviest weight
+// moved is tracked for the log (see RecordsPanel.maxWeight) but is not a claim
+// about strength — a heavy single at a load that estimates below the standing
+// record does not earn a badge.
+//
+// e1RM is not an AMRAP-specific idea, so every working set counts — a joker
+// chained above the top set is exactly the kind of set that takes the record,
+// and reading only the AMRAP missed it. That also retires the old "more reps at
+// this exact weight" flavour, which was only ever a proxy for progress on the
+// AMRAP set.
 //
 // Sets are folded into their session first, so a session is a record if its
 // best set beats every earlier session — within-session logging order never
-// matters. A lift's first session is a record on both counts. Ties within a
-// single day are resolved by sessionId, so the order is stable rather than
-// dependent on query order.
+// matters. A lift's first session is its baseline record. Ties within a single
+// day are resolved by sessionId, so the order is stable rather than dependent
+// on query order.
 export function prSessionIds(
   records: ReadonlyArray<PerformanceRecord>,
   discount: HighRepDiscount = 'off',
 ): Set<number> {
-  interface SessionBest { date: Date; e1rm: number; weight: number }
-  const byLift = new Map<number, Map<number, SessionBest>>()
+  const byLift = new Map<number, Map<number, { date: Date; e1rm: number }>>()
   for (const r of records) {
     if (r.reps < 1 || r.weight <= 0) continue
     let sessions = byLift.get(r.liftId)
     if (!sessions) { sessions = new Map(); byLift.set(r.liftId, sessions) }
     const e1rm = estimated1RM(r.weight, r.reps, discount)
     const held = sessions.get(r.sessionId)
-    if (!held) sessions.set(r.sessionId, { date: r.date, e1rm, weight: r.weight })
-    else {
-      if (e1rm > held.e1rm) held.e1rm = e1rm
-      if (r.weight > held.weight) held.weight = r.weight
-    }
+    if (!held) sessions.set(r.sessionId, { date: r.date, e1rm })
+    else if (e1rm > held.e1rm) held.e1rm = e1rm
   }
 
   const out = new Set<number>()
@@ -62,11 +62,8 @@ export function prSessionIds(
       (a, b) => a[1].date.getTime() - b[1].date.getTime() || a[0] - b[0]
     )
     let bestE1Rm = -Infinity
-    let bestWeight = -Infinity
     for (const [sessionId, best] of ordered) {
-      if (best.e1rm > bestE1Rm || best.weight > bestWeight) out.add(sessionId)
-      if (best.e1rm > bestE1Rm) bestE1Rm = best.e1rm
-      if (best.weight > bestWeight) bestWeight = best.weight
+      if (best.e1rm > bestE1Rm) { out.add(sessionId); bestE1Rm = best.e1rm }
     }
   }
   return out

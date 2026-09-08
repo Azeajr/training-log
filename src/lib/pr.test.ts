@@ -218,22 +218,23 @@ describe('prSessionIds', () => {
     expect(out.has(3)).toBe(false)
   })
 
-  it('marks a heaviest-weight record even when the e1RM does not improve', () => {
+  it('a heavier load that estimates lower is not a record', () => {
     // 200x10 estimates to ~269.5; the later 250x1 estimates to a flat 250
-    // (reps === 1 short-circuits), so it wins on load alone.
+    // (reps === 1 short-circuits). Heaviest weight moved is a stat the log
+    // keeps, not a claim about strength, so the badge stays off.
     const out = prSessionIds([rec(1, 1, 200, 10), rec(2, 8, 250, 1)])
-    expect(out.has(2)).toBe(true)
+    expect(out.has(2)).toBe(false)
   })
 
-  it('leaves a session that beats neither record unmarked', () => {
-    // Lighter than session 1 and a lower estimate than session 2.
+  it('leaves a session that does not improve the e1RM unmarked', () => {
     const out = prSessionIds([rec(1, 1, 300, 3), rec(2, 8, 200, 12), rec(3, 15, 200, 5)])
+    expect(out.has(2)).toBe(false)
     expect(out.has(3)).toBe(false)
   })
 
   it('folds a session to its best set — a joker carries the whole session', () => {
-    // Session 2's own top set is a regression; the joker logged alongside it is
-    // both a heavier load and a bigger estimate than session 1.
+    // Session 2's own top set is a regression; the joker logged alongside it
+    // estimates above session 1, so the session takes the record.
     const out = prSessionIds([
       rec(1, 1, 250, 5),
       rec(2, 8, 200, 3), rec(2, 8, 275, 3),
