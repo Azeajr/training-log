@@ -1,8 +1,9 @@
 import type { TrainingDB } from '../db/index'
 import type { HighRepDiscount } from '../types/domain'
 import { estimated1RM } from './calc'
+import { isWorkingPerformance } from './performance'
 
-export interface AmrapPrResult {
+export interface PrResult {
   repPr: boolean
   e1RmPr: boolean
   newE1Rm: number
@@ -69,26 +70,36 @@ export function prSessionIds(
   return out
 }
 
-// Detect whether (weight × reps) is a new PR for a given lift, relative to all
-// prior AMRAP sets recorded for that lift. `excludeSetId` skips the just-saved
-// set when the caller has already written it to the DB.
+// Detect whether (weight × reps) is a new PR for a given lift, relative to every
+// working set already recorded for it. `excludeSetId` skips the just-saved set
+// when the caller has already written it to the DB.
+//
+// Not AMRAPs alone. A joker chained above the top set is the likeliest set of the
+// day to take a record, and the History badge already scores it (see
+// prSessionIds) — the toast has to read the same history or the two disagree
+// about the same session. Widening the *trigger* without widening this baseline
+// would be worse than either: a joker scored against AMRAP-only history is
+// measured against a past that excludes every previous joker, so almost any of
+// them would look like a record. Cross blocks belong to the movement they train,
+// so they count toward that lift and never toward the session's own.
 //
 // Two flavors of PR are reported independently:
-//   - repPr: strictly more reps than any prior AMRAP at this exact weight
-//   - e1RmPr: strictly higher Wathan estimated 1RM than any prior AMRAP
+//   - repPr: strictly more reps than any prior working set at this exact weight
+//   - e1RmPr: strictly higher Wathan estimated 1RM than any prior working set
 //
-// First-ever AMRAP for a lift returns e1RmPr=true (sets the baseline record).
-// A 0-rep AMRAP (failed set) is never a PR and never a record: the reps < 1
-// guard below returns early, so a lift that was never completed can't be
-// credited with an e1RM regardless of what the formula returns at reps=0.
-export async function detectAmrapPRs(
+// A lift's first recorded work returns e1RmPr=true (sets the baseline record).
+// A 0-rep set (failed) is never a PR and never a record: the reps < 1 guard
+// below returns early, and isWorkingPerformance keeps prior failures out of the
+// baseline, so a lift that was never completed can't be credited with an e1RM
+// regardless of what the formula returns at reps=0.
+export async function detectPRs(
   db: TrainingDB,
   liftId: number,
   weight: number,
   reps: number,
   excludeSetId?: number,
   discount: HighRepDiscount = 'off',
-): Promise<AmrapPrResult> {
+): Promise<PrResult> {
   const newE1Rm = estimated1RM(weight, reps, discount)
   if (reps < 1) return { repPr: false, e1RmPr: false, newE1Rm }
 
@@ -98,24 +109,29 @@ export async function detectAmrapPRs(
     return { repPr: false, e1RmPr: false, newE1Rm }
   }
 
-  let amrapSets = await db.sets
+  const ownSets = await db.sets
     .where('sessionId').anyOf(sessionIds)
-    .filter(s => s.isAmrap && s.reps >= 1)
+    .filter(s => s.type !== 'cross' && isWorkingPerformance(s))
     .toArray()
+  const crossSets = await db.sets
+    .where('liftId').equals(liftId)
+    .filter(s => s.type === 'cross' && isWorkingPerformance(s))
+    .toArray()
+  let prior = [...ownSets, ...crossSets]
   if (excludeSetId != null) {
-    amrapSets = amrapSets.filter(s => s.id !== excludeSetId)
+    prior = prior.filter(s => s.id !== excludeSetId)
   }
-  if (amrapSets.length === 0) {
+  if (prior.length === 0) {
     return { repPr: false, e1RmPr: true, newE1Rm }
   }
 
-  const sameWeight = amrapSets.filter(s => s.weight === weight)
+  const sameWeight = prior.filter(s => s.weight === weight)
   const prevBestReps = sameWeight.length > 0
     ? Math.max(...sameWeight.map(s => s.reps))
     : undefined
   const repPr = prevBestReps != null && reps > prevBestReps
 
-  const prevBestE1Rm = Math.max(...amrapSets.map(s => estimated1RM(s.weight, s.reps, discount)))
+  const prevBestE1Rm = Math.max(...prior.map(s => estimated1RM(s.weight, s.reps, discount)))
   const e1RmPr = newE1Rm > prevBestE1Rm
 
   return { repPr, e1RmPr, newE1Rm, prevBestReps, prevBestE1Rm }

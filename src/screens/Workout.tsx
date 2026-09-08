@@ -16,7 +16,7 @@ import type { SupplementalTemplate } from '../types/domain'
 import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getRecentWorkingSets, deloadTms, applyCycleDoubling } from '../lib/cycle'
 import { discardPendingSession } from '../lib/session'
-import { detectAmrapPRs } from '../lib/pr'
+import { detectPRs } from '../lib/pr'
 import { getCurrentTm, setTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -309,6 +309,28 @@ export default function Workout() {
     rebuildAllSets()
   }
 
+  const isPrCandidate = (type: string, weight: number, reps: number): boolean =>
+    type !== 'warmup' && reps >= 1 && weight > 0
+
+  // Shared by the linear and cross log paths. A cross set's record belongs to the
+  // movement it trains, so callers pass that lift — naming the session's lift here
+  // would credit the wrong movement.
+  const checkPr = async (
+    liftId: number, liftName: string, weight: number, reps: number, dbId: number,
+  ) => {
+    try {
+      const prs = await detectPRs(db, liftId, weight, reps, dbId, settings.highRepDiscount)
+      if (prs.repPr || prs.e1RmPr) {
+        const msgs: string[] = []
+        if (prs.repPr) msgs.push(`REP PR ${weight}×${reps}`)
+        if (prs.e1RmPr) msgs.push(`e1RM ${Math.round(prs.newE1Rm)}lb`)
+        showToast(`${liftName.toUpperCase()} — ${msgs.join(' · ')}`, 5000)
+      }
+    } catch {
+      // PR detection is best-effort; do not block the workout flow.
+    }
+  }
+
   const handleLog = async (setIndex: number, reps: number, weight: number) => {
     const s = allSets()[setIndex]
     const setData = {
@@ -341,18 +363,12 @@ export default function Workout() {
       return
     }
 
-    if (setData.isAmrap && lift()) {
-      try {
-        const prs = await detectAmrapPRs(db, lift()!.id!, weight, reps, dbId, settings.highRepDiscount)
-        if (prs.repPr || prs.e1RmPr) {
-          const msgs: string[] = []
-          if (prs.repPr) msgs.push(`REP PR ${weight}×${reps}`)
-          if (prs.e1RmPr) msgs.push(`e1RM ${Math.round(prs.newE1Rm)}lb`)
-          showToast(`${lift()!.name.toUpperCase()} — ${msgs.join(' · ')}`, 5000)
-        }
-      } catch {
-        // PR detection is best-effort; do not block the workout flow.
-      }
+    // Every real set is a record candidate, not just the AMRAP: a joker chained
+    // above the top set is the likeliest one of the day to take the e1RM, and
+    // History already badges it (see prSessionIds). detectPRs scores against the
+    // matching widened history, so a joker is measured against prior jokers.
+    if (isPrCandidate(setData.type, weight, reps) && lift()) {
+      await checkPr(lift()!.id!, lift()!.name, weight, reps, dbId)
     }
 
     const nextS = allSets()[setIndex + 1]
@@ -422,8 +438,9 @@ export default function Workout() {
     logCrossSet(setData)
     rebuildAllSets()
     const idx = workout.loggedCrossSets.length - 1
+    let dbId: number
     try {
-      const dbId = await db.sets.add(setData)
+      dbId = await db.sets.add(setData)
       editCrossSet(idx, { id: dbId })
     } catch (err) {
       deleteLastCrossSetFor(section.block.movementLiftId)
@@ -431,6 +448,9 @@ export default function Workout() {
       reportSaveFailure(err, 'set', `${section.block.movementName} set ${s.setNumber} · ${weight}lb × ${reps}`,
         () => handleLogCross(section, localIdx, reps, weight))
       return
+    }
+    if (isPrCandidate(setData.type, weight, reps)) {
+      await checkPr(section.block.movementLiftId, section.block.movementName, weight, reps, dbId)
     }
     const nextS = section.sets[localIdx + 1]
     startRest(reps < s.reps ? 'fail' : !nextS ? 'transition' : 'normal')
