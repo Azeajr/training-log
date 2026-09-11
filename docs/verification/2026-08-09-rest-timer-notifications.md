@@ -1,5 +1,8 @@
 # Verification — Rest-timer system notifications
 
+> Historical verification for the pre-checkpoint timer behavior. Since
+> 2026-09-11, completed sets schedule two bells and failed sets schedule one.
+
 **Date:** 2026-08-09
 **Commit:** `a0fc86c` (feature) — written against working tree at `25524bd`
 **Verdict:** PASS — automated tests + Chrome desktop runtime pass. Scope: chime

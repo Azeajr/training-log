@@ -1,8 +1,8 @@
 // Tag-keyed one-shot timer registry shared by the page scheduler
 // (src/lib/notifications.ts) and the service worker (src/service-worker.ts).
 //
-// A rest phase can carry several notifications that share a tag (nudge /
-// warning / critical), so timers are keyed per-handle with tag grouping:
+// A completed-set rest carries two notifications that share a tag, so timers
+// are keyed per-handle with tag grouping:
 // `cancelTag` drops every pending timer for a tag, `arm` never evicts
 // same-tag timers. `tag` is also the notification coalescing key, so a fired
 // notification replaces an earlier same-tag one instead of stacking.

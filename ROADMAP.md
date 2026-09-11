@@ -2,6 +2,13 @@
 
 ## Done
 
+### Rest-timer recovery checkpoints (2026-09-11)
+
+- A completed set now rings at both configured checkpoints (90 s and 180 s by default), leaving
+  easy-versus-hard recovery to the lifter instead of guessing from the next exercise.
+- A missed set skips those checkpoints and rings once at its configured recovery time (5 min by
+  default). Exercise boundaries no longer change the timer schedule.
+
 ### UX Audit Pass — Interaction, Navigation, IA (2026-09-05)
 
 Seventeen findings from a workflow audit, addressed in one pass. The terminal/logbook aesthetic is
@@ -523,7 +530,7 @@ Stored in `settings.supplementalTemplate`; migrated from per-lift column on firs
 
 ### Rest-Timer Notifications (Service Worker)
 
-First half of the old "Push Notifications" plan, shipped 2026-08-09 (`a0fc86c`). A custom injectManifest service worker (`src/service-worker.ts`) arms one-shot timers at the rest-phase thresholds (nudge / warning / critical) and the 2 h stalled-session mark, coalesced by `tag` and cancelled on rest stop/skip, session clear, or unmount. Permission is requested from the Settings toggle gesture, not on first load; with no SW controlling the page the same targets fall back to in-page `setTimeout`s. Notification bodies per the original plan table; fail-rest critical ("Rest up — take your time") differs from nudge/warning.
+First half of the old "Push Notifications" plan, shipped 2026-08-09 (`a0fc86c`). A custom injectManifest service worker (`src/service-worker.ts`) arms one-shot timers for both completed-set bells, the single failed-set bell, and the 2 h stalled-session mark, coalesced by `tag` and cancelled on rest stop/skip, session clear, or unmount. Permission is requested from the Settings toggle gesture, not on first load; with no SW controlling the page the same targets fall back to in-page `setTimeout`s.
 
 Runtime-verified 2026-08-09 (Chrome desktop, production preview): the nudge fires with the tab backgrounded. The chime follows OS notification-sound policy — the Notification API exposes no sound control on desktop Chrome. Details: `docs/verification/2026-08-09-rest-timer-notifications.md`. The Web Push backend step is deliberately deferred — see Planned. iOS: installed PWA only, prefers Web Push; not installed = no notifications.
 
@@ -806,4 +813,3 @@ Four inert-but-misleading leftovers, found while reconciling the docs against th
   side-effect at component construction time.
 
 ---
-

@@ -7,13 +7,12 @@ import {
   getSupplementalLabel, calcJokerSet, calcJokerIncrement, calcNextJokerWeight,
   shouldShowJokerButton, JOKER_MIN_REPS, isSupplementalType, jokerChainBaseWeight,
   applyMainCascadeToSupplemental, supplementalSourceSetNumber,
-  calcCrossSets, getCrossLabel, effectiveSupplementalWeek,
+  calcCrossSets, getCrossLabel, effectiveSupplementalWeek, restTypeAfterSet,
 } from '../lib/calc'
 import { ACCESSORY_SETS } from '../lib/calc'
 import { composeAllSets, amrapTargetsFor } from '../lib/workout-compose'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
-import type { RestType } from '../store/workout-store'
 import { advanceCycleIfComplete, getRecentWorkingSets, deloadTms, applyCycleDoubling } from '../lib/cycle'
 import { discardPendingSession } from '../lib/session'
 import { detectPRs } from '../lib/pr'
@@ -371,16 +370,7 @@ export default function Workout() {
       await checkPr(lift()!.id!, lift()!.name, weight, reps, dbId)
     }
 
-    const nextS = allSets()[setIndex + 1]
-    let restType: RestType
-    if (reps < s.reps) {
-      restType = 'fail'
-    } else if (!nextS || nextS.type !== s.type) {
-      restType = 'transition'
-    } else {
-      restType = 'normal'
-    }
-    startRest(restType)
+    startRest(restTypeAfterSet(reps, s.reps))
   }
 
   const handleEdit = async (setIndex: number, reps: number, weight: number) => {
@@ -452,8 +442,7 @@ export default function Workout() {
     if (isPrCandidate(setData.type, weight, reps)) {
       await checkPr(section.block.movementLiftId, section.block.movementName, weight, reps, dbId)
     }
-    const nextS = section.sets[localIdx + 1]
-    startRest(reps < s.reps ? 'fail' : !nextS ? 'transition' : 'normal')
+    startRest(restTypeAfterSet(reps, s.reps))
   }
 
   const handleEditCross = async (

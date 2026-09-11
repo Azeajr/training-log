@@ -53,7 +53,7 @@ describe('arm / fire', () => {
     expect(fires).toHaveLength(0)
   })
 
-  it('two same-tag targets both fire (multi-cue rest)', () => {
+  it('two same-tag targets both fire (completed-set checkpoints)', () => {
     timers.arm(target({ fireAt: NOW + 180_000 }))
     timers.arm(target({ fireAt: NOW + 300_000 }))
     vi.advanceTimersByTime(180_000)

@@ -58,10 +58,9 @@ export default function RestTimer() {
     const b = bonus()
     if (b === 0) return base
     return {
-      normal: base.normal + b,
-      transition: base.transition + b,
-      failNudge: base.failNudge + b,
-      failMax: base.failMax + b,
+      firstBell: base.firstBell + b,
+      secondBell: base.secondBell + b,
+      failedBell: base.failedBell + b,
     }
   }
 
@@ -116,8 +115,10 @@ export default function RestTimer() {
 
   onCleanup(() => cancelAll())
 
-  const phaseToCue: Record<RestPhase, 'nudge' | 'warning' | 'critical' | null> = {
-    idle: null, nudge: 'nudge', warning: 'warning', critical: 'critical',
+  // Each checkpoint is one equal bell. The phase still drives the distinct
+  // on-screen copy, but it no longer implies escalating multi-pulse alarms.
+  const phaseToCue: Record<RestPhase, 'nudge' | null> = {
+    idle: null, nudge: 'nudge', warning: 'nudge', critical: 'nudge',
   }
 
   createEffect(() => {
@@ -145,8 +146,8 @@ export default function RestTimer() {
         <div class="max-w-3xl mx-auto">
           <div class="flex items-end justify-between gap-4">
             <div class="min-w-0">
-              {/* The three rest lengths differ by set context, and the context
-                  was never named — which made them read as arbitrary. */}
+              {/* The countdown targets the first completed-set bell or the
+                  single failed-set bell; the label makes that distinction. */}
               <div class="text-muted text-xs uppercase tracking-widest mb-1">
                 {REST_TYPE_LABEL[workout.restType]}
               </div>
@@ -172,6 +173,7 @@ export default function RestTimer() {
               </button>
               <button
                 onClick={stopRest}
+                aria-label="SKIP REST"
                 class="border border-border px-5 py-3 font-mono text-text-dim text-xs tracking-widest hover:border-accent hover:text-accent"
               >
                 SKIP
