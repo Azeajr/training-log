@@ -50,6 +50,8 @@ pnpm test             # unit + component integration (Vitest)
 pnpm test:e2e         # end-to-end (Playwright)
 pnpm test:coverage    # coverage report (v8)
 pnpm test:mutation    # mutation score (Stryker)
+pnpm check:local      # fast cached lint + typecheck
+pnpm check:ci         # lint + coverage + production build
 ```
 
 **Arch Linux**: Playwright's bundled Chromium requires system libs not installed by default:
@@ -100,4 +102,4 @@ TM progression at the end of each cycle is per-lift (`progressionIncrement`, see
 
 ## Deployment
 
-Pushes to `main` deploy automatically to Cloudflare Pages via `.github/workflows/deploy.yml`. The workflow is path-filtered to source and config changes, and does not run the test suite — tests are a local gate.
+Pull requests run lint, coverage, and a production build via `.github/workflows/ci.yml`. Pushes to `main` deploy automatically to Cloudflare Pages via `.github/workflows/deploy.yml`; the deployment is path-filtered to source and config changes and runs the same checks before publishing.
