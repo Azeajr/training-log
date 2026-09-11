@@ -29,13 +29,12 @@ import {
   supplementalSourceSetNumber,
   applySupplementalOverride,
   restStatus,
-  REST_NORMAL_THRESHOLD,
-  REST_TRANSITION_THRESHOLD,
-  REST_FAIL_NUDGE,
-  REST_FAIL_MAX,
-  FAIL_NUDGE_RATIO,
+  REST_FIRST_BELL,
+  REST_SECOND_BELL,
+  REST_FAILED_BELL,
   restThresholds,
   restTarget,
+  restTypeAfterSet,
   calcSupplementalSets,
   getSupplementalLabel,
   isSupplementalType,
@@ -768,44 +767,29 @@ describe('applySupplementalOverride', () => {
 })
 
 describe('restStatus', () => {
-  describe('normal rest', () => {
-    it('idle before threshold', () => {
-      expect(restStatus(0,                            'normal')).toEqual({ phase: 'idle',  message: '' })
-      expect(restStatus(REST_NORMAL_THRESHOLD - 1,    'normal')).toEqual({ phase: 'idle',  message: '' })
+  describe('completed-set rest', () => {
+    it('is idle before the first bell', () => {
+      expect(restStatus(0,                       'normal')).toEqual({ phase: 'idle', message: '' })
+      expect(restStatus(REST_FIRST_BELL - 1,      'normal')).toEqual({ phase: 'idle', message: '' })
     })
-    it('nudge at and after threshold', () => {
-      expect(restStatus(REST_NORMAL_THRESHOLD,        'normal')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
-      expect(restStatus(REST_NORMAL_THRESHOLD + 30,   'normal')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
+    it('rings the first bell at its configured threshold', () => {
+      expect(restStatus(REST_FIRST_BELL,          'normal')).toEqual({ phase: 'nudge', message: 'FIRST BELL — GO IF READY' })
+      expect(restStatus(REST_SECOND_BELL - 1,     'normal')).toEqual({ phase: 'nudge', message: 'FIRST BELL — GO IF READY' })
     })
-  })
-
-  describe('transition rest', () => {
-    it('idle before threshold', () => {
-      expect(restStatus(0,                              'transition')).toEqual({ phase: 'idle',  message: '' })
-      expect(restStatus(REST_TRANSITION_THRESHOLD - 1,  'transition')).toEqual({ phase: 'idle',  message: '' })
-    })
-    it('nudge at and after threshold', () => {
-      expect(restStatus(REST_TRANSITION_THRESHOLD,      'transition')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
-      expect(restStatus(REST_TRANSITION_THRESHOLD + 30, 'transition')).toEqual({ phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' })
-    })
-    it('rests longer than a between-sets rest — a section change earns more', () => {
-      expect(REST_TRANSITION_THRESHOLD).toBeGreaterThan(REST_NORMAL_THRESHOLD)
-      expect(restStatus(REST_NORMAL_THRESHOLD, 'transition')).toEqual({ phase: 'idle', message: '' })
+    it('rings the second bell at its configured threshold', () => {
+      expect(restStatus(REST_SECOND_BELL,         'normal')).toEqual({ phase: 'warning', message: 'SECOND BELL — GO IF READY' })
+      expect(restStatus(REST_SECOND_BELL + 30,    'normal')).toEqual({ phase: 'warning', message: 'SECOND BELL — GO IF READY' })
     })
   })
 
-  describe('fail rest', () => {
-    it('idle before nudge threshold', () => {
-      expect(restStatus(0,                  'fail')).toEqual({ phase: 'idle',     message: '' })
-      expect(restStatus(REST_FAIL_NUDGE - 1, 'fail')).toEqual({ phase: 'idle',    message: '' })
+  describe('failed-set rest', () => {
+    it('stays idle until the failed-set bell', () => {
+      expect(restStatus(0,                      'fail')).toEqual({ phase: 'idle', message: '' })
+      expect(restStatus(REST_FAILED_BELL - 1,   'fail')).toEqual({ phase: 'idle', message: '' })
     })
-    it('warning between nudge and max thresholds', () => {
-      expect(restStatus(REST_FAIL_NUDGE,    'fail')).toEqual({ phase: 'warning', message: 'TIME FOR YOUR NEXT SET' })
-      expect(restStatus(REST_FAIL_MAX - 1,  'fail')).toEqual({ phase: 'warning', message: 'TIME FOR YOUR NEXT SET' })
-    })
-    it('critical at and after max threshold', () => {
-      expect(restStatus(REST_FAIL_MAX,       'fail')).toEqual({ phase: 'critical', message: 'REST UP — SET FAILED' })
-      expect(restStatus(REST_FAIL_MAX + 60,   'fail')).toEqual({ phase: 'critical', message: 'REST UP — SET FAILED' })
+    it('rings once at and after the failed-set threshold', () => {
+      expect(restStatus(REST_FAILED_BELL,       'fail')).toEqual({ phase: 'critical', message: 'FAILED-SET REST COMPLETE' })
+      expect(restStatus(REST_FAILED_BELL + 60,  'fail')).toEqual({ phase: 'critical', message: 'FAILED-SET REST COMPLETE' })
     })
   })
 
@@ -814,34 +798,42 @@ describe('restStatus', () => {
   describe('user-configured thresholds', () => {
     const settings = { restTimer1: 60, restTimer2: 240, restTimerFail: 400 }
 
-    it('maps the three stored settings onto the four thresholds', () => {
+    it('maps the three stored settings onto the three bell thresholds', () => {
       expect(restThresholds(settings)).toEqual({
-        normal: 60,
-        transition: 240,
-        failNudge: Math.round(400 * FAIL_NUDGE_RATIO),
-        failMax: 400,
+        firstBell: 60,
+        secondBell: 240,
+        failedBell: 400,
       })
     })
 
     it('drives restStatus off the configured values, not the constants', () => {
       const t = restThresholds(settings)
       expect(restStatus(60, 'normal', t).phase).toBe('nudge')
-      expect(restStatus(REST_NORMAL_THRESHOLD, 'transition', t).phase).toBe('idle')
-      expect(restStatus(240, 'transition', t).phase).toBe('nudge')
+      expect(restStatus(239, 'normal', t).phase).toBe('nudge')
+      expect(restStatus(240, 'normal', t).phase).toBe('warning')
       expect(restStatus(400, 'fail', t).phase).toBe('critical')
     })
 
-    it('reports the countdown target for each rest context', () => {
+    it('counts down to the first bell after success and the only bell after failure', () => {
       const t = restThresholds(settings)
       expect(restTarget('normal', t)).toBe(60)
-      expect(restTarget('transition', t)).toBe(240)
       expect(restTarget('fail', t)).toBe(400)
     })
 
     it('falls back to the built-in lengths when no settings are passed', () => {
-      expect(restTarget('normal')).toBe(REST_NORMAL_THRESHOLD)
-      expect(restTarget('transition')).toBe(REST_TRANSITION_THRESHOLD)
-      expect(restTarget('fail')).toBe(REST_FAIL_MAX)
+      expect(restTarget('normal')).toBe(REST_FIRST_BELL)
+      expect(restTarget('fail')).toBe(REST_FAILED_BELL)
+    })
+  })
+
+  describe('restTypeAfterSet', () => {
+    it('uses the two-bell completed-set rest when the target is met or exceeded', () => {
+      expect(restTypeAfterSet(5, 5)).toBe('normal')
+      expect(restTypeAfterSet(8, 5)).toBe('normal')
+    })
+
+    it('uses the single failed-set bell when actual reps miss the target', () => {
+      expect(restTypeAfterSet(4, 5)).toBe('fail')
     })
   })
 })

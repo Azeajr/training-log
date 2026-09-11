@@ -88,8 +88,8 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
 // Mirrors the page scheduler (src/lib/notify-timers.ts): timers keyed per
 // handle, tag-scoped cancel. Best-effort by design — the page owns the
 // reliable path. `cancel(tag)` drops every pending timer for that tag; a new
-// `schedule` does not evict same-tag timers (a rest phase can carry several
-// notifications that share a tag — nudge / warning / critical).
+// `schedule` does not evict same-tag timers (a completed-set rest carries both
+// the first and second bell under the same tag).
 
 const notifyTimers = createNotifyTimers({
   fire: (target) => {

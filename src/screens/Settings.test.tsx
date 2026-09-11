@@ -650,13 +650,22 @@ describe('Settings — rest timers', () => {
 
   afterEach(drain)
 
+  it('describes two completed-set bells and one failed-set bell', async () => {
+    renderSettings()
+
+    expect(await screen.findByText(/^first bell$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^second bell$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^failed-set bell$/i)).toBeInTheDocument()
+    expect(screen.queryByText(/^between exercises$/i)).not.toBeInTheDocument()
+  })
+
   it('timer + button increases restTimer1 by 30 s', async () => {
     renderSettings()
 
     // Wait for timer display "1:30" (90 s)
     await screen.findByText('1:30')
 
-    // Find the + button in the First timer row
+    // Find the + button in the first-bell row
     const timeEl = screen.getByText('1:30')
     const row = timeEl.closest('div')!
     const buttons = Array.from(row.querySelectorAll('button'))

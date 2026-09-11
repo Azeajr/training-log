@@ -171,7 +171,7 @@ describe('startRest', () => {
 
   it('supports all rest types', () => {
     startSession(SESSION)
-    for (const t of ['normal', 'transition', 'fail'] as const) {
+    for (const t of ['normal', 'fail'] as const) {
       startRest(t)
       expect(workout.restType).toBe(t)
     }
@@ -398,7 +398,7 @@ describe('loadFromStorage', () => {
         currentSetIndex: 'three',   // string where number expected
         isResting: 'yes',           // string where boolean expected
         restStartedAt: {},          // object where number|null expected
-        restType: 'bogus',          // not one of normal|transition|fail
+        restType: 'bogus',          // not one of normal|fail
         activeSession: [1, 2],      // array where object|null expected
         notes: 'kept',              // valid — must survive alongside the dropped keys
       },
@@ -412,6 +412,17 @@ describe('loadFromStorage', () => {
     expect(w.restType).toBe('normal')
     expect(w.activeSession).toBeNull()
     expect(w.notes).toBe('kept')
+  })
+
+  it('resumes a legacy transition rest on the completed-set schedule', async () => {
+    localStorage.setItem('workout-store', JSON.stringify({
+      v: 1,
+      state: { isResting: true, restStartedAt: 1234, restType: 'transition' },
+    }))
+    const { workout: w } = await import('./workout-store')
+    expect(w.isResting).toBe(true)
+    expect(w.restStartedAt).toBe(1234)
+    expect(w.restType).toBe('normal')
   })
 
   it('rejects a negative currentSetIndex', async () => {

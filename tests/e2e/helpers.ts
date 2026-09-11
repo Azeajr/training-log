@@ -32,17 +32,14 @@ export async function completeSetupWizard(page: Page, tms = [95, 95, 135, 135]) 
   for (let i = 0; i < tms.length; i++) {
     await fillStepper(page.getByTestId(`stepper-tm-${TM_LIFT_NAMES[i]}`), tms[i] ?? 100)
   }
-  await page.getByRole('button', { name: 'NEXT' }).click()
-
-  // Step 3: confirm
-  await expect(page.getByRole('heading', { name: /STEP 3/ })).toBeVisible()
+  // Step 2 is also the review; onboarding no longer has a read-only step 3.
   await page.getByRole('button', { name: 'START TRAINING' }).click()
   await expect(page.getByText('WEEK 1')).toBeVisible()
 }
 
 export async function startWorkout(page: Page) {
   await page.getByRole('button', { name: 'START WORKOUT' }).click()
-  await expect(page.getByRole('button', { name: 'COMPLETE SESSION' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^(FINISH|COMPLETE SESSION)$/ })).toBeVisible()
 }
 
 export async function logSet(page: Page, reps: number) {

@@ -74,85 +74,73 @@ export function applySupplementalOverride<T extends { type: string; weight: numb
 export type RestPhase = 'idle' | 'nudge' | 'warning' | 'critical'
 export interface RestStatus { phase: RestPhase; message: string }
 
-// Fallback lengths, used only where no settings are in hand (pure tests, a
-// call site that predates the wiring). The live thresholds come from the
-// user's settings via restThresholds() — see below.
-export const REST_NORMAL_THRESHOLD = 90
-export const REST_TRANSITION_THRESHOLD = 180
-export const REST_FAIL_NUDGE = 180
-export const REST_FAIL_MAX = 300
+// Fallback bell times, used only where no settings are in hand. Completed sets
+// get both checkpoints so the lifter decides whether the set was easy enough
+// for the first bell or hard enough to need the second. A missed set gets only
+// the longer recovery bell.
+export const REST_FIRST_BELL = 90
+export const REST_SECOND_BELL = 180
+export const REST_FAILED_BELL = 300
 
 export interface RestThresholds {
-  /** Same section, next set. */
-  normal: number
-  /** Section change — warmup → main, main → supplemental. */
-  transition: number
-  /** First cue after a missed set. */
-  failNudge: number
-  /** Hard stop after a missed set; also the countdown target. */
-  failMax: number
+  /** First checkpoint after a completed set. */
+  firstBell: number
+  /** Second checkpoint after the same completed set. */
+  secondBell: number
+  /** The only checkpoint after a missed set. */
+  failedBell: number
 }
 
 export const DEFAULT_REST_THRESHOLDS: RestThresholds = {
-  normal: REST_NORMAL_THRESHOLD,
-  transition: REST_TRANSITION_THRESHOLD,
-  failNudge: REST_FAIL_NUDGE,
-  failMax: REST_FAIL_MAX,
+  firstBell: REST_FIRST_BELL,
+  secondBell: REST_SECOND_BELL,
+  failedBell: REST_FAILED_BELL,
 }
 
-// A missed set earns two cues: a nudge partway in, then the hard stop at the
-// configured length. One stored number drives both, so the settings screen
-// keeps three rows rather than four (and no schema change).
-export const FAIL_NUDGE_RATIO = 0.6
-
-// The user's three settings, in the shape the timer actually needs. This is the
-// join that was missing: restTimer1/2/Fail were stored, exported and editable,
-// while restStatus ran off constants and ignored them entirely.
+// The stored column names predate the checkpoint behavior. Keep the schema
+// stable and translate them once at the edge of the timer domain.
 export function restThresholds(s: {
   restTimer1: number
   restTimer2: number
   restTimerFail: number
 }): RestThresholds {
   return {
-    normal: s.restTimer1,
-    transition: s.restTimer2,
-    failNudge: Math.round(s.restTimerFail * FAIL_NUDGE_RATIO),
-    failMax: s.restTimerFail,
+    firstBell: s.restTimer1,
+    secondBell: s.restTimer2,
+    failedBell: s.restTimerFail,
   }
 }
 
-// What this rest is aiming at — the number the timer counts down to.
+// The countdown leads to the first actionable bell. After a completed set it
+// then counts over until the second bell; a missed-set rest has only one bell.
 export function restTarget(
-  type: 'normal' | 'transition' | 'fail',
+  type: 'normal' | 'fail',
   t: RestThresholds = DEFAULT_REST_THRESHOLDS,
 ): number {
-  return type === 'fail' ? t.failMax : type === 'transition' ? t.transition : t.normal
+  return type === 'fail' ? t.failedBell : t.firstBell
 }
 
-// Names the user can act on. The three rest lengths differ by a rule the screen
-// never used to state, which made them look arbitrary.
-export const REST_TYPE_LABEL: Record<'normal' | 'transition' | 'fail', string> = {
-  normal: 'BETWEEN SETS',
-  transition: 'BETWEEN EXERCISES',
+export const REST_TYPE_LABEL: Record<'normal' | 'fail', string> = {
+  normal: 'AFTER A COMPLETED SET',
   fail: 'AFTER A MISSED SET',
 }
 
 export function restStatus(
   elapsed: number,
-  type: 'normal' | 'transition' | 'fail',
+  type: 'normal' | 'fail',
   t: RestThresholds = DEFAULT_REST_THRESHOLDS,
 ): RestStatus {
   if (type === 'fail') {
-    if (elapsed >= t.failMax) return { phase: 'critical', message: 'REST UP — SET FAILED' }
-    if (elapsed >= t.failNudge) return { phase: 'warning', message: 'TIME FOR YOUR NEXT SET' }
+    if (elapsed >= t.failedBell) return { phase: 'critical', message: 'FAILED-SET REST COMPLETE' }
     return { phase: 'idle', message: '' }
   }
-  if (type === 'transition') {
-    if (elapsed >= t.transition) return { phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' }
-    return { phase: 'idle', message: '' }
-  }
-  if (elapsed >= t.normal) return { phase: 'nudge', message: 'TIME FOR YOUR NEXT SET' }
+  if (elapsed >= t.secondBell) return { phase: 'warning', message: 'SECOND BELL — GO IF READY' }
+  if (elapsed >= t.firstBell) return { phase: 'nudge', message: 'FIRST BELL — GO IF READY' }
   return { phase: 'idle', message: '' }
+}
+
+export function restTypeAfterSet(actualReps: number, targetReps: number): 'normal' | 'fail' {
+  return actualReps < targetReps ? 'fail' : 'normal'
 }
 
 export const roundToNearest5 = (weight: number): number =>

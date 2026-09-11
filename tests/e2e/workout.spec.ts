@@ -237,16 +237,16 @@ test.describe('rest type wiring on log', () => {
   const pollRestType = (page: Parameters<typeof logSet>[0]) =>
     expect.poll(async () => (await getWorkoutState(page))?.restType)
 
-  test('last warmup→main sets restType to transition', async ({ page }) => {
+  test('last warmup→main keeps the completed-set rest schedule', async ({ page }) => {
     await startWorkout(page)
     await logSet(page, 5)
     await page.getByRole('button', { name: 'SKIP REST' }).click()
     await logSet(page, 5)
     await page.getByRole('button', { name: 'SKIP REST' }).click()
-    await logSet(page, 3) // last warmup → next is main = transition
+    await logSet(page, 3) // exercise boundary does not change the bell schedule
 
     await expect.poll(async () => (await getWorkoutState(page))?.isResting).toBe(true)
-    await pollRestType(page).toBe('transition')
+    await pollRestType(page).toBe('normal')
   })
 
   test('main→main set sets restType to normal', async ({ page }) => {
@@ -257,12 +257,12 @@ test.describe('rest type wiring on log', () => {
     await pollRestType(page).toBe('normal')
   })
 
-  test('AMRAP at or above program minimum sets restType to transition (to FSL)', async ({ page }) => {
+  test('successful AMRAP keeps the completed-set rest schedule before FSL', async ({ page }) => {
     await startWorkout(page)
     await advanceToAmrap(page)
-    await logSet(page, 6) // 6 >= 5 minimum; next set is FSL → transition
+    await logSet(page, 6) // 6 >= 5 minimum; next section does not change the schedule
 
-    await pollRestType(page).toBe('transition')
+    await pollRestType(page).toBe('normal')
   })
 
   test('AMRAP below program minimum sets restType to fail', async ({ page }) => {
