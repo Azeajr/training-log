@@ -8,20 +8,17 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B05b — finish the session/resume and Workout slice in one pass.** Review
-`src/lib/session.ts`, `src/lib/session.test.ts`, `src/screens/Workout.tsx`, and
-`src/screens/Workout.test.tsx`, concentrating on the stale completed-session → SKIP
-path already reproduced below, completion/skip/exit ordering, save-failure retries,
-and session reconciliation. Do not broaden into other screens or libraries until
-these four files are closed. B04b and B05a are complete; use their evidence instead
-of rereading unchanged settings/store files. This is deliberately the next batch so
-the unfinished work is completed together rather than split again.
+**Next batch: B06a — Today screen and its tests.** Review `src/screens/Today.tsx`
+and `src/screens/Today.test.tsx`, starting with resume/start/abandon ordering and
+session selection. Use completed B05 evidence rather than reopening unchanged
+Workout/store files. Do not begin B06a in the B05b continuation session.
 
-Latest run: **two sequential batches completed; 4 additional files marked deep**
-(2 implementation files, 2 test files). **21 files deep in total.** 74 focused
-tests passed in this continuation before B05b was interrupted, plus 5 isolated
-checks. F01/F03 reconfirmed; new findings F07–F12 and the stale-session lead is now
-F13. No application changes or sub-agents.
+Latest run: **B05b complete; 4 additional files marked deep** (2 implementation
+files, 2 test files). **25 files deep in total.** All 101 existing session/Workout
+tests passed; 8 disposable checks passed (7 assert faulty behavior, 1 tests helper
+protection/rollback). F13 now covers COMPLETE as well as SKIP. New confirmed
+findings F14/F15 cover overlapping set mutations and stale retries; new lead L05
+tracks post-completion modal concurrency. No application changes or sub-agents.
 
 ## Previous session summary — 2026-09-11
 
@@ -60,8 +57,9 @@ summary; inaccessible report contents have not been reconstructed by guesswork.
 
 ## Findings carried forward
 
-F01–F10 have evidence recorded in the completed batches below. L01 is resolved
-into F07; L02–L04 still retain the previous session's leads. See each batch for
+F01–F15 have evidence recorded in the completed batches below. L01 is resolved
+into F07 and L03 into F13; L02 is partly substantiated by F14/F15, while L04/L05
+remain leads. See each batch for
 verification limits and historical versus fresh evidence. Review completion and bug resolution are separate states; no fix is
 claimed here.
 
@@ -79,11 +77,14 @@ claimed here.
 | F10 | Medium; B03a component regression | `src/screens/HistoryEdit.tsx:328–333`; `src/lib/calc.ts:35` | Stored `cross` sets are loaded but never rendered because the edit type list excludes them. Users cannot correct cross-lift weight/reps in history. | Render cross-lift sets with movement labels and editable controls; test persistence of cross-set edits. |
 | F11 | Medium; B04b isolated restore check | `src/store/settings-store.ts:286–301`; import callers | Importing a backup with no settings row leaves the previous in-memory settings active until a reload, even though the database is empty. A restored theme is similarly stored in memory without immediate CSS application. | Reset settings state to defaults when no row exists and apply the resolved theme after import/restore. |
 | F12 | Medium; B05a isolated persistence check | `src/store/workout-store.ts:116–132` | A localStorage quota/write failure escapes the reactive persistence effect. The render path has no catch or user-visible persistence status, so active-workout recovery can silently stop. | Catch persistence failures, surface degraded recovery state, and define retry/cleanup behavior. |
-| F13 | High; B05b isolated Workout probe | `src/screens/Workout.tsx:620–626`; `src/lib/session.ts:11–20` | A stale in-memory pending session can point to a completed DB row; the Workout SKIP handler updates it to `skipped` without reconciling status. This can rewrite a completed workout after reload/resume. | Call `reconcileActiveSession` before SKIP/COMPLETE/EXIT, or make status transitions conditional in one transaction; add a reload/resume regression test. |
+| F13 | High; B05b isolated Workout/SQLite probes | `src/screens/Workout.tsx:189–207`, `574–597`, `620–626` | A stale pending store resumes a completed DB row. SKIP changes it to skipped; COMPLETE appends duplicate accessory sets and overwrites saved date/notes. EXIT already protects completed data. | Reconcile on route entry; perform status-conditional, idempotent completion/skip in a serialized transaction. Preserve a separate resumable post-commit phase instead of replaying the save. |
+| F14 | High; B05b delayed-write component probes | `src/screens/Workout.tsx:302–308`, `333–362`, `413–440`, `470–477` | Set mutations overlap without operation identity: a failed earlier LOG pops a later successful set (linear and same-movement cross paths); undo before add settles leaves a DB row with no valid logged store entry. | Serialize dependent mutations or reconcile each result/rollback by stable operation ID; gate undo/edit/finalization on pending saves and bind completions to the originating session. |
+| F15 | High; B05b retry component probes | `src/screens/Workout.tsx:333–361`, `376–389`, `413–439`; `src/components/workout/SaveFailureBanner.tsx:25–36` | RETRY replays a positional handler against live workout state. After manual LOG it duplicates the old slot, advances the cursor incorrectly and misassigns its DB ID; after EXIT/start it writes the old set into the new session. | Bind immutable session/set identity to retry; verify applicability and make retries idempotent. Scope banners to their originating session and retire superseded callbacks, retaining unresolved gap records as appropriate. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
-| L02 | Lead; progress message only | Stores and save callers; exact location pending | Overlapping saves and accessory editing risks mentioned. | Trace write ordering, stale state, and failure recovery; do not report as confirmed yet. |
+| L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
 | L04 | Lead with prior isolated probe | `src/service-worker.ts`; exact line pending | HTTP 503 navigation response appears to replace a good cached shell; later offline navigation returns the cached error. | Check response validation and cache writes; reproduce in browser where practical before final severity. |
+| L05 | Lead; B05b caller inspection only | `src/screens/Workout.tsx:523–551`; `src/lib/cycle.ts:108–133`; TM modal callbacks | Post-session accept/dismiss callbacks are outside runFinishing; modal controls do not await/disable competing callbacks. Concurrent progression may use the same pre-transaction cycle snapshot. | B07/B08: probe rapid accept/dismiss and double acceptance with delayed DB writes; verify progression idempotency and modal error recovery before assigning severity. |
 
 ## Batch rules and completion evidence
 
@@ -283,8 +284,8 @@ column as work is completed.
 | `src/lib/pr.ts` | B07 | pending | — |
 | `src/lib/rest-timer-worker.test.ts` | B09 | pending | — |
 | `src/lib/rest-timer-worker.ts` | B09 | pending | — |
-| `src/lib/session.test.ts` | B05 | partial | B05b next; helper reviewed only through caller trace |
-| `src/lib/session.ts` | B05 | partial | B05b next; helper reviewed only through caller trace |
+| `src/lib/session.test.ts` | B05 | deep | B05b — full file; helper status/rollback evidence below |
+| `src/lib/session.ts` | B05 | deep | B05b — full file; helper status/rollback evidence below |
 | `src/lib/tm-recommendations.test.ts` | B07 | pending | — |
 | `src/lib/tm-recommendations.ts` | B07 | pending | — |
 | `src/lib/training-max.test.ts` | B07 | deep | B01b — app shell and training-max helpers (1/5); evidence below |
@@ -304,8 +305,8 @@ column as work is completed.
 | `src/screens/Stats.tsx` | B06 | pending | — |
 | `src/screens/Today.test.tsx` | B06 | pending | — |
 | `src/screens/Today.tsx` | B06 | pending | — |
-| `src/screens/Workout.test.tsx` | B05 | partial | B05b next; focused finish-path tests sampled, full file pending |
-| `src/screens/Workout.tsx` | B05 | partial | B05b next; finish/resume path traced, full file pending |
+| `src/screens/Workout.test.tsx` | B05 | deep | B05b — all 1755 lines; 94 existing tests passed; evidence below |
+| `src/screens/Workout.tsx` | B05 | deep | B05b — full file; F13 expanded, F14/F15 confirmed; evidence below |
 | `src/service-worker.ts` | B09 | partial | L04 probe |
 | `src/store/save-failure-store.test.ts` | B11 | pending | — |
 | `src/store/save-failure-store.ts` | B11 | pending | — |
@@ -556,7 +557,7 @@ Reviewed every state field, version/key/type validation, hydration fallback, fre
 Positive observations: read/JSON failures fall back safely, unknown top-level keys/types are discarded, clearSession creates fresh arrays, cross sets do not affect the linear cursor, fixed slots replace while extras append. Hydration validates array containers but not entries or active-session fields; malformed nested values can still reach consumers (follow-up, no new product-flow finding). The store deliberately does not write SQL: accessory data waits for completion, making local persistence errors material for resume. Existing tests have no storage-write exception coverage, and do not test duplicate exercise IDs across slots; caller guards remain for component review. Next: B05b session helpers plus a bounded Workout screen slice.
 
 
-### Checkpoint — continuation interrupted during B05b
+### Historical checkpoint — continuation interrupted during B05b (resolved below)
 
 The next session must continue with B05b as a single bounded pass. Do not start a
 new area until these files are closed:
@@ -591,3 +592,163 @@ it passed 19 selected tests (75 skipped by the filter in the run shown in the lo
 Run the complete Workout and session files once in B05b, then record exact totals.
 No product code changed. After B05b, update these partial rows to `deep`, reconcile
 F13 against COMPLETE, and choose the next queue area from the tracker.
+
+### 2026-09-12 — B05b: session/resume and complete Workout slice
+
+**Revision:** `eb3d7f908ebcbabb10c88cce93be00f3cfdaa2ed`. `git diff
+f8026941549518159866831bba07012794b62007 HEAD -- src` was empty; prior application
+evidence therefore remains applicable. Clean task worktree at start. Single agent
+in the assigned Codex lane; no delegation, application edits, commits or pushes.
+
+**Interruption point / scope:** The historical checkpoint above had reproduced
+stale completed-session SKIP and run only 19 selected Workout tests. Neither helper
+file nor either Workout file had full-file completion evidence. This continuation
+closed exactly those four files, including the entire 1755-line Workout test file
+(not merely the checkpoint's approximate “525+” lines).
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/lib/session.ts` | 1–43 | `efa391612222fbb72d04489e22df33516801deed` |
+| `src/lib/session.test.ts` | 1–76 | `b705b8ca7d3d204d9dfee740f776d5984e2e47ea` |
+| `src/screens/Workout.tsx` | 1–1089 | `d086b5c8bcc4bbe04770c34d40c19c81cf9eb7c3` |
+| `src/screens/Workout.test.tsx` | 1–1755 | `abeb1457bca67c9ede8c17ccf396290188f9328c` |
+
+**Behavior and invariants traced:**
+
+- Both helpers: authoritative pending-row lookup, no-ID/missing/completed/skipped
+  cases, child deletion order, transaction failure propagation and rollback. EXIT
+  calls the status-guarded helper. Today's START calls reconciliation, but Workout
+  does not; its loadData deliberately leaves completed rows editable. Comments at
+  Workout:195–196 claiming COMPLETE is guarded and session:33–34 claiming Workout
+  uses reconciliation are inaccurate. The transaction-local status read is useful
+  but does not repair F05's globally shared transaction-depth isolation failure.
+- Workout loading: session/lift fetch, dangling-row redirect, TM/template/cross-block
+  loading and composition, movement-loading metadata, AMRAP/recent-history targets,
+  exercise lookup. A missing lift returns without recovery; reads are fire-and-forget
+  without catch, cancellation or session-generation checks. A late load can still
+  publish stale data. These are explicit recovery/concurrency validation gaps, not
+  additional reproduced findings. No deep completion is claimed for callee libraries.
+- Every log/edit/delete handler, linear and cross cursors, optimistic state snapshots,
+  ID assignment, rollback/retry closures, best-effort PR detection and rest ordering.
+  F14 is a caller-level defect independent of F05: it reproduces with ordinary
+  single-row writes, without overlapping transactions. Same-movement cross logging
+  has the same rollback defect. Overlapping edits and finish-versus-pending-write
+  outcomes remain regression cases for the same operation-lifecycle repair.
+- Finish/skip/exit mutual exclusion, confirmation cancellation, accessory flattening
+  (including duration/distance), note-only saves, transaction boundary, post-commit
+  accessory/TM/cycle prompt sequence, accept/dismiss/deload/doubling callback wiring,
+  store clearing and navigation. runFinishing protects only the three ending handlers
+  while their promises are pending; it releases when a modal opens and does not guard
+  the subsequent modal callbacks (L05). Completion/progression/delete rejections lack
+  a local catch or failure banner; a failure after the completion transaction commits
+  leaves stale pending store state and permits replaying that transaction (F13).
+- Full render path: positional Index rows, type offsets, extra/legacy accessory slots,
+  picker/history callbacks, section completion, joker/supplemental additions, segment
+  accounting, reduced-motion-aware scroll handoff, notes, fallback and action controls.
+  Cross rows use rebuilt reference-keyed sections; component-local edit/reset effects
+  remain for B08, not an assumed functional failure. Week 4 checks here denote deload,
+  not cycle completion; the latter delegates to the cycle helper's configured final week.
+
+**Fresh checks and exact outcomes:**
+
+1. `pnpm exec vitest run src/screens/Workout.test.tsx src/lib/session.test.ts`:
+   **101/101 passed**, two files (94 Workout, 7 session), exit 0. This command first
+   populated this worktree's node_modules from the existing pnpm store; no tracked
+   manifest or lockfile changed. Inspected every test, not just test names or counts.
+2. Created a disposable `git archive HEAD` source copy at
+   `/tmp/training-review-b05b-0ltRmW`, symlinked task-worktree node_modules, and added
+   only `src/screens/review-b05b.test.tsx` plus temporary config adjustments there.
+   Initial execution with the temporary directory as Vite root failed before tests:
+   external symlinked jest-dom resolved as an invalid `/@fs/...` module. Setting the
+   temporary config's root to the task worktree, explicit absolute test/setup paths,
+   and fs allow entries for both directories corrected harness resolution.
+3. `pnpm exec vitest run --config /tmp/training-review-b05b-0ltRmW/vite.config.ts
+   --reporter=verbose`: **8/8 passed**, exit 0. Seven assertions deliberately describe
+   current bugs, not fixes. One control covers helper protection and rollback. The
+   undo/delayed-add probe also emitted Solid's “computations created outside a
+   createRoot or render will never be disposed” warning; no unhandled-error failure.
+
+**Reproduction recipes / confirmed effects:**
+
+- **F13 / SKIP:** completed SQLite session + stale pending store copy; render actual
+  Workout, wait for LOG, open session options, SKIP LIFT → SKIP. Navigation succeeds;
+  persisted status is now skipped. Reconfirms the prior probe.
+- **F13 / COMPLETE:** completed session dated 2026-01-06 with saved notes and one
+  accessory set; restore stale pending store with the same accessory set, render,
+  FINISH. DB now contains two accessory rows, original notes become empty and date
+  changes. Thus COMPLETE is not protected, despite its loadData comment. No duplicate
+  note was needed; on migrated databases a repeated nonblank accessory note can
+  instead fail the unique index and roll back the second transaction (source trace,
+  not separately fault-probed). Terminal-state reconciliation plus an idempotent
+  save/post-save phase is required; a plain preflight check alone cannot prevent races.
+- **F14 / overlap:** defer the first db.sets.add, click the next active LOG and wait
+  for its real SQLite ID, then reject the first. Store retains set 1 without an ID
+  while SQLite contains only successfully saved set 2. Repeat within a Squat cross
+  block: same result, independent of the linear cursor. Rollback pops the latest
+  entry rather than the failed operation; the following cursor/undo/edit are wrong.
+- **F14 / undo:** defer add, LOG then undo → yes, then release the real insert.
+  Cursor stays at zero but SQLite contains the supposedly undone set; the late ID
+  assignment has no corresponding valid logged-set data. Gate dependent actions or
+  track pending operations by stable identity rather than mutable array positions.
+- **F15 / same session:** fail LOG once, use ordinary LOG successfully, then press
+  the still-present RETRY. SQLite has two set-number-1 rows, cursor is two, store
+  slot 0 now has the retry row ID and appended slot 1 has none. The callback retained
+  index zero but appends at the current tail. A successful ordinary LOG did not retire it.
+- **F15 / next session:** fail LOG, EXIT through real confirmation, unmount, create
+  session 2 and mount it, press the old banner's RETRY. The callback from session 1
+  writes into session 2 because handleLog reads the current activeSession. The banner
+  is global/unfiltered; clearSession does not clear its callbacks. Bind retry to the
+  original session and operation, not merely to the old component closure/index.
+- **Positive helper control:** completed/skipped sessions retain their child rows;
+  missing ID is harmless. Inject a pending session deletion failure after child
+  deletes; the transaction rejects and restores both session and children in SQLite.
+
+**Test assessment / remaining validation:** Existing tests cover normal logging,
+undo, templates/cascades/remounts, finish prompts, confirmation exclusion and one-shot
+save/edit failure and immediate retry. Some branch tests only check cursor/count or
+“no crash,” several comments reference obsolete line numbers/algorithms (including
+an Epley formula comment although production uses Wathan). They omit stale COMPLETE/
+SKIP, in-flight mutation ordering, retry after manual progress or session change,
+post-commit failures and competing modal callbacks. Disposable probes fill the
+specific evidence gaps above; they are not retained application regression tests.
+
+Dependency reads were limited to relevant caller/callee contracts: Today:125–148,
+workout-store mutation helpers, save-failure store/banner, SetRow callback wiring,
+SessionBar finish control, TM modal callbacks, cycle:103–135 and schema note index.
+Those files are not newly marked deep. F05/F06 production-client findings remain
+open; Vitest aliases the client and does not test real Worker/OPFS timing, timeouts,
+browser reload hydration, cross-tab behavior or browser modal interaction. No full
+repository suite, lint, build or browser E2E was run for this documentation-only
+review. F12 was not reprobed, as instructed.
+
+**Outcome / exact next action:** B05b completes without a blocker; “complete” means
+the bounded review, not bug resolution. Four partial ledger rows become deep;
+F13 expanded, F14/F15 confirmed, L02 partly resolved, L05 recorded for B07/B08.
+All four selected files have full-range evidence, with cross-file checks explicitly
+carried forward. Only this tracker changed in the task worktree. Request operator
+review of this handoff; do not mark the Kanban card accepted. Stop here. The next
+review session should start B06a (Today and tests); repository-wide review remains
+unfinished.
+
+#### B05b review-response verification
+
+The four requested handoff confirmations are recorded:
+
+1. HEAD and the tracker remain pinned to
+   `eb3d7f908ebcbabb10c88cce93be00f3cfdaa2ed`. Fresh `git hash-object`
+   checks match all four blobs above, both in the task worktree and disposable
+   probe copy; the application-source diff is empty.
+2. F14/F15 remain confirmed high-severity findings for separate remediation,
+   as acknowledged by the coordinator. Neither is fixed by this review-only task.
+3. L05 remains unreproduced and belongs to B07/B08 validation; it does not block
+   closure of the bounded B05b review.
+4. In-process SQLite is not production Worker/OPFS coverage. Disposable probes
+   remain under `/tmp`; F05/F06 remain open. Full-suite, lint, build, browser E2E,
+   real reload/cross-tab and production storage checks were not run.
+
+Both commands under **Fresh checks and exact outcomes** were rerun after review:
+101 existing tests and 8 disposable probes passed again (exit 0). The same Solid
+disposal warning appeared in the delayed-add/undo probe. Seven probes reproduce
+defects; passing them does not mean the application is repaired. `git diff --check`
+passed. No application changes, commits or pushes. The assigned worker's lifecycle
+requires a native human-review handoff rather than marking the card accepted.
