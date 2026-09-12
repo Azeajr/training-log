@@ -38,6 +38,9 @@ Dated runtime-verification logs, one per claim checked against the running app.
 
 ## Review notes
 
+- `docs/deep-code-review.md` — exhaustive review progress, prior findings, per-file
+  coverage, and bounded batches. **Single agent only**; resume here for code review.
+
 - `docs/ui-consistency-review.md` — UI/UX consistency findings from the history-modal /
   history-label work. **RESOLVED 2026-08-08**: all nine findings validated, then fixed
   in one design-system pass; resolutions recorded inline. Kept as the rationale record.
