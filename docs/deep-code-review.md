@@ -8,19 +8,21 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B06d — Settings screen and its tests.** Review `src/screens/Settings.tsx`
-(1,069 implementation lines) and `src/screens/Settings.test.tsx`, starting with theme
-load/update ordering, settings import/export (F03 hasDeloadWeek allowlist, F08 backup
-validation), the F11 restore-defaults lead and database failure propagation. Reuse
-B04a export/import evidence; do not reopen unchanged dependencies or begin B06e
-(Stats) here.
+**Next batch: B06e — Stats screen and its tests.** Review `src/screens/Stats.tsx`
+and `src/screens/Stats.test.tsx`, starting with presence refresh integration,
+correct training max usage, and AMRAP/stat calculations. Reuse B04b/05a evidence.
 
-Latest run: **B06c complete** — Setup screen and its tests reviewed (onboarding
-roster/TM writes, import, validation, partial failures, navigation). Both files
-marked deep; **31 files deep in total.** All 17 existing Setup tests passed, exit 0.
-No new F-numbers were confirmed for this batch. Only this tracker changed; no
-application fixes or sub-agents. PR #82 merged to main; operator acceptance remains
-a separate native Kanban review step.
+Latest run: **B06d complete** — Settings screen and its tests reviewed (theme
+load/update ordering, settings import/export allowlist, restore-defaults,
+database failure propagation). Both files marked deep; **33 files deep in
+total.** All 1,094 existing tests passed (`pnpm exec vitest run`, 48 files),
+lint and typecheck passed clean. No new F-numbers were confirmed for this
+batch; disposable probes reconfirmed F03 (hasDeloadWeek allowlist), F08
+(unrelated JSON wipes DB), and F11 (restored theme/settings not applied until
+reload) as Settings-facing manifestations of the existing findings. Only this
+tracker changed; no application fixes or sub-agents. This
+card authorizes commit, push and PR; operator acceptance remains a separate
+native Kanban review step.
 
 ## Previous session summary — 2026-09-11
 
@@ -306,8 +308,8 @@ column as work is completed.
 | `src/screens/History.tsx` | B06 | deep | B06b — all 726 lines; F10 display evidence, F19–F21 confirmed; limits below |
 | `src/screens/HistoryEdit.test.tsx` | B03 | deep | B03a — history editor and tests (4/5); evidence below |
 | `src/screens/HistoryEdit.tsx` | B03 | deep | B03a — history editor and tests (4/5); evidence below |
-| `src/screens/Settings.test.tsx` | B06 | pending | — |
-| `src/screens/Settings.tsx` | B06 | pending | — |
+| `src/screens/Settings.test.tsx` | B06 | deep | B06d — full existing test suite passed; no new findings confirmed |
+| `src/screens/Settings.tsx` | B06 | deep | B06d — all 1,069 lines; reconfirmed F03/F08/F11 as Settings-facing; no new findings |
 | `src/screens/Setup.test.tsx` | B06 | deep | B06c — all 259 lines; 17 existing tests passed; no new findings confirmed |
 | `src/screens/Setup.tsx` | B06 | deep | B06c — all 384 lines; no new findings confirmed |
 | `src/screens/Stats.test.tsx` | B06 | pending | — |
