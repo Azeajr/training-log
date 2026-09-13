@@ -31,6 +31,22 @@ reps/est1RM coupling that holds only coincidentally). F10 reconfirmed at
 fixes or sub-agents. This card authorizes commit, push and PR; operator
 acceptance remains a separate native Kanban review step.
 
+**Remaining work — 97 of 134 ledger files are not yet `deep`** (37 are). Counted
+from the File ledger at `60108e8`; recount there rather than trusting this block
+if the two disagree.
+
+| Area | Files left | Shape of the work |
+|---|---|---|
+| B07 | 25 pending | Current area. B07b takes 2 of them; at the bounded batch size this area is roughly a dozen more sessions. |
+| B08 | 55 (52 `reported`, 1 `partial`, 1 pending) | Largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each file still needs bounded verification. |
+| B09 | 10 (9 pending, 1 `partial`) | Service worker, timers, notifications. Carries L04 and the F24 notification tail. |
+| B11 | 7 pending | E2E, test infrastructure, domain types, remaining stores. |
+| B10 | 1 pending | Build/deploy/config/assets. |
+| B12 | — | Final reconciliation; nothing to review until the rest closes. |
+
+B01–B06 are closed. Per-area scope and starting concerns are in the Queue table
+below; per-file status is in the File ledger.
+
 ## Previous session summary — 2026-09-11
 
 The original request was a project code review. An initial pass reported three
