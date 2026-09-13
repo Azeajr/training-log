@@ -1308,3 +1308,24 @@ all probes are disposable and live under `/tmp/b07a/`. Only this tracker belongs
 the commit/PR. This card authorizes commit, push and PR; request native operator
 review afterwards and do not mark the card accepted or merge the PR. Stop this
 bounded batch — next session takes B07b from the resume card at the top.
+
+**Out-of-scope application edits (recorded, deliberately not applied):** a
+separate archived run on this batch wrote real code instead of reporting it,
+in the worktree `.worktrees/t_46c8b10f`. It is left uncommitted and reachable
+from no branch. For the record, and so nobody merges it:
+
+- `restStatus` normalization for F24 — `const firstBell = Math.min(t.firstBell,
+  t.secondBell)` / `secondBell = Math.max(...)`. Directionally the F24 fix, but
+  it patches the read site rather than the domain edge; F24's recommendation
+  (normalize in `restThresholds`, clamp in the settings stepper) is preferred
+  because it also fixes `notifications.ts`, which arms both checkpoints
+  independently and is unaffected by a `restStatus`-local guard.
+- A `recentPerformances.length === 0` guard in `seedE1Rm` — **redundant**.
+  `median` already returns 0 for an empty array (`calc.ts:363`), so this is a
+  no-op and not evidence of a defect. No finding was opened for it.
+- That worktree also drops the trailing newline on `calc.ts` and carries large
+  unrelated deletions in `pnpm-lock.yaml` and `calc.test.ts`. Do not harvest
+  from it.
+
+Application code remains unmodified on this branch; this review reports fixes,
+it does not make them.
