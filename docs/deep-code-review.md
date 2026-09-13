@@ -8,17 +8,19 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B06a — Today screen and its tests.** Review `src/screens/Today.tsx`
-and `src/screens/Today.test.tsx`, starting with resume/start/abandon ordering and
-session selection. Use completed B05 evidence rather than reopening unchanged
-Workout/store files. Do not begin B06a in the B05b continuation session.
+**Next batch: B06b — History screen and its tests.** Review `src/screens/History.tsx`
+and `src/screens/History.test.tsx`, starting with session-list ordering, navigation,
+loading/failure states, and consistency after history changes. Reuse B03a's completed
+HistoryEdit evidence; do not reopen unchanged files or start B06b in this session.
 
-Latest run: **B05b complete; 4 additional files marked deep** (2 implementation
-files, 2 test files). **25 files deep in total.** All 101 existing session/Workout
-tests passed; 8 disposable checks passed (7 assert faulty behavior, 1 tests helper
-protection/rollback). F13 now covers COMPLETE as well as SKIP. New confirmed
-findings F14/F15 cover overlapping set mutations and stale retries; new lead L05
-tracks post-completion modal concurrency. No application changes or sub-agents.
+Latest run: **B06a complete; 2 additional files marked deep** (Today implementation
+and tests). **27 files deep in total.** All 29 existing Today/session tests passed;
+10 disposable checks passed (6 assert faulty behavior, 4 positive controls).
+F13 now includes Today's unreconciled RESUME link. New confirmed findings F16–F18
+cover overlapping starts, stale selection results, and pending-session recovery
+without local workout state; L06 records unprobed Today failure paths. Only this
+tracker changes; no application fixes or sub-agents. Publication awaits operator
+confirmation after review, as required by the B06a card.
 
 ## Previous session summary — 2026-09-11
 
@@ -57,9 +59,9 @@ summary; inaccessible report contents have not been reconstructed by guesswork.
 
 ## Findings carried forward
 
-F01–F15 have evidence recorded in the completed batches below. L01 is resolved
+F01–F18 have evidence recorded in the completed batches below. L01 is resolved
 into F07 and L03 into F13; L02 is partly substantiated by F14/F15, while L04/L05
-remain leads. See each batch for
+and L06 remain leads. See each batch for
 verification limits and historical versus fresh evidence. Review completion and bug resolution are separate states; no fix is
 claimed here.
 
@@ -77,14 +79,18 @@ claimed here.
 | F10 | Medium; B03a component regression | `src/screens/HistoryEdit.tsx:328–333`; `src/lib/calc.ts:35` | Stored `cross` sets are loaded but never rendered because the edit type list excludes them. Users cannot correct cross-lift weight/reps in history. | Render cross-lift sets with movement labels and editable controls; test persistence of cross-set edits. |
 | F11 | Medium; B04b isolated restore check | `src/store/settings-store.ts:286–301`; import callers | Importing a backup with no settings row leaves the previous in-memory settings active until a reload, even though the database is empty. A restored theme is similarly stored in memory without immediate CSS application. | Reset settings state to defaults when no row exists and apply the resolved theme after import/restore. |
 | F12 | Medium; B05a isolated persistence check | `src/store/workout-store.ts:116–132` | A localStorage quota/write failure escapes the reactive persistence effect. The render path has no catch or user-visible persistence status, so active-workout recovery can silently stop. | Catch persistence failures, surface degraded recovery state, and define retry/cleanup behavior. |
-| F13 | High; B05b isolated Workout/SQLite probes | `src/screens/Workout.tsx:189–207`, `574–597`, `620–626` | A stale pending store resumes a completed DB row. SKIP changes it to skipped; COMPLETE appends duplicate accessory sets and overwrites saved date/notes. EXIT already protects completed data. | Reconcile on route entry; perform status-conditional, idempotent completion/skip in a serialized transaction. Preserve a separate resumable post-commit phase instead of replaying the save. |
+| F13 | High; B05b Workout/SQLite probes; B06a real-router entry probe | `src/screens/Today.tsx:220–226`; `src/screens/Workout.tsx:189–207`, `574–597`, `620–626` | A stale pending store resumes a completed DB row. Today's RESUME link bypasses START's reconciliation and reaches live Workout controls. SKIP changes the row to skipped; COMPLETE appends duplicate accessory sets and overwrites saved date/notes. EXIT already protects completed data. | Reconcile every resume entry and on route entry; perform status-conditional, idempotent completion/skip in a serialized transaction. Preserve a separate resumable post-commit phase instead of replaying the save. |
 | F14 | High; B05b delayed-write component probes | `src/screens/Workout.tsx:302–308`, `333–362`, `413–440`, `470–477` | Set mutations overlap without operation identity: a failed earlier LOG pops a later successful set (linear and same-movement cross paths); undo before add settles leaves a DB row with no valid logged store entry. | Serialize dependent mutations or reconcile each result/rollback by stable operation ID; gate undo/edit/finalization on pending saves and bind completions to the originating session. |
 | F15 | High; B05b retry component probes | `src/screens/Workout.tsx:333–361`, `376–389`, `413–439`; `src/components/workout/SaveFailureBanner.tsx:25–36` | RETRY replays a positional handler against live workout state. After manual LOG it duplicates the old slot, advances the cursor incorrectly and misassigns its DB ID; after EXIT/start it writes the old set into the new session. | Bind immutable session/set identity to retry; verify applicability and make retries idempotent. Scope banners to their originating session and retire superseded callbacks, retaining unresolved gap records as appropriate. |
+| F16 | Medium; confirmed B06a delayed-insert component/SQLite probe | `src/screens/Today.tsx:80–122`, `125–148`, `352–354` | START has no in-flight guard. Two clicks before insertion settles both see no pending session and create distinct pending rows for the same lift/cycle/week. Completing the active one leaves the hidden pending attempt holding the week open. | Single-flight the entire start/resume/abandon/seed/navigation operation; atomically select-or-create one pending attempt for a slot, preserving historical redo rows. Define recovery for existing duplicate pending rows; a component flag alone does not address cross-tab calls. |
+| F17 | Medium; confirmed B06a deferred-selection component probes | `src/screens/Today.tsx:45–47`, `74–77`, `125–127`, `254–259`, `352–354` | Lift selection changes immediately while old TM/defaults remain; late reads overwrite the latest selection. A valid Bench TM can be replaced by a delayed zero-TM Deadlift result, disabling Bench, or Bench can display Deadlift's assistance. START during loading accepts a no-TM lift using the previous lift's enabled button. | Key TM/defaults/loading by selection generation and publish only current results; clear or hide stale values, disable START while unresolved, and validate the captured target's TM inside the start operation. |
+| F18 | High; confirmed B06a Today→Workout/SQLite probe | `src/screens/Today.tsx:87–91`, `116–121`; `src/store/workout-store.ts:135–137`; `src/screens/Workout.tsx:179–187`, `189–259`, `333–353` | Reusing a pending SQL session without matching local workout state resets the cursor/logged arrays instead of restoring its saved sets. Workout derives progress only from those empty arrays; the next LOG inserts another warmup set 1 alongside the already-saved row. Backup restore or absent local recovery state can reach this path. | Distinguish fresh sessions from recovery; hydrate persisted main/cross sets with stable IDs and reconstructed cursors before logging, reconcile defaults and available notes/accessories, and explicitly disclose state that was never backed up. Preserve existing rows and test pending-backup recovery. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
 | L04 | Lead with prior isolated probe | `src/service-worker.ts`; exact line pending | HTTP 503 navigation response appears to replace a good cached shell; later offline navigation returns the cached error. | Check response validation and cache writes; reproduce in browser where practical before final severity. |
 | L05 | Lead; B05b caller inspection only | `src/screens/Workout.tsx:523–551`; `src/lib/cycle.ts:108–133`; TM modal callbacks | Post-session accept/dismiss callbacks are outside runFinishing; modal controls do not await/disable competing callbacks. Concurrent progression may use the same pre-transaction cycle snapshot. | B07/B08: probe rapid accept/dismiss and double acceptance with delayed DB writes; verify progression idempotency and modal error recovery before assigning severity. |
+| L06 | Lead; B06a source inspection only, no injected failure | `src/screens/Today.tsx:43–71`, `113–122`, `135–148`, `174–192`; `src/components/workout/AccessoryPicker.tsx:118–143` | Today fires load/start without a catch or local error state; defaults load after startSession, and selection/cross-preview failures have no local recovery UI. The default-mode picker also swallows persistence failure before reporting a successful pick, while launch rereads the DB. Exact user-visible failure and retry outcomes remain unprobed. | In a separately authorized follow-up, inject failures at initial load, abandon/delete, session insert, default seeding, cross-preview, and default-picker persistence. Check partial state, promise ownership, recoverability and late settlement after navigation; keep B08 component review separate. |
 
 ## Batch rules and completion evidence
 
@@ -303,8 +309,8 @@ column as work is completed.
 | `src/screens/Setup.tsx` | B06 | pending | — |
 | `src/screens/Stats.test.tsx` | B06 | pending | — |
 | `src/screens/Stats.tsx` | B06 | pending | — |
-| `src/screens/Today.test.tsx` | B06 | pending | — |
-| `src/screens/Today.tsx` | B06 | pending | — |
+| `src/screens/Today.test.tsx` | B06 | deep | B06a — all 368 lines; 22 existing tests passed; test gaps and controls below |
+| `src/screens/Today.tsx` | B06 | deep | B06a — all 377 lines; F13 entry confirmed, F16–F18 confirmed, L06 recorded |
 | `src/screens/Workout.test.tsx` | B05 | deep | B05b — all 1755 lines; 94 existing tests passed; evidence below |
 | `src/screens/Workout.tsx` | B05 | deep | B05b — full file; F13 expanded, F14/F15 confirmed; evidence below |
 | `src/service-worker.ts` | B09 | partial | L04 probe |
@@ -752,3 +758,165 @@ disposal warning appeared in the delayed-add/undo probe. Seven probes reproduce
 defects; passing them does not mean the application is repaired. `git diff --check`
 passed. No application changes, commits or pushes. The assigned worker's lifecycle
 requires a native human-review handoff rather than marking the card accepted.
+
+### 2026-09-12 — B06a: Today session selection, start/resume/abandon and tests
+
+**Revision:** `6368a06796f72bfb4868b20243e3146de499ffe6`. Clean assigned worktree
+at start, branch `training-log/t_4c88123b-b06a-deep-code-review-batch-next-tracker`.
+`git diff eb3d7f908ebcbabb10c88cce93be00f3cfdaa2ed HEAD -- src` was empty.
+The earlier application evidence remains applicable; no B05 full-file review was
+reopened. One agent in the authorized Codex lane; no delegation or product fixes.
+
+**Interruption point / scope confirmation:** Read the full 754-line tracker at this
+revision, including the historical B05b interruption and its resolved continuation.
+The card's 593-line description was historical, not this file's current length.
+The Resume here section explicitly queued Today and its tests as B06a. B05b had
+already closed all four session/Workout files, expanded F13 to COMPLETE, confirmed
+F14/F15 and carried L05 forward. No new B06a interruption existed to recover.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/screens/Today.tsx` | 1–377 | `ac2cb6a5115a24dc2cb6c7f3136bcb2d0b6ecbc3` |
+| `src/screens/Today.test.tsx` | 1–368 | `c4444aa879fd8bbe5c5ca4e3da7392bd0c21de23` |
+
+**Behavior and invariants traced:**
+
+- Initial load: next-slot lookup/cycle-advance side effect, ordered non-archived
+  roster, week/cycle/lift selection, pending-row precedence over old terminal rows,
+  TM/default loading and final loading-state release. The status rule matches the
+  reopened-week contract. Multiple terminal rows use the first returned row, not
+  an explicit newest ordering; completed-versus-skipped redo display remains a
+  lower-priority ambiguity rather than an additional confirmed finding.
+- Every start branch: same-lift **and** same-cycle/week check; authoritative pending
+  reconciliation; dropping stale references; abandon confirmation and status-guarded
+  child deletion; reuse of an existing pending attempt; completed/skipped redo
+  confirmation; draft insert; store reset; fixed-slot seeding; navigation. Confirmed
+  cancellation does not create a redo, and pending deletion precedes replacement.
+  Abandon and redo are separate decisions: accepting abandon deletes the old attempt
+  before a later redo confirmation, so cancelling redo does not undo that accepted
+  deletion. The start operation is neither single-flight nor awaited through
+  launchSession (F16/L06). Reusing a pending row is not equivalent to restoring its
+  saved progress (F18).
+- Every selection/render path: selected chip identity and persistent status colours,
+  no-TM warning/disabled control, top main set and AMRAP marker, collapsed warmup/main
+  disclosure, self/cross supplemental previews, assistance slots, default picker and
+  active-session banner. Week 4 checks denote deload, not a hardcoded cycle length.
+  Cross preview delegates effective-week/weight calculations to existing helpers,
+  orders blocks, skips missing movements and uses the movement TM; it is resource-keyed
+  by lift/week/deload mode, unlike the unguarded TM/default awaits (F17). Numerical
+  boundary validation remains B07. The RESUME anchor is a separate entry that bypasses
+  handleStart altogether (F13).
+- Limited dependency traces, **not newly deep files**: cycle next-slot and week-owed
+  rules (`cycle.ts:24–37`, `206–262`), assistance defaults/picks (`assistance.ts:91–120`,
+  `147–181`), confirmation request/response ownership, training-max lookup, store
+  reset and accessory construction, Workout's load/composition/LOG contracts,
+  default-mode picker persistence/callbacks (`AccessoryPicker.tsx:118–165`), schema
+  session/set identity, JSON export table reads and Settings import's clearSession.
+  No uniqueness constraint prevents the reproduced duplicate session/set inserts.
+
+**Fresh checks and exact outcomes:**
+
+1. `pnpm exec vitest run src/screens/Today.test.tsx src/lib/session.test.ts`:
+   **29/29 passed**, two files (22 Today, 7 session), exit 0. pnpm populated this
+   worktree's node_modules from its existing store; no manifest/lockfile changed.
+2. Archived tracked `src`, package.json and all four tsconfigs from HEAD into the
+   disposable worktree-local `.review-b06a-IFGvnu` directory; symlinked this task's
+   node_modules. Added only a temporary probe and minimal Solid/Vitest config there.
+   Config retained the assigned worktree as root, explicit absolute probe/setup
+   paths, both fs allow entries and the existing in-process SQLite alias. Copied
+   Today source/test blobs matched the originals above before probing.
+3. `pnpm exec vitest run --config .review-b06a-IFGvnu/vite.config.ts --reporter=verbose`:
+   initial **8/8 passed**, then **10/10 passed** after adding two abandon controls,
+   exit 0 both times. Final run is **6 bug assertions + 4 positive controls**, not ten
+   repaired behaviors. The real-router link probe emitted jsdom's “Not implemented:
+   Window's scrollTo() method” warning; no failed tests or unhandled-error report.
+4. A verbose existing-test rerun while the disposable source directory was visible
+   to normal discovery ran **58/58 across four files**, exit 0: it included duplicate
+   copies of both selected test files, **not additional unique coverage**. Moved the
+   disposable copy into ignored `node_modules/.cache/review-b06a-IFGvnu`, then reran
+   `pnpm exec vitest run src/screens/Today.test.tsx src/lib/session.test.ts
+   --reporter=verbose`: **29/29 across exactly two files**, exit 0.
+5. `git diff --check` passed; tracked diff and status name only this tracker. The
+   ledger count is **27 deep rows**, including the two newly closed Today rows.
+   Disposable files are excluded from the commit. To rerun their exact config in
+   this worktree, move the ignored copy back to `.review-b06a-IFGvnu`, execute command
+   3, then return it to the ignored cache before using normal test discovery. This
+   local cache is disposable; the revision and reproduction recipes below are the
+   durable evidence, not a promise of permanent probe-file availability.
+
+**Reproduction recipes / findings:**
+
+- **F13, High, expanded entry evidence:** Persist a completed OHP row; put its stale
+  pending copy in workout.activeSession; mount real Today and Workout routes under
+  the actual Solid Router. Click SESSION IN PROGRESS — RESUME. The path changes to
+  `/workout`, LOG renders, the store still says pending and the DB still says
+  completed. Only useNavigate is mocked for imperative handlers; the anchor's
+  router transition is real under jsdom. B05b remains the evidence for subsequent
+  destructive SKIP/COMPLETE effects; those finish probes were not rerun here.
+- **F16, Medium, confirmed:** Start with no sessions. Defer db.sessions.add before
+  the real insert, click START twice, wait for both calls, then release. Two pending
+  rows and two navigation calls result. Mark the active attempt completed and add
+  completed rows for the other active lifts; the real next-slot helper still returns
+  the original lift/week because the other pending attempt remains. No overlapping
+  transaction is needed, so this is independent of F05. Cross-tab duplication and
+  late seeding into another session are remaining lifecycle checks, not probed facts.
+- **F17, Medium, confirmed in three probes:** With OHP TM 200, Bench TM 300 and no
+  Deadlift TM, defer Deadlift's TM read, select Deadlift then Bench, settle Bench and
+  release Deadlift. Bench stays selected but displays “No training max set for Bench”
+  and START is disabled despite its real TM of 300. Separately, select Deadlift and
+  START before its read resolves: a pending Deadlift row is created and navigation
+  succeeds even though its authoritative TM is zero. Finally, give Deadlift and
+  Bench distinct push defaults and valid TMs; defer Deadlift's default response,
+  select Bench, then release. Bench displays Deadlift's pick while its persisted
+  default is unchanged. These prove stale reads/UI gating, not wrong DB default
+  writes or incorrect Workout weights (Workout rereads its own TM).
+- **F18, High, confirmed:** Seed one pending session with a saved warmup set 1 and
+  an empty workout store. START reuses that session ID but leaves loggedSets empty
+  and currentSetIndex zero. Unmount Today, mount actual Workout and click LOG: SQLite
+  now has two warmup/set-number-1 rows, while the store knows only the new row. The
+  original saved row was **not deleted**; recovery hides progress and corrupts set
+  identity by duplication. Source-traced reachability: JSON export includes pending
+  sessions/sets (`export-import.ts:23–43`) but not the workout store, and Settings
+  clears that store after import (`Settings.tsx:459–467`). The probe seeds the
+  equivalent persisted/local state; it does not exercise the Settings import UI or
+  a browser reload. The linear-set recovery defect is confirmed with a warmup;
+  main/cross/notes/accessory recovery needs explicit regression coverage in the fix.
+- **Positive controls:** A genuine persisted same-slot pending session resumes with
+  its logged-set ID and cursor intact, without another session insert. START against
+  a stale completed copy clears the reference and asks REDO; cancelling preserves
+  the completed row and saved set. Accepted abandon of a pending session deletes
+  its session, sets, accessory sets and accessory notes before launching the selected
+  lift. Accepted abandon of a different stale completed session preserves its
+  completed status, saved set and accessory note while starting the new lift.
+- **L06, unconfirmed lead:** Error/partial-start and default-persistence behavior is
+  source-inspected only. No rejected-load, rejected-abandon, seeding-failure or picker
+  write-failure test was run; do not promote those potential effects to confirmed bugs.
+
+**Test assessment / residual risk:** Read every line of Today.test.tsx. Existing
+tests cover basic rendering, status chips/reopening, deload label, no-TM display,
+cross-block presence, pending reuse, abandon and redo decisions. The “active session
+matches” test seeds only a store reference, not the claimed DB row; navigation alone
+does not prove resume rather than fresh launch. Several abandon tests select a lift
+with no TM and immediately click the still-enabled START, inadvertently depending
+on F17's timing window. Pending-reuse coverage checks only the session ID, not saved
+set/cursor hydration; banner coverage checks presence, not reconciliation. beforeEach
+omits exercise/accessory/default/notes/settings table resets, so expanded tests need stronger
+isolation. No existing overlapping-start/selection, persisted-progress recovery,
+three-week Today rollover, archived-roster, comprehensive preview or local failure
+coverage was established. Disposable probes fill only the explicitly recorded gaps.
+
+Production Worker/OPFS, real browser reload and cross-tab ordering remain untested;
+F05/F06 and prior findings remain open. No full repository suite, lint, typecheck,
+build or browser E2E was run for this documentation-only batch. No changes to the
+selected source files or retained application tests, and no finding is fixed.
+
+**Outcome / exact next action:** B06a completes cleanly without a review blocker;
+both selected files are closed with full-range evidence. Three findings added,
+F13's Today entry substantiated, L06 recorded. Commit only this tracker and request
+native operator review; do not mark the Kanban task accepted. The card explicitly
+requires post-review operator confirmation for push/PR, so publication has **not**
+occurred in this phase. After acceptance and publication confirmation, push the
+documentation branch and open its PR. Next review slice: B06b, History.tsx and
+History.test.tsx as specified at the top; do not begin it here. Repository-wide
+review remains unfinished. **hotspot: docs/deep-code-review.md —** this card owns
+the continuation; serialize other tracker edits until its branch is reconciled.
