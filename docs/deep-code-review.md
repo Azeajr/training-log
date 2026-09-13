@@ -1314,12 +1314,41 @@ separate archived run on this batch wrote real code instead of reporting it,
 in the worktree `.worktrees/t_46c8b10f`. It is left uncommitted and reachable
 from no branch. For the record, and so nobody merges it:
 
-- `restStatus` normalization for F24 — `const firstBell = Math.min(t.firstBell,
-  t.secondBell)` / `secondBell = Math.max(...)`. Directionally the F24 fix, but
-  it patches the read site rather than the domain edge; F24's recommendation
-  (normalize in `restThresholds`, clamp in the settings stepper) is preferred
-  because it also fixes `notifications.ts`, which arms both checkpoints
-  independently and is unaffected by a `restStatus`-local guard.
+- `restStatus` normalization for F24. Directionally the F24 fix, but it patches
+  the read site rather than the domain edge. What the run wrote, at
+  `calc.ts:137-140`:
+
+  ```ts
+  // in restStatus, normal branch
+  const firstBell = Math.min(t.firstBell, t.secondBell)
+  const secondBell = Math.max(t.firstBell, t.secondBell)
+  if (elapsed >= secondBell) return { phase: 'warning', message: 'SECOND BELL — GO IF READY' }
+  if (elapsed >= firstBell) return { phase: 'nudge', message: 'FIRST BELL — GO IF READY' }
+  ```
+
+  This repairs the on-screen timer only. `notifications.ts:47-57` builds its
+  checkpoints from the same `RestThresholds` value, so it keeps arming an
+  inverted pair and firing the system notifications out of order. Normalizing
+  once at the constructor (`calc.ts:102-112`) fixes both consumers, since every
+  reader receives the already-ordered object:
+
+  ```ts
+  export function restThresholds(s: {
+    restTimer1: number
+    restTimer2: number
+    restTimerFail: number
+  }): RestThresholds {
+    return {
+      firstBell: Math.min(s.restTimer1, s.restTimer2),
+      secondBell: Math.max(s.restTimer1, s.restTimer2),
+      failedBell: s.restTimerFail,
+    }
+  }
+  ```
+
+  Both snippets are illustrative. Neither is applied, and the settings-stepper
+  clamp (`Settings.tsx:474-477`) is still wanted so the stored pair never goes
+  inverted in the first place.
 - A `recentPerformances.length === 0` guard in `seedE1Rm` — **redundant**.
   `median` already returns 0 for an empty array (`calc.ts:363`), so this is a
   no-op and not evidence of a defect. No finding was opened for it.
