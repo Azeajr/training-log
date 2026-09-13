@@ -8,21 +8,19 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B06c — Setup screen and its tests.** Review `src/screens/Setup.tsx`
-and `src/screens/Setup.test.tsx`, starting with onboarding roster/TM writes, import,
-validation, partial failures and navigation. Reuse B02a/B04a/B04b evidence for seed,
-import and settings; do not reopen unchanged dependencies or begin B06c here.
-Settings (1,069 implementation lines) will need a separately bounded slice later.
+**Next batch: B06d — Settings screen and its tests.** Review `src/screens/Settings.tsx`
+(1,069 implementation lines) and `src/screens/Settings.test.tsx`, starting with theme
+load/update ordering, settings import/export (F03 hasDeloadWeek allowlist, F08 backup
+validation), the F11 restore-defaults lead and database failure propagation. Reuse
+B04a export/import evidence; do not reopen unchanged dependencies or begin B06e
+(Stats) here.
 
-Latest run: **B06c complete**; 2 additional files marked deep (Setup screen and its tests). **31 files deep in total.
-and tests). **29 files deep in total.** All 30 existing History tests passed.
-Eight disposable checks passed (6 bug assertions, 2 positive controls); a separate
-failure-injection run passed its 2 behavioral assertions but **exited 1 with 2
-expected unhandled rejections**. F10 now includes hidden cross sets in History.
-New confirmed findings F19–F21 cover wrong-session detail, stale list/calendar
-results and misleading empty-state failure handling. Only this tracker changes;
-no application fixes or sub-agents. This card authorizes commit, push and PR;
-operator acceptance remains a separate native Kanban review step.
+Latest run: **B06c complete** — Setup screen and its tests reviewed (onboarding
+roster/TM writes, import, validation, partial failures, navigation). Both files
+marked deep; **31 files deep in total.** All 17 existing Setup tests passed, exit 0.
+No new F-numbers were confirmed for this batch. Only this tracker changed; no
+application fixes or sub-agents. PR #82 merged to main; operator acceptance remains
+a separate native Kanban review step.
 
 ## Previous session summary — 2026-09-11
 
@@ -310,8 +308,8 @@ column as work is completed.
 | `src/screens/HistoryEdit.tsx` | B03 | deep | B03a — history editor and tests (4/5); evidence below |
 | `src/screens/Settings.test.tsx` | B06 | pending | — |
 | `src/screens/Settings.tsx` | B06 | pending | — |
-| `src/screens/Setup.test.tsx` | B06 | pending | — |
-| `src/screens/Setup.tsx` | B06 | pending | — |
+| `src/screens/Setup.test.tsx` | B06 | deep | B06c — all 259 lines; 17 existing tests passed; no new findings confirmed |
+| `src/screens/Setup.tsx` | B06 | deep | B06c — all 384 lines; no new findings confirmed |
 | `src/screens/Stats.test.tsx` | B06 | pending | — |
 | `src/screens/Stats.tsx` | B06 | pending | — |
 | `src/screens/Today.test.tsx` | B06 | deep | B06a — all 368 lines; 22 existing tests passed; test gaps and controls below |
