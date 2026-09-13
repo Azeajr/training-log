@@ -8,21 +8,28 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B06e — Stats screen and its tests.** Review `src/screens/Stats.tsx`
-and `src/screens/Stats.test.tsx`, starting with presence refresh integration,
-correct training max usage, and AMRAP/stat calculations. Reuse B04b/05a evidence.
+**Next batch: B07a — calculation core and its tests.** Review `src/lib/calc.ts`
+and `src/lib/calc.test.ts` (plus `src/lib/performance.ts`, which is small and was
+already read as a B06e dependency), starting with Wathan/`effectiveReps` numeric
+boundaries, the `targetReps` inverse, rounding/plate interaction and the
+percentage tables. B06e recorded a limited contract for `estimated1RM`,
+`effectiveReps` and `isWorkingPerformance`/`bestEstimatedPerformance` — treat it
+as a caller-side note, not as completed B07 rows. **B06 is now closed:** every
+screen and screen test in the area is `deep`.
 
-Latest run: **B06d complete** — Settings screen and its tests reviewed (theme
-load/update ordering, settings import/export allowlist, restore-defaults,
-database failure propagation). Both files marked deep; **33 files deep in
-total.** All 1,094 existing tests passed (`pnpm exec vitest run`, 48 files),
-lint and typecheck passed clean. No new F-numbers were confirmed for this
-batch; disposable probes reconfirmed F03 (hasDeloadWeek allowlist), F08
-(unrelated JSON wipes DB), and F11 (restored theme/settings not applied until
-reload) as Settings-facing manifestations of the existing findings. Only this
-tracker changed; no application fixes or sub-agents. This
-card authorizes commit, push and PR; operator acceptance remains a separate
-native Kanban review step.
+Latest run: **B06e complete** — Stats screen and its tests reviewed (RecordsPanel
+load path, session-status attribution, cross-set ownership, e1RM/max-weight
+selection, TM progression chain and delta, failure and empty states). Both files
+marked deep; **35 files deep in total.** All 1,094 existing tests passed
+(`pnpm exec vitest run`, 48 files), the 10 Stats tests passed on their own, and
+lint and typecheck passed clean. **Two new findings: F22** (RecordsPanel counts
+sets from `skipped` and `pending` sessions, so Stats shows all-time records for
+work History deliberately hides) **and F23** (a rejected read in `load()` pins
+the panel on `Loading…` forever with an unhandled rejection and no retry). Both
+were reproduced with disposable probes, alongside a positive control and an
+archived-lift correctness check; the probe tree was deleted. Only this tracker
+changed; no application fixes or sub-agents. This card authorizes commit, push
+and PR; operator acceptance remains a separate native Kanban review step.
 
 ## Previous session summary — 2026-09-11
 
@@ -61,7 +68,7 @@ summary; inaccessible report contents have not been reconstructed by guesswork.
 
 ## Findings carried forward
 
-F01–F21 have evidence recorded in the completed batches below. L01 is resolved
+F01–F23 have evidence recorded in the completed batches below. L01 is resolved
 into F07 and L03 into F13; L02 is partly substantiated by F14/F15, while L04/L05
 and L06 remain leads. See each batch for
 verification limits and historical versus fresh evidence. Review completion and bug resolution are separate states; no fix is
@@ -90,6 +97,8 @@ claimed here.
 | F19 | Medium; B06b sequential and delayed-detail component/SQLite probes | `src/screens/History.tsx:540–556`, `294–321`; `src/components/forms/LiftSetsByType.tsx:21–27` | Open A then B without collapsing A: old detail is attached to B immediately. Same-type set arrays are captured nonreactively by the child, so B's final notes/e1RM can accompany A's weights even after B finishes loading. A late A response can also replace B's notes. EDIT still targets B, not the displayed A data. | Key detail/loading/error state by session ID and request generation; clear old detail on a new selection, discard stale responses, and make the grouped set arrays reactive (or remount them by detail identity). Test both sequential and reordered reads. |
 | F20 | Medium; B06b delayed lift/month/day component/SQLite probes | `src/screens/History.tsx:391`, `431–449`, `495–519` | Late lift reads replace the current lift's list; late month reads erase the selected month's badges; late day-row builds put A's sessions under selected day B. Each async operation writes unkeyed global result signals without checking the current selection. | Use generation-keyed results for list mode/lift, month and selected day; publish only matching results, clear or explicitly mark old data while loading, and invalidate detail when its owning view changes. Include mode-switch and unmount coverage in the repair. |
 | F21 | Medium; B06b injected DB/storage failures, expected nonzero diagnostic run | `src/screens/History.tsx:391`, `495–502`, `693–696` | Rejected initial roster query or denied optional `history-lift` storage read escapes as an unhandled rejection while saved sessions are presented as “No completed sessions yet.” No error/retry state explains the failure. Mode changes can retry a transient DB failure; a persistent preference-read failure continues blocking automatic selection. | Catch owned load promises, distinguish loading/error/empty states, expose retry, and guard optional lift-preference reads/writes as already done for view mode. Extend fault coverage to month/day/detail/PR loads without conflating this with startup F04. |
+| F22 | High; confirmed B06e real-SQLite component probes (skipped + pending + discard) | `src/components/stats/RecordsPanel.tsx:52`, `55–69`, `80–85` (reached via `src/screens/Stats.tsx:11`) | The per-lift session query filters nothing but `liftId`, so sets from `skipped` and `pending` sessions count toward the all-time RECORDS max and EST. 1RM. `Workout.tsx:624` and `Settings.tsx:331`/`391` flip a partly logged session to `skipped` without deleting its sets, while History drops non-`completed` sessions entirely (`History.tsx:399`, `445`, `510`, `516`); Stats then reports a permanent record for a session no history view will ever show. A live `pending` session leaks the same way, and Workout EXIT (`discardPendingSession`) later deletes those sets, so the displayed record silently disappears. | Decide the one ownership rule for a record and apply it in `RecordsPanel.load`: restrict to `completed` sessions (matching History and the PR badge) or define and document the in-progress case. Attribute cross sets through their own session status too, since `db.sets.where('liftId')` bypasses the session query completely. Add status-varying coverage to `Stats.test.tsx`, which currently uses `completed` everywhere. |
+| F23 | Medium; confirmed B06e injected sync and async read failures, expected nonzero diagnostic run | `src/components/stats/RecordsPanel.tsx:42`, `44–47`, `100` | `createEffect` fires `void load(...)` with no catch, and `setLoading(false)` runs only after every await resolves. Any rejected read — lift roster, sessions, sets, cross sets or training maxes — escapes as an unhandled rejection and pins `/stats` on `Loading…` permanently, with no error text, no retry and no remount trigger short of navigating away. This is the Stats analogue of F21 on History and is distinct from startup F04. | Own the load promise, split loading/error/empty states, expose retry, and clear `loading` in a `finally`. Cover an injected read failure in `Stats.test.tsx`. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -232,7 +241,7 @@ column as work is completed.
 | `src/components/modals/ModalAsyncStates.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/TmRecommendationModal.test.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/TmRecommendationModal.tsx` | B08 | reported | Area claim only |
-| `src/components/stats/RecordsPanel.tsx` | B08 | reported | Area claim only |
+| `src/components/stats/RecordsPanel.tsx` | B08 | partial | Area claim plus B06e caller-side evidence: F22/F23 confirmed at `42`, `44–47`, `52`, `55–69`, `80–85`, `100`. Still needs its own B08 row for `compact`/`liftId` props and async identity |
 | `src/components/ui/InlineConfirm.test.tsx` | B08 | reported | Area claim only |
 | `src/components/ui/InlineConfirm.tsx` | B08 | reported | Area claim only |
 | `src/components/ui/ToggleChip.tsx` | B08 | reported | Area claim only |
@@ -312,8 +321,8 @@ column as work is completed.
 | `src/screens/Settings.tsx` | B06 | deep | B06d — all 1,069 lines; reconfirmed F03/F08/F11 as Settings-facing; no new findings |
 | `src/screens/Setup.test.tsx` | B06 | deep | B06c — all 259 lines; 17 existing tests passed; no new findings confirmed |
 | `src/screens/Setup.tsx` | B06 | deep | B06c — all 384 lines; no new findings confirmed |
-| `src/screens/Stats.test.tsx` | B06 | pending | — |
-| `src/screens/Stats.tsx` | B06 | pending | — |
+| `src/screens/Stats.test.tsx` | B06 | deep | B06e — all 138 lines; 10 existing tests passed; test gaps and probes below |
+| `src/screens/Stats.tsx` | B06 | deep | B06e — all 14 lines; a pure wrapper, so the review ran through it into RecordsPanel; F22/F23 confirmed |
 | `src/screens/Today.test.tsx` | B06 | deep | B06a — all 368 lines; 22 existing tests passed; test gaps and controls below |
 | `src/screens/Today.tsx` | B06 | deep | B06a — all 377 lines; F13 entry confirmed, F16–F18 confirmed, L06 recorded |
 | `src/screens/Workout.test.tsx` | B05 | deep | B05b — all 1755 lines; 94 existing tests passed; evidence below |
