@@ -8,19 +8,21 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B06b — History screen and its tests.** Review `src/screens/History.tsx`
-and `src/screens/History.test.tsx`, starting with session-list ordering, navigation,
-loading/failure states, and consistency after history changes. Reuse B03a's completed
-HistoryEdit evidence; do not reopen unchanged files or start B06b in this session.
+**Next batch: B06c — Setup screen and its tests.** Review `src/screens/Setup.tsx`
+and `src/screens/Setup.test.tsx`, starting with onboarding roster/TM writes, import,
+validation, partial failures and navigation. Reuse B02a/B04a/B04b evidence for seed,
+import and settings; do not reopen unchanged dependencies or begin B06c here.
+Settings (1,069 implementation lines) will need a separately bounded slice later.
 
-Latest run: **B06a complete; 2 additional files marked deep** (Today implementation
-and tests). **27 files deep in total.** All 29 existing Today/session tests passed;
-10 disposable checks passed (6 assert faulty behavior, 4 positive controls).
-F13 now includes Today's unreconciled RESUME link. New confirmed findings F16–F18
-cover overlapping starts, stale selection results, and pending-session recovery
-without local workout state; L06 records unprobed Today failure paths. Only this
-tracker changes; no application fixes or sub-agents. Publication awaits operator
-confirmation after review, as required by the B06a card.
+Latest run: **B06b complete; 2 additional files marked deep** (History implementation
+and tests). **29 files deep in total.** All 30 existing History tests passed.
+Eight disposable checks passed (6 bug assertions, 2 positive controls); a separate
+failure-injection run passed its 2 behavioral assertions but **exited 1 with 2
+expected unhandled rejections**. F10 now includes hidden cross sets in History.
+New confirmed findings F19–F21 cover wrong-session detail, stale list/calendar
+results and misleading empty-state failure handling. Only this tracker changes;
+no application fixes or sub-agents. This card authorizes commit, push and PR;
+operator acceptance remains a separate native Kanban review step.
 
 ## Previous session summary — 2026-09-11
 
@@ -59,7 +61,7 @@ summary; inaccessible report contents have not been reconstructed by guesswork.
 
 ## Findings carried forward
 
-F01–F18 have evidence recorded in the completed batches below. L01 is resolved
+F01–F21 have evidence recorded in the completed batches below. L01 is resolved
 into F07 and L03 into F13; L02 is partly substantiated by F14/F15, while L04/L05
 and L06 remain leads. See each batch for
 verification limits and historical versus fresh evidence. Review completion and bug resolution are separate states; no fix is
@@ -76,7 +78,7 @@ claimed here.
 | F07 | High; B02a real-SQLite regression | `src/db/seed.ts:51–54` | Startup with fewer than four lifts deletes survivors and creates defaults with new IDs, orphaning surviving training maxes/session history and losing customization. A smaller roster is supported by onboarding. | Seed only truly uninitialized installs; preserve existing lift IDs and intentional roster choices; test restart after customizing/removing defaults. |
 | F08 | High; B04a importJson regression | `src/lib/export-import.ts:114–130`, `163–178` | A valid JSON object with no recognized backup tables (e.g. unrelated document) passes validation and successfully clears all tables. Settings asks for overwrite confirmation, but the file is never established to be a backup. | Validate a recognized backup envelope/table set and supported versions before clearing; preserve legacy formats explicitly. |
 | F09 | Medium; B04a CSV regression | `src/lib/export-import.ts:202`, `224–230` | Timed/distance accessory rows export without duration or distance columns, silently discarding their measured performance in CSV. | Include both measurements and units, and cover timed/distance rows in export tests. |
-| F10 | Medium; B03a component regression | `src/screens/HistoryEdit.tsx:328–333`; `src/lib/calc.ts:35` | Stored `cross` sets are loaded but never rendered because the edit type list excludes them. Users cannot correct cross-lift weight/reps in history. | Render cross-lift sets with movement labels and editable controls; test persistence of cross-set edits. |
+| F10 | Medium; B03a edit probe; B06b History display probe | `src/screens/HistoryEdit.tsx:328–333`; `src/screens/History.tsx:321`; `src/components/forms/LiftSetsByType.tsx:21`; `src/lib/calc.ts:34–35` | Both display and edit type lists exclude stored `cross` sets. History can badge a session for a cross-movement PR yet hide that work in its expanded detail; users also cannot correct those sets in the editor. | Render cross sets with movement labels in both read-only and editable history; preserve B03a edit evidence and cover displayed work/PR attribution and persisted edits. |
 | F11 | Medium; B04b isolated restore check | `src/store/settings-store.ts:286–301`; import callers | Importing a backup with no settings row leaves the previous in-memory settings active until a reload, even though the database is empty. A restored theme is similarly stored in memory without immediate CSS application. | Reset settings state to defaults when no row exists and apply the resolved theme after import/restore. |
 | F12 | Medium; B05a isolated persistence check | `src/store/workout-store.ts:116–132` | A localStorage quota/write failure escapes the reactive persistence effect. The render path has no catch or user-visible persistence status, so active-workout recovery can silently stop. | Catch persistence failures, surface degraded recovery state, and define retry/cleanup behavior. |
 | F13 | High; B05b Workout/SQLite probes; B06a real-router entry probe | `src/screens/Today.tsx:220–226`; `src/screens/Workout.tsx:189–207`, `574–597`, `620–626` | A stale pending store resumes a completed DB row. Today's RESUME link bypasses START's reconciliation and reaches live Workout controls. SKIP changes the row to skipped; COMPLETE appends duplicate accessory sets and overwrites saved date/notes. EXIT already protects completed data. | Reconcile every resume entry and on route entry; perform status-conditional, idempotent completion/skip in a serialized transaction. Preserve a separate resumable post-commit phase instead of replaying the save. |
@@ -85,6 +87,9 @@ claimed here.
 | F16 | Medium; confirmed B06a delayed-insert component/SQLite probe | `src/screens/Today.tsx:80–122`, `125–148`, `352–354` | START has no in-flight guard. Two clicks before insertion settles both see no pending session and create distinct pending rows for the same lift/cycle/week. Completing the active one leaves the hidden pending attempt holding the week open. | Single-flight the entire start/resume/abandon/seed/navigation operation; atomically select-or-create one pending attempt for a slot, preserving historical redo rows. Define recovery for existing duplicate pending rows; a component flag alone does not address cross-tab calls. |
 | F17 | Medium; confirmed B06a deferred-selection component probes | `src/screens/Today.tsx:45–47`, `74–77`, `125–127`, `254–259`, `352–354` | Lift selection changes immediately while old TM/defaults remain; late reads overwrite the latest selection. A valid Bench TM can be replaced by a delayed zero-TM Deadlift result, disabling Bench, or Bench can display Deadlift's assistance. START during loading accepts a no-TM lift using the previous lift's enabled button. | Key TM/defaults/loading by selection generation and publish only current results; clear or hide stale values, disable START while unresolved, and validate the captured target's TM inside the start operation. |
 | F18 | High; confirmed B06a Today→Workout/SQLite probe | `src/screens/Today.tsx:87–91`, `116–121`; `src/store/workout-store.ts:135–137`; `src/screens/Workout.tsx:179–187`, `189–259`, `333–353` | Reusing a pending SQL session without matching local workout state resets the cursor/logged arrays instead of restoring its saved sets. Workout derives progress only from those empty arrays; the next LOG inserts another warmup set 1 alongside the already-saved row. Backup restore or absent local recovery state can reach this path. | Distinguish fresh sessions from recovery; hydrate persisted main/cross sets with stable IDs and reconstructed cursors before logging, reconcile defaults and available notes/accessories, and explicitly disclose state that was never backed up. Preserve existing rows and test pending-backup recovery. |
+| F19 | Medium; B06b sequential and delayed-detail component/SQLite probes | `src/screens/History.tsx:540–556`, `294–321`; `src/components/forms/LiftSetsByType.tsx:21–27` | Open A then B without collapsing A: old detail is attached to B immediately. Same-type set arrays are captured nonreactively by the child, so B's final notes/e1RM can accompany A's weights even after B finishes loading. A late A response can also replace B's notes. EDIT still targets B, not the displayed A data. | Key detail/loading/error state by session ID and request generation; clear old detail on a new selection, discard stale responses, and make the grouped set arrays reactive (or remount them by detail identity). Test both sequential and reordered reads. |
+| F20 | Medium; B06b delayed lift/month/day component/SQLite probes | `src/screens/History.tsx:391`, `431–449`, `495–519` | Late lift reads replace the current lift's list; late month reads erase the selected month's badges; late day-row builds put A's sessions under selected day B. Each async operation writes unkeyed global result signals without checking the current selection. | Use generation-keyed results for list mode/lift, month and selected day; publish only matching results, clear or explicitly mark old data while loading, and invalidate detail when its owning view changes. Include mode-switch and unmount coverage in the repair. |
+| F21 | Medium; B06b injected DB/storage failures, expected nonzero diagnostic run | `src/screens/History.tsx:391`, `495–502`, `693–696` | Rejected initial roster query or denied optional `history-lift` storage read escapes as an unhandled rejection while saved sessions are presented as “No completed sessions yet.” No error/retry state explains the failure. Mode changes can retry a transient DB failure; a persistent preference-read failure continues blocking automatic selection. | Catch owned load promises, distinguish loading/error/empty states, expose retry, and guard optional lift-preference reads/writes as already done for view mode. Extend fault coverage to month/day/detail/PR loads without conflating this with startup F04. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -299,8 +304,8 @@ column as work is completed.
 | `src/lib/workout-compose.test.ts` | B07 | pending | — |
 | `src/lib/workout-compose.ts` | B07 | pending | — |
 | `src/main.tsx` | B01 | deep | B01a; full file; findings/evidence below |
-| `src/screens/History.test.tsx` | B06 | pending | — |
-| `src/screens/History.tsx` | B06 | pending | — |
+| `src/screens/History.test.tsx` | B06 | deep | B06b — all 632 lines; 30 existing tests passed; test gaps and probes below |
+| `src/screens/History.tsx` | B06 | deep | B06b — all 726 lines; F10 display evidence, F19–F21 confirmed; limits below |
 | `src/screens/HistoryEdit.test.tsx` | B03 | deep | B03a — history editor and tests (4/5); evidence below |
 | `src/screens/HistoryEdit.tsx` | B03 | deep | B03a — history editor and tests (4/5); evidence below |
 | `src/screens/Settings.test.tsx` | B06 | pending | — |
@@ -920,3 +925,170 @@ documentation branch and open its PR. Next review slice: B06b, History.tsx and
 History.test.tsx as specified at the top; do not begin it here. Repository-wide
 review remains unfinished. **hotspot: docs/deep-code-review.md —** this card owns
 the continuation; serialize other tracker edits until its branch is reconciled.
+
+### 2026-09-12 — B06b: History lists, calendar, detail, charts and tests
+
+**Revision:** `20d38c3ae099293a5dd3a036f0dad395d755e28e`. Clean assigned worktree
+at start, branch `training-log/t_8f0dedfd-deep-code-review-batch-per-docs-deep-cod`.
+`git diff f8026941549518159866831bba07012794b62007 HEAD -- src` was empty;
+the diff from B06a's revision contained only `.gitignore` and this tracker. Existing
+deep application evidence, including B03a HistoryEdit, is unchanged and was not
+reopened. Origin/main matched this revision at publication preflight. One agent in
+the authorized Codex lane; no delegation, application edits or retained test edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/screens/History.tsx` | 1–726 | `739a09444fe21126e1a0d3d06f5d9d19611f6816` |
+| `src/screens/History.test.tsx` | 1–632 | `1ebf04247ca22aad4708452df09d9fda53be8e89` |
+
+**Behavior and invariants traced:**
+
+- Entire chart implementation: local dates, month arithmetic, clamped Catmull–Rom
+  controls, empty/single/equal-date and equal-weight guards, primary flat extension,
+  secondary path, deduplicated date ticks, coordinate scaling and point toggling.
+  Curve controls remain inside each segment's bounding rectangle; only real points
+  are smoothed. Primary TM and reversed session e1RM input are ascending by date.
+  Wathan and high-rep discount are delegated to calc, not rederived here. The header
+  hides zero-weight/zero-rep AMRAP summaries while the chart includes non-null zeros;
+  active tooltip state is not reset on new data. These are unprobed chart consistency
+  notes, not new confirmed findings. No graphical/browser/accessibility pass claimed.
+- Session row identity, fold semantics, panel IDs, EDIT URL, reactive save-gap lookup,
+  PR badge, notes and note-only accessories, exercise fallback names/modal arguments,
+  grouped lift-set rendering and settings-dependent e1RM. F19 demonstrates that
+  correct row/route identity alone does not ensure the displayed detail is its own.
+  F10 extends to read-only History because the display order also excludes cross.
+  Text interpolation does not introduce raw HTML from saved notes/exercise names.
+- All load branches and preferences: mode read/validation and guarded mode writes,
+  URL lift precedence, stored lift fallback, active/archived chip visibility, ordered
+  lift lookup, TM lookup, completed-only list queries, newest-first date sort, AMRAP
+  join and orphan-name fallback. Optional lift storage is unguarded unlike mode
+  storage (F21); stored/URL IDs are parsed but not checked against the roster. A stale
+  stored ID or hidden archived selection can produce an unselected-looking filter;
+  automatic fallback and same-route search-param changes need regression coverage.
+  Multiple AMRAP rows use the last returned row without an explicit best/latest
+  rule; ordinary Workout cross rows are not AMRAP, so cross overwriting the AMRAP
+  summary is **not** established. Duplicate/imported AMRAP policy remains B07 work.
+- Calendar: completed-only inclusive local-month bounds, Sunday-aligned padded grid,
+  outside-month disabled cells, today/selected states, density classes, day grouping,
+  inline day rows and empty message. Month/day result identity is not bound to the
+  selected header (F20). Within-day rows retain query order rather than applying the
+  list's newest-first sort; equal-time list ties also have no explicit ID rule.
+  No separate ordering bug is claimed without an agreed same-day ordering contract.
+- PR loading runs once per mount over completed sessions and successful working
+  sets; cross performance is attributed to its movement, badge to its parent
+  session. Views share that set of IDs. PRs and list data are separate snapshots;
+  there is no DB subscription. Ordinary editor navigation remounts History through
+  distinct routes; a controlled remount after persisted changes refreshes the list.
+  Concurrent external writes, live settings changes and production bfcache remain
+  untested rather than presumed to refresh automatically.
+- Limited dependency contracts, **not additional deep rows**: existing DB query/
+  serialization evidence; `LiftSetsByType.tsx:19–48` and SetReadout prop rendering;
+  calc's type-order constants and estimated1RM signature; `performance.ts:10–11`;
+  `pr.ts:40–68`; date-format helpers; `save-failure-store.ts:105–106`; RecordsPanel's
+  load path/archived filtering; Workout's logged `isAmrap` fields; App's History/edit
+  routes and HistoryEdit's return URLs. RecordsPanel's own status filtering and
+  async identity remain B08 questions, not silently completed by this caller review.
+
+**Fresh checks and exact outcomes:**
+
+1. `pnpm exec vitest run src/screens/History.test.tsx`: **30/30 passed**, exactly
+   one file, exit 0. pnpm populated worktree node_modules using existing store
+   packages; no manifest or lockfile changed. Read every test line, not only names.
+2. Archived HEAD's `src`, package.json and all tsconfigs into
+   `/tmp/training-review-b06b-XCQJv4`; symlinked this worktree's node_modules. A
+   minimal Solid/Vitest config retains the task worktree as root, absolute temporary
+   test/setup paths, both fs allow entries and the in-process SQLite alias. Source
+   and test blob checks in the copy matched the table above. Only disposable files
+   were written outside the assigned worktree, as permitted by the batch rules.
+3. `pnpm exec vitest run --config /tmp/training-review-b06b-XCQJv4/vite.config.ts
+   --reporter=verbose` initially passed **8/8**, exit 0. The later fault file is
+   selected separately; the final ordinary-probe command uses the exact
+   `review-b06b.test.tsx` filter. Six checks assert faulty behavior, two are positive
+   controls. RecordsPanel and ExerciseHistoryModal are stubbed to bound scope;
+   History, row/set rendering, Solid Router context and SQLite are real. Imperative
+   navigation is a spy, not a browser transition. The F10 fixture was strengthened
+   to establish that the displayed PR is specifically attributable to cross work.
+4. `pnpm exec vitest run --config /tmp/training-review-b06b-XCQJv4/vite.config.ts
+   review-b06b-failure --reporter=verbose`: **2 behavioral assertions passed, but
+   command exited 1 with 2 expected unhandled rejections**, at History:496 and :499.
+   This is deliberate failure-path evidence, **not a passing regression gate** and
+   not a harness-resolution failure. The injected errors were not suppressed.
+5. Final `pnpm exec vitest run --config
+   /tmp/training-review-b06b-XCQJv4/vite.config.ts review-b06b.test.tsx
+   --reporter=verbose`: **8/8 passed**, exit 0, including the strengthened F10
+   fixture, with no unhandled-error report. `git diff --check` passed; only this
+   tracker changed, selected source blobs still matched and no untracked files
+   belonged in the PR. `python /tmp/training-review-b06b-XCQJv4/audit.py` verified
+   **179 ledger rows, 29 deep, zero duplicate paths and zero unlisted tracked files**
+   after applying the documented tracker/generated-status exclusions.
+
+**Reproduction recipes / confirmed effects:**
+
+- **F19 / ordinary sequential selection:** Seed completed Bench A with a 111lb main
+  set and A-notes, and B with a 222lb main set and B-notes. Expand A and await its
+  notes, then expand B directly. After B-notes arrive and continuations drain, B's
+  panel still displays 111lb, not 222lb. Its EDIT handler targets B; SQLite B remains
+  222lb. Root cause spans two sites: History keeps A's detail when setting expanded
+  to B, and LiftSetsByType captures `typeSets` once in the reference-keyed type loop.
+  B's arriving detail keeps the same `main` key, so that array does not refresh.
+  Positive control: explicitly collapse A before expanding B; B correctly shows
+  222lb. No timing injection is needed for this persistent wrong-weight display.
+- **F19 / reordered detail:** Defer db.sessions.get(A), expand A then B and await
+  B-notes. Release A: A-notes now appear inside B's still-expanded panel. A is folded.
+  Both the request identity race and nonreactive child grouping need coverage; merely
+  making the child reactive does not solve a late response from the wrong session.
+- **F20 / lift:** Fully load Bench; defer OHP's trainingMaxes sortBy, select OHP,
+  select Bench again and let Bench settle, then release OHP. The highlighted chip
+  stays Bench but only OHP's session row is present. **Month:** with sessions in
+  adjacent months, defer the Previous month's query, click Next and let the current
+  month settle, then release Previous. Current header stays in place but its saved
+  session badge disappears; both persisted sessions still exist. **Day:** defer
+  day A's AMRAP join, select day B and await B's row, then release A. B stays selected
+  while A's session replaces B's row. The probes assert final UI identity and real
+  persisted state where relevant, not simply promise completion. Mode-switch races
+  and settlement after unmount were source-traced only, not separately exercised.
+- **F10 / hidden work:** Seed an earlier 444lb Bench performance, then a weaker
+  111lb Bench session containing a first OHP cross performance of 333lb. The current
+  session gets a PR badge from OHP's baseline record despite not beating Bench.
+  Expand it: 111lb main is visible, but neither 333lb nor a Cross section appears.
+  The cross row remains in SQLite. B03a remains the evidence for inability to edit
+  cross rows; no editor probe was rerun and no deletion is alleged.
+- **F21 / failure states:** With one completed session, reject only the initial
+  lifts.orderBy('order').toArray call. The screen claims no completed sessions,
+  exposes no alert/retry and leaves the saved row intact; changing to By date retries
+  successfully. Separately throw from localStorage.getItem only for `history-lift`:
+  the same false empty display persists despite healthy SQLite. Vitest reports each
+  rejected load as unhandled. This validates two initial-load failures only; PR,
+  month, selected-day, detail, exercise-name and preference-write rejection UI still
+  need targeted regression tests. No real-browser storage denial was exercised.
+- **Refresh/ordering control:** Seed completed sessions out of chronological order
+  plus newer pending/skipped sessions. By date shows only completed rows newest
+  first across lifts. Unmount, update the oldest completed date/notes and delete the
+  newest row, then remount: order, notes and membership reflect SQLite. This models
+  post-edit state, not the actual editor UI, browser Back or cross-tab invalidation.
+
+**Test assessment / remaining risk:** The 30 existing tests cover chart legends,
+degenerate input presence, basic expansion/collapse, notes/accessories, EDIT URL,
+mode and lift selection, orphan names, current-day styling and density badges.
+Many checks target branch execution or text presence rather than exact values;
+the initial empty-state test can pass before loading, URL/storage tests select the
+first lift anyway, and “expand one of two” never switches directly between them.
+No existing test covers reordered loads, storage/read failure, chart geometry/
+interaction, remembered mode validation, archived filter recovery, cross visibility,
+PR attribution, numeric set order or remount after edits. Several suites omit
+accessory/exercise table resets; expanded probes use explicit synthetic isolation.
+
+No full repository suite, lint, typecheck, build or browser E2E was run locally for
+this documentation-only batch. Production Worker/OPFS, RPC failure timing, multi-tab
+changes and real browser navigation are not covered by in-process SQLite/jsdom.
+F01–F21 remain open findings, not fixes. Cross-file questions above are explicit
+follow-up coverage limits; B06b has no external blocker and closes only two files.
+
+**Outcome / exact next action:** Two History ledger rows become deep, bringing the
+total to 29; F19–F21 added at Medium, F10 expanded without duplicating its ID. Only
+this tracker belongs in the commit/PR. This card explicitly authorizes publication,
+unlike B06a's earlier pre-publication phase. Request native operator review after
+push/PR verification; do not mark the card accepted or merge the PR. Stop this
+bounded batch. Next session: B06c Setup and tests at the top; repository-wide review
+is unfinished. **hotspot: docs/deep-code-review.md —** serialize other tracker edits
+until this continuation is reconciled.
