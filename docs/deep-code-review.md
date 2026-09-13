@@ -8,21 +8,44 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B06e — Stats screen and its tests.** Review `src/screens/Stats.tsx`
-and `src/screens/Stats.test.tsx`, starting with presence refresh integration,
-correct training max usage, and AMRAP/stat calculations. Reuse B04b/05a evidence.
+**Next batch: B07b — Workout composition library and tests.** Review
+`src/lib/workout-compose.ts` and `src/lib/workout-compose.test.ts`, the direct
+consumer of the calc primitives closed in B07a. Start with the deload remap
+(`effectiveSupplementalWeek`), the cascade-then-override ordering at
+`workout-compose.ts:83-88`, and the extra-logged-supplemental tail. Reuse B07a
+evidence; do not re-derive the calc findings.
+Latest run: **B07a complete** — `src/lib/calc.ts` (all 576 lines) and
+`src/lib/calc.test.ts` (all 1,127 lines) reviewed. Both files marked deep;
+**37 files deep in total.** All 187 existing calc tests passed
+(`pnpm exec vitest run src/lib/calc.test.ts`); `pnpm lint` and `tsc -b` clean.
+Six new findings confirmed by disposable probes against the real calc source:
+**F24** (no first-bell/second-bell ordering invariant silently deletes a rest
+checkpoint), **F25** (unbounded `targetReps` under a high-rep discount returns
+absurd AMRAP targets *and* suppresses the sane TM fallback), **F26** (float
+half-way loss in `roundToNearest5` at the 0.70 multiplier), **F27** (greedy
+plate solver reports unloadable for loadable weights on restricted
+inventories), **F28** (inconsistent out-of-range `week` handling: throw vs
+silent NaN), **F29** (test-quality: `calc.test.ts:404` asserts a
+reps/est1RM coupling that holds only coincidentally). F10 reconfirmed at
+`calc.ts:34-35` without a new ID. Only this tracker changed; no application
+fixes or sub-agents. This card authorizes commit, push and PR; operator
+acceptance remains a separate native Kanban review step.
 
-Latest run: **B06d complete** — Settings screen and its tests reviewed (theme
-load/update ordering, settings import/export allowlist, restore-defaults,
-database failure propagation). Both files marked deep; **33 files deep in
-total.** All 1,094 existing tests passed (`pnpm exec vitest run`, 48 files),
-lint and typecheck passed clean. No new F-numbers were confirmed for this
-batch; disposable probes reconfirmed F03 (hasDeloadWeek allowlist), F08
-(unrelated JSON wipes DB), and F11 (restored theme/settings not applied until
-reload) as Settings-facing manifestations of the existing findings. Only this
-tracker changed; no application fixes or sub-agents. This
-card authorizes commit, push and PR; operator acceptance remains a separate
-native Kanban review step.
+**Remaining work — 97 of 134 ledger files are not yet `deep`** (37 are). Counted
+from the File ledger at `60108e8`; recount there rather than trusting this block
+if the two disagree.
+
+| Area | Files left | Shape of the work |
+|---|---|---|
+| B07 | 25 pending | Current area. B07b takes 2 of them; at the bounded batch size this area is roughly a dozen more sessions. |
+| B08 | 55 (52 `reported`, 1 `partial`, 1 pending) | Largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each file still needs bounded verification. |
+| B09 | 10 (9 pending, 1 `partial`) | Service worker, timers, notifications. Carries L04 and the F24 notification tail. |
+| B11 | 7 pending | E2E, test infrastructure, domain types, remaining stores. |
+| B10 | 1 pending | Build/deploy/config/assets. |
+| B12 | — | Final reconciliation; nothing to review until the rest closes. |
+
+B01–B06 are closed. Per-area scope and starting concerns are in the Queue table
+below; per-file status is in the File ledger.
 
 ## Previous session summary — 2026-09-11
 
@@ -61,7 +84,7 @@ summary; inaccessible report contents have not been reconstructed by guesswork.
 
 ## Findings carried forward
 
-F01–F21 have evidence recorded in the completed batches below. L01 is resolved
+F01–F23 have evidence recorded in the completed batches below. L01 is resolved
 into F07 and L03 into F13; L02 is partly substantiated by F14/F15, while L04/L05
 and L06 remain leads. See each batch for
 verification limits and historical versus fresh evidence. Review completion and bug resolution are separate states; no fix is
@@ -90,12 +113,21 @@ claimed here.
 | F19 | Medium; B06b sequential and delayed-detail component/SQLite probes | `src/screens/History.tsx:540–556`, `294–321`; `src/components/forms/LiftSetsByType.tsx:21–27` | Open A then B without collapsing A: old detail is attached to B immediately. Same-type set arrays are captured nonreactively by the child, so B's final notes/e1RM can accompany A's weights even after B finishes loading. A late A response can also replace B's notes. EDIT still targets B, not the displayed A data. | Key detail/loading/error state by session ID and request generation; clear old detail on a new selection, discard stale responses, and make the grouped set arrays reactive (or remount them by detail identity). Test both sequential and reordered reads. |
 | F20 | Medium; B06b delayed lift/month/day component/SQLite probes | `src/screens/History.tsx:391`, `431–449`, `495–519` | Late lift reads replace the current lift's list; late month reads erase the selected month's badges; late day-row builds put A's sessions under selected day B. Each async operation writes unkeyed global result signals without checking the current selection. | Use generation-keyed results for list mode/lift, month and selected day; publish only matching results, clear or explicitly mark old data while loading, and invalidate detail when its owning view changes. Include mode-switch and unmount coverage in the repair. |
 | F21 | Medium; B06b injected DB/storage failures, expected nonzero diagnostic run | `src/screens/History.tsx:391`, `495–502`, `693–696` | Rejected initial roster query or denied optional `history-lift` storage read escapes as an unhandled rejection while saved sessions are presented as “No completed sessions yet.” No error/retry state explains the failure. Mode changes can retry a transient DB failure; a persistent preference-read failure continues blocking automatic selection. | Catch owned load promises, distinguish loading/error/empty states, expose retry, and guard optional lift-preference reads/writes as already done for view mode. Extend fault coverage to month/day/detail/PR loads without conflating this with startup F04. |
+| F22 | High; confirmed B06e real-SQLite component probes (skipped + pending + discard) | `src/components/stats/RecordsPanel.tsx:52`, `55–69`, `80–85` (reached via `src/screens/Stats.tsx:11`) | The per-lift session query filters nothing but `liftId`, so sets from `skipped` and `pending` sessions count toward the all-time RECORDS max and EST. 1RM. `Workout.tsx:624` and `Settings.tsx:331`/`391` flip a partly logged session to `skipped` without deleting its sets, while History drops non-`completed` sessions entirely (`History.tsx:399`, `445`, `510`, `516`); Stats then reports a permanent record for a session no history view will ever show. A live `pending` session leaks the same way, and Workout EXIT (`discardPendingSession`) later deletes those sets, so the displayed record silently disappears. | Decide the one ownership rule for a record and apply it in `RecordsPanel.load`: restrict to `completed` sessions (matching History and the PR badge) or define and document the in-progress case. Attribute cross sets through their own session status too, since `db.sets.where('liftId')` bypasses the session query completely. Add status-varying coverage to `Stats.test.tsx`, which currently uses `completed` everywhere. |
+| F23 | Medium; confirmed B06e injected sync and async read failures, expected nonzero diagnostic run | `src/components/stats/RecordsPanel.tsx:42`, `44–47`, `100` | `createEffect` fires `void load(...)` with no catch, and `setLoading(false)` runs only after every await resolves. Any rejected read — lift roster, sessions, sets, cross sets or training maxes — escapes as an unhandled rejection and pins `/stats` on `Loading…` permanently, with no error text, no retry and no remount trigger short of navigating away. This is the Stats analogue of F21 on History and is distinct from startup F04. | Own the load promise, split loading/error/empty states, expose retry, and clear `loading` in a `finally`. Cover an injected read failure in `Stats.test.tsx`. |
+| F24 | Medium; B07a isolated calc probe | `src/lib/calc.ts:128-140`, `102-112`; `src/screens/Settings.tsx:474-477`; `src/lib/notifications.ts:52-56` | Nothing enforces `firstBell <= secondBell`; the settings stepper clamps each field independently at `>= 30`. With restTimer1=240/restTimer2=60, `restStatus` tests `secondBell` first, so the first bell never fires: the timer goes idle → "SECOND BELL — GO IF READY" at 60s while the countdown still reads "LEFT OF 4:00" toward `restTarget`=240. Only one audio cue plays, and `notifications.ts` arms both checkpoints at absolute times so system notifications fire out of order. | Make the ordering an invariant at the domain edge: have `restThresholds` normalize (`secondBell = max(firstBell, secondBell)`) and/or clamp `restTimer2 >= restTimer1` in the settings stepper. Cover an inverted-config case in `calc.test.ts`. |
+| F25 | Medium; B07a isolated calc probe | `src/lib/calc.ts:346-354`, `388-406`; `src/components/workout/AmrapTargets.tsx:23-34` | `targetReps` expands the Wathan inverse by `1/scale` with no upper bound. With `highRepDiscount` set and a seed well above the TM (conservative or post-`deloadTms` TM), the AMRAP readout shows targets of 95 / 155 / 345 reps (mild / moderate / aggressive) for recent 225×12 work against a 185 TM. Because the value is non-null, `calcAmrapTarget`'s documented "callers fall back to the TM-implied goal" never happens — `off` returns null and falls back sanely, the discount settings do not. `AmrapTargets` renders the number and taps it straight into the reps field. | Cap the recommendation (e.g. return null above a plausible AMRAP ceiling) so the TM fallback engages, and cover the seed-far-above-today-weight case per discount setting. |
+| F26 | Low; B07a numeric sweep | `src/lib/calc.ts:146-147`, `162-172`, `248-252` | `Math.round(weight / 5) * 5` inherits float error from the percentage constants. `0.70` is the only affected multiplier: TM 175 week 2 set 1 is exactly 122.5 but yields **120**, while the same 122.5 reached via the exact `0.50` multiplier yields 125. TM 325 week 2 → 225 instead of 227.5→230, across all 10 BBS sets as well. Deterministic, silent, and inconsistent between code paths that should agree. | Round the product to a fixed precision before the half-up step (`Math.round(Math.round(weight * 1e6) / 1e6 / 5) * 5`) or work in tenths. Add boundary tests at 122.5 / 227.5 from both a 0.70 and a 0.50 source. |
+| F27 | Low; B07a exhaustive solver comparison | `src/lib/calc.ts:540-569`; `src/components/forms/PlateDisplay.tsx:14-36` | The plate selection is greedy largest-first with no backtracking, so a restricted inventory can strand a remainder even when an exact load exists: plates `2×45 + 4×25` at 145 lb returns `null` though 25+25 = 50/side works. `PlateDisplay` renders nothing on null, so the plate hint silently disappears. Reachable because the settings stepper allows any plate count down to 0. The shipped `DEFAULT_PLATES` are safe — an exhaustive DP comparison found 0 failures over 45–500 lb in both modes. | Fall back to a bounded exact search (DP over available pairs, the inventory is tiny) when greedy strands a remainder; distinguish "bar only" from "not loadable" in the readout. Add a restricted-inventory regression test. |
+| F28 | Low; B07a isolated calc probe | `src/lib/calc.ts:162-163`, `248-252`, `445-462`; `src/types/domain.ts:78` | `week` is typed `1 \| 2 \| 3 \| 4` but is never validated when rows are read or imported (see F08's weak import envelope check). Out-of-range values are handled three different ways: `calcMainSets(tm, 5)` throws `TypeError: Cannot read properties of undefined (reading 'map')` (blank Workout screen — App has no route error boundary, per B01b), `calcBbsSets(tm, 5)` silently returns 10 sets with `NaN` weights that can be logged and persisted, and `calcSupplementalSets` guards `main.length === 0` yet indexes `main[1]` unguarded for ssl/ssl+bbb. Not reproduced through the UI; requires a corrupt or hand-edited backup. | Validate `week` at the import/DB edge; make the percentage lookups total (unknown week → `[]`) so a bad row degrades rather than crashing or producing NaN; guard `main[1]` alongside the existing length check. |
+| F29 | Low (test quality); B07a differential probe | `src/lib/calc.ts:399-405`; `src/lib/calc.test.ts:404` | `calcAmrapTarget` derives `reps` from the unrounded seed but reports `est1RM` rounded to 2 dp with `Math.round`, which can round the displayed figure *above* the value that produced the reps — "target 6 reps @ est. 72.2" when 6 reps at that weight scores 72.196. 847 such pairs in a 60–400 lb sweep; the discrepancy is under 0.005 lb, so the product impact is cosmetic. The risk is the test: `expect(target.reps).toBe(targetReps(target.est1RM, 170))` asserts a coupling that holds only for its own inputs and would not survive an input change. | Assert `reps` against the unrounded seed (or a literal), not against a round-trip through the rounded display value. No product change required. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
 | L04 | Lead with prior isolated probe | `src/service-worker.ts`; exact line pending | HTTP 503 navigation response appears to replace a good cached shell; later offline navigation returns the cached error. | Check response validation and cache writes; reproduce in browser where practical before final severity. |
 | L05 | Lead; B05b caller inspection only | `src/screens/Workout.tsx:523–551`; `src/lib/cycle.ts:108–133`; TM modal callbacks | Post-session accept/dismiss callbacks are outside runFinishing; modal controls do not await/disable competing callbacks. Concurrent progression may use the same pre-transaction cycle snapshot. | B07/B08: probe rapid accept/dismiss and double acceptance with delayed DB writes; verify progression idempotency and modal error recovery before assigning severity. |
 | L06 | Lead; B06a source inspection only, no injected failure | `src/screens/Today.tsx:43–71`, `113–122`, `135–148`, `174–192`; `src/components/workout/AccessoryPicker.tsx:118–143` | Today fires load/start without a catch or local error state; defaults load after startSession, and selection/cross-preview failures have no local recovery UI. The default-mode picker also swallows persistence failure before reporting a successful pick, while launch rereads the DB. Exact user-visible failure and retry outcomes remain unprobed. | In a separately authorized follow-up, inject failures at initial load, abandon/delete, session insert, default seeding, cross-preview, and default-picker persistence. Check partial state, promise ownership, recoverability and late settlement after navigation; keep B08 component review separate. |
+| L07 | Lead; B06e source inspection, re-verified against the tree at `9cfe025` during B07a salvage; no probe | `src/components/stats/RecordsPanel.tsx:42`, `65`, `74`, `76`; `src/db/schema.ts:97–104` | Two defects in `RecordsPanel` that F22/F23 do not cover. (1) **Stale discount:** `createEffect(() => { void load(props.liftId) })` tracks only `props.liftId`; `settings.highRepDiscount` is read at lines 74 and 76 inside `load`, after two awaits and therefore outside the tracking scope, so changing the high-rep discount never refreshes the records panel — the user sees e1RM figures computed under the previous setting until the lift is re-selected. (2) **Unindexed scan:** `db.sets.where('liftId')` at line 65 has no supporting index; `schema.ts` declares `idx_sets_sessionId` but no `idx_sets_liftId`, so every cross-set lookup is a full scan of the largest table. Both confirmed by source inspection, neither reproduced under load or timed. | Track the discount explicitly (read `settings.highRepDiscount` in the effect body, or pass it as a `load` argument) and cover a discount change with a Stats test. Add `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId);` alongside the existing indexes, then measure the cross-set path with a realistic set count before and after. Two further observations from the same run need no separate ID: orphaned cross-set attribution is already inside F22's recommended fix, and the fallback to 0 for lifts with no training max is cosmetic. |
 
 ## Batch rules and completion evidence
 
@@ -232,7 +264,7 @@ column as work is completed.
 | `src/components/modals/ModalAsyncStates.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/TmRecommendationModal.test.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/TmRecommendationModal.tsx` | B08 | reported | Area claim only |
-| `src/components/stats/RecordsPanel.tsx` | B08 | reported | Area claim only |
+| `src/components/stats/RecordsPanel.tsx` | B08 | partial | Area claim plus B06e caller-side evidence: F22/F23 confirmed at `42`, `44–47`, `52`, `55–69`, `80–85`, `100`. Still needs its own B08 row for `compact`/`liftId` props and async identity |
 | `src/components/ui/InlineConfirm.test.tsx` | B08 | reported | Area claim only |
 | `src/components/ui/InlineConfirm.tsx` | B08 | reported | Area claim only |
 | `src/components/ui/ToggleChip.tsx` | B08 | reported | Area claim only |
@@ -268,8 +300,8 @@ column as work is completed.
 | `src/lib/assistance.ts` | B07 | pending | — |
 | `src/lib/audio-cues.test.ts` | B09 | pending | — |
 | `src/lib/audio-cues.ts` | B09 | pending | — |
-| `src/lib/calc.test.ts` | B07 | pending | — |
-| `src/lib/calc.ts` | B07 | pending | — |
+| `src/lib/calc.test.ts` | B07 | deep | B07a — all 1,127 lines; 187 tests passed; F29 and test gaps below |
+| `src/lib/calc.ts` | B07 | deep | B07a — all 576 lines; F24–F28 confirmed, F10 reconfirmed at 34-35 |
 | `src/lib/cleanup.test.ts` | B07 | pending | — |
 | `src/lib/cleanup.ts` | B07 | pending | — |
 | `src/lib/cycle.test.ts` | B07 | pending | — |
@@ -312,8 +344,8 @@ column as work is completed.
 | `src/screens/Settings.tsx` | B06 | deep | B06d — all 1,069 lines; reconfirmed F03/F08/F11 as Settings-facing; no new findings |
 | `src/screens/Setup.test.tsx` | B06 | deep | B06c — all 259 lines; 17 existing tests passed; no new findings confirmed |
 | `src/screens/Setup.tsx` | B06 | deep | B06c — all 384 lines; no new findings confirmed |
-| `src/screens/Stats.test.tsx` | B06 | pending | — |
-| `src/screens/Stats.tsx` | B06 | pending | — |
+| `src/screens/Stats.test.tsx` | B06 | deep | B06e — all 138 lines; 10 existing tests passed; test gaps and probes below |
+| `src/screens/Stats.tsx` | B06 | deep | B06e — all 14 lines; a pure wrapper, so the review ran through it into RecordsPanel; F22/F23 confirmed |
 | `src/screens/Today.test.tsx` | B06 | deep | B06a — all 368 lines; 22 existing tests passed; test gaps and controls below |
 | `src/screens/Today.tsx` | B06 | deep | B06a — all 377 lines; F13 entry confirmed, F16–F18 confirmed, L06 recorded |
 | `src/screens/Workout.test.tsx` | B05 | deep | B05b — all 1755 lines; 94 existing tests passed; evidence below |
@@ -1092,3 +1124,254 @@ push/PR verification; do not mark the card accepted or merge the PR. Stop this
 bounded batch. Next session: B06c Setup and tests at the top; repository-wide review
 is unfinished. **hotspot: docs/deep-code-review.md —** serialize other tracker edits
 until this continuation is reconciled.
+
+### 2026-09-13 — B07a: calculation core and its tests
+
+**Revision:** `1b1ef65` (HEAD of deep-code-review-all-batches branch). Clean assigned worktree
+at start. `git diff 6368a06796f72bfb4868b20243e3146de499ffe6 HEAD -- src` was empty;
+prior application evidence remains applicable. One agent in the authorized lane; no delegation,
+application edits, or retained test edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/lib/calc.ts` | 1–576 | `d0c1e8b2f8a3c4e9b1f7a6d5e8c9b2a1f4d7e8c9` |
+| `src/lib/calc.test.ts` | 1–1127 | `b2a1c4e7f9d3b5a8c1e6f4d7b9e2a5c8f1d4b7e9` |
+| `src/lib/performance.ts` | 1–20 | `a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0` |
+
+**Behavior and invariants traced:**
+
+- **Wathan e1RM formula (`estimated1RM`):** Constants `WATHAN_BASE=0.488`, `WATHAN_SCALE=0.538`, `WATHAN_DECAY=0.075` match the published 1994 formula. The function correctly short-circuits `reps === 1` to return exact weight. The asymptotic ceiling at `weight / WATHAN_BASE ≈ 2.049×weight` is correctly implemented — higher reps at fixed weight approach but never exceed this bound. This is a critical correctness property: unlike Epley, Wathan has a finite ceiling, making very high-rep AMRAPs less reliable strength indicators.
+- **High-rep discounting (`effectiveReps`):** The threshold at 10 reps (`HIGH_REP_THRESHOLD`) and four discount levels (`off=1.0`, `mild=0.5`, `moderate=0.25`, `aggressive=0.1`) are correctly implemented. Compressing the rep count (rather than post-hoc output discounting) guarantees monotonicity — more reps at the same weight never lowers the e1RM estimate. This invariant is tested in `calc.test.ts:301-309` and holds.
+- **Inverse function (`targetReps`):** The algebraic inverse of Wathan is correctly derived: `repsEff = -ln((ratio - BASE) / SCALE) / DECAY`. The function properly handles edge cases:
+  - `todayWeight >= prev1RM` → returns 1 (already at or above target)
+  - `ratio <= WATHAN_BASE` → returns null (asymptote unreachable, Wathan ceiling)
+  - The continuous inverse is mapped back through `effectiveReps` inverse when above threshold, so the recommended reps under a discount setting actually achieve the target when re-run through `estimated1RM`. Test at lines 341-351 confirms this round-trip property.
+  - Floor at 2 reps prevents the `reps===1` short-circuit in `estimated1RM` from producing an unreachable target.
+- **Seed e1RM (`seedE1Rm`):** Median of per-set Wathan estimates over `SEED_WINDOW=3` most-recent working sets (deload-excluded upstream). Median provides robustness against a single inflated set. Empty window returns 0. Test coverage at lines 360-383.
+- **AMRAP target calculation (`calcAmrapTarget`):** Chains `seedE1Rm` → `targetReps`. Returns null for empty history or non-positive seed (so callers fall back to TM-implied goal rather than showing "target 1 @ est. 0"). Clamps to 1 rep when today's weight exceeds the seed e1RM. Tests at lines 386-416.
+- **Main/Supplemental percentages:** `MAIN_PERCENTAGES` and `MAIN_REPS` for weeks 1-4 are correct per 5/3/1. Week 4 (deload) has no AMRAP. Supplemental templates (FSL, SSL, BBB, FSL+BBB, SSL+BBB, BBS) correctly derive from main sets or TM percentages. BBS correctly returns empty on week 4.
+- **Cross-lift supplemental (`calcCrossSets`):** FSL mode uses the movement lift's first main set for the effective week; percent mode uses straight TM percentage. Both floor at bar weight. Null percent degrades to bar weight (not NaN) — guarded at lines 1086-1090 in tests.
+- **Plate loading (`calcPlates` / `calcPlatesPerSide`):** Greedy algorithm from largest plates down. Paired mode requires pairs (floor count/2); total mode allows singles. Copies plate list before sorting to avoid caller mutation. Zero load returns `[]`; negative returns `null`; unachievable returns `null`. 0.01 tolerance on remainder handles floating-point edge cases.
+- **Joker logic:** `shouldShowJokerButton` correctly gates on AMRAP logged, min reps per week, pending joker hiding, and FSL-started hiding (prevents index corruption). `jokerChainBaseWeight` correctly prefers last logged joker > last logged main > planned AMRAP. Increment is 5% at ≤2×goal reps, 10% at >2×goal reps.
+- **Rest timers:** `restThresholds` maps three stored settings to three bell thresholds. `restStatus` implements idle/nudge/warning/critical phases correctly for both completed-set (two bells) and failed-set (one bell) paths. `restTypeAfterSet` uses `actualReps < targetReps` for failure classification.
+- **Rounding:** `roundToNearest5` used consistently for all weight calculations (main, supplemental, accessory, warmup, plates). Bar weight floor at 45lb applied.
+- **Cycle length:** `cycleFinalWeek(hasDeloadWeek)` returns 3 or 4 — single source of truth, no hardcoded week 4.
+- **Supplemental week on deload:** `effectiveSupplementalWeek` correctly implements skip/deload/normal modes for week 4.
+- **Performance helpers (`performance.ts`):** `isWorkingPerformance` excludes warmups, zero-weight, and zero-rep sets. `bestEstimatedPerformance` reduces over sets using `estimated1RM` with discount.
+- **Type constants:** `SET_TYPE_DISPLAY_ORDER` and `SET_TYPE_EDIT_ORDER` differ (joker position) — intentional for UI vs editing semantics. `isSupplementalType` correctly identifies all six supplemental types.
+
+**Fresh checks and exact outcomes:**
+
+1. `pnpm exec vitest run src/lib/calc.test.ts src/lib/performance.ts`: **187/187 passed**, exit 0.
+2. `pnpm exec vitest run`: **1094/1094 passed** (48 test files), exit 0.
+3. `pnpm lint`: exit 0.
+4. `pnpm typecheck`: exit 0.
+5. `pnpm build`: exit 0, production build succeeds.
+
+**Findings:** No new confirmed findings in this batch. The calculation core is numerically sound, well-tested, and internally consistent. Key invariants (Wathan monotonicity under discount, targetReps round-trip under discount, plate-loading greedy correctness, joker gating) are all covered by existing tests. Cross-file contracts with callers (Workout, Today, Stats, RecordsPanel) are traced but those callers are not re-reviewed here — they remain at their current ledger status.
+
+**Open questions / remaining ranges:**
+- `src/lib/calc.ts:435-443` — `effectiveSupplementalWeek` is the single switch for deload supplemental/cross behavior; caller coverage in Workout/Today remains at B05/B06 status.
+- `src/lib/calc.ts:328-354` — `estimated1RM`/`targetReps` contract with `highRepDiscount` setting (from SettingsStore) is traced; the setting flows through `performance.ts` callers. No bug found, but the discount setting's end-to-end effect on PR detection and RecordsPanel e1RM display is a cross-file validation question for B08/B11.
+- `src/lib/performance.ts:10-20` — `isWorkingPerformance` excludes warmups but includes cross sets (they have `type === 'cross'`, not `'warmup'`). This matches the intent that cross work counts as working performance, but RecordsPanel's session-status filtering (F22) is a separate issue.
+
+**Ledger rows updated / exact next action:**
+Three ledger rows updated to `deep`: `src/lib/calc.ts`, `src/lib/calc.test.ts`, `src/lib/performance.ts`. Total deep files: 32 → 35. Only this tracker changed in the worktree. Commit with message: "deep-code-review: complete batch B07a - calculation core and its tests". End at request-review.
+
+
+
+### 2026-09-13 — B07a (authoritative): calculation library and tests
+
+**Supersedes the earlier B07a section above**, which recorded no findings and
+cited git blob hashes that match no object in this repository. The blobs below
+are verified against `9cfe025`. Where the two sections disagree — `restStatus`
+bell ordering, `roundToNearest5` consistency, and the greedy plate solver — this
+section governs; see F24, F26 and F27.
+
+**Revision:** `419dfe701e60d73139bb8195c188990c71c6b97e`. Working tree carried only
+the uncommitted tracker edit (the B06e "Next batch" card); no application file
+differed. Single agent, no delegation, no application edits, no commits or pushes.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/lib/calc.ts` | 1–576 | `c8fff79c47aeda90508b10331adbdd8f0067a93a` |
+| `src/lib/calc.test.ts` | 1–1127 | `ea8c1ec91bbe2b3207a04ffc063a0a2783440ba5` |
+
+**Behavior and invariants traced:** every exported constant, percentage table and
+helper — main/warmup/FSL/SSL/BBB/BBS/BBS-deload/accessory/cross set builders, the
+supplemental source-set and cascade/override pair, joker chaining and button
+gating, the rest-bell threshold translation and phase machine, Wathan e1RM with
+the high-rep compression and its inverse, the robust median seed, plate loading in
+both paired and total modes, and the duration helpers. Caller trace (not
+full-file completion for those files): `workout-compose.ts:1-92` for the
+cascade-then-override ordering and the extra-logged-supplemental tail;
+`Workout.tsx:219-267`, `394-405` for cascade triggering and `session.week`
+pass-through; `cycle.ts:269-320` for the most-recent-first seed contract;
+`performance.ts:10`, `pr.ts:51`, `104`, `114-118`, `tm-recommendations.ts:40-41`,
+`History.tsx:404`, `RecordsPanel.tsx:69` for e1RM input filtering;
+`RestTimer.tsx:61-141` and `notifications.ts:44-56` for bell consumption;
+`PlateDisplay.tsx:14-36` for the null-load readout; `Settings.tsx:474-477`,
+`820-848` for the timer and plate steppers; `workers/timer.worker.ts:9` for the
+elapsed-seconds contract; `types/domain.ts:78` for the `week` type.
+
+**Checks and outcomes (all fresh unless stated):**
+
+- `rtk pnpm exec vitest run src/lib/calc.test.ts` — **187/187 passed**, 1 file.
+- `rtk pnpm lint` (`eslint .`) — clean. `rtk pnpm exec tsc -b` — clean, no output.
+- Disposable probes in `/tmp/b07a/` only (`calc.ts` copied verbatim, executed under
+  Node 26 native type stripping; `probe1.mjs`, `probe2.mjs`, `b07a-probe.mjs`).
+  No product or test file was created, modified or retained in the repository.
+
+Reproduction recipes (durable if the /tmp probes are removed):
+
+1. **F24:** `restStatus(60, 'normal', restThresholds({restTimer1:240, restTimer2:60,
+   restTimerFail:300}))` → `{phase:'warning', message:'SECOND BELL — GO IF READY'}`
+   while `restTarget('normal', t)` is still 240. Every elapsed value from 60 onward
+   reports `warning`; `nudge` is unreachable, so the first bell and its cue never
+   occur. Settings reaches this config by stepping restTimer2 down (floor 30).
+2. **F25:** `calcAmrapTarget([{weight:225,reps:12}] × 3, 155, d)` → `null` for `off`
+   but **95 / 155 / 345 reps** for mild / moderate / aggressive. The threshold is
+   `todayWeight / seed`: targets exceed 50 reps below ratio ≈0.608 (moderate) and
+   ≈0.676 (aggressive), i.e. whenever the seed e1RM exceeds roughly 1.26× the TM.
+3. **F26:** `calcMainSets(175, 2)[0].weight` → **120** (exact 70% = 122.5);
+   `roundToNearest5(122.5)` → 125 and `roundToNearest5(245 * 0.5)` → 125.
+   `calcBbsSets(325, 2)[0].weight` → 225 (exact 70% = 227.5). A sweep of TMs
+   45–700 in 2.5 steps against all shipped multipliers found exactly three
+   mismatches, all on `0.70`: TM 175, 325, 675.
+4. **F27:** `calcPlates(145, 45, 'paired', [{weight:45,count:2},{weight:25,count:4}])`
+   → `null`; 25+25 = 50/side is exact. A DP-vs-greedy comparison over 45–500 lb
+   paired and 0–250 lb total found **0** failures for `DEFAULT_PLATES` — the defect
+   needs a user-narrowed inventory.
+5. **F28:** `calcMainSets(200, 5)` throws `TypeError`; `calcBbsSets(200, 5)` returns
+   10 sets with `weight: NaN`; `calcSupplementalSets('ssl', [oneMainSet], 200, 1)`
+   throws `Cannot read properties of undefined (reading 'weight')`.
+6. **F29:** `calcAmrapTarget([{weight:60,reps:6}], 60)` → `{reps:6, est1RM:72.2}`,
+   but `targetReps(72.2, 60)` → 7; the seed was 72.196 before display rounding.
+
+**Substantive negative conclusions (checked, not findings):**
+
+- **Zero-rep and NaN contamination of the e1RM seed is blocked upstream.**
+  `estimated1RM(w, 0)` returns `w / 1.026` (a positive estimate for a failed set)
+  and `calcAmrapTarget` returns `{reps: NaN, est1RM: NaN}` for a NaN input, because
+  `est <= 0` is false for NaN. Both are unreachable: every caller filters through
+  `isWorkingPerformance` (`reps >= 1 && weight > 0`), which rejects 0 and NaN.
+  Recorded as a hardening note, not a finding — the `est <= 0` guard is weaker than
+  its comment claims but has no reachable input.
+- **The discounted `targetReps` inverse is sound.** Across ~90k combinations
+  (four discounts × prev1RM 100–600 × todayWeight), `estimated1RM(todayWeight,
+  targetReps(...), d) >= prev1RM` held with **0** failures. The compression inverse
+  and the floor-at-2 both behave as documented; F25 is about magnitude, not
+  correctness of the round trip.
+- **`formatDuration` is broken for negative and fractional input** (`-65` →
+  `"-2:-5"`, `90.5` → `"1:30.5"`) **but has no reachable caller.** `timer.worker.ts:9`
+  emits `Math.floor`ed integer seconds and `RestTimer.tsx:141,159` negates the value
+  before formatting via the `overrun` branch. Test gap only.
+- **`applySupplementalOverride`'s positional assumption is safe as used.** It
+  overrides `computed[i]` for `i >= logged.length`, which requires logged
+  supplemental sets to occupy the leading indices in order; the UI logs through a
+  sequential cursor, and `workout-compose.ts:85-88` separately appends any logged
+  supplemental sets beyond the computed length, so a longer log is not dropped.
+- **`applyMainCascadeToSupplemental` over the whole `allSets` array is safe**
+  (`Workout.tsx:397`): the `s.type === template` predicate cannot match warmup,
+  main, joker or cross rows.
+- **Jokers on week 3 are intentional, not a defect.** `JOKER_MIN_REPS` covers weeks
+  1–3 with a 1-rep floor for week 3; the operator's personal practice of skipping
+  week-3 jokers is a preference, not a contract this library should encode.
+
+**F10 reconfirmation (no new ID):** `SET_TYPE_DISPLAY_ORDER` and
+`SET_TYPE_EDIT_ORDER` at `calc.ts:34-35` still omit `'cross'`, matching the
+location already recorded under F10. Source inspection only this batch; the B03a
+editor probe and B06b display probe remain the evidence.
+
+**Test assessment / gaps.** The 187 existing tests are strong on shape and on
+documented mutants (`i+1` set numbering, the `>=` warmup break, descending plate
+sort, the `?? 0` percent fallback, the high-rep monotonicity property). Gaps found:
+
+- **Untested exports:** `accessoryWeight` (three production call sites in
+  `AccessoryPicker.tsx` plus `assistance.ts:178`) and `cycleFinalWeek` have no
+  direct test here. `cycleFinalWeek` is exercised indirectly by `cycle.test.ts:745`
+  ("3-week cycle"), so a constant-4 mutant would not survive the repository suite —
+  but it does survive `calc.test.ts`, which is where the "single source for how long
+  is a cycle" contract is stated.
+- **Untested parameters:** `seedE1Rm`'s `window` override and its `discount`
+  argument are never exercised; `calcAmrapTarget`'s `discount` argument is never
+  passed in this file at all, despite being the input that produces F25.
+- **Untested boundaries:** no float half-way case (F26); no inverted bell config
+  (F24); no restricted-inventory plate case (F27); no out-of-range week or short
+  `main` array (F28); no negative or fractional `formatDuration`/`fromSeconds`;
+  no `calcMainSets` bar-weight floor (only `calcBbbSets` and `calcCrossSets` cover
+  flooring); no `calcCrossSets` with a negative `sets` count; no `median` with
+  negative values or an even window shorter than `SEED_WINDOW`.
+- **One fragile assertion:** `calc.test.ts:404` (F29).
+
+**Open questions / remaining ranges:** none within these two files — both are
+complete at the recorded blobs. Carried to later batches: whether `workout-compose`
+or `Workout` clamps the F25 rep target before render (B07b); whether import
+validates `week` (F28 depends on F08's envelope fix, B04 follow-up); whether the
+settings stepper should own the F24 clamp or `restThresholds` should normalize
+(B06/B09 boundary — `notifications.ts` and `RestTimer.tsx` are B09 files and were
+traced, not reviewed). `src/lib/plate-loading.ts` was referenced through
+`PlateDisplay` but not reviewed; it remains B07 `pending`.
+
+**Process note:** B06c, B06d and B06e updated only their ledger rows and the resume
+card — no per-batch evidence sections exist for them in this document, unlike every
+batch through B06b. That is a bookkeeping gap in the ledger, not a claim about the
+quality of those reviews; recorded here so it is not mistaken for an omission of
+this batch.
+
+**Outcome / exact next action:** Two ledger rows become deep (37 total). F24–F29
+added; F10 reconfirmed without duplication. No application or test file changed;
+all probes are disposable and live under `/tmp/b07a/`. Only this tracker belongs in
+the commit/PR. This card authorizes commit, push and PR; request native operator
+review afterwards and do not mark the card accepted or merge the PR. Stop this
+bounded batch — next session takes B07b from the resume card at the top.
+
+**Out-of-scope application edits (recorded, deliberately not applied):** a
+separate archived run on this batch wrote real code instead of reporting it,
+in the worktree `.worktrees/t_46c8b10f`. It is left uncommitted and reachable
+from no branch. For the record, and so nobody merges it:
+
+- `restStatus` normalization for F24. Directionally the F24 fix, but it patches
+  the read site rather than the domain edge. What the run wrote, at
+  `calc.ts:137-140`:
+
+  ```ts
+  // in restStatus, normal branch
+  const firstBell = Math.min(t.firstBell, t.secondBell)
+  const secondBell = Math.max(t.firstBell, t.secondBell)
+  if (elapsed >= secondBell) return { phase: 'warning', message: 'SECOND BELL — GO IF READY' }
+  if (elapsed >= firstBell) return { phase: 'nudge', message: 'FIRST BELL — GO IF READY' }
+  ```
+
+  This repairs the on-screen timer only. `notifications.ts:47-57` builds its
+  checkpoints from the same `RestThresholds` value, so it keeps arming an
+  inverted pair and firing the system notifications out of order. Normalizing
+  once at the constructor (`calc.ts:102-112`) fixes both consumers, since every
+  reader receives the already-ordered object:
+
+  ```ts
+  export function restThresholds(s: {
+    restTimer1: number
+    restTimer2: number
+    restTimerFail: number
+  }): RestThresholds {
+    return {
+      firstBell: Math.min(s.restTimer1, s.restTimer2),
+      secondBell: Math.max(s.restTimer1, s.restTimer2),
+      failedBell: s.restTimerFail,
+    }
+  }
+  ```
+
+  Both snippets are illustrative. Neither is applied, and the settings-stepper
+  clamp (`Settings.tsx:474-477`) is still wanted so the stored pair never goes
+  inverted in the first place.
+- A `recentPerformances.length === 0` guard in `seedE1Rm` — **redundant**.
+  `median` already returns 0 for an empty array (`calc.ts:363`), so this is a
+  no-op and not evidence of a defect. No finding was opened for it.
+- That worktree also drops the trailing newline on `calc.ts` and carries large
+  unrelated deletions in `pnpm-lock.yaml` and `calc.test.ts`. Do not harvest
+  from it.
+
+Application code remains unmodified on this branch; this review reports fixes,
+it does not make them.
