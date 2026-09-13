@@ -35,3 +35,6 @@ training-log-*.json
 coverage/
 reports/
 stryker-setup-*.js
+
+# Hermes agent worktrees — worker checkouts, never committed
+.worktrees/
