@@ -14,7 +14,7 @@ validation, partial failures and navigation. Reuse B02a/B04a/B04b evidence for s
 import and settings; do not reopen unchanged dependencies or begin B06c here.
 Settings (1,069 implementation lines) will need a separately bounded slice later.
 
-Latest run: **B06b complete; 2 additional files marked deep** (History implementation
+Latest run: **B06c complete**; 2 additional files marked deep (Setup screen and its tests). **31 files deep in total.
 and tests). **29 files deep in total.** All 30 existing History tests passed.
 Eight disposable checks passed (6 bug assertions, 2 positive controls); a separate
 failure-injection run passed its 2 behavioral assertions but **exited 1 with 2
