@@ -758,15 +758,13 @@ export default function Settings() {
       <Group id="training" label="TRAINING">
         <div class="mb-6">
           <SectionLabel class="mb-2">REST TIMERS</SectionLabel>
-          {/* These three now drive the timer. They always looked like they did —
-              they were stored, exported and editable while restStatus ran off
-              hardcoded constants — and their old names ("First", "Second",
-              "Failed") described a sequence the app never had. Each is a rest
-              *context*, which is what actually decides the length. */}
+          {/* A completed set arms both bells; the lifter decides whether the
+              first was enough or the second is needed. A missed set skips both
+              and arms only its longer recovery bell. */}
           <For each={[
-            { label: 'Between sets', hint: 'same block, next set', field: 'restTimer1' as const, value: settings.restTimer1 },
-            { label: 'Between exercises', hint: 'warmup → main, main → supplemental', field: 'restTimer2' as const, value: settings.restTimer2 },
-            { label: 'After a missed set', hint: 'nudge at 60% of this, then time up', field: 'restTimerFail' as const, value: settings.restTimerFail },
+            { label: 'First bell', hint: 'after any completed set', field: 'restTimer1' as const, value: settings.restTimer1 },
+            { label: 'Second bell', hint: 'same rest, if more recovery is needed', field: 'restTimer2' as const, value: settings.restTimer2 },
+            { label: 'Failed-set bell', hint: 'the only bell after a missed set', field: 'restTimerFail' as const, value: settings.restTimerFail },
           ]}>{({ label, hint, field, value }) => (
             <div class="py-2 border-b border-border-dim">
               <div class="flex items-center gap-3">

@@ -13,6 +13,8 @@
     "test:coverage": "vitest run --coverage",
     "test:mutation": "stryker run",
     "check": "pnpm build && pnpm test",
+    "check:local": "eslint . --cache --cache-location node_modules/.cache/eslint && tsc -b",
+    "check:ci": "pnpm lint && pnpm test:coverage && pnpm build",
     "test:e2e": "playwright test",
     "debug:browser": "node scripts/debug-browser.js",
     "debug:browser:nowipe": "node scripts/debug-browser.js --no-wipe"
@@ -46,5 +48,5 @@
     "vite-plugin-solid": "^2.11.12",
     "vitest": "^4.1.5"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@12.3.4"
 }

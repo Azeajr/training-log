@@ -13,7 +13,7 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 - **Cross-lift supplemental** — optional per-training-day blocks that run volume sets of *another* main lift's movement, loaded at that lift's FSL weight or a straight percentage of its TM
 - **Assistance work** — three slots per session (push / pull / legs+core) with a per-lift default that follows your last pick; log reps, weight, duration, or distance, plus a free-text note per exercise; per-exercise TM progression rate
 - **Equipment-aware plate math** — each lift and accessory is `none` / `paired` / `total` with its own implement base weight, so straight bars, hex bars, belt squats, and dip belts all read correctly
-- **Rest timer** — in-session countdown with audio and vibration cues; Screen Wake Lock keeps the display active; separate durations for normal, transition, and failed sets
+- **Rest timer** — every completed set gets configurable first and second recovery bells; a missed set gets one longer bell; Screen Wake Lock keeps the countdown visible
 - **Configurable cycle shape** — 3-week (no deload) or 4-week (deload) cycles; on a deload week, supplemental volume can be skipped, run at deload percentages, or run at week-1 percentages. TMs progress and the next cycle opens automatically at the end; manual week override and SKIP DELOAD in Settings; the cycle-complete modal shows old → new TM per lift
 - **History** — browse completed sessions by lift, by date, or on a calendar heatmap; editable after the fact; estimated-1RM history charted alongside TM
 - **Stats** — best estimated 1RM and heaviest actual lift per lift, plus training-max progression
@@ -50,6 +50,8 @@ pnpm test             # unit + component integration (Vitest)
 pnpm test:e2e         # end-to-end (Playwright)
 pnpm test:coverage    # coverage report (v8)
 pnpm test:mutation    # mutation score (Stryker)
+pnpm check:local      # fast cached lint + typecheck
+pnpm check:ci         # lint + coverage + production build
 ```
 
 **Arch Linux**: Playwright's bundled Chromium requires system libs not installed by default:
@@ -100,4 +102,4 @@ TM progression at the end of each cycle is per-lift (`progressionIncrement`, see
 
 ## Deployment
 
-Pushes to `main` deploy automatically to Cloudflare Pages via `.github/workflows/deploy.yml`. The workflow is path-filtered to source and config changes, and does not run the test suite — tests are a local gate.
+Pull requests run lint, coverage, and a production build via `.github/workflows/ci.yml`. Pushes to `main` deploy automatically to Cloudflare Pages via `.github/workflows/deploy.yml`; the deployment is path-filtered to source and config changes and runs the same checks before publishing.

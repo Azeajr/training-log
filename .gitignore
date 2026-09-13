@@ -34,3 +34,7 @@ training-log-*.json
 # Test coverage output (regenerable via `npm run test:coverage`)
 coverage/
 reports/
+stryker-setup-*.js
+
+# Hermes agent worktrees — worker checkouts, never committed
+.worktrees/

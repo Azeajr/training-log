@@ -113,36 +113,36 @@ describe('RestTimer — audio/vibration cues', () => {
     await drainMicro()
   })
 
-  it('fires nudge cue (vibrate 80ms) at 90s for normal rest', async () => {
+  it('fires the first completed-set cue at 90s', async () => {
     render(() => <RestTimer />)
     startRest('normal')
     await vi.advanceTimersByTimeAsync(91_000)
     expect(vibrateMock).toHaveBeenCalledWith(80)
   })
 
-  // A section change earns a longer rest than a between-sets one, and the
-  // length comes from settings.restTimer2 (default 180s) rather than a constant.
-  it('fires nudge cue (vibrate 80ms) at the configured transition rest', async () => {
+  it('fires a second completed-set cue at 180s', async () => {
     render(() => <RestTimer />)
-    startRest('transition')
+    startRest('normal')
     await vi.advanceTimersByTimeAsync(91_000)
-    expect(vibrateMock).not.toHaveBeenCalled()
-    await vi.advanceTimersByTimeAsync(91_000)
-    expect(vibrateMock).toHaveBeenCalledWith(80)
+    expect(vibrateMock).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(90_000)
+    expect(vibrateMock).toHaveBeenNthCalledWith(2, 80)
+    expect(vibrateMock).toHaveBeenCalledTimes(2)
   })
 
-  it('fires warning cue at 180s for fail rest', async () => {
+  it('does not fire a completed-set cue during a failed-set rest', async () => {
     render(() => <RestTimer />)
     startRest('fail')
-    await vi.advanceTimersByTimeAsync(181_000)
-    expect(vibrateMock).toHaveBeenCalledWith([80, 40, 80])
+    await vi.advanceTimersByTimeAsync(299_000)
+    expect(vibrateMock).not.toHaveBeenCalled()
   })
 
-  it('fires critical cue at 300s for fail rest', async () => {
+  it('fires the single failed-set cue at 300s', async () => {
     render(() => <RestTimer />)
     startRest('fail')
     await vi.advanceTimersByTimeAsync(301_000)
-    expect(vibrateMock).toHaveBeenCalledWith([120, 60, 120, 60, 120])
+    expect(vibrateMock).toHaveBeenCalledOnce()
+    expect(vibrateMock).toHaveBeenCalledWith(80)
   })
 
   it('does not fire before threshold for normal rest', async () => {
@@ -261,21 +261,34 @@ describe('RestTimer — SW notification scheduling', () => {
     expect(postMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'stalled-session' })
   })
 
-  it('posts two schedules for a fail rest (warning + critical)', async () => {
+  it('posts two schedules for a completed-set rest', async () => {
+    render(() => <RestTimer />)
+    await drain()
+    postMessage.mockClear()
+    startRest('normal')
+    await drain()
+    const schedules = postMessage.mock.calls
+      .map(c => c[0])
+      .filter(c => c.type === 'schedule' && c.tag === 'rest-timer')
+    expect(schedules).toHaveLength(2)
+    expect(schedules.map(c => c.body)).toEqual([
+      'First bell — go if ready',
+      'Second bell — go if ready',
+    ])
+  })
+
+  it('posts one schedule for a failed-set rest', async () => {
     render(() => <RestTimer />)
     await drain()
     postMessage.mockClear()
     startRest('fail')
     await drain()
-    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'schedule',
-      tag: 'rest-timer',
-      body: 'Time for your next set',
-    }))
-    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'schedule',
-      tag: 'rest-timer',
-      body: 'Rest up — take your time',
+    const schedules = postMessage.mock.calls
+      .map(c => c[0])
+      .filter(c => c.type === 'schedule' && c.tag === 'rest-timer')
+    expect(schedules).toHaveLength(1)
+    expect(schedules[0]).toEqual(expect.objectContaining({
+      body: 'Failed-set rest complete',
     }))
   })
 
@@ -289,7 +302,7 @@ describe('RestTimer — SW notification scheduling', () => {
     await drain()
     const calls = postMessage.mock.calls.map(c => c[0])
     expect(calls.filter(c => c.type === 'cancel' && c.tag === 'rest-timer')).toHaveLength(1)
-    expect(calls.filter(c => c.type === 'schedule' && c.tag === 'rest-timer')).toHaveLength(1)
+    expect(calls.filter(c => c.type === 'schedule' && c.tag === 'rest-timer')).toHaveLength(2)
   })
 
   it('stopping rest cancels only the rest timer; the stalled timer stays armed', async () => {

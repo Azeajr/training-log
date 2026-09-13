@@ -706,6 +706,38 @@ describe('getRecentWorkingSets', () => {
     const result = await getRecentWorkingSets(db, lifts[0].id!, 'aggressive')
     expect(result).toEqual([{ weight: 235, reps: 8 }])
   })
+
+  it('a later cross-lift session does not take the week away from the lift\u2019s own top set', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    // Squat's own week-1 day, then a Bench day later the same week carrying a
+    // light cross-squat block. Both are cycle 1 / week 1, so only one can seed
+    // the window — it has to be the real top set, not the prescribed volume.
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[3].id!, week: 1, amrapWeight: 315, amrapReps: 8, date: new Date('2026-01-10') })
+    const benchSession = await db.sessions.add({
+      cycleId: cycle1, liftId: lifts[0].id!, week: 1, date: new Date('2026-01-12'), notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId: benchSession, type: 'cross', setNumber: 1, weight: 225, reps: 5, isAmrap: false, liftId: lifts[3].id! })
+    expect(await getRecentWorkingSets(db, lifts[3].id!)).toEqual([{ weight: 315, reps: 8 }])
+  })
+
+  it('still seeds from cross work on a week the lift has no session of its own', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    const benchSession = await db.sessions.add({
+      cycleId: cycle1, liftId: lifts[0].id!, week: 1, date: new Date('2026-01-12'), notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId: benchSession, type: 'cross', setNumber: 1, weight: 225, reps: 5, isAmrap: false, liftId: lifts[3].id! })
+    expect(await getRecentWorkingSets(db, lifts[3].id!)).toEqual([{ weight: 225, reps: 5 }])
+  })
+
+  it('ignores 0lb rows \u2014 they estimate to a 0 e1RM and would drag the seed', async () => {
+    const lifts = await seedLifts()
+    const cycle1 = await db.cycles.add({ number: 1, startDate: new Date('2026-01-01'), endDate: null })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 1, amrapWeight: 205, amrapReps: 8, date: new Date('2026-01-10') })
+    await seedAmrapSession({ cycleId: cycle1, liftId: lifts[0].id!, week: 2, amrapWeight: 0, amrapReps: 8, date: new Date('2026-01-20') })
+    expect(await getRecentWorkingSets(db, lifts[0].id!)).toEqual([{ weight: 205, reps: 8 }])
+  })
 })
 
 // ─── 3-week cycle (hasDeloadWeek = false) ─────────────────────────────────────

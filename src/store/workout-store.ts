@@ -3,7 +3,7 @@ import { createEffect } from 'solid-js'
 import type { Session, Set, AccessorySet } from '../types/domain'
 import type { AssistanceSlot } from '../lib/assistance'
 
-export type RestType = 'normal' | 'transition' | 'fail'
+export type RestType = 'normal' | 'fail'
 
 export interface ActiveAccessory {
   exerciseId: number
@@ -66,7 +66,9 @@ const PERSISTED_VALIDATORS: Record<(typeof PERSISTED_KEYS)[number], (v: unknown)
   currentSetIndex: v => Number.isInteger(v) && (v as number) >= 0,
   isResting: v => typeof v === 'boolean',
   restStartedAt: v => v === null || typeof v === 'number',
-  restType: v => v === 'normal' || v === 'transition' || v === 'fail',
+  // Dropping a persisted pre-checkpoint `transition` value falls back to
+  // `normal`, so an in-progress successful rest resumes with both bells.
+  restType: v => v === 'normal' || v === 'fail',
   activeAccessories: Array.isArray,
   notes: v => typeof v === 'string',
 }

@@ -647,17 +647,19 @@ describe('Workout screen — rest types', () => {
 
     fireEvent.click(screen.getByText('LOG'))
     await waitFor(() => expect(workout.currentSetIndex).toBe(1))
+    await waitFor(() => expect(workout.restType).toBe('fail'))
   })
 
-  it('logs set when last warmup set logged (transition rest path)', async () => {
+  it('uses the completed-set rest when the next set starts a new section', async () => {
     startSession(BENCH)
     renderWorkout()
 
-    // Log all 3 warmup sets — the 3rd triggers transition rest (next set is main)
+    // Log all 3 warmup sets — moving to main must not change the bell schedule.
     await logNSets(3)
 
     // Active set is now main set 0 (index 3)
     expect(workout.currentSetIndex).toBe(3)
+    expect(workout.restType).toBe('normal')
   })
 })
 
