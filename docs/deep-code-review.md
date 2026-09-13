@@ -8,36 +8,35 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B07b — Workout composition library and tests.** Review
-`src/lib/workout-compose.ts` and `src/lib/workout-compose.test.ts`, the direct
-consumer of the calc primitives closed in B07a. Start with the deload remap
-(`effectiveSupplementalWeek`), the cascade-then-override ordering at
-`workout-compose.ts:83-88`, and the extra-logged-supplemental tail. Reuse B07a
-evidence; do not re-derive the calc findings.
-Latest run: **B07a complete** — `src/lib/calc.ts` (all 576 lines) and
-`src/lib/calc.test.ts` (all 1,127 lines) reviewed. Both files marked deep;
-**37 files deep in total.** All 187 existing calc tests passed
-(`pnpm exec vitest run src/lib/calc.test.ts`); `pnpm lint` and `tsc -b` clean.
-Six new findings confirmed by disposable probes against the real calc source:
-**F24** (no first-bell/second-bell ordering invariant silently deletes a rest
-checkpoint), **F25** (unbounded `targetReps` under a high-rep discount returns
-absurd AMRAP targets *and* suppresses the sane TM fallback), **F26** (float
-half-way loss in `roundToNearest5` at the 0.70 multiplier), **F27** (greedy
-plate solver reports unloadable for loadable weights on restricted
-inventories), **F28** (inconsistent out-of-range `week` handling: throw vs
-silent NaN), **F29** (test-quality: `calc.test.ts:404` asserts a
-reps/est1RM coupling that holds only coincidentally). F10 reconfirmed at
-`calc.ts:34-35` without a new ID. Only this tracker changed; no application
-fixes or sub-agents. This card authorizes commit, push and PR; operator
-acceptance remains a separate native Kanban review step.
+**Next batch: B07c — Cycle progression library and tests.** Review
+`src/lib/cycle.ts` (325 lines) and `src/lib/cycle.test.ts` (812 lines); the pair
+is at the batch line size on its own. Start with L05 (post-session accept/dismiss
+outside `runFinishing`, progression idempotency against a pre-transaction cycle
+snapshot), then `cycleFinalWeek`/`closedThroughWeek` reconciliation across the
+3-week↔4-week switch. Reuse B07a/B07b evidence; do not re-derive calc findings.
+Latest run: **B07b complete** — `src/lib/workout-compose.ts` (all 117 lines) and
+`src/lib/workout-compose.test.ts` (all 178 lines) reviewed. Both files marked deep;
+**39 files deep in total.** All 17 existing tests passed
+(`pnpm exec vitest run src/lib/workout-compose.test.ts`); `pnpm lint` and `tsc -b`
+clean. Three new findings confirmed by a disposable probe against the real source:
+**F30** (`deloadSupplemental: 'deload'` silently drops supplemental entirely for
+the `bbs` template — identical to `skip`, against the settings copy), **F31** (two
+cross blocks on one movement lift share a single logged stream; the one-block-per-
+movement rule is UI-only, with no DB constraint), **F32** (logged cross sets have
+no restore path when their plan block disappears, while logged self-supplemental
+sets do). The cascade-then-override ordering at `workout-compose.ts:83-88` and the
+extra-logged tail were probed and are **correct** — recorded as negative
+conclusions, not findings. Only this tracker changed; no application fixes or
+sub-agents. This card authorizes commit, push and PR; operator acceptance remains
+a separate native Kanban review step.
 
-**Remaining work — 97 of 134 ledger files are not yet `deep`** (37 are). Counted
+**Remaining work — 95 of 134 ledger files are not yet `deep`** (39 are). Counted
 from the File ledger at `60108e8`; recount there rather than trusting this block
 if the two disagree.
 
 | Area | Files left | Shape of the work |
 |---|---|---|
-| B07 | 25 pending | Current area. B07b takes 2 of them; at the bounded batch size this area is roughly a dozen more sessions. |
+| B07 | 23 pending | Current area. B07c takes 2 of them; at the bounded batch size this area is roughly ten more sessions. |
 | B08 | 55 (52 `reported`, 1 `partial`, 1 pending) | Largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each file still needs bounded verification. |
 | B09 | 10 (9 pending, 1 `partial`) | Service worker, timers, notifications. Carries L04 and the F24 notification tail. |
 | B11 | 7 pending | E2E, test infrastructure, domain types, remaining stores. |
@@ -121,6 +120,9 @@ claimed here.
 | F27 | Low; B07a exhaustive solver comparison | `src/lib/calc.ts:540-569`; `src/components/forms/PlateDisplay.tsx:14-36` | The plate selection is greedy largest-first with no backtracking, so a restricted inventory can strand a remainder even when an exact load exists: plates `2×45 + 4×25` at 145 lb returns `null` though 25+25 = 50/side works. `PlateDisplay` renders nothing on null, so the plate hint silently disappears. Reachable because the settings stepper allows any plate count down to 0. The shipped `DEFAULT_PLATES` are safe — an exhaustive DP comparison found 0 failures over 45–500 lb in both modes. | Fall back to a bounded exact search (DP over available pairs, the inventory is tiny) when greedy strands a remainder; distinguish "bar only" from "not loadable" in the readout. Add a restricted-inventory regression test. |
 | F28 | Low; B07a isolated calc probe | `src/lib/calc.ts:162-163`, `248-252`, `445-462`; `src/types/domain.ts:78` | `week` is typed `1 \| 2 \| 3 \| 4` but is never validated when rows are read or imported (see F08's weak import envelope check). Out-of-range values are handled three different ways: `calcMainSets(tm, 5)` throws `TypeError: Cannot read properties of undefined (reading 'map')` (blank Workout screen — App has no route error boundary, per B01b), `calcBbsSets(tm, 5)` silently returns 10 sets with `NaN` weights that can be logged and persisted, and `calcSupplementalSets` guards `main.length === 0` yet indexes `main[1]` unguarded for ssl/ssl+bbb. Not reproduced through the UI; requires a corrupt or hand-edited backup. | Validate `week` at the import/DB edge; make the percentage lookups total (unknown week → `[]`) so a bad row degrades rather than crashing or producing NaN; guard `main[1]` alongside the existing length check. |
 | F29 | Low (test quality); B07a differential probe | `src/lib/calc.ts:399-405`; `src/lib/calc.test.ts:404` | `calcAmrapTarget` derives `reps` from the unrounded seed but reports `est1RM` rounded to 2 dp with `Math.round`, which can round the displayed figure *above* the value that produced the reps — "target 6 reps @ est. 72.2" when 6 reps at that weight scores 72.196. 847 such pairs in a 60–400 lb sweep; the discrepancy is under 0.005 lb, so the product impact is cosmetic. The risk is the test: `expect(target.reps).toBe(targetReps(target.est1RM, 170))` asserts a coupling that holds only for its own inputs and would not survive an input change. | Assert `reps` against the unrounded seed (or a literal), not against a round-trip through the rounded display value. No product change required. |
+| F30 | Medium; B07b isolated compose probe | `src/lib/calc.ts:21`, `248–252`, `477–480`; `src/lib/workout-compose.ts:73–75`; `src/screens/Settings.tsx:670–690` | `BBS_PERCENTAGES[4]` is `null`, so `calcBbsSets(tm, 4)` returns `[]`. With `supplementalTemplate: 'bbs'` and `deloadSupplemental: 'deload'`, week 4 composes **0** supplemental sets — byte-identical to `'skip'` — while every other template composes 5. `getSupplementalLabel` also returns `null`, so nothing on screen explains the absence. The settings copy promises "run it at deload %", and the same `effectiveSupplementalWeek(4, 'deload') === 4` is what `Workout.tsx:220` feeds the cross-block plan. A user who picked BBS and deliberately chose the *keep-it* deload mode silently gets the *drop-it* one. | Decide BBS's deload semantics and make the three modes total for every template: either give week 4 a BBS percentage (e.g. `0.50`) so `'deload'` means what it says, or have `'deload'` fall back to `'skip'` explicitly and say so in the UI. Cover `deloadSupplemental: 'deload'` in `workout-compose.test.ts` — that mode has no test at all today. |
+| F31 | Low; B07b isolated compose probe | `src/lib/workout-compose.ts:41–57`; `src/db/schema.ts:47–56`, `104`; `src/components/modals/LiftSetupModal.tsx:90–93`; `src/screens/Workout.tsx:121`, `224–241` | Logged cross sets carry only `liftId` (the movement), never a block identity, so `composeCrossSets` matches them to *every* block with that `movementLiftId`. Two blocks on the same movement (plans 3×210 and 3×150) plus a single logged set at 999 compose to `[210, 999, 999, 150, 999, 999]`: one logged set marks set 1 of both blocks done and overrides the remainder of both. `liftHistoryName` (`Workout.tsx:121`) picks whichever block `.find` hits first. `LiftSetupModal` prevents duplicates by filtering the picker, but `liftSupplementals` has only `idx_liftSupplementals_liftId` — no unique index, unlike `idx_assistanceDefaults_lift_section` — so an imported backup (see F08's weak envelope) restores duplicates verbatim. | Add `CREATE UNIQUE INDEX IF NOT EXISTS idx_liftSupplementals_lift_movement ON liftSupplementals(liftId, movementLiftId);` so the UI rule becomes a storage invariant, and reconcile duplicates on import. If per-movement uniqueness is ever meant to be relaxed, cross sets need a block id instead. Add a duplicate-movement case to `workout-compose.test.ts`. |
+| F32 | Low; B07b source trace, probe-confirmed compose behavior | `src/lib/workout-compose.ts:45`, `85–88`; `src/screens/Workout.tsx:220–223`, `228–230` | Logged **self**-supplemental sets survive their plan disappearing — `extraFsl` restores them even when `effectiveSupplementalWeek` returns `null` (probe: skip mode still composes `1@135, 2@135`). Logged **cross** sets have no such path: `composeCrossSets` is a `flatMap` over the plan blocks, so with no block there is no output. Removing a cross block in `LiftSetupModal` mid-session, or switching `deloadSupplemental` to `skip` during a week-4 session, makes already-logged cross work vanish from the Workout screen while its rows stay in the DB and keep counting toward History, PRs and Stats (F22). | Make the two tails symmetric: append logged cross sets whose `liftId` matches no plan block, tagged as unplanned, or state explicitly that cross work is plan-owned and delete/annotate the rows when its block goes away. Cover "logged cross sets with no matching block" in `workout-compose.test.ts`. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -333,8 +335,8 @@ column as work is completed.
 | `src/lib/tm-recommendations.ts` | B07 | pending | — |
 | `src/lib/training-max.test.ts` | B07 | deep | B01b — app shell and training-max helpers (1/5); evidence below |
 | `src/lib/training-max.ts` | B07 | deep | B01b — app shell and training-max helpers (1/5); evidence below |
-| `src/lib/workout-compose.test.ts` | B07 | pending | — |
-| `src/lib/workout-compose.ts` | B07 | pending | — |
+| `src/lib/workout-compose.test.ts` | B07 | deep | B07b — all 178 lines; 17 tests passed; test gaps below |
+| `src/lib/workout-compose.ts` | B07 | deep | B07b — all 117 lines; F30–F32 confirmed; cascade/tail ordering cleared |
 | `src/main.tsx` | B01 | deep | B01a; full file; findings/evidence below |
 | `src/screens/History.test.tsx` | B06 | deep | B06b — all 632 lines; 30 existing tests passed; test gaps and probes below |
 | `src/screens/History.tsx` | B06 | deep | B06b — all 726 lines; F10 display evidence, F19–F21 confirmed; limits below |
@@ -1375,3 +1377,111 @@ from no branch. For the record, and so nobody merges it:
 
 Application code remains unmodified on this branch; this review reports fixes,
 it does not make them.
+
+### 2026-09-13 — B07b: workout composition and its tests
+
+**Revision:** `3e7c24adc9a7b559517b72755116d4132b0045f0`. Application files unchanged
+at batch start and end. Single agent; no sub-agents; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/lib/workout-compose.ts` | 1–117 | `0694506be4447a0c6770d84fa9e9fdd03986ca05` |
+| `src/lib/workout-compose.test.ts` | 1–178 | `fc40bd351369c3f8b1d5a2ca32496e51faf4a558` |
+
+**Behavior, invariants and dependencies traced.** `composeAllSets` is the single
+derivation of the Workout screen's linear set list: plan from the TM, then restore
+everything the user actually did from `loggedSets`. The order it emits — warmup,
+main, jokers, supplemental, extra supplemental — is the contract the screen's
+positional cursor depends on (`allSets()[i]` ↔ `loggedSets[i]`, the same mapping
+`shouldShowJokerButton` protects at `calc.ts:221-222`). Traced into `calc.ts`
+(`effectiveSupplementalWeek`, `calcMainSets`, `calcWarmup`, `calcSupplementalSets`,
+`supplementalSourceSetNumber`, `applyMainCascadeToSupplemental`,
+`applySupplementalOverride`, `calcCrossSets`, `calcBbsSets`) and out to the call
+sites in `Workout.tsx:179-187`, `189-241`, `273`, plus the cross-block writer
+`LiftSetupModal.tsx:66-162` and the `liftSupplementals` DDL in `schema.ts:47-56`.
+
+**Checks and outcomes.**
+
+- `pnpm exec vitest run src/lib/workout-compose.test.ts` — **17 passed**, fresh run.
+- `pnpm lint` — clean, fresh run. `pnpm exec tsc -b` — clean, exit 0, fresh run.
+- Disposable probe under `/tmp/b07b-probe/`, run with
+  `pnpm exec vitest run --root /tmp/b07b-probe --environment node` against the real
+  source by absolute import, then deleted. Nothing in the repository was touched.
+- Not run this batch: the full suite, `Workout.test.tsx`, any browser/E2E check.
+
+**Findings.**
+
+1. **F30 (medium, confirmed).** Probe output for TM 300, week 4, template `bbs`:
+   `deload/skip/normal → 0 / 0 / 10` supplemental sets; the same run for `fsl` gives
+   `5 / 0 / 5`. `getSupplementalLabel('bbs', [], 4)` → `null`. `deload` and `skip` are
+   indistinguishable to a BBS user, and nothing on screen says why.
+2. **F31 (low, confirmed).** Two blocks on movement lift 7, plans `[210,210,210]` and
+   `[150,150,150]`, one logged cross set at 999 →
+   `composeCrossSets` returns `[210, 999, 999, 150, 999, 999]`. The single logged set
+   is consumed by both blocks.
+3. **F32 (low, confirmed behavior).** `deloadSupplemental: 'skip'` with two logged
+   `fsl` rows composes `1@135, 2@135` — the self-supplemental tail survives having no
+   plan. `composeCrossSets` with no matching block returns `[]` for the same shape of
+   input, because it is a `flatMap` over the plan.
+
+**Substantive negative conclusions (checked, not findings):**
+
+- **The cascade-then-override ordering at `workout-compose.ts:83-88` is correct.**
+  Week 4 / `normal` plans `[195,195,195,195,195]`; logging main set 1 at 999 *and*
+  supplemental set 1 at 123 composes `[195, 123, 123, 123, 123]`. The `eff === week`
+  guard correctly suppresses the cascade on a remapped deload (the B07a open question
+  for this batch), and the override still reaches the pending sets. The reverse order
+  would let a stale cascade overwrite the user's own supplemental weight.
+- **The extra-logged-supplemental tail is correct and does not double-count.** With
+  `planned + 2` logged rows, `applySupplementalOverride` no-ops (no index `>=
+  logged.length`) and `extraFsl` appends exactly the 2 rows past the plan.
+- **`calcBbsSets(tm, 4)` returns `[]`, not NaN weights.** F28's NaN case needs a week
+  outside `1|2|3|4`; the in-range deload week is guarded by the `pct === null` check
+  at `calc.ts:250`. F30 is about the *silence* of that empty result, not about NaN.
+- **Week 4 composes no warmup, by design.** `WARMUP_PERCENTAGES` tops out at 0.60 TM
+  and the deload's first main set is 0.40 TM, so `calcWarmup`'s `weight >=
+  workingWeight` break fires immediately (probe: week-4 main `[120, 150, 180]`).
+- **`template: 'none'` is guarded twice** — in `applySupplementalOverride` and in the
+  `extraFsl` ternary — so a stale logged supplemental row cannot reappear after the
+  user switches the template off.
+- **Combined templates cascade correctly.** `calcFslBbbSets`/`calcSslBbbSets` tag
+  their sets `'fsl+bbb'`/`'ssl+bbb'`, which is exactly what `s.type === template`
+  matches, so the `supplementalSourceSetNumber` → cascade path is live for them.
+- **Joker restore renumbers and drops `isAmrap`** (`joker` logged at `setNumber: 3`
+  composes as `setNumber: 1`, `isAmrap: false`). Not a defect: `JokerSet` types
+  `isAmrap` as `false`, and jokers are a contiguous chain whose display number is
+  positional. Recorded so a later reader does not re-open it.
+
+**Test assessment / gaps.** The 17 existing tests cover the plan/cascade/override/
+extra-tail shape, block independence and flatten order, and all four
+`amrapTargetsFor` branches. Gaps:
+
+- **`deloadSupplemental: 'deload'` is never tested.** Only `skip` and `normal` appear.
+  That is the mode F30 breaks, and a mutant returning `null` for it would survive.
+- **Only `template: 'fsl'` drives the cascade tests.** `ssl` (source set **2**),
+  `bbb`/`bbs` (source `null`), and the combined variants are untested here, so
+  `supplementalSourceSetNumber`'s mapping is unexercised through this entry point.
+- **`amrapTargetsFor`'s `discount` argument is never passed** — the same gap B07a
+  found in `calc.test.ts`, and the input that produces F25. B07a's open question
+  "does `workout-compose` clamp the F25 rep target before render" is now **answered:
+  it does not.** `amrapTargetsFor` passes `discount` straight through and returns
+  whatever `calcAmrapTarget` produces; the TM fallback at line 111 is only reached on
+  `null`. F25 stands unchanged, with no mitigation at this layer.
+- **No test restores logged supplemental rows when the deload skips supplemental**
+  (the `eff === null` + `extraFsl` path, F32's counterpart).
+- **`composeAllSets` is never called with cross input.** `crossBlocks` and
+  `loggedCrossSets` are exercised only through `composeCrossSets` directly, so the
+  wiring at line 96 is untested.
+- **No duplicate-movement case** (F31) and **no unplanned-logged-cross case** (F32).
+
+**Open questions / remaining ranges:** none within these two files — both complete at
+the recorded blobs. Carried forward: BBS deload semantics (F30) is a product decision
+for the operator, not a code question; the `liftSupplementals` unique index (F31)
+lands in B02's schema territory but is opened here because this is where the effect
+is observable; F32's symmetry choice touches `Workout.tsx` (already `deep`, B05b) and
+should be reconciled in B12 rather than re-opening that row.
+
+**Ledger rows updated / exact next action:** `src/lib/workout-compose.ts` and
+`src/lib/workout-compose.test.ts` → `deep` (39 total). F30–F32 added. No application
+or test file changed; the probe was deleted. Next: **B07c — `src/lib/cycle.ts` and
+`src/lib/cycle.test.ts`**, starting from L05.
