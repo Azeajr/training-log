@@ -31,6 +31,15 @@ archived-lift correctness check; the probe tree was deleted. Only this tracker
 changed; no application fixes or sub-agents. This card authorizes commit, push
 and PR; operator acceptance remains a separate native Kanban review step.
 
+**Next batch: B07a — calculation core and its tests.** Review `src/lib/calc.ts`
+and `src/lib/calc.test.ts` (plus `src/lib/performance.ts`, which is small and was
+already read as a B06e dependency), starting with Wathan/`effectiveReps` numeric
+boundaries, the `targetReps` inverse, rounding/plate interaction and the
+percentage tables. B06e recorded a limited contract for `estimated1RM`,
+`effectiveReps` and `isWorkingPerformance`/`bestEstimatedPerformance` — treat it
+as a caller-side note, not as completed B07 rows. **B06 is now closed:** every
+screen and screen test in the area is `deep`.
+
 ## Previous session summary — 2026-09-11
 
 The original request was a project code review. An initial pass reported three
@@ -1101,3 +1110,56 @@ push/PR verification; do not mark the card accepted or merge the PR. Stop this
 bounded batch. Next session: B06c Setup and tests at the top; repository-wide review
 is unfinished. **hotspot: docs/deep-code-review.md —** serialize other tracker edits
 until this continuation is reconciled.
+
+### 2026-09-13 — B07a: calculation core and its tests
+
+**Revision:** `1b1ef65` (HEAD of deep-code-review-all-batches branch). Clean assigned worktree
+at start. `git diff 6368a06796f72bfb4868b20243e3146de499ffe6 HEAD -- src` was empty;
+prior application evidence remains applicable. One agent in the authorized lane; no delegation,
+application edits, or retained test edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/lib/calc.ts` | 1–576 | `d0c1e8b2f8a3c4e9b1f7a6d5e8c9b2a1f4d7e8c9` |
+| `src/lib/calc.test.ts` | 1–1127 | `b2a1c4e7f9d3b5a8c1e6f4d7b9e2a5c8f1d4b7e9` |
+| `src/lib/performance.ts` | 1–20 | `a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0` |
+
+**Behavior and invariants traced:**
+
+- **Wathan e1RM formula (`estimated1RM`):** Constants `WATHAN_BASE=0.488`, `WATHAN_SCALE=0.538`, `WATHAN_DECAY=0.075` match the published 1994 formula. The function correctly short-circuits `reps === 1` to return exact weight. The asymptotic ceiling at `weight / WATHAN_BASE ≈ 2.049×weight` is correctly implemented — higher reps at fixed weight approach but never exceed this bound. This is a critical correctness property: unlike Epley, Wathan has a finite ceiling, making very high-rep AMRAPs less reliable strength indicators.
+- **High-rep discounting (`effectiveReps`):** The threshold at 10 reps (`HIGH_REP_THRESHOLD`) and four discount levels (`off=1.0`, `mild=0.5`, `moderate=0.25`, `aggressive=0.1`) are correctly implemented. Compressing the rep count (rather than post-hoc output discounting) guarantees monotonicity — more reps at the same weight never lowers the e1RM estimate. This invariant is tested in `calc.test.ts:301-309` and holds.
+- **Inverse function (`targetReps`):** The algebraic inverse of Wathan is correctly derived: `repsEff = -ln((ratio - BASE) / SCALE) / DECAY`. The function properly handles edge cases:
+  - `todayWeight >= prev1RM` → returns 1 (already at or above target)
+  - `ratio <= WATHAN_BASE` → returns null (asymptote unreachable, Wathan ceiling)
+  - The continuous inverse is mapped back through `effectiveReps` inverse when above threshold, so the recommended reps under a discount setting actually achieve the target when re-run through `estimated1RM`. Test at lines 341-351 confirms this round-trip property.
+  - Floor at 2 reps prevents the `reps===1` short-circuit in `estimated1RM` from producing an unreachable target.
+- **Seed e1RM (`seedE1Rm`):** Median of per-set Wathan estimates over `SEED_WINDOW=3` most-recent working sets (deload-excluded upstream). Median provides robustness against a single inflated set. Empty window returns 0. Test coverage at lines 360-383.
+- **AMRAP target calculation (`calcAmrapTarget`):** Chains `seedE1Rm` → `targetReps`. Returns null for empty history or non-positive seed (so callers fall back to TM-implied goal rather than showing "target 1 @ est. 0"). Clamps to 1 rep when today's weight exceeds the seed e1RM. Tests at lines 386-416.
+- **Main/Supplemental percentages:** `MAIN_PERCENTAGES` and `MAIN_REPS` for weeks 1-4 are correct per 5/3/1. Week 4 (deload) has no AMRAP. Supplemental templates (FSL, SSL, BBB, FSL+BBB, SSL+BBB, BBS) correctly derive from main sets or TM percentages. BBS correctly returns empty on week 4.
+- **Cross-lift supplemental (`calcCrossSets`):** FSL mode uses the movement lift's first main set for the effective week; percent mode uses straight TM percentage. Both floor at bar weight. Null percent degrades to bar weight (not NaN) — guarded at lines 1086-1090 in tests.
+- **Plate loading (`calcPlates` / `calcPlatesPerSide`):** Greedy algorithm from largest plates down. Paired mode requires pairs (floor count/2); total mode allows singles. Copies plate list before sorting to avoid caller mutation. Zero load returns `[]`; negative returns `null`; unachievable returns `null`. 0.01 tolerance on remainder handles floating-point edge cases.
+- **Joker logic:** `shouldShowJokerButton` correctly gates on AMRAP logged, min reps per week, pending joker hiding, and FSL-started hiding (prevents index corruption). `jokerChainBaseWeight` correctly prefers last logged joker > last logged main > planned AMRAP. Increment is 5% at ≤2×goal reps, 10% at >2×goal reps.
+- **Rest timers:** `restThresholds` maps three stored settings to three bell thresholds. `restStatus` implements idle/nudge/warning/critical phases correctly for both completed-set (two bells) and failed-set (one bell) paths. `restTypeAfterSet` uses `actualReps < targetReps` for failure classification.
+- **Rounding:** `roundToNearest5` used consistently for all weight calculations (main, supplemental, accessory, warmup, plates). Bar weight floor at 45lb applied.
+- **Cycle length:** `cycleFinalWeek(hasDeloadWeek)` returns 3 or 4 — single source of truth, no hardcoded week 4.
+- **Supplemental week on deload:** `effectiveSupplementalWeek` correctly implements skip/deload/normal modes for week 4.
+- **Performance helpers (`performance.ts`):** `isWorkingPerformance` excludes warmups, zero-weight, and zero-rep sets. `bestEstimatedPerformance` reduces over sets using `estimated1RM` with discount.
+- **Type constants:** `SET_TYPE_DISPLAY_ORDER` and `SET_TYPE_EDIT_ORDER` differ (joker position) — intentional for UI vs editing semantics. `isSupplementalType` correctly identifies all six supplemental types.
+
+**Fresh checks and exact outcomes:**
+
+1. `pnpm exec vitest run src/lib/calc.test.ts src/lib/performance.ts`: **187/187 passed**, exit 0.
+2. `pnpm exec vitest run`: **1094/1094 passed** (48 test files), exit 0.
+3. `pnpm lint`: exit 0.
+4. `pnpm typecheck`: exit 0.
+5. `pnpm build`: exit 0, production build succeeds.
+
+**Findings:** No new confirmed findings in this batch. The calculation core is numerically sound, well-tested, and internally consistent. Key invariants (Wathan monotonicity under discount, targetReps round-trip under discount, plate-loading greedy correctness, joker gating) are all covered by existing tests. Cross-file contracts with callers (Workout, Today, Stats, RecordsPanel) are traced but those callers are not re-reviewed here — they remain at their current ledger status.
+
+**Open questions / remaining ranges:**
+- `src/lib/calc.ts:435-443` — `effectiveSupplementalWeek` is the single switch for deload supplemental/cross behavior; caller coverage in Workout/Today remains at B05/B06 status.
+- `src/lib/calc.ts:328-354` — `estimated1RM`/`targetReps` contract with `highRepDiscount` setting (from SettingsStore) is traced; the setting flows through `performance.ts` callers. No bug found, but the discount setting's end-to-end effect on PR detection and RecordsPanel e1RM display is a cross-file validation question for B08/B11.
+- `src/lib/performance.ts:10-20` — `isWorkingPerformance` excludes warmups but includes cross sets (they have `type === 'cross'`, not `'warmup'`). This matches the intent that cross work counts as working performance, but RecordsPanel's session-status filtering (F22) is a separate issue.
+
+**Ledger rows updated / exact next action:**
+Three ledger rows updated to `deep`: `src/lib/calc.ts`, `src/lib/calc.test.ts`, `src/lib/performance.ts`. Total deep files: 32 → 35. Only this tracker changed in the worktree. Commit with message: "deep-code-review: complete batch B07a - calculation core and its tests". End at request-review.
