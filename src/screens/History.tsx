@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Session, Lift, Set as TrainingSet, AccessorySet } from '../types/domain'
 import { estimated1RM } from '../lib/calc'
-import { prSessionIds, type AmrapRecord } from '../lib/pr'
+import { prSessionIds, type PerformanceRecord } from '../lib/pr'
+import { isWorkingPerformance } from '../lib/performance'
 import { formatDateShort, formatDateLong } from '../lib/format'
 import { settings } from '../store/settings-store'
 import SectionLabel from '../components/layout/SectionLabel'
@@ -398,21 +399,25 @@ export default function History() {
     const sessions = (await db.sessions.toArray()).filter(s => s.status === 'completed')
     const ids = sessions.map(s => s.id!).filter(Boolean)
     if (ids.length === 0) return
-    const amraps = await db.sets
+    const working = await db.sets
       .where('sessionId').anyOf(ids)
-      .filter(s => s.isAmrap && s.reps >= 1)
+      .filter(isWorkingPerformance)
       .toArray()
     const byId = new Map(sessions.map(s => [s.id!, s]))
-    const records: AmrapRecord[] = []
-    for (const a of amraps) {
-      const s = byId.get(a.sessionId)
+    const records: PerformanceRecord[] = []
+    for (const set of working) {
+      const s = byId.get(set.sessionId)
       if (!s) continue
+      // A cross block trains another movement, so it scores against that lift's
+      // history — the badge still lands on the session it was logged in.
+      const liftId = set.type === 'cross' ? set.liftId : s.liftId
+      if (liftId == null) continue
       records.push({
-        sessionId: a.sessionId,
-        liftId: s.liftId,
+        sessionId: set.sessionId,
+        liftId,
         date: new Date(s.date),
-        weight: a.weight,
-        reps: a.reps,
+        weight: set.weight,
+        reps: set.reps,
       })
     }
     setPrSessions(prSessionIds(records, settings.highRepDiscount))

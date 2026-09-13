@@ -1,7 +1,7 @@
 import { createSignal, createMemo, For, Show } from 'solid-js'
 import { logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory, startRest, setAccessoryNotes, type ActiveAccessory } from '../../store/workout-store'
 import type { AccessorySet, Exercise } from '../../types/domain'
-import { ACCESSORY_SETS, ACCESSORY_REPS } from '../../lib/calc'
+import { ACCESSORY_SETS, ACCESSORY_REPS, restTypeAfterSet } from '../../lib/calc'
 import DurationInput from '../forms/DurationInput'
 import Stepper from '../forms/Stepper'
 import SetLogControls, { FieldRow } from '../forms/SetLogControls'
@@ -80,7 +80,7 @@ export default function AccessoryLog(props: Props) {
       distance: type() === 'distance' ? distance() : null,
     }
     logAccessorySet(props.accessory.exerciseId, set)
-    startRest(nextSet() >= ACCESSORY_SETS ? 'transition' : 'normal')
+    startRest(type() === 'reps' ? restTypeAfterSet(reps(), ACCESSORY_REPS) : 'normal')
     setReps(ACCESSORY_REPS)
     setDuration(null)
     setDistance(0)

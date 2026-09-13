@@ -21,11 +21,11 @@
 //   { type: 'schedule', tag, fireAt, title, body }   — arm a one-shot
 //   { type: 'cancel',   tag }                        — drop a pending one
 //
-// `tag` is the coalescing key: a new rest nudge replaces a stale one rather
+// `tag` is the coalescing key: a new rest checkpoint replaces a stale one rather
 // than stacking. Rest-phase and stalled-session notifications use distinct
 // tags.
 
-import { DEFAULT_REST_THRESHOLDS, restStatus } from './calc'
+import { DEFAULT_REST_THRESHOLDS } from './calc'
 import type { RestPhase, RestThresholds } from './calc'
 import { createNotifyTimers, type NotifyTarget } from './notify-timers'
 
@@ -36,23 +36,24 @@ export const STALLED_DELAY_MS = 120 * 60 * 1000
 
 // Mixed-case bodies (the in-app restStatus().message is uppercase).
 const PHASE_BODY: Record<Exclude<RestPhase, 'idle'>, string> = {
-  nudge: 'Time for your next set',
-  warning: 'Time for your next set',
-  critical: 'Rest up — take your time',
+  nudge: 'First bell — go if ready',
+  warning: 'Second bell — go if ready',
+  critical: 'Failed-set rest complete',
 }
 
-// Phase thresholds (seconds) where restStatus flips idle→active for each type.
-// A 'fail' rest crosses two cues (nudge, then the hard stop); normal and
-// transition each have a single nudge. Lengths come from the user's settings —
-// a notification that fires on a different schedule from the on-screen timer is
-// worse than none.
-function thresholds(
-  restType: 'normal' | 'transition' | 'fail',
+// Bell thresholds (seconds). A completed set always arms both checkpoints; a
+// failed set arms only its longer recovery checkpoint. Lengths come from the
+// user's settings so notifications cannot drift from the on-screen timer.
+function checkpoints(
+  restType: 'normal' | 'fail',
   t: RestThresholds,
-): number[] {
-  if (restType === 'fail') return [t.failNudge, t.failMax]
-  if (restType === 'transition') return [t.transition]
-  return [t.normal]
+): Array<{ at: number; phase: Exclude<RestPhase, 'idle'> }> {
+  return restType === 'fail'
+    ? [{ at: t.failedBell, phase: 'critical' }]
+    : [
+        { at: t.firstBell, phase: 'nudge' },
+        { at: t.secondBell, phase: 'warning' },
+      ]
 }
 
 export { type NotifyTarget }
@@ -60,18 +61,15 @@ export { type NotifyTarget }
 // Pure: the notification targets for one rest period. Testable without a DOM/SW.
 export function restNotificationTargets(
   restStartedAt: number,
-  restType: 'normal' | 'transition' | 'fail',
+  restType: 'normal' | 'fail',
   t: RestThresholds = DEFAULT_REST_THRESHOLDS,
 ): NotifyTarget[] {
-  return thresholds(restType, t)
-    .map((at) => {
-      const phase = restStatus(at, restType, t).phase
-      const body = phase === 'idle' ? null : PHASE_BODY[phase]
-      return body === null
-        ? null
-        : { fireAt: restStartedAt + at * 1000, title: 'Rest complete', body, tag: REST_TAG }
-    })
-    .filter((t): t is NotifyTarget => t !== null)
+  return checkpoints(restType, t).map(({ at, phase }) => ({
+    fireAt: restStartedAt + at * 1000,
+    title: 'Rest complete',
+    body: PHASE_BODY[phase],
+    tag: REST_TAG,
+  }))
 }
 
 // Pure: the stalled-session target.
@@ -132,7 +130,7 @@ function schedulePage(key: string, targets: NotifyTarget[]): void {
 
 export function scheduleRest(
   restStartedAt: number,
-  restType: 'normal' | 'transition' | 'fail',
+  restType: 'normal' | 'fail',
   t: RestThresholds = DEFAULT_REST_THRESHOLDS,
 ): void {
   cancelRest()

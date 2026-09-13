@@ -10,10 +10,9 @@ import {
   STALLED_DELAY_MS,
 } from './notifications'
 import {
-  REST_FAIL_MAX,
-  REST_FAIL_NUDGE,
-  REST_NORMAL_THRESHOLD,
-  REST_TRANSITION_THRESHOLD,
+  REST_FAILED_BELL,
+  REST_FIRST_BELL,
+  REST_SECOND_BELL,
 } from './calc'
 
 const NOW = 1_000_000_000
@@ -23,34 +22,27 @@ const NOW = 1_000_000_000
 describe('restNotificationTargets', () => {
   const startedAt = 1_000_000
 
-  it('fires once at 90s for normal rest', () => {
+  it('fires at both completed-set checkpoints', () => {
     const t = restNotificationTargets(startedAt, 'normal')
-    expect(t).toHaveLength(1)
-    expect(t[0].fireAt).toBe(startedAt + REST_NORMAL_THRESHOLD * 1000)
-    expect(t[0].body).toBe('Time for your next set')
+    expect(t).toHaveLength(2)
+    expect(t[0].fireAt).toBe(startedAt + REST_FIRST_BELL * 1000)
+    expect(t[0].body).toBe('First bell — go if ready')
     expect(t[0].title).toBe('Rest complete')
     expect(t[0].tag).toBe('rest-timer')
+    expect(t[1].fireAt).toBe(startedAt + REST_SECOND_BELL * 1000)
+    expect(t[1].body).toBe('Second bell — go if ready')
   })
 
-  it('fires once at 60s for transition rest', () => {
-    const t = restNotificationTargets(startedAt, 'transition')
-    expect(t).toHaveLength(1)
-    expect(t[0].fireAt).toBe(startedAt + REST_TRANSITION_THRESHOLD * 1000)
-    expect(t[0].body).toBe('Time for your next set')
-  })
-
-  it('fires twice for fail: 180s warning + 300s critical', () => {
+  it('fires once at the failed-set checkpoint', () => {
     const t = restNotificationTargets(startedAt, 'fail')
-    expect(t).toHaveLength(2)
-    expect(t[0].fireAt).toBe(startedAt + REST_FAIL_NUDGE * 1000)
-    expect(t[0].body).toBe('Time for your next set')
-    expect(t[1].fireAt).toBe(startedAt + REST_FAIL_MAX * 1000)
-    expect(t[1].body).toBe('Rest up — take your time')
+    expect(t).toHaveLength(1)
+    expect(t[0].fireAt).toBe(startedAt + REST_FAILED_BELL * 1000)
+    expect(t[0].body).toBe('Failed-set rest complete')
   })
 
   it('returns targets even when startedAt is in the past (scheduler fires immediately)', () => {
     const t = restNotificationTargets(startedAt - 200_000, 'normal')
-    expect(t).toHaveLength(1)
+    expect(t).toHaveLength(2)
     expect(t[0].fireAt).toBeLessThan(NOW)
   })
 })
@@ -127,30 +119,30 @@ afterEach(() => {
 describe('notifications — page timers, no SW (dev preview fallback)', () => {
   it('fires a page Notification after the 90s threshold (normal)', () => {
     scheduleRest(NOW, 'normal')
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
     expect(notifCalls).toHaveLength(1)
     expect(notifCalls[0].title).toBe('Rest complete')
-    expect(notifCalls[0].opts.body).toBe('Time for your next set')
+    expect(notifCalls[0].opts.body).toBe('First bell — go if ready')
     expect(notifCalls[0].opts.tag).toBe('rest-timer')
   })
 
   it('does NOT fire before the threshold', () => {
     scheduleRest(NOW, 'normal')
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000 - 1)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000 - 1)
     expect(notifCalls).toHaveLength(0)
   })
 
   it('cancels the rest timer before it fires', () => {
     scheduleRest(NOW, 'normal')
     cancelRest()
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000 + 1000)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000 + 1000)
     expect(notifCalls).toHaveLength(0)
   })
 
   it('re-scheduling a rest cancels the previous timer (no stacking)', () => {
     scheduleRest(NOW, 'normal')
     scheduleRest(NOW, 'normal')
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
     expect(notifCalls).toHaveLength(1)
   })
 
@@ -158,7 +150,7 @@ describe('notifications — page timers, no SW (dev preview fallback)', () => {
     scheduleRest(NOW - 200_000, 'normal')
     expect(notifCalls).toHaveLength(0)          // deferred, not synchronous
     vi.advanceTimersByTime(0)
-    expect(notifCalls).toHaveLength(1)
+    expect(notifCalls).toHaveLength(2)
     expect(notifCalls[0].opts.tag).toBe('rest-timer')
   })
 
@@ -188,7 +180,7 @@ describe('notifications — page timers, no SW (dev preview fallback)', () => {
     scheduleRest(NOW, 'normal')
     scheduleStalledSession(NOW)
     cancelRest()
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
     expect(notifCalls).toHaveLength(0)             // rest cancelled
     vi.advanceTimersByTime(STALLED_DELAY_MS)
     expect(notifCalls).toHaveLength(1)             // stalled still fires
@@ -198,7 +190,7 @@ describe('notifications — page timers, no SW (dev preview fallback)', () => {
   it('does not fire when permission is not granted', () => {
     MockNotification.permission = 'denied'
     scheduleRest(NOW, 'normal')
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
     expect(notifCalls).toHaveLength(0)
   })
 })
@@ -210,11 +202,11 @@ describe('notifications — SW present (production)', () => {
     expect(swPostMessage).toHaveBeenCalledWith({
       type: 'schedule',
       tag: 'rest-timer',
-      fireAt: NOW + REST_NORMAL_THRESHOLD * 1000,
+      fireAt: NOW + REST_FIRST_BELL * 1000,
       title: 'Rest complete',
-      body: 'Time for your next set',
+      body: 'First bell — go if ready',
     })
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000 + 1000)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000 + 1000)
     expect(notifCalls).toHaveLength(0)             // visible tab: SW owns it
   })
 
@@ -222,7 +214,7 @@ describe('notifications — SW present (production)', () => {
     installSw()
     setPageHidden(true)
     scheduleRest(NOW, 'normal')
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
     expect(notifCalls).toHaveLength(1)
     expect(swPostMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'schedule' }))
   })
@@ -240,7 +232,7 @@ describe('notifications — SW present (production)', () => {
     setPageHidden(true)
     scheduleRest(NOW - 200_000, 'normal')
     vi.advanceTimersByTime(0)
-    expect(notifCalls).toHaveLength(1)
+    expect(notifCalls).toHaveLength(2)
   })
 
   it('cancel posts to the SW and clears the page timers', () => {
@@ -248,7 +240,7 @@ describe('notifications — SW present (production)', () => {
     scheduleRest(NOW, 'normal')
     cancelRest()
     expect(swPostMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'rest-timer' })
-    vi.advanceTimersByTime(REST_NORMAL_THRESHOLD * 1000 + 1000)
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000 + 1000)
     expect(notifCalls).toHaveLength(0)
   })
 })

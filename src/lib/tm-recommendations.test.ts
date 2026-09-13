@@ -45,11 +45,63 @@ async function seedSessionWithAmrap(opts: {
 //   reps=11: e1RM=259.7, suggestedTm=235, delta=17.5%
 
 describe('getSessionTmRecommendation', () => {
-  it('returns null when no AMRAP set in session', async () => {
+  it('counts a top set that was never flagged AMRAP', async () => {
+    // The read is the session's best working set, so a logged top set still
+    // proves strength even if the AMRAP flag never got set on it.
     const lifts = await seedLifts()
     const liftId = lifts[0].id!
     await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
     const { sessionId } = await seedSessionWithAmrap({ liftId, week: 3, weight: 190, reps: 10, isAmrap: false })
+    const result = await getSessionTmRecommendation(db, sessionId, liftId, lifts[0].name)
+    expect(result!.suggestedTm).toBe(230)
+  })
+
+  it('returns null when the session logged nothing but warmups', async () => {
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 3, date: new Date(), notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'warmup', setNumber: 1, weight: 250, reps: 5, isAmrap: false })
+    expect(await getSessionTmRecommendation(db, sessionId, liftId, lifts[0].name)).toBeNull()
+  })
+
+  it('a joker that outscores the AMRAP drives the recommendation', async () => {
+    // AMRAP 190x9 alone is a 10% delta — no prompt. The joker chained above it
+    // at 220x5 estimates to ~256, which is the honest read on the day.
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+    const { sessionId } = await seedSessionWithAmrap({ liftId, week: 3, weight: 190, reps: 9 })
+    await db.sets.add({ sessionId, type: 'joker', setNumber: 1, weight: 220, reps: 5, isAmrap: false })
+    const result = await getSessionTmRecommendation(db, sessionId, liftId, lifts[0].name)
+    expect(result).not.toBeNull()
+    expect(result!.suggestedTm).toBe(230)
+  })
+
+  it('a joker single does not inflate the read \u2014 reps === 1 scores the bare weight', async () => {
+    // 200x1 estimates to 200, below the 190x10 AMRAP's 253.3, so the AMRAP still
+    // sets the number. Without the reps === 1 short-circuit a heavy single would
+    // out-score every multi-rep set on the day.
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+    const { sessionId } = await seedSessionWithAmrap({ liftId, week: 3, weight: 190, reps: 10 })
+    await db.sets.add({ sessionId, type: 'joker', setNumber: 1, weight: 200, reps: 1, isAmrap: false })
+    const result = await getSessionTmRecommendation(db, sessionId, liftId, lifts[0].name)
+    expect(result!.suggestedTm).toBe(230)
+  })
+
+  it('ignores a cross block trained for a different lift', async () => {
+    // Cross sets belong to the movement they train; a heavy cross-deadlift block
+    // logged on OHP day must not bump the OHP training max.
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date() })
+    const { sessionId } = await seedSessionWithAmrap({ liftId, week: 3, weight: 190, reps: 9 })
+    await db.sets.add({ sessionId, type: 'cross', setNumber: 1, weight: 400, reps: 5, isAmrap: false, liftId: lifts[1].id! })
     expect(await getSessionTmRecommendation(db, sessionId, liftId, lifts[0].name)).toBeNull()
   })
 
@@ -263,6 +315,41 @@ describe('getCycleDoublingCandidates', () => {
     await db.sets.add({ sessionId: stale, type: 'main', setNumber: 3, weight: 170, reps: 9, isAmrap: true })
     const result = await getCycleDoublingCandidates(db, cycle)
     expect(result.map(c => c.liftId)).toEqual([liftId])
+  })
+
+  it('a joker carries a week that its AMRAP alone would have failed', async () => {
+    // Week 1 at 170x12 is a 7.5% delta and blocks the whole lift. A joker at
+    // 210x5 on that same day estimates to ~244.8 → suggestedTm 220, delta 10%,
+    // so the week clears on its best set and all three qualify.
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    const cycle = await buildCycle({
+      liftId,
+      weeks: [
+        { week: 1, weight: 170, reps: 12 }, // 7.5% on its own
+        { week: 2, weight: 180, reps: 11 },
+        { week: 3, weight: 190, reps: 9 },
+      ],
+    })
+    const week1 = (await db.sessions.toArray()).find(x => x.week === 1 && x.liftId === liftId)!
+    await db.sets.add({ sessionId: week1.id!, type: 'joker', setNumber: 1, weight: 210, reps: 5, isAmrap: false })
+    expect((await getCycleDoublingCandidates(db, cycle)).map(c => c.liftId)).toEqual([liftId])
+  })
+
+  it('a cross block for another lift cannot carry a week', async () => {
+    const lifts = await seedLifts()
+    const liftId = lifts[0].id!
+    const cycle = await buildCycle({
+      liftId,
+      weeks: [
+        { week: 1, weight: 170, reps: 12 }, // 7.5% — still fails
+        { week: 2, weight: 180, reps: 11 },
+        { week: 3, weight: 190, reps: 9 },
+      ],
+    })
+    const week1 = (await db.sessions.toArray()).find(x => x.week === 1 && x.liftId === liftId)!
+    await db.sets.add({ sessionId: week1.id!, type: 'cross', setNumber: 1, weight: 400, reps: 5, isAmrap: false, liftId: lifts[1].id! })
+    expect(await getCycleDoublingCandidates(db, cycle)).toEqual([])
   })
 
   it('returns [] when a mid-cycle TM bump occurred (>60s after cycle start)', async () => {
