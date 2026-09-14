@@ -8,41 +8,39 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B07d — PR detection and plate loading.** Review `src/lib/pr.ts`
-(138 lines) with `src/lib/pr.test.ts` (302), and `src/lib/plate-loading.ts` (44)
-with `src/lib/plate-loading.test.ts` (62). Start from F27 (greedy plate solver
-strands a remainder on a restricted inventory) and from F22's record-ownership
-question — check whether `pr.ts` filters session status the way History does and
-`RecordsPanel` does not. Reuse B07a/B07b/B07c evidence; do not re-derive calc,
-compose or cycle findings.
-Latest run: **B07c complete** — `src/lib/cycle.ts` (all 325 lines) and
-`src/lib/cycle.test.ts` (all 812 lines) reviewed. Both files marked deep;
-**41 files deep in total.** All 63 existing tests passed
-(`pnpm exec vitest run src/lib/cycle.test.ts`); `pnpm lint` and `tsc -b` clean.
-**L05 is resolved** into two confirmed findings: **F33** (high — two concurrent
-`advanceCycleIfComplete` calls, reachable by double-tapping an undisabled
-post-session modal outside `runFinishing`, both pass the `weekComplete` guard and
-leave two cycle rows numbered 2) and **F34** (medium — `applyCycleDoubling` and
-`deloadTms` compound on a second tap: 205→210→**215**, 200→180→**160**; the
-summary also folds back by lift *name*, which `lifts.name` does not make unique).
-Two more: **F35** (medium — the cycle-shrink reconcile lives only in Settings, so
-a week-4 session orphaned by any other route is stranded `pending` in a closed
-cycle, unreachable by Today and History but still counted by F22's record query)
-and **F36** (low — `getCurrentTm` and `getAllCurrentTms` break `setAt` ties in
-opposite directions). Sequential idempotency, the empty-roster guard, the
-own-session-outranks-cross seeding rule and the `week !== 4` deload filter under
-both cycle shapes were probed and are **correct** — negative conclusions, not
-findings. Only this tracker changed; no application fixes or sub-agents. This
+**Next batch: B07e — TM recommendations and accessory training maxes.** Review
+`src/lib/tm-recommendations.ts` (133 lines) with `src/lib/tm-recommendations.test.ts`
+(598), and `src/lib/accessory-tm.ts` (78) with `src/lib/accessory-tm.test.ts` (96).
+Start from F25 (the uncapped `targetReps` inverse) and from F33/F34 — both modules
+feed the post-session modals whose callbacks are now known to be unguarded — and
+carry F38's ownership question into `getCycleDoublingCandidates`, which decides a
+TM bump from session sets. Reuse B07a–B07d evidence; do not re-derive calc,
+compose, cycle or PR findings.
+Latest run: **B07d complete** — `src/lib/pr.ts` (138), `src/lib/pr.test.ts` (302),
+`src/lib/plate-loading.ts` (44), `src/lib/plate-loading.test.ts` (62) and
+`src/lib/performance.ts` (20) reviewed in full. Five files marked deep;
+**46 files deep in total.** All 45 existing tests passed
+(`pnpm exec vitest run src/lib/pr.test.ts src/lib/plate-loading.test.ts`);
+`pnpm lint` and `tsc -b` clean. Two new findings, both probe-confirmed against
+real SQLite: **F37** (medium — `detectPRs`'s empty-history guard returns before
+the cross-set query, so a movement trained only as cross work is scored against
+nothing; 600×5 over a standing 466 e1RM reports no PR, and adding one *empty* own
+session flips the same call to `e1RmPr: true`) and **F38** (medium — the toast,
+the History badge and `RecordsPanel` use three different session-status baselines,
+breaking the invariant `pr.ts:78-84` states in its own comment). `plate-loading.ts`
+and `performance.ts` produced **no findings** — their resolve/fallback matrix and
+the shared working-set filter were traced across all four consumers and are
+consistent. Only this tracker changed; no application fixes or sub-agents. This
 card authorizes commit, push and PR; operator acceptance remains a separate
 native Kanban review step.
 
-**Remaining work — 93 of 134 ledger files are not yet `deep`** (41 are). Counted
+**Remaining work — 88 of 134 ledger files are not yet `deep`** (46 are). Counted
 from the File ledger at `7992747`; recount there rather than trusting this block
 if the two disagree.
 
 | Area | Files left | Shape of the work |
 |---|---|---|
-| B07 | 21 pending | Current area. B07d takes 4 of them; at the bounded batch size this area is roughly four more sessions. |
+| B07 | 16 pending | Current area. B07e takes 4 of them; at the bounded batch size this area is roughly three more sessions. |
 | B08 | 55 (52 `reported`, 1 `partial`, 1 pending) | Largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each file still needs bounded verification. |
 | B09 | 10 (9 pending, 1 `partial`) | Service worker, timers, notifications. Carries L04 and the F24 notification tail. |
 | B11 | 7 pending | E2E, test infrastructure, domain types, remaining stores. |
@@ -133,6 +131,8 @@ claimed here.
 | F34 | Medium; B07c staggered-call probe against real SQLite | `src/lib/cycle.ts:167-169`, `187-204`; `src/components/modals/CycleCompleteModal.tsx:48-53`, `66-71`; `src/screens/Workout.tsx:634-641`; `src/screens/Settings.tsx:1040-1043` | `CycleCompleteModal` fires `onDoubleIncrement`/`onDeload` as un-awaited `void` callbacks and never disables the buttons, and neither `applyCycleDoubling` nor `deloadTms` is idempotent — both read the latest TM and append a new row. A second tap after the first read settles compounds: TM **205 → 210 → 215** for one "+10 LBS" button, and **200 → 180 → 160** for one "CUT ALL TMS −10%". Simultaneous taps instead append a duplicate row at the same weight (`205,210,210` / `200,180,180`), which is silent but leaves two TMs at the same instant (see F36). The returned summary even renders the compounded 215, so the readout confirms a change the user asked for once. `applyCycleDoubling` also folds back **by lift name** (`t.liftName === liftName`) while `lifts.name` has no UNIQUE constraint: with two lifts named "Bench", accepting on one rewrites the other's summary row to the wrong weight (`300 → 210`; probe P8). The DB write itself is by `liftId` and stays correct. | Disable the modal's buttons for the duration of their handler and await the callbacks; make the two writes idempotent or guard them behind a single-flight token. Key the summary fold-back on `liftId` — `newTms` should carry the id alongside the name. Add `applyCycleDoubling` and `deloadTms` double-invocation tests; `cycle.test.ts` never imports `applyCycleDoubling` at all. |
 | F35 | Medium; B07c real-SQLite probe (P5) | `src/lib/cycle.ts:119-121`, `234-242`; `src/screens/Settings.tsx:415-442`; `src/screens/Today.tsx:58`, `83-87` | Retiring the sessions that a cycle shrink orphans lives only in `Settings.handleCycleShapeChange:430-434`, not in `advanceCycleIfComplete`. With `hasDeloadWeek: false` reached by any other route, a live week-4 session is stepped over: probe seeds weeks 1–3 complete plus one `pending` week-4 row with a logged set, calls `getNextSessionAdvancingIfDone`, and gets cycle 2 / week 1 while the week-4 row stays `pending` in cycle 1 **with its sets intact**. Today only queries `next.cycleId` so it can never be resumed or discarded; History drops non-`completed` rows so it is never displayed; `RecordsPanel` filters nothing but `liftId`, so its sets keep counting toward the all-time record (F22). The route around the Settings handler is a backup import, whose settings envelope is already weak (F03, F08). | Move the "weeks past the new final week no longer exist" reconcile into `advanceCycleIfComplete` (or a shared helper both callers use) so the invariant holds however `hasDeloadWeek` changes, and decide whether the orphaned sets are deleted or retained as `skipped` history — consistently with whatever F22 settles for record ownership. Cover "advance with a stranded week-4 pending row under a 3-week setting" in `cycle.test.ts`; the existing 3-week block only tests clean cycles. |
 | F36 | Low; B07c probe (P7); reconcile in B12 | `src/lib/training-max.ts:36-39`, `61-75` | The two "current training max" helpers in the same module break ties differently. `getCurrentTm` uses `sortBy('setAt')` and takes the last element — `Array.prototype.sort` is stable, so equal timestamps keep insertion order and the **newest** row wins. `getAllCurrentTms` compares with strict `>` over `toArray()` order, so on a tie the **first** row wins. Probe: two rows for one lift at the same instant, weights 200 then 210 → `getCurrentTm` returns 210, `getAllCurrentTms` returns 200. The table is append-only with no ordering key besides `setAt`, and F33/F34's concurrent paths are exactly what produce same-instant rows; a restored backup (F08) can carry them verbatim. | Give both helpers one tie-break — prefer the higher row id at equal `setAt`, or store a monotonic sequence — and cover a tie in `training-max.test.ts`. `src/lib/training-max.ts` stays `deep` (B01b); this is a cross-file reconcile for B12, not a reopened row. |
+| F37 | Medium; B07d real-SQLite probe | `src/lib/pr.ts:106-119` | The "this lift has no history at all" guard returns at line 108 **before** the cross-set query at line 116, and `db.sessions.where('liftId')` only finds the movement's *own* sessions. A movement whose history is entirely cross work is therefore scored against nothing: probe seeds two cross blocks for lift 2 at 400×5 and 405×5 (e1RM 466) inside lift 1's sessions, then `detectPRs(db, 2, 600, 5)` — e1RM 699 — returns `{repPr: false, e1RmPr: false}` with **no `prevBestE1Rm` field at all**. Adding one *empty* own session for lift 2 flips the identical call to `e1RmPr: true, prevBestE1Rm: 466`, so the answer turns on a session row's existence rather than on the lift's actual history. `Workout.checkPr` passes the movement's `liftId` for every cross set (`Workout.tsx:317-321`), so this is the live path; reachable whenever a cross block is logged before the movement's own training day comes round. | Move the empty-history check after both queries — decide it on `prior.length`, which already has its own branch at line 124 — or query cross sets first. Keep the existing "first work on a lift with no history is not a toast" behavior if that is wanted (`pr.test.ts:24` pins it), but base it on the combined set list. Add a cross-only-history case to `pr.test.ts`; `pr.test.ts:133` only covers a movement that already owns a session. |
+| F38 | Medium; B07d real-SQLite probe | `src/lib/pr.ts:106`; `src/screens/History.tsx:399`; `src/components/stats/RecordsPanel.tsx:52` | Three features now answer "what counts as a record" three different ways. `detectPRs` (the mid-set toast) queries `db.sessions.where('liftId')` with **no status filter**; `History.loadPrs` feeds `prSessionIds` from **`completed` sessions only**; `RecordsPanel` filters **nothing but `liftId`** (F22). Probe: with one `skipped` session holding 400×5, `detectPRs(db, 1, 300, 5)` reports `prevBestE1Rm: 466` and no PR, while History's baseline for the same database is empty and `prSessionIds` badges the very next session. A `pending` session behaves identically. The reverse also holds — F37's probe shows History badging two sessions the toast never announced. `pr.ts:78-84` states the invariant this breaks: "the toast has to read the same history or the two disagree about the same session." | Settle F22's ownership rule once and apply it in all three readers; the natural home is a shared "performance records for a lift" query in `pr.ts` or `performance.ts` that History, Workout and `RecordsPanel` all call, rather than three `db.sessions` queries with three different filters. Note the live `pending` session is a genuine special case for the toast — its own earlier sets must stay in the baseline — so the rule is "completed, plus the session being logged", not simply "completed". Cover a skipped-session baseline in `pr.test.ts`, whose helper writes `status: 'completed'` for every fixture. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -332,11 +332,11 @@ column as work is completed.
 | `src/lib/notifications.ts` | B09 | pending | — |
 | `src/lib/notify-timers.test.ts` | B09 | pending | — |
 | `src/lib/notify-timers.ts` | B09 | pending | — |
-| `src/lib/performance.ts` | B07 | pending | — |
-| `src/lib/plate-loading.test.ts` | B07 | pending | — |
-| `src/lib/plate-loading.ts` | B07 | pending | — |
-| `src/lib/pr.test.ts` | B07 | pending | — |
-| `src/lib/pr.ts` | B07 | pending | — |
+| `src/lib/performance.ts` | B07 | deep | B07d — all 20 lines; no test file of its own (gap recorded); shared-filter contract traced |
+| `src/lib/plate-loading.test.ts` | B07 | deep | B07d — all 62 lines; 12 tests passed; test gaps below |
+| `src/lib/plate-loading.ts` | B07 | deep | B07d — all 44 lines; no findings; resolve/fallback matrix probed by the existing suite |
+| `src/lib/pr.test.ts` | B07 | deep | B07d — all 302 lines; 33 tests passed; test gaps below |
+| `src/lib/pr.ts` | B07 | deep | B07d — all 138 lines; F37–F38 confirmed |
 | `src/lib/rest-timer-worker.test.ts` | B09 | pending | — |
 | `src/lib/rest-timer-worker.ts` | B09 | pending | — |
 | `src/lib/session.test.ts` | B05 | deep | B05b — full file; helper status/rollback evidence below |
@@ -1658,3 +1658,153 @@ resolved. No application or test file changed; the probe was deleted. Next:
 **B07d — `src/lib/pr.ts` + `src/lib/pr.test.ts` and `src/lib/plate-loading.ts` +
 `src/lib/plate-loading.test.ts`**, starting from F27 and F22's status-filter
 question.
+
+### 2026-09-13 — B07d: PR detection, plate loading and the shared performance filter
+
+**Revision:** `7992747eaae1dd0008092618414a36b4888dd07c` for the source files (the
+batch commits on top of `bcd9cfa`, B07c). Application files unchanged at batch
+start and end. Single agent; no sub-agents; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/lib/pr.ts` | 1–138 | `575f1189636474de3af99d6576af0244c930aed7` |
+| `src/lib/pr.test.ts` | 1–302 | `d7a3b2d5d7eb67514be186f4b3838d6e069d00cc` |
+| `src/lib/plate-loading.ts` | 1–44 | `7073a7fb1e6d7c1730ba43ebb76c94c85f2ecea1` |
+| `src/lib/plate-loading.test.ts` | 1–62 | `946672506217696e493f7f0027b9fced2bd0c974` |
+| `src/lib/performance.ts` | 1–20 | `486f5fb611942faf81fd867c1b544c3e08a9479c` |
+
+`performance.ts` is folded into this batch because it is `pr.ts`'s baseline filter
+and has no test file of its own; the superseded first B07a section listed it with a
+blob (`a1b2c3d4…`) that matches no object in this repository, and the authoritative
+B07a section marked only `calc.ts`/`calc.test.ts` deep. Its ledger row was still
+`pending` and is closed here on fresh evidence.
+
+**Behavior, invariants and dependencies traced.** `pr.ts` has two entry points that
+are *documented to agree*: `detectPRs` scores the set being logged (mid-set toast,
+`Workout.tsx:311-331`) and `prSessionIds` scores whole sessions after the fact
+(History badge, `History.tsx:393-424`). Both fold sets into sessions, both score on
+Wathan e1RM rather than heaviest load, both attribute a cross set to the movement it
+trains rather than the session's lift, and both evaluate strictly against *prior*
+work so a later session cannot retroactively un-PR an earlier one. `prSessionIds`
+breaks same-day ties by `sessionId` so query order cannot change the answer.
+`performance.ts:10-11` is the single shared definition of "real loaded work" —
+`type !== 'warmup' && reps >= 1 && weight > 0` — consumed by `pr.ts:114`/`118`,
+`cycle.ts:294-295`, `tm-recommendations.ts:41` and `RecordsPanel.tsx:69`.
+`plate-loading.ts` resolves `(plateMode, implementBase, legacy usesBarbell,
+global barWeight)` to `{mode, base} | null`, with opposite defaults for lifts
+(paired) and accessories (none), feeding `calc.calcPlates` and `PlateDisplay`.
+
+The two entry points do **not** in fact agree, in two independent ways — F37 and F38.
+
+**Checks and outcomes.**
+
+- `pnpm exec vitest run src/lib/pr.test.ts src/lib/plate-loading.test.ts` —
+  **45 passed** (33 + 12), fresh run.
+- `pnpm lint` — clean, fresh run. `pnpm exec tsc -b` — clean, exit 0, fresh run.
+- Disposable probe under `/tmp/b07c-probe/pr.test.ts` (five cases), run with
+  `pnpm exec vitest run --root /tmp/b07c-probe --config /tmp/b07c-probe/vitest.config.ts pr`
+  against the real source by absolute import and against real in-process SQLite,
+  then deleted. Nothing in the repository was touched.
+- Not run this batch: the full suite, `Workout.test.tsx`, `History.test.tsx`, any
+  browser/E2E check. F38's cross-feature divergence is reproduced at the two library
+  APIs plus the exact `db.sessions` filter each screen applies, not by rendering both.
+
+**Findings.**
+
+1. **F37 (medium, confirmed).** Lift 2 with two cross blocks logged in lift 1's
+   sessions (400×5 then 405×5, standing e1RM 466) and no own session:
+   `detectPRs(db, 2, 600, 5)` → `{repPr: false, e1RmPr: false, newE1Rm: 699.5}` with
+   **no `prevBestE1Rm` key**, i.e. the early return at line 108, not a comparison.
+   The same call after adding one empty own session for lift 2 →
+   `{e1RmPr: true, prevBestE1Rm: 466.3}`.
+2. **F38 (medium, confirmed).** One `skipped` session holding 400×5 →
+   `detectPRs(db, 1, 300, 5)` reports `prevBestE1Rm: 466.3` and no PR; the
+   `completed`-only id list History would build from the same database is `[]`. A
+   `pending` session gives byte-identical output. Conversely `prSessionIds` on F37's
+   cross-only history badges **both** sessions (`[1,2]`) that the toast never
+   announced.
+
+**Substantive negative conclusions (checked, not findings):**
+
+- **`plate-loading.ts` is correct across its whole input matrix.** `plateMode` wins
+  over the legacy `usesBarbell` flag; `implementBase ?? (mode === 'paired' ?
+  barWeight : 0)` is what makes standard-bar lifts track the global `barWeight` while
+  a hex bar or belt-squat carriage pins its own number; `implementBase: 0` is
+  correctly distinguished from `undefined`/`null` by `??` rather than `||`, which is
+  the bug this shape usually has (a two-sided plate cable at base 0 would otherwise
+  silently pick up the 45 lb bar). The existing 12 tests cover both entities' default
+  arms, both override directions and the `0` vs `null` distinction. F27's greedy
+  plate solver lives in `calc.ts:540-569`, not here — this module only chooses the
+  mode and base handed to it — so no part of F27 is re-derived or re-opened.
+- **`performance.ts`'s filter is applied consistently by all four consumers.** Each
+  one adds only its own *attribution* rule on top (`type !== 'cross'` for own sets,
+  `type === 'cross' && liftId === …` for cross sets), never a different definition of
+  working work. The `weight > 0` guard is load-bearing in three separate places
+  because the weight stepper bottoms out at 0.
+- **`prSessionIds` does not need `isWorkingPerformance`.** Its own
+  `reps < 1 || weight <= 0` guard is the same rule minus the warmup clause, and its
+  only caller (`History.tsx:404`) has already applied `isWorkingPerformance` to the
+  rows it passes. Recorded so a later reader does not "unify" the two and change the
+  library API's behavior for a caller that has not filtered.
+- **`bestEstimatedPerformance`'s tie-break is first-wins** (strict `>` in the
+  reduce), so on equal e1RM the earlier element in the array survives. In
+  `cycle.getRecentWorkingSets` own sets are appended before cross sets, so a tie
+  resolves to the lift's own set — which is the ranking that function documents.
+  Consistent, not accidental.
+- **`detectPRs`'s inclusion of the live `pending` session is required,** not a bug:
+  the set being logged and its earlier siblings live in that session, and
+  `excludeSetId` removes only the row just written. F38 is about `skipped` and about
+  the disagreement between readers, not about dropping `pending`.
+- **The `.filter(Boolean)` at `pr.ts:107`** is a no-op in practice (SQLite rowids
+  start at 1) but harmless; it does not mask a missing-id case.
+
+**Observation that needs no separate ID:**
+
+- `detectPRs` uses `db.sets.where('liftId')` at line 117 — the third call site for
+  the missing `idx_sets_liftId` that **L07** opened on `RecordsPanel.tsx:65` and
+  B07c found again in `cycle.getRecentWorkingSets`. This one runs on **every logged
+  set**, which makes it the most frequent of the three. Fold into L07's index
+  recommendation rather than tracking separately.
+- Probe Q5: when F15's retry writes the same physical set twice, the duplicate row
+  lands in `prior` and `prevBestE1Rm` comes out exactly equal to `newE1Rm`, so the
+  strict `>` suppresses the set's own PR. That is a consequence of F14/F15's missing
+  operation identity, not an independent defect in `pr.ts`.
+
+**Test assessment / gaps.** The 33 `pr.ts` tests are unusually thorough on the
+scoring rules — `Math.max` vs `Math.min` mutants, the `reps >= 1` boundary, the
+joker-in-the-baseline false positive, heavier-but-lower-e1RM, and the same-day
+tie-break all have named tests. Gaps:
+
+- **Every fixture writes `status: 'completed'`** (`pr.test.ts:9-14`), so F38 has no
+  coverage in either direction and a mutant deleting a status filter — if one were
+  added — would survive.
+- **No cross-only-history case** (F37). `pr.test.ts:133` covers a movement that
+  *already* owns a session, which is precisely the arm that works.
+- **The two entry points are never asserted against each other.** Their agreement is
+  stated in a comment and tested nowhere; a single test feeding the same history to
+  `detectPRs` and `prSessionIds` would have caught both findings.
+- **`prSessionIds` is never given records from two lifts that share a session** (a
+  session with its own main work plus a cross block), which is the case that relies
+  on `byLift` keying rather than session keying.
+- **`performance.ts` has no test file at all.** Its three exports are covered only
+  through four consumers, so the `weight > 0` and `reps >= 1` boundaries and the
+  `bestEstimatedPerformance` tie-break have no direct assertion. Given how many
+  modules depend on this one 11-line predicate, that is the widest gap in the batch.
+- **`plate-loading.test.ts` never checks `plateMode` overriding `usesBarbell: true`
+  on the accessory side** (only the lift side, at `:15`), and never exercises a
+  negative or non-finite `implementBase`/`barWeight`.
+
+**Open questions / remaining ranges:** none within these five files — all complete
+at the recorded blobs. Carried forward: F37 and F38 both change what
+`Workout.checkPr` shows, and `Workout.tsx` is already `deep` (B05b), so the fix is
+reconciled in B12 rather than by re-opening that row; F38 cannot be closed before
+F22 settles record ownership; the missing `idx_sets_liftId` now has three recorded
+call sites and belongs to L07's single index change.
+
+**Ledger rows updated / exact next action:** `src/lib/pr.ts`, `src/lib/pr.test.ts`,
+`src/lib/plate-loading.ts`, `src/lib/plate-loading.test.ts` and
+`src/lib/performance.ts` → `deep` (46 total). F37–F38 added. No application or test
+file changed; the probe was deleted. Next: **B07e — `src/lib/tm-recommendations.ts`
++ `src/lib/tm-recommendations.test.ts` and `src/lib/accessory-tm.ts` +
+`src/lib/accessory-tm.test.ts`**, starting from F25 and the F33/F34 modal-callback
+surface.
