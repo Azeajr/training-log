@@ -8,46 +8,60 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Next batch: B07g — formatting, lift roster and cleanup (closes B07).** Review
-`src/lib/format.ts` (32) with `src/lib/format.test.ts` (61), `src/lib/lift.ts`
-(106) with `src/lib/lift.test.ts` (182), and `src/lib/cleanup.ts` (38) with
-`src/lib/cleanup.test.ts` (60). Start from `archiveLift`/`moveLift` ordering
-against `computeClosedThroughWeek`'s frozen high-water mark (B07c) and from
-`cleanup.ts`'s orphan/archive plan, which `Settings.tsx:285-302` applies in bulk
-and which touches the same `exercises`/`assistanceDefaults` rows F41 and B07f's
-cascade evidence cover. Reuse B07a–B07f evidence. **This is the last B07 batch** —
-after it, every B07 ledger row is `deep` and the area closes; B08 is next.
-Latest run: **B07f complete** — `src/lib/assistance.ts` (182),
-`src/lib/assistance.test.ts` (274), `src/lib/exercise.ts` (65),
-`src/lib/exercise.test.ts` (116), `src/lib/exercise-history.ts` (103) and
-`src/lib/exercise-history.test.ts` (246) reviewed in full. Six files marked deep;
-**56 files deep in total.** All 56 existing tests passed
-(`pnpm exec vitest run src/lib/assistance.test.ts src/lib/exercise.test.ts src/lib/exercise-history.test.ts`);
-`pnpm lint` and `tsc -b` clean. Two new findings, both probe-confirmed against
-real SQLite: **F41** (low — exercise-name uniqueness is a check-then-act rule with
-no UNIQUE index; two concurrent creates both succeed and afterwards neither row can
-be renamed) and **F42** (low — `getLiftHistory` omits a lift's cross work done on
-another lift's day, so the mid-session "last time" reference disagrees with the PR
-toast, Stats and the AMRAP seed). `assistance.ts` produced **no findings** — the
-re-tag cascade was probed including the case where one exercise holds two sections
-for the same lift, and it resolves correctly. Only this tracker changed; no
-application fixes or sub-agents. This card authorizes commit, push and PR; operator
-acceptance remains a separate native Kanban review step.
+**Area B07 is CLOSED.** Every `src/lib/**` row queued to B07 is now `deep` at a
+recorded blob, across seven batches (B07a–B07g). No B07 file remains `pending`,
+`partial` or `stale`. Twenty-two findings were opened from this area
+(F24–F45, less the ones opened elsewhere), and leads **L05 is resolved** while
+**L07** gained two further call sites. Nothing in B07 is blocked.
 
-**Remaining work — 78 of 134 ledger files are not yet `deep`** (56 are). Counted
-from the File ledger at `7992747`; recount there rather than trusting this block
-if the two disagree.
+**Next batch: B08a — the start of the components area.** B08 is the largest
+remaining block and the one the `pending` column hides: 52 of its rows are
+`reported`, a prior area-level claim with no recoverable per-file evidence, so each
+still needs bounded verification. Start with the three modals this area's own
+findings already implicate, since the evidence is written and only the component
+rows are missing: `CycleCompleteModal.tsx` (F34, F40 — undisabled buttons firing
+un-awaited callbacks, and a "+X LBS" offer for an archived lift),
+`TmRecommendationModal.tsx` and `AccessoryTmModal.tsx` (F33 — the accept arms that
+re-enter `proceedAfterSession`), with `Modal.test.tsx`/`ModalAsyncStates.tsx` as the
+shared dependency. That slice also settles whether an in-flight guard belongs in
+`Modal` itself or at each call site, which every one of F33/F34/F41 needs.
+Latest run: **B07g complete** — `src/lib/format.ts` (32),
+`src/lib/format.test.ts` (61), `src/lib/lift.ts` (106), `src/lib/lift.test.ts`
+(182), `src/lib/cleanup.ts` (38) and `src/lib/cleanup.test.ts` (60) reviewed in
+full. Six files marked deep; **62 files deep in total.** All 35 existing tests
+passed (`pnpm exec vitest run src/lib/format.test.ts src/lib/lift.test.ts src/lib/cleanup.test.ts`);
+`pnpm lint` and `tsc -b` clean. Three new findings, all probe-confirmed against
+real SQLite: **F43** (medium — `archiveLift` deletes a pending session row without
+its child rows, unlike `discardPendingSession`; an orphaned cross set then sets a
+movement's PR baseline to 582.9 permanently, unreachable by every screen and every
+delete path), **F44** (low — `deleteLift` is an incomplete cascade whose
+"pre-history only" contract is unenforced on a reachable `/setup` route) and
+**F45** (low — CLEANUP archives never-logged exercises that are live assistance
+default picks, emptying Today's slots with only a count in the toast).
+`format.ts` produced **no findings**. Only this tracker changed; no application
+fixes or sub-agents. This card authorizes commit, push and PR; operator acceptance
+remains a separate native Kanban review step.
 
-| Area | Files left | Shape of the work |
+**Remaining work — 117 of 179 ledger rows are not yet `deep`** (62 are). Recounted
+directly from the File ledger at `7992747` this session.
+
+**Correction:** every earlier card in this document quoted a 134-row ledger
+(e.g. "95 of 134", "39 are"). That total was wrong — the File ledger has always
+held **179** rows, and the per-area figures under it were wrong in the same way
+(B10 was listed as "1 pending" against 25 actual rows). The per-area counts below
+are recounted, not carried forward. Deep-row counts in the batch sections were
+correct; only the remaining-work totals were not.
+
+| Area | Rows left | Shape of the work |
 |---|---|---|
-| B07 | 6 pending | Current area. B07g takes all 6 and closes the area. |
-| B08 | 55 (52 `reported`, 1 `partial`, 1 pending) | Largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each file still needs bounded verification. |
+| B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
+| B08 | 54 (52 `reported`, 1 `partial`, 1 pending) | Largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row still needs bounded verification. |
+| B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
+| B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
+| B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
 | B09 | 10 (9 pending, 1 `partial`) | Service worker, timers, notifications. Carries L04 and the F24 notification tail. |
-| B11 | 7 pending | E2E, test infrastructure, domain types, remaining stores. |
-| B10 | 1 pending | Build/deploy/config/assets. |
-| B12 | — | Final reconciliation; nothing to review until the rest closes. |
 
-B01–B06 are closed. Per-area scope and starting concerns are in the Queue table
+B01–B07 are closed. Per-area scope and starting concerns are in the Queue table
 below; per-file status is in the File ledger.
 
 ## Previous session summary — 2026-09-11
@@ -137,6 +151,9 @@ claimed here.
 | F40 | Low; B07e real-SQLite probe | `src/lib/tm-recommendations.ts:82`, `126-129`; `src/lib/cycle.ts:89`, `113` | `getCycleDoublingCandidates` resolves lift names from `db.lifts.toArray()` — **all** lifts — and never filters `archived`, while `progressTms` and `advanceCycleIfComplete`'s completion math both go through `activeLiftsOrdered`. Probe: one active lift and one archived lift, both with three qualifying weeks in the cycle → `advanceCycleIfComplete` returns `newTms` for the active lift only but `doublingCandidates` for **both**. `CycleCompleteModal` then renders a "STRONG CYCLE / +20 LBS" button for a retired lift that has no row in the "New training maxes" list above it, and accepting writes a fresh training max for it (`applyCycleDoubling` goes straight to `setTm`). | Filter the candidate loop to active lifts, the same way the progression does — ideally by having both read one `activeLiftsOrdered` result rather than two different lift queries. Add an archived-lift case to `tm-recommendations.test.ts`, which has no archived fixture at all. |
 | F41 | Low; B07f real-SQLite probe | `src/lib/exercise.ts:12-18`, `20-29`, `31-35`; `src/db/schema.ts:40-46`; `src/screens/Settings.tsx:220-234` | `assertUniqueExerciseName` loads the whole `exercises` table, checks for a case/whitespace-insensitive match, and only then writes — a check-then-act with no `UNIQUE` index on `exercises(name)` behind it (the schema declares uniqueness only for `assistanceDefaults(liftId, section)` and `accessoryNotes(sessionId, exerciseId)`). `handleAddExercise` has no in-flight guard and clears the form only *after* its await, so a double tap on ADD runs both creates concurrently: probe → both `fulfilled`, two rows both named "Dips". The picker then shows two indistinguishable entries, and the repair path is closed too — `renameExercise` on either one now **rejects**, because the check sees the twin. A backup import restores duplicates verbatim (F08's weak envelope), reaching the same state without any race. | Add `CREATE UNIQUE INDEX IF NOT EXISTS idx_exercises_name_nocase ON exercises(name COLLATE NOCASE);` so the application rule becomes a storage invariant — the same change F31 asks for on `liftSupplementals` — and reconcile duplicates on import. Disable the ADD button while its handler is in flight (the F33/F34 pattern). Add a concurrent-create test and a duplicate-rows-already-present test to `exercise.test.ts`. |
 | F42 | Low; B07f real-SQLite probe | `src/lib/exercise-history.ts:67-80`; `src/components/modals/LiftHistoryModal.tsx` | `getLiftHistory` selects only sessions whose own `liftId` matches, so a lift's cross work — logged inside another lift's session and attributed to this movement everywhere else — is invisible to it. Probe: Squat with one own session (275×8) and one 315×5 cross block on Bench's day returns **only `[275]`**. The "what did I do last time" reference a user opens mid-session therefore omits the heaviest work the app itself counted toward that lift's PR toast (`pr.ts`), its Stats record (`RecordsPanel`) and its AMRAP seed (`cycle.getRecentWorkingSets`). The set-level filter at line 79 (`!s.liftId \|\| s.liftId === liftId`) is correct on its own; the omission is in the session query above it. | Union the lift's own sessions with the sessions holding cross sets tagged for this lift — the query `pr.detectPRs` already runs — and label a cross entry so the user can see it came from another day. This is the same attribution gap F10 records for the History screen and F38 records for the status filters; fix all three against one shared reader. Add a cross-work case to `exercise-history.test.ts`, which only tests cross sets being *excluded* from the wrong lift (`:199`), never included for the right one. |
+| F43 | Medium; B07g real-SQLite probe | `src/lib/lift.ts:27-28`; `src/lib/session.ts:17-26`; `src/lib/pr.ts:116-119`; `src/components/stats/RecordsPanel.tsx:65` | Two code paths delete a pending session and only one is a complete cascade. `discardPendingSession` deletes `sets`, `accessorySets`, `accessoryNotes` **and** the row; `archiveLift` deletes only the row. Probe: archiving a lift whose pending session held a main set, a cross set and an accessory set leaves all three behind with a `sessionId` that no longer resolves. `cycle.getRecentWorkingSets` survives this because it checks `sessionById.has(s.sessionId)` (probe: seed window `[]`), but `detectPRs` and `RecordsPanel` query `db.sets.where('liftId')` with **no session join at all**. Probe T1b: the archived day carried a 500×5 cross block for Squat; once Squat has any session of its own, `detectPRs(squat, 405, 5)` reports `prevBestE1Rm: 582.9` — a permanent record derived entirely from a set no screen can display and no deletion path can reach. | Route `archiveLift`'s pending cleanup through `discardPendingSession` rather than re-implementing it, so there is one definition of "discard an attempt". Add the session-existence join to the two readers that lack it (folds into F22/F38's shared-reader fix). Add a child-row assertion to `lift.test.ts:39`, which today checks only that the session row is gone. |
+| F44 | Low; B07g real-SQLite probe | `src/lib/lift.ts:58-70`; `src/screens/Setup.tsx:109-110`, `226`; `src/App.tsx:39-40`, `103` | `deleteLift` removes the lift, its training maxes and its cross blocks in both directions, but **not** its sessions, sets, accessory sets/notes or `assistanceDefaults`. Probe: after deleting a lift with one completed session, `lifts` and `trainingMaxes` are empty while the session, its set and the default-pick row all remain, referencing an id that no longer exists. The doc comment scopes the function to "pre-history use (onboarding roster edits)", but nothing enforces that: `/setup` is a plain route (`App.tsx:103`) and the redirect at `:39-40` only *forces* entry when no training max exists — it does not block entry when one does. A user who navigates back to `/setup` with a full history can press "remove". `getCycleDoublingCandidates` already carries an `if (!lift) continue` guard for exactly this orphan shape. | Either complete the cascade (delete the lift's sessions and their child rows, plus its `assistanceDefaults`) or enforce the contract — refuse when the lift has any session and tell the user to archive instead. Guard the `/setup` route against re-entry once training maxes exist. `deleteLift` is not imported by `lift.test.ts` at all; add coverage for both the no-history and has-history cases. |
+| F45 | Low; B07g real-SQLite probe | `src/lib/cleanup.ts:27-35`; `src/screens/Settings.tsx:284-303` | `buildCleanupPlan` treats "has a surviving logged `accessorySet`" as the only evidence an exercise is in use, so the CLEANUP sweep archives every never-logged exercise — including one the user has just configured as a lift's assistance default and given an accessory training max. Probe T4: Dips with a TM and a live `push` default → `exercisesToArchive: [1]`; after archiving, `getAssistanceDefaults` returns `{}` and Today's push slot is empty. The toast reports only a count ("archived N exercises"), never which ones. Recovery works — the `assistanceDefaults` row is not deleted, so unarchiving restores the pick — but nothing on screen says so. | Treat a live `assistanceDefaults` reference (and arguably an existing `accessoryTrainingMax`) as evidence of use and exclude those exercises from `exercisesToArchive`. List the affected names in the confirmation dialog instead of reporting a bare count afterwards. Add an "exercise is a live default pick" case to `cleanup.test.ts`, which passes no defaults at all today. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -193,7 +210,7 @@ area membership is not permission to review the entire area in one session.
 | B04 | Export/import and settings store | F03; validation and round trips |
 | B05 | Workout store, session logic, workout screen | L02/L03; lifecycle and save ordering |
 | B06 | Other screens and screen tests | Navigation, failure states, state consistency |
-| B07 | Calculation, progression, composition and other libraries/tests | Numeric boundaries and domain invariants |
+| B07 | Calculation, progression, composition and other libraries/tests | **Closed** (B07a–B07g). Numeric boundaries and domain invariants; F24–F45 opened |
 | B08 | Components, hooks, related tests | Recover reported coverage through bounded verification; edits and async state |
 | B09 | Service worker, timers, notifications and tests | L04; offline and notification lifecycle |
 | B10 | Build/deploy/config/scripts/public assets | Deployment assumptions and operational failures |
@@ -318,8 +335,8 @@ column as work is completed.
 | `src/lib/audio-cues.ts` | B09 | pending | — |
 | `src/lib/calc.test.ts` | B07 | deep | B07a — all 1,127 lines; 187 tests passed; F29 and test gaps below |
 | `src/lib/calc.ts` | B07 | deep | B07a — all 576 lines; F24–F28 confirmed, F10 reconfirmed at 34-35 |
-| `src/lib/cleanup.test.ts` | B07 | pending | — |
-| `src/lib/cleanup.ts` | B07 | pending | — |
+| `src/lib/cleanup.test.ts` | B07 | deep | B07g — all 60 lines; 9 tests passed; no default-pick case |
+| `src/lib/cleanup.ts` | B07 | deep | B07g — all 38 lines; F45 confirmed |
 | `src/lib/cycle.test.ts` | B07 | deep | B07c — all 812 lines; 63 tests passed; test gaps below |
 | `src/lib/cycle.ts` | B07 | deep | B07c — all 325 lines; F33–F36 confirmed, L05 resolved |
 | `src/lib/exercise-history.test.ts` | B07 | deep | B07f — all 246 lines; 15 tests passed; test gaps below |
@@ -328,10 +345,10 @@ column as work is completed.
 | `src/lib/exercise.ts` | B07 | deep | B07f — all 65 lines; F41 confirmed |
 | `src/lib/export-import.test.ts` | B04 | deep | B04a — backup import/export and tests (5/5); evidence below |
 | `src/lib/export-import.ts` | B04 | deep | B04a — backup import/export and tests (5/5); evidence below |
-| `src/lib/format.test.ts` | B07 | pending | — |
-| `src/lib/format.ts` | B07 | pending | — |
-| `src/lib/lift.test.ts` | B07 | pending | — |
-| `src/lib/lift.ts` | B07 | pending | — |
+| `src/lib/format.test.ts` | B07 | deep | B07g — all 61 lines; 8 tests passed; `accessorySetValue` untested |
+| `src/lib/format.ts` | B07 | deep | B07g — all 32 lines; no findings; precedence probed |
+| `src/lib/lift.test.ts` | B07 | deep | B07g — all 182 lines; 18 tests passed; `deleteLift` never imported |
+| `src/lib/lift.ts` | B07 | deep | B07g — all 106 lines; F43–F44 confirmed |
 | `src/lib/notifications.test.ts` | B09 | pending | — |
 | `src/lib/notifications.ts` | B09 | pending | — |
 | `src/lib/notify-timers.test.ts` | B09 | pending | — |
@@ -2112,3 +2129,147 @@ B08's `AccessoryPicker.tsx` row.
 deleted. Next: **B07g — `src/lib/format.ts` + `src/lib/format.test.ts`,
 `src/lib/lift.ts` + `src/lib/lift.test.ts` and `src/lib/cleanup.ts` +
 `src/lib/cleanup.test.ts`**, which closes area B07.
+
+### 2026-09-13 — B07g: formatting, lift roster and cleanup (closes B07)
+
+**Revision:** `7992747eaae1dd0008092618414a36b4888dd07c` for the source files (the
+batch commits on top of `dc99d3c`, B07f). Application files unchanged at batch
+start and end. Single agent; no sub-agents; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/lib/format.ts` | 1–32 | `df9664af4a96ba70e9da9caf71cdc25e07916e34` |
+| `src/lib/format.test.ts` | 1–61 | `765fadb735c023a25a1925b148a410ccb69720f7` |
+| `src/lib/lift.ts` | 1–106 | `44447f24a9ac1896c2d8e37bb1e0477f49572609` |
+| `src/lib/lift.test.ts` | 1–182 | `4cc350e8875ec246fe7e9e41f771171990c31cde` |
+| `src/lib/cleanup.ts` | 1–38 | `0e359834f877eef1292620f8e0b0dc6ad56bb663` |
+| `src/lib/cleanup.test.ts` | 1–60 | `bbaad3bcf9fd029a1366fa0abdb9db8ff4d42936` |
+
+**Behavior, invariants and dependencies traced.** `lift.ts` is the roster's write
+layer and the only place the archive-vs-delete distinction is expressed:
+**archiving** is reversible and keeps all history but drops the lift from the active
+roster (so it stops counting toward `weekComplete`), while **deleting** is
+destructive and scoped by comment to onboarding. Archiving deletes pending sessions
+specifically so no empty husk holds the week open — the same rule B07c traced
+through `computeClosedThroughWeek`, and the reason `cycle.test.ts:544` passes.
+`moveLift` swaps `order` with the adjacent *active* lift, correctly stepping over an
+archived one in between. `liftsCrossReferencing` drives the archive warning, naming
+only active days. `cleanup.ts` is a pure planner — no DB access — whose plan
+`Settings.tsx:291-295` applies inside one transaction. `format.ts` holds the three
+date renderers (local-day, deliberately not `toISOString`) and the single
+`accessorySetValue` definition that History, `ExerciseHistoryModal` and
+`AccessoryLog` had each re-implemented and drifted on.
+
+Traced out to `Settings.tsx:183`, `193-205`, `210-216`, `264-303`, `Setup.tsx:104`,
+`109-115`, `226`, `LiftSetupModal.tsx:128`, `App.tsx:39-40`, `103`, and in to
+`session.discardPendingSession`, `pr.detectPRs`, `cycle.getRecentWorkingSets`,
+`RecordsPanel.tsx:65`, `assistance.getAssistanceDefaults` and
+`calc.formatDuration`.
+
+The invariant that fails is *cascade completeness*: two functions delete a parent
+row without its children, and they disagree with the one function that does it
+properly. That is F43 and F44.
+
+**Checks and outcomes.**
+
+- `pnpm exec vitest run src/lib/format.test.ts src/lib/lift.test.ts src/lib/cleanup.test.ts`
+  — **35 passed** (8 + 18 + 9), fresh run.
+- `pnpm lint` — clean, fresh run. `pnpm exec tsc -b` — clean, exit 0, fresh run.
+- Disposable probe under `/tmp/b07c-probe/lift.test.ts` and `lift2.test.ts`
+  (six cases), run with
+  `pnpm exec vitest run --root /tmp/b07c-probe --config /tmp/b07c-probe/vitest.config.ts lift`
+  against the real source by absolute import and against real in-process SQLite,
+  then deleted. Nothing in the repository was touched.
+- Not run this batch: the full suite, `Settings.test.tsx`, `Setup.test.tsx`, any
+  browser/E2E check. F44's `/setup` reachability is established from the route table
+  and the redirect condition, not by driving a browser back-navigation.
+
+**Findings.**
+
+1. **F43 (medium, confirmed).** Archiving a lift whose pending session held a main
+   set, a cross set and an accessory set: the session row is `undefined` afterwards
+   while `sets` still holds `[{id:1,sessionId:1,main,225},{id:2,sessionId:1,cross,500}]`
+   and `accessorySets` still holds 1 row. `getRecentWorkingSets` ignores them
+   (`[]` — it joins on session existence). T1b then gives the movement one real
+   session of its own and asks for a 405×5 PR:
+   `{e1RmPr: false, prevBestE1Rm: 582.9}` — the standing record is the orphan.
+2. **F44 (low, confirmed).** After `deleteLift` on a lift with one completed
+   session: `lifts` 0 rows, `trainingMaxes` 0 rows, but `sessions`
+   `[{id:1,liftId:1,status:"completed"}]`, `sets` 1 row and `assistanceDefaults`
+   1 row all survive, pointing at a lift id that no longer exists.
+3. **F45 (low, confirmed).** Dips with an accessory TM and a live `push` default,
+   never logged → `buildCleanupPlan` returns `exercisesToArchive: [1]`; after the
+   sweep `getAssistanceDefaults(db, 1)` is `{}` while the pick row itself survives,
+   so unarchiving restores it (`{"push":{"exerciseId":1,"name":"Dips"}}`).
+
+**Substantive negative conclusions (checked, not findings):**
+
+- **`format.ts`'s local-day `formatDateIso` is right and well-guarded.** The test at
+  `:55` pins the exact bug the comment describes — a 9:30 pm local session exporting
+  as the next day under `toISOString` in a negative-offset zone — and asserts the CSV
+  date agrees with what `formatDateShort` renders. No change wanted.
+- **`accessorySetValue`'s precedence is reps → duration → distance,** verified:
+  `{reps:8}`→`"8"`, `{reps:0}`→`"0"`, `{duration:150}`→`"2:30"`,
+  `{distance:100}`→`"100ft"`, `{}`→`""`. `reps: 0` correctly renders `"0"` rather
+  than falling through (`!= null`, not truthiness) — the mistake this shape usually
+  makes.
+- **`moveLift` steps over an archived lift correctly** and has a named
+  mutant-killing test for it (`:134`). Its three no-op arms (top boundary, bottom
+  boundary, unknown id) are all covered.
+- **`archiveLift`'s `removeCrossRefs` default is off, and that is deliberate** —
+  archiving is reversible, so cross blocks keep running off the lift's frozen TM
+  until the user opts in. Both arms are tested, and `Settings.tsx:193-205` asks
+  before choosing.
+- **`createLift`'s `nextOrder` maxes over *all* lifts, archived included,** so
+  unarchiving can never collide with a later-created lift's order. Correct.
+- **`buildCleanupPlan` already accounts for rows it is about to delete** — it derives
+  `survivingSetExIds` from `validSessionIds`, so an exercise whose only sets are
+  themselves orphaned is an archive candidate in the same plan that deletes them
+  (`cleanup.test.ts:55`). No two-pass ordering hazard.
+- **`cleanup.ts` correctly ignores `sets`** (main/cross) and looks only at
+  `accessorySets`; its scope is the exercise library, not lift history.
+
+**Observations that need no separate ID:**
+
+- `moveLift` is a silent no-op when two active lifts share an `order` value (probe
+  T3: both stay at `order: 1`, the arrow does nothing, forever). `createLift` cannot
+  produce that state; only a restored backup can, which puts it under **F08**'s weak
+  import envelope rather than in `lift.ts`.
+- `archiveLift`, `deleteLift`, `moveLift` and the CLEANUP sweep all wrap their writes
+  in `db.transaction`, so each inherits **F05/F06**'s nesting and BEGIN-failure
+  defects. Not re-derived here.
+
+**Test assessment / gaps.** The 35 tests are solid on `moveLift`'s boundaries and
+the archive/cross-ref matrix. Gaps:
+
+- **`deleteLift` is never imported by `lift.test.ts`** — the most destructive
+  function in the module has no test at all (F44).
+- **`archiveLift`'s test (`:39`) asserts only that the session row is gone,** never
+  that its sets went with it — exactly F43's blind spot.
+- **`accessorySetValue` is never tested.** `format.test.ts` imports only the three
+  date helpers, so the one function in that module written specifically to stop three
+  call sites from drifting has no direct coverage.
+- **`cleanup.test.ts` passes no `assistanceDefaults` at all** (F45), and never
+  exercises an exercise that has an accessory TM but no sets.
+- **No test covers duplicate `order` values** for `moveLift` (probe T3).
+- **`updateLift` has one test and `unarchiveLift` one line;** neither covers a patch
+  that changes `liftType` or `baseWeight`, which downstream plate/warmup math reads.
+
+**Open questions / remaining ranges:** none within these six files — all complete at
+the recorded blobs. **Area B07 closes here.** Carried forward out of the area:
+F43's fix is to route `archiveLift` through `discardPendingSession` and add the
+session join to the two readers that lack it, which merges into F22/F38's
+shared-reader work in **B12**; F44's route guard is an `App.tsx` change (already
+`deep`, B01b) and is reconciled in B12 rather than by re-opening that row; F45's
+confirmation-dialog copy sits in `Settings.tsx` (already `deep`, B06d), same
+treatment. No B07 file is `blocked`.
+
+**Ledger rows updated / exact next action:** `src/lib/format.ts`,
+`src/lib/format.test.ts`, `src/lib/lift.ts`, `src/lib/lift.test.ts`,
+`src/lib/cleanup.ts` and `src/lib/cleanup.test.ts` → `deep` (62 total). F43–F45
+added. The remaining-work totals at the top of this document were recounted and
+corrected this session (179 ledger rows, not 134). No application or test file
+changed; the probes were deleted. Next: **B08a — `CycleCompleteModal.tsx`,
+`TmRecommendationModal.tsx` and `AccessoryTmModal.tsx` with `Modal.tsx` /
+`Modal.test.tsx` / `ModalAsyncStates.tsx` as the shared dependency**, starting from
+F33/F34/F40 and settling where the in-flight guard belongs.
