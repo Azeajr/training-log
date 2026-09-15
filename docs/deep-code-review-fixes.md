@@ -110,7 +110,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F19 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
 | F20 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
 | F21 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
-| F22 | **High** | B06 | — | `src/components/stats/RecordsPanel.tsx` | `fixed` | `<pending>` · `Stats.test.tsx` ×3 | **Ownership rule settled: completed sessions, plus the one being logged.** Stats filtered nothing but `liftId`, so skipped and abandoned work set permanent records History would never show. Now reads `baselineWorkingSets`. |
+| F22 | **High** | B06 | — | `src/components/stats/RecordsPanel.tsx` | `fixed` | `013e0f9` · `Stats.test.tsx` ×3 | **Ownership rule settled: completed sessions, plus the one being logged.** Stats filtered nothing but `liftId`, so skipped and abandoned work set permanent records History would never show. Now reads `baselineWorkingSets`. |
 | F23 | Medium | B06 | — | `src/components/stats/RecordsPanel.tsx` | `open` | — | — |
 | F24 | Medium | B07 | — | `src/lib/calc.ts` | `open` | — | Notification-layer tail confirmed in B09b (P26). |
 | F25 | Medium | B07 | — | `src/lib/calc.ts` | `open` | — | — |
@@ -125,13 +125,13 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F34 | Medium | B07 | C1 | `src/lib/cycle.ts` | `open` | — | — |
 | F35 | Medium | B07 | — | `src/lib/cycle.ts` | `open` | — | — |
 | F36 | Low | B07 | — | `src/lib/training-max.ts` | `open` | — | Decided in B12d: highest `id` wins at equal `setAt`. Fix is mechanical. |
-| F37 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `<pending>` · `pr.test.ts` cross-history case | Not in the planned chunk — fixed as a consequence of the shared reader. The "no history at all" guard tested the lift's **own** session rows and returned before the cross query ran, so a movement trained entirely as cross work was scored against nothing. It is now decided on every qualifying session, cross-only included. Both previously pinned behaviours preserved. |
-| F38 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `<pending>` · `pr.test.ts` ×4 | The three readers now share one rule via `lib/performance.ts`. The live-session clause is what lets the toast and the History badge agree while the toast still works mid-workout — `pr.ts:78-84` asserted that invariant and did not hold it. |
+| F37 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `013e0f9` · `pr.test.ts` cross-history case | Not in the planned chunk — fixed as a consequence of the shared reader. The "no history at all" guard tested the lift's **own** session rows and returned before the cross query ran, so a movement trained entirely as cross work was scored against nothing. It is now decided on every qualifying session, cross-only included. Both previously pinned behaviours preserved. |
+| F38 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `013e0f9` · `pr.test.ts` ×4 | The three readers now share one rule via `lib/performance.ts`. The live-session clause is what lets the toast and the History badge agree while the toast still works mid-workout — `pr.ts:78-84` asserted that invariant and did not hold it. |
 | F39 | Medium | B07 | — | `src/lib/tm-recommendations.ts` | `open` | — | — |
 | F40 | Low | B07 | — | `src/lib/tm-recommendations.ts` | `open` | — | — |
 | F41 | Low | B07 | C1 | `src/lib/exercise.ts` | `open` | — | — |
-| F42 | Low | B07 | — | `src/lib/exercise-history.ts` | `fixed` | `<pending>` · `exercise-history.test.ts` ×2 | `getLiftHistory` matched the lift's **own** sessions only, so cross work logged on another lift's day was invisible — while counting toward the same lift's PR toast, Stats record and AMRAP seed. Now resolved through `baselineSets`. |
-| F43 | Medium | B07 | — | `src/lib/lift.ts` | `fixed-by` | `<pending>` · reader half only | **Reader half only.** `db.sets.where('liftId')` had no session join, so sets orphaned by `archiveLift` scored permanent records no screen could display; `baselineSets` resolves cross work through its session and drops orphans. **`archiveLift`'s missing cascade is NOT fixed** — that is a separate defect and stays open as F99. |
+| F42 | Low | B07 | — | `src/lib/exercise-history.ts` | `fixed` | `013e0f9` · `exercise-history.test.ts` ×2 | `getLiftHistory` matched the lift's **own** sessions only, so cross work logged on another lift's day was invisible — while counting toward the same lift's PR toast, Stats record and AMRAP seed. Now resolved through `baselineSets`. |
+| F43 | Medium | B07 | — | `src/lib/lift.ts` | `fixed-by` | `013e0f9` · reader half only | **Reader half only.** `db.sets.where('liftId')` had no session join, so sets orphaned by `archiveLift` scored permanent records no screen could display; `baselineSets` resolves cross work through its session and drops orphans. **`archiveLift`'s missing cascade is NOT fixed** — that is a separate defect and stays open as F99. |
 | F44 | Low | B07 | — | `src/lib/lift.ts` | `open` | — | — |
 | F45 | Low | B07 | — | `src/lib/cleanup.ts` | `open` | — | — |
 | F46 | Low | B08 | — | `src/components/modals/ModalAsyncStates.tsx` | `open` | — | — |
