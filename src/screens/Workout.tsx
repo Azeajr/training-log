@@ -318,7 +318,14 @@ export default function Workout() {
     liftId: number, liftName: string, weight: number, reps: number, dbId: number,
   ) => {
     try {
-      const prs = await detectPRs(db, liftId, weight, reps, dbId, settings.highRepDiscount)
+      // Pass the live session: it is `pending` by definition while the workout
+      // is happening, and the baseline is otherwise completed-sessions-only, so
+      // without this the toast could not see the sets logged minutes ago in the
+      // very session it is reporting on.
+      const prs = await detectPRs(
+        db, liftId, weight, reps, dbId, settings.highRepDiscount,
+        workout.activeSession?.id,
+      )
       if (prs.repPr || prs.e1RmPr) {
         const msgs: string[] = []
         if (prs.repPr) msgs.push(`REP PR ${weight}×${reps}`)

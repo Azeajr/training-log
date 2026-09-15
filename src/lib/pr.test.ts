@@ -300,3 +300,66 @@ describe('prSessionIds', () => {
     expect([...prSessionIds([rec(2, 1, 200, 5), rec(1, 1, 200, 8)])].sort()).toEqual([1])
   })
 })
+
+// ── F22 / F38 / F43: one rule for what counts as a record ───────────────────
+// Three readers answered this three different ways. The rule is: a set counts
+// once its session is completed, plus the session currently being logged, so
+// the mid-set toast can still see the sets you logged earlier today.
+describe('record ownership', () => {
+  const addSessionWith = (liftId: number, status: 'completed' | 'skipped' | 'pending') =>
+    db.sessions.add({ cycleId: 1, liftId, week: 1, date: new Date(), notes: null, status })
+
+  it('does not score against a skipped session (F38)', async () => {
+    // Workout EXIT and Settings both flip a partly logged session to skipped
+    // without deleting its sets.
+    const sid = await addSessionWith(1, 'skipped')
+    await addAmrap(sid, 400, 5)
+    const result = await detectPRs(db, 1, 300, 5)
+    // The skipped 400x5 must not stand as a baseline the user cannot see.
+    expect(result.prevBestE1Rm).toBeUndefined()
+  })
+
+  it('does not score against another unfinished session (F38)', async () => {
+    const sid = await addSessionWith(1, 'pending')
+    await addAmrap(sid, 400, 5)
+    const result = await detectPRs(db, 1, 300, 5)
+    expect(result.prevBestE1Rm).toBeUndefined()
+  })
+
+  it('still scores against earlier sets in the session being logged (F38)', async () => {
+    // The live session is pending by definition; the toast has to see it or it
+    // cannot report a PR during the workout that earns one.
+    const sid = await addSessionWith(1, 'pending')
+    await addAmrap(sid, 200, 5)
+    const result = await detectPRs(db, 1, 200, 6, undefined, 'off', sid)
+    expect(result.repPr).toBe(true)
+  })
+
+  it('agrees with the History badge about the same session (F38)', async () => {
+    const skipped = await addSessionWith(1, 'skipped')
+    await addAmrap(skipped, 400, 5)
+    const completed = await addSessionWith(1, 'completed')
+    await addAmrap(completed, 300, 5)
+    // History badges from completed sessions only; the toast must use the same
+    // baseline or the two disagree about the very next session.
+    const result = await detectPRs(db, 1, 310, 5)
+    // The baseline has to be the completed 300x5, not the skipped 400x5 —
+    // otherwise the toast stays silent about a session History badges.
+    expect(result.prevBestE1Rm).toBeLessThan(400)
+    expect(result.e1RmPr).toBe(true)
+  })
+
+  it('ignores sets whose session no longer exists (F43)', async () => {
+    // archiveLift deletes the session row but not its sets, leaving cross sets
+    // pointing at a session id nothing resolves.
+    await db.sets.add({
+      sessionId: 9999, type: 'cross', liftId: 1, setNumber: 1,
+      weight: 500, reps: 5, isAmrap: false,
+    })
+    const completed = await addSessionWith(1, 'completed')
+    await addAmrap(completed, 200, 5)
+    const result = await detectPRs(db, 1, 300, 5)
+    // 500x5 is a record derived entirely from a set no screen can display.
+    expect(result.prevBestE1Rm).toBeLessThan(400)
+  })
+})

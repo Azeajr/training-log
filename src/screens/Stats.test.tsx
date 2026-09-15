@@ -136,3 +136,52 @@ describe('Stats screen', () => {
     await waitFor(() => expect(document.body.textContent).toContain('-20'))
   })
 })
+
+// ── F22 ─────────────────────────────────────────────────────────────────────
+// Stats used to filter nothing but liftId, so it reported permanent records
+// from sessions History drops entirely. Workout EXIT and Settings both flip a
+// partly logged session to skipped without deleting its sets, and Workout EXIT
+// later deletes a pending session's sets — so a record shown here could vanish
+// on its own.
+describe('Stats record ownership', () => {
+  const t0 = new Date()
+
+  it('ignores sets from a skipped session (F22)', async () => {
+    const cycleId = await db.cycles.add({ number: 1, startDate: t0, endDate: null })
+    const done = await db.sessions.add({ cycleId, liftId: 1, week: 3, date: t0, notes: null, status: 'completed' })
+    await db.sets.add({ sessionId: done, type: 'main', setNumber: 3, weight: 200, reps: 5, isAmrap: true })
+    const skipped = await db.sessions.add({ cycleId, liftId: 1, week: 2, date: t0, notes: null, status: 'skipped' })
+    await db.sets.add({ sessionId: skipped, type: 'main', setNumber: 1, weight: 400, reps: 5, isAmrap: false })
+
+    render(() => <Stats />)
+    await waitFor(() => expect(document.body.textContent).toContain('200'))
+    expect(document.body.textContent).not.toContain('400')
+  })
+
+  it('ignores sets from a session still in progress (F22)', async () => {
+    const cycleId = await db.cycles.add({ number: 1, startDate: t0, endDate: null })
+    const done = await db.sessions.add({ cycleId, liftId: 1, week: 3, date: t0, notes: null, status: 'completed' })
+    await db.sets.add({ sessionId: done, type: 'main', setNumber: 3, weight: 200, reps: 5, isAmrap: true })
+    const pending = await db.sessions.add({ cycleId, liftId: 1, week: 4, date: t0, notes: null, status: 'pending' })
+    await db.sets.add({ sessionId: pending, type: 'main', setNumber: 1, weight: 405, reps: 5, isAmrap: false })
+
+    render(() => <Stats />)
+    await waitFor(() => expect(document.body.textContent).toContain('200'))
+    expect(document.body.textContent).not.toContain('405')
+  })
+
+  it('ignores sets whose session no longer exists (F43)', async () => {
+    const cycleId = await db.cycles.add({ number: 1, startDate: t0, endDate: null })
+    const done = await db.sessions.add({ cycleId, liftId: 2, week: 3, date: t0, notes: null, status: 'completed' })
+    await db.sets.add({ sessionId: done, type: 'main', setNumber: 3, weight: 225, reps: 5, isAmrap: true })
+    // archiveLift deletes the session row but not its sets.
+    await db.sets.add({
+      sessionId: 9999, type: 'cross', liftId: 2, setNumber: 1,
+      weight: 500, reps: 5, isAmrap: false,
+    })
+
+    render(() => <Stats />)
+    await waitFor(() => expect(document.body.textContent).toContain('225'))
+    expect(document.body.textContent).not.toContain('500')
+  })
+})
