@@ -8,9 +8,10 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Area B07 is closed; B08 is open.** B08a is complete — the modal shell and the
-three post-session dialogs are now `deep` at recorded blobs, and the area-level
-`reported` claim has been replaced with per-file evidence for seven of its rows.
+**Area B07 is closed; B08 is open.** B08a and B08b are complete — every
+`src/components/modals/**` row and `src/hooks/use-confirmation.ts` are now `deep`
+at recorded blobs, so the modal layer no longer rests on the area-level `reported`
+claim. Fourteen of B08's 54 rows are closed.
 
 **The in-flight-guard question is settled: the guard belongs in `Modal`, not at
 each call site.** F33/F34/F41 all ask for "disable the button while the handler
@@ -20,36 +21,39 @@ so every dialog has a close path its own buttons cannot gate. B08a probe P3
 confirms it: tapping UPDATE TM and then pressing Escape while the accept is still
 awaiting produces `accept:start → dismiss → accept:end`, both callbacks fired once
 — which is F33's duplicate-cycle race reached with **one tap plus one keypress**,
-not the double tap F33 describes. The shape to build is a `busy?: boolean` prop on
-`Modal` that suppresses Escape and the `← BACK` control while set, with call sites
-passing the same flag to `disabled` on their action buttons.
+not the double tap F33 describes. B08b found the pattern already hand-rolled in
+one place: `LiftSetupModal.tsx:169` passes `onClose={() => { if (!saving()) props.onCancel() }}`
+and disables both footer buttons on the same flag. That is the shape to lift into
+`Modal` as a `busy?: boolean` prop which suppresses Escape and `← BACK`, with call
+sites passing the same flag to their buttons' `disabled`.
 
-**Next batch: B08b — the remaining modals.** `LiftSetupModal.tsx` (321),
-`ConfirmationDialog.tsx` (56), `ExerciseHistoryModal.tsx` (55) and
-`LiftHistoryModal.tsx` (71) with `ExerciseHistoryModal.test.tsx` (174) and
-`LiftHistoryModal.test.tsx` (156), plus `src/hooks/use-confirmation.ts` (55),
-which is `ConfirmationDialog`'s other half and the only `pending` row in the area.
-The two history modals are also F46's call sites, so their error paths are the
-natural place to confirm that finding end to end.
+**Next batch: B08c — workout logging components.** `SetRow.tsx` (179),
+`CrossBlockLog.tsx` (61), `SessionBar.tsx` (93), `SaveFailureBanner.tsx` (57) and
+`AmrapTargets.tsx` (43) with `SetRow.test.tsx` (59), `SaveFailureBanner.test.tsx`
+(90) and `AmrapTargets.test.tsx` (43). F13/F14/F15 and L02 all land in this slice,
+and `SaveFailureBanner` is the error-surfacing idiom F50 says `LiftSetupModal`
+should have been using — worth reading first so the recommendation is concrete.
 
-Latest run: **B08a complete** — `src/components/modals/Modal.tsx` (196),
-`ModalAsyncStates.tsx` (33), `CycleCompleteModal.tsx` (77),
-`TmRecommendationModal.tsx` (63), `AccessoryTmModal.tsx` (70), `Modal.test.tsx`
-(180) and `TmRecommendationModal.test.tsx` (106) reviewed in full. Seven files
-marked deep; **69 files deep in total.** All 34 existing tests passed
-(`pnpm exec vitest run src/components/modals/Modal.test.tsx src/components/modals/TmRecommendationModal.test.tsx`);
-`pnpm lint` and `tsc -b` clean. Two new findings, both probe-confirmed in jsdom:
-**F46** (low — `ModalAsyncStates` renders its error message and a permanent
-"Loading..." together, because the loading branch tests the same derived `null`
-the error branch produces) and **F47** (low — `CycleCompleteModal` opens with
-focus already on the "+X LBS" doubling button, so Enter arms a non-idempotent TM
-write; `Modal` has an `initialFocus="container"` escape hatch for exactly this and
-only `ConfirmationDialog` uses it). F33 gained the Escape trigger above. Only this
-tracker changed; probes were created inside `src/`, run, and deleted, leaving the
-tree clean. This card authorizes commit, push and PR; operator acceptance remains a
+Latest run: **B08b complete** — `src/components/modals/LiftSetupModal.tsx` (321),
+`ConfirmationDialog.tsx` (56), `ExerciseHistoryModal.tsx` (55),
+`LiftHistoryModal.tsx` (71), `src/hooks/use-confirmation.ts` (55),
+`ExerciseHistoryModal.test.tsx` (174) and `LiftHistoryModal.test.tsx` (156)
+reviewed in full. Seven files marked deep; **76 files deep in total.** All 19
+existing tests passed
+(`pnpm exec vitest run src/components/modals/LiftHistoryModal.test.tsx src/components/modals/ExerciseHistoryModal.test.tsx`);
+`pnpm lint` and `tsc -b` clean. Three new findings, all probe-confirmed:
+**F48** (medium — a second `confirm()` silently orphans the first request's
+promise, which never settles, so the first handler stops mid-flight with no error),
+**F49** (low — `LiftSetupModal` is interactive before `load()` resolves and then
+overwrites what the user touched) and **F50** (medium — a rejected commit in
+`LiftSetupModal` is discarded: no error, no retry, dialog still open). F46 was
+also confirmed end to end through `LiftHistoryModal`'s own error path: a failed
+load renders `"worker timeout"` and `"Loading..."` together. Only this tracker
+changed; probes were created inside `src/`, run, and deleted, leaving the tree
+clean. This card authorizes commit, push and PR; operator acceptance remains a
 separate native Kanban review step.
 
-**Remaining work — 110 of 179 ledger rows are not yet `deep`** (69 are). Recounted
+**Remaining work — 103 of 179 ledger rows are not yet `deep`** (76 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -63,7 +67,7 @@ correct; only the remaining-work totals were not.
 | Area | Rows left | Shape of the work |
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
-| B08 | 47 (45 `reported`, 1 `partial`, 1 pending) | **Open (B08a done).** Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08b remaining modals + `use-confirmation`, B08c workout logging (`SetRow`, `CrossBlockLog`, `SessionBar`, `SaveFailureBanner`, `AmrapTargets`), B08d accessory (`AccessoryLog`, `AccessoryPicker`), B08e `RestTimer`/`CollapsibleSection`, B08f form inputs (`Stepper`, `NotesField`, `NotesText`, `DurationInput`), B08g form display + exercise editing, B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
+| B08 | 40 (39 `reported`, 1 `partial`) | **Open (B08a, B08b done).** Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08c workout logging (`SetRow`, `CrossBlockLog`, `SessionBar`, `SaveFailureBanner`, `AmrapTargets`), B08d accessory (`AccessoryLog`, `AccessoryPicker`), B08e `RestTimer`/`CollapsibleSection`, B08f form inputs (`Stepper`, `NotesField`, `NotesText`, `DurationInput`), B08g form display + exercise editing, B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
@@ -164,6 +168,9 @@ claimed here.
 | F45 | Low; B07g real-SQLite probe | `src/lib/cleanup.ts:27-35`; `src/screens/Settings.tsx:284-303` | `buildCleanupPlan` treats "has a surviving logged `accessorySet`" as the only evidence an exercise is in use, so the CLEANUP sweep archives every never-logged exercise — including one the user has just configured as a lift's assistance default and given an accessory training max. Probe T4: Dips with a TM and a live `push` default → `exercisesToArchive: [1]`; after archiving, `getAssistanceDefaults` returns `{}` and Today's push slot is empty. The toast reports only a count ("archived N exercises"), never which ones. Recovery works — the `assistanceDefaults` row is not deleted, so unarchiving restores the pick — but nothing on screen says so. | Treat a live `assistanceDefaults` reference (and arguably an existing `accessoryTrainingMax`) as evidence of use and exclude those exercises from `exercisesToArchive`. List the affected names in the confirmation dialog instead of reporting a bare count afterwards. Add an "exercise is a live default pick" case to `cleanup.test.ts`, which passes no defaults at all today. |
 | F46 | Low; B08a component probe (P1) | `src/components/modals/ModalAsyncStates.tsx:16`, `22-24`; `src/components/modals/ExerciseHistoryModal.tsx:38`; `src/components/modals/LiftHistoryModal.tsx:43` | The state ladder collapses `error` and `loading` onto the same derived value. `list()` returns `null` whenever `props.error` is set *or* the query is still in flight, and the loading branch tests `list() === null` — so an errored history sheet renders the error message **and** a permanent "Loading..." underneath it, forever. Probe: `error="Failed to load history"`, `entries=null` → rendered text `"Failed to load historyLoading..."`; with rows already fetched, `error="boom"`, `entries=[1,2]` → `"boomLoading..."` — the list is correctly withheld but the spinner text is not. The three healthy states are each correct in isolation (`"Loading..."`, the empty sentence, the list). Both history modals set `error` from a failed query, so this is the live path for every load failure in a sheet modal. | Derive one state rather than three independent predicates — `error ? 'error' : entries === null ? 'loading' : entries.length === 0 ? 'empty' : 'list'` — and render a single branch off it. `ModalAsyncStates.tsx` has **no test file at all**; add one covering all four states, the error-with-rows case included. |
 | F47 | Low on its own, medium with F34; B08a component probe (P2) | `src/components/modals/CycleCompleteModal.tsx:48-53`; `src/components/modals/Modal.tsx:46-51`, `91-92`; `src/screens/Workout.tsx:639-641` | `Modal` focuses `focusables()[0]` on open, and in `CycleCompleteModal` the first focusable is the "+X LBS" doubling button — not CONTINUE. Probe: with one doubling candidate, `document.activeElement` on open is the `+10 LBS` button, and two activations of the already-focused control fire `onDoubleIncrement` twice with identical arguments (`[[1,5],[1,5]]`). So the modal opens with a non-idempotent training-max write armed under the next Enter keypress, and F34's compounding (205 → 210 → 215) is reachable from the keyboard without the user ever aiming at the button. `Modal` already carries the fix as a documented prop — `initialFocus="container"`, "for dialogs whose first control is destructive" — and `ConfirmationDialog.tsx:20` is the only call site that uses it, so the codebase recognised the hazard for confirm dialogs and not for this one. | Pass `initialFocus="container"` on `CycleCompleteModal`, and treat "first control performs a write" as the rule for that prop rather than "first control says DELETE". This is orthogonal to F34's disable/await and does not replace it: focus placement changes who can trigger the compounding, not whether it compounds. Add a focus-placement case to a `CycleCompleteModal` test file, which does not exist. |
+| F48 | Medium; B08b probe (P5) | `src/hooks/use-confirmation.ts:33-34`, `41-44`; `src/screens/Settings.tsx:193-205`, `261`, `272`, `314`, `353`, `378`, `445`, `460`; `src/screens/Today.tsx:100`, `142`; `src/screens/Workout.tsx:610`, `621` | `confirmWithChoice` stores the new request's `resolve` over the old one with no queue and no settlement of what it displaces, so a second `confirm()` while one is pending leaves the first promise **permanently unsettled**. Probe: two `confirm()` calls, then one `respond('confirm')` → second promise `resolved:true`, first still `PENDING`, `pending()` back to `null` with nobody left to answer it. The caller is an `await` inside a handler, so the handler simply stops — no error, no toast, no trace; the user tapped ARCHIVE and nothing happened. Reachable in `Settings` and `Today`, where several destructive handlers run a db query *before* their confirm (`liftsCrossReferencing` at `Settings.tsx:193`) and nothing gates a second tap during that window — the modal that would block the screen is not mounted yet. `Workout`'s two confirms both sit inside `runFinishing`, which holds `finishing = true` across a `try/finally`; an orphan there would strand the flag and disable COMPLETE/EXIT/SKIP until reload. That is **not reachable today** — `runFinishing` is the only confirm caller on that screen — but it is what makes the missing settlement more than cosmetic. | Settle the displaced request before replacing it: `pending()?.resolve('cancel')` inside `confirmWithChoice` (matching Escape's existing meaning), or queue requests and show them in turn. Either way make it explicit rather than implicit. `use-confirmation.ts` has no test file; add one covering replacement, `respond` with nothing pending, and the binary `confirm` mapping. |
+| F49 | Low; B08b probe (P8) | `src/components/modals/LiftSetupModal.tsx:50-53`, `64-80`, `182-205` | The modal renders fully interactive before `load()` resolves, and `load()` then writes over whatever the user touched. `plateMode` and `implementBase` are seeded with defaults (`'paired'`, `settings.barWeight`) at setup, and for an existing lift `load()` replaces them at `:74-75` after an awaited query. Probe: open setup for a lift, tap NONE before the query settles → the readout shows `none`, then flips back to `paired` on its own. The same await also means a lift stored as `none` shows the wrong equipment mode until `load()` lands. The cross-block buffer is protected by accident only — `movementOptions()` is empty until `activeLifts()` is populated, so ADD BLOCK cannot be reached early. | Gate the form on a `loaded` flag (the modal already has `saving()` as a precedent for disabling its own controls), or apply loaded values only to fields the user has not touched. Add a test; `LiftSetupModal.tsx` has no test file at all. |
+| F50 | Medium; B08b probe (P7) | `src/components/modals/LiftSetupModal.tsx:122-162`, `303-309`; `src/screens/Settings.tsx:1047-1051`; `src/screens/Setup.tsx:363-366` | `handleCommit` has a `try/finally` and no `catch`, and its button calls it as `void handleCommit()`, so a rejected transaction is discarded. Probe with `db.transaction` rejecting `SQLITE_IOERR`: `onCommit` is **not** called, `SAVING…` reverts to `DONE`, the dialog stays open and its text contains no error, warning or retry — the user's only signal is that the screen behind never refetches. Nothing was written, but per F05/F06 a *timed-out* write can still land in the worker, so the same silent path also covers "it failed" and "it may have succeeded". The app already surfaces this class of failure elsewhere (`SaveFailureBanner`, `showToast`), so the idiom exists and this path does not use it. | Catch the rejection and surface it in the dialog with a retry, the way the workout save path does; at minimum `showToast` and keep the buffered state. Add a rejected-commit test. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -295,13 +302,13 @@ column as work is completed.
 | `src/components/layout/Toast.tsx` | B08 | reported | Area claim only |
 | `src/components/layout/WeekBadge.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/AccessoryTmModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F33 accessory arm) |
-| `src/components/modals/ConfirmationDialog.tsx` | B08 | reported | Area claim only |
+| `src/components/modals/ConfirmationDialog.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (clean; busy-gating not needed) |
 | `src/components/modals/CycleCompleteModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F34, F40, F47) |
-| `src/components/modals/ExerciseHistoryModal.test.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/ExerciseHistoryModal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/LiftHistoryModal.test.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/LiftHistoryModal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/LiftSetupModal.tsx` | B08 | reported | Area claim only |
+| `src/components/modals/ExerciseHistoryModal.test.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (no error-path test) |
+| `src/components/modals/ExerciseHistoryModal.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F46 call site) |
+| `src/components/modals/LiftHistoryModal.test.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (no error-path test) |
+| `src/components/modals/LiftHistoryModal.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F46 confirmed end to end) |
+| `src/components/modals/LiftSetupModal.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F49, F50; no test file) |
 | `src/components/modals/Modal.test.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (coverage gaps listed) |
 | `src/components/modals/Modal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (Escape path, F33 guard location) |
 | `src/components/modals/ModalAsyncStates.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F46; no test file) |
@@ -335,7 +342,7 @@ column as work is completed.
 | `src/db/sqlite-table.ts` | B02 | deep | B02b — table layer and test client (3/5); evidence below |
 | `src/db/sqlite-test-client.ts` | B02 | deep | B02b — table layer and test client (3/5); evidence below |
 | `src/db/sqlite.worker.ts` | B01 | deep | B01a; full file; findings/evidence below |
-| `src/hooks/use-confirmation.ts` | B08 | pending | — |
+| `src/hooks/use-confirmation.ts` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F48; no test file) |
 | `src/index.css` | B10 | pending | — |
 | `src/lib/accessory-tm.test.ts` | B07 | deep | B07e — all 96 lines; 9 tests passed; test gaps below |
 | `src/lib/accessory-tm.ts` | B07 | deep | B07e — all 78 lines; no findings; slate guard probed across six shapes |
@@ -2404,3 +2411,111 @@ remain open bugs.
 `LiftHistoryModal.tsx`, `src/hooks/use-confirmation.ts`, with
 `ExerciseHistoryModal.test.tsx` and `LiftHistoryModal.test.tsx`** — confirming F46
 end to end through a history modal's own error path.
+
+### 2026-09-15 — B08b: remaining modals and the confirmation hook
+
+**Revision:** `21001c04` (tracker-only commit on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; four implementation components, one hook
+and two test files deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/modals/LiftSetupModal.tsx` | 1–321 | `a1be863e40ea6d513dc76ded940584a81b59a0f0` |
+| `src/components/modals/ConfirmationDialog.tsx` | 1–56 | `88d95cd5b3a1a64adfc7bd73acebc49bc25b1632` |
+| `src/components/modals/ExerciseHistoryModal.tsx` | 1–55 | `aafe8e6cb56d15ce2a1eb5c2bb39f46e0425d3d1` |
+| `src/components/modals/LiftHistoryModal.tsx` | 1–71 | `ffb72b3ed9eb620657e02684685211c606d0a98d` |
+| `src/hooks/use-confirmation.ts` | 1–55 | `1b59b47491de6aae9003d719544841f85bffe519` |
+| `src/components/modals/ExerciseHistoryModal.test.tsx` | 1–174 | `6826d52731d41879df6080a38cecf1dbab9420aa` |
+| `src/components/modals/LiftHistoryModal.test.tsx` | 1–156 | `4f26c9a98ed8f52fc4f199bb15e18676559ff04a` |
+
+**Behavior and invariants traced:**
+
+- `use-confirmation`: the tri-state `ConfirmResult`, the binary `confirm` wrapper
+  and its `'confirm' → true` mapping, the promise-per-request model, `respond`'s
+  resolve-then-clear ordering, and the context guard. The API is app-wide — one
+  `createConfirmation()` in `App.tsx:91` feeding a single `<ConfirmationDialog />`
+  — so `pending` is global state shared by all thirteen call sites and survives
+  navigation. F48 opened on request replacement.
+- `ConfirmationDialog`: label/title precedence including the `'Confirm'` fallback
+  when `opts.title` is absent, `initialFocus="container"` and the reasoning behind
+  it, the destructive styling switch, the optional third button, and Escape mapping
+  to `'cancel'`. **No in-flight hazard here**: `respond` resolves and clears
+  `pending` synchronously, so the dialog unmounts in the same tick as the first
+  activation and cannot be double-fired — the F33/F34 shape does not apply.
+- `LiftSetupModal`: the buffered-draft model (nothing touches the db until DONE),
+  the `liftId` vs `draftLift` split, `load()`'s plate-mode and cross-block hydration,
+  buffer mutations, and the commit reconcile — delete-removed, add-new, update-kept,
+  all inside one `db.transaction`, with `order` rewritten from the buffer index.
+  This is the one modal in the tree that already gates its own close path on an
+  in-flight flag (`:169`), which is the precedent the B08a `busy` recommendation
+  should follow. F49 and F50 opened.
+- Both history modals: `onMount` → `load()` → `getLiftHistory` / `getExerciseHistory`,
+  the error/entries signal pair, and the sheet-variant presentation. Neither resets
+  `entries` on error, which is precisely what F46 turns into a permanent
+  "Loading..." underneath the error message.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/modals/LiftHistoryModal.test.tsx src/components/modals/ExerciseHistoryModal.test.tsx` — 2 files, **19 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P5 (`createConfirmation`, no DOM): two `confirm()` calls then one
+  `respond('confirm')` → `pending()` showed the **second** message after the second
+  call; second promise `resolved:true`; first promise still `PENDING` after the
+  respond; `pending()` then `null`. F48.
+- Probe P6 (`LiftHistoryModal` with `getLiftHistory` rejecting `worker timeout`):
+  dialog text `"← BACKHISTORY — Bench--- HISTORY — Bench ---worker timeoutLoading..."`,
+  `Loading...` still present. F46 confirmed at a live call site, not just at the
+  `ModalAsyncStates` unit.
+- Probe P7 (`LiftSetupModal`, `db.transaction` rejecting `SQLITE_IOERR`): `onCommit`
+  called 0 times, button label back to `DONE`, dialog text matched no
+  error/failure/retry wording. No `unhandledrejection` event was observed under
+  jsdom — recorded as observed, not as a claim about the browser; the user-visible
+  result is the finding either way. F50.
+- Probe P8 (`LiftSetupModal` with `liftId`, existing lift stored `plateMode: 'paired'`):
+  the equipment chips are live before `load()` resolves; tapping NONE showed
+  `no plate readout`, and after `load()` settled the readout was back to `paired`. F49.
+- Not run: the full suite. `LiftSetupModal`, `ConfirmationDialog` and
+  `use-confirmation` have no test files, so there was no existing coverage to run
+  for three of the five implementation files in this batch.
+
+**Findings:** F48 (medium, confirmed), F49 (low, confirmed), F50 (medium,
+confirmed). F46 upgraded from a unit-level probe to an end-to-end confirmation
+through `LiftHistoryModal`.
+
+**Substantive negative conclusions:**
+
+- `LiftSetupModal`'s `liftLabel()` resolves against `activeLifts()`, which excludes
+  archived lifts, so editing an archived lift would title the dialog `LIFT · SETUP`
+  — while cross-block movement names deliberately resolve against `allLifts()` for
+  exactly this reason. **Unreachable:** the only two `setSetupLiftId` call sites
+  (`Settings.tsx:519`, `Setup.tsx:224`) sit inside the active-lift lists; the
+  archived list at `Settings.tsx:588-590` offers no setup control. Noted as an
+  inconsistency a future archived-lift editor would trip, not as a finding.
+- `createLift` performs no uniqueness check, so duplicate lift names are not a
+  commit-failure trigger for F50 the way `assertUniqueExerciseName` is for F41.
+  F50's reachable triggers are worker/storage failures (F02) and timeouts (F05/F06).
+- `LiftSetupModal` and `AccessoryTmModal` both use a scrolling card where
+  `Modal.tsx:19-21` argues for a sheet. Considered and rejected again: the dialog
+  root is `fixed inset-0` with no overflow, so the card's scroller is the only
+  scroll region and the nested-scroll problem the comment describes does not occur.
+- Both history modals read `props.liftId` / `props.exerciseId` once inside `load()`
+  and never re-run on a prop change. Not a finding: both are rendered under a
+  `<Show>` keyed on the id being non-null, so a change of subject unmounts and
+  remounts the component.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- No test file exists for `LiftSetupModal.tsx`, `ConfirmationDialog.tsx` or
+  `src/hooks/use-confirmation.ts` — three of this batch's five implementation files.
+  `use-confirmation` is the one with app-wide reach and an unsettled-promise bug.
+- Both history modal test files cover loading, empty, list, a11y and Escape, and
+  **neither has an error-path case** — the exact state F46 breaks.
+
+**Open questions / remaining ranges:** none carried from this batch.
+
+**Ledger rows updated:** six `src/components/modals/**` rows moved `reported` →
+`deep` and `src/hooks/use-confirmation.ts` moved `pending` → `deep`; B08 now has
+40 rows left and the modals directory is fully closed. **Next action: B08c —
+`SetRow.tsx`, `CrossBlockLog.tsx`, `SessionBar.tsx`, `SaveFailureBanner.tsx` and
+`AmrapTargets.tsx` with their three test files**, carrying F13/F14/F15 and L02.
