@@ -8,54 +8,60 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07–B10 are CLOSED; B11 is open with B11a and B11b done.** 158 of 179
-ledger rows are `deep`. Four B11 rows remain, then B12 (17) closes the review.
+**Areas B07 through B11 are all CLOSED.** All 11 B11 rows are `deep` across
+three batches (B11a–B11c). **162 of 179 ledger rows are now `deep`.** One area
+remains: **B12 — documentation relevance and the final reconciliation (17 rows)**,
+which closes the review.
 
-**B11 so far is about the test layer itself, and both batches found the same
-shape: the thing under test and the thing testing it have drifted apart, with
-nothing in between to notice.**
+**B11 reviewed the test layer itself, and every batch found the same shape: the
+thing under test and the thing testing it had drifted, with nothing in between to
+notice.**
 
 - **F85 (medium)** — B11a ran the end-to-end suite, apparently for the first
   time, and **6 of 32 tests fail**. Every failure is spec drift, not a product
-  bug. Three causes — the wizard went three steps to two, `SessionBar` split
-  FINISH from COMPLETE SESSION, `Stepper` gained `fieldLabel` so `+` is no longer
-  the button's accessible name. In all three the **helper was updated and the
-  specs were not**, because helpers are shared and specs are executed by nothing
-  (F74).
+  bug. Three causes: the wizard went from three steps to two, `SessionBar` split
+  FINISH from COMPLETE SESSION, and `Stepper` gained `fieldLabel` so `+` is no
+  longer the button's accessible name. In all three the **helper was updated and
+  the specs were not** — helpers are shared, specs are executed by nothing (F74).
 - **F87 (medium)** — B11b measured `test-setup.ts`'s `MockWorker` against the
-  real `timer.worker.ts`: `pause` clears the interval in one and keeps it in the
-  other; `start` without `restStartedAt` posts in one and is silent in the other;
-  the stub delivers `onmessage` synchronously where a real Worker goes through
-  the message port. `timer.worker.ts` has no tests, so neither is checked against
-  the other. The sharpest consequence: **fix F68 and a test asserting the fix
-  fails under the stub** — the stub blocks its own fix.
+  real `timer.worker.ts` and found three divergences. Neither is checked against
+  the other, because `timer.worker.ts` has no tests. Sharpest consequence: **fix
+  F68 and a test asserting the fix fails under the stub.**
+- **F86, F88 (low)** — `test-results/.last-run.json` is tracked and carries a
+  stale `{"status": "passed"}` receipt for a suite that fails; and
+  `sessionIdsWithGaps` is a dead export whose comment names a consumer that does
+  not exist, with a passing test covering it.
 
-**B11a also sharpened F78.** Pointing the E2E suite at a production build is not
-a one-line `webServer` change: every test goes through `helpers.freshStart`,
-which waits on `window.__e2eResetDb`, and `sqlite-client.ts:93` defines that hook
-inside `if (import.meta.env.DEV)`. The suite is structurally bound to the dev
-server by its reset strategy — which is why `verify-notify-hardening.js` resets
-with a fresh browser context per leg instead.
+**F78 was amended** with a constraint found in B11a: the E2E suite is
+structurally bound to the dev server by its reset strategy —
+`helpers.freshStart` waits on `window.__e2eResetDb`, and `sqlite-client.ts:93`
+defines that hook inside `if (import.meta.env.DEV)`. Pointing it at a production
+build is not a one-line change.
 
-**Next batch: B11c — the last two stores, which closes B11.**
-`src/store/save-failure-store.ts` (116) and `src/store/toast-store.ts` (12) with
-`save-failure-store.test.ts` (75) and `toast-store.test.ts` (47).
-`save-failure-store` is **F51**'s other half — B08c reviewed the banner and found
-its single-slot `retrying` id re-enables a retry mid-flight; the store owns the
-retry closures those buttons call, and the `localStorage` gap log that outlives a
-reload. Then **B12** (17 rows) closes the review, already carrying F36, F76 and
-F82.
+**Next and last area: B12 — documentation relevance and final reconciliation
+(17 rows).** `CLAUDE.md`, `README.md`, `ROADMAP.md`, `ENGINEERING_PASSES.md`,
+`docs/INDEX.md`, the three `.claude/` key docs, three verification docs,
+`AMRAP_TARGET_REPS_ANALYSIS.md`, `docs/design/plate-loading-model.md`,
+`docs/ui-consistency-review.md` and two READMEs. It already carries inbound work
+from earlier areas: **F36** (the `getCurrentTm`/`getAllCurrentTms` tie-break
+reconcile was explicitly deferred here), **F76** (`CLAUDE.md` claims the deploy
+workflow runs no lint and no tests; it runs `check:ci`), **F82** (decide whether
+`demo-seed.json` is wired up or deleted) and **F83** (`.gitignore` hides
+`.claude/` while `CLAUDE.md` points at three tracked files inside it). Per batch
+rule 8, the area also owns the completion claim: every in-scope file `deep`,
+cross-file questions resolved or explicitly blocked, and findings reconciled.
 
-Latest run: **B11b complete** — `src/test-setup.ts` (80), `src/types/domain.ts`
-(184) and `src/vite-env.d.ts` (1) reviewed in full. Three files marked deep;
-**158 files deep in total.** The **full unit suite** was run as this batch's check,
-since `test-setup.ts` is loaded by every test — **48 files, 1,094 tests, all
-passing**; `pnpm lint` and `tsc -b` clean (exit 0). One new finding (F87).
-`domain.ts` is clean. Only this tracker changed; the probe was created inside
-`src/`, run, and deleted, leaving the tree clean. This card authorizes commit,
-push and PR; operator acceptance remains a separate native Kanban review step.
+Latest run: **B11c complete** — `src/store/save-failure-store.ts` (116),
+`save-failure-store.test.ts` (75), `src/store/toast-store.ts` (12) and
+`toast-store.test.ts` (47) reviewed in full. Four files marked deep; **162 files
+deep in total.** All 12 existing tests passed
+(`pnpm exec vitest run src/store/save-failure-store.test.ts src/store/toast-store.test.ts`);
+`pnpm lint` and `tsc -b` clean (exit 0). One new finding (F88). `toast-store.ts`
+is clean. Only this tracker changed; the tree is clean. This card authorizes
+commit, push and PR; operator acceptance remains a separate native Kanban review
+step.
 
-**Remaining work — 21 of 179 ledger rows are not yet `deep`** (158 are). Recounted
+**Remaining work — 17 of 179 ledger rows are not yet `deep`** (162 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -72,7 +78,7 @@ correct; only the remaining-work totals were not.
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
-| B11 | 4 pending | **Open (B11a, B11b done).** Remaining slice: B11c — `save-failure-store.ts` and `toast-store.ts` with their tests. |
+| B11 | **0 — closed** | All 11 rows `deep` across B11a–B11c. F85–F88 opened; F78 amended. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
 B01–B07 are closed. Per-area scope and starting concerns are in the Queue table
@@ -210,6 +216,7 @@ claimed here.
 | F85 | Medium; B11a — first recorded execution of the suite | `tests/e2e/app.spec.ts:13-20`; `tests/e2e/workout.spec.ts:14`, `19-25`, `53`, `119`, `152` | **The E2E suite does not pass.** Nothing runs it (F74), so this batch ran it — apparently for the first time — and **6 of 32 tests fail**: `app.spec.ts` 1 failed / 3 passed, `workout.spec.ts` 5 failed / 23 passed. Every failure is spec drift, not a product bug; the app is right in all six cases. Three independent causes, each an app improvement whose specs were never updated: **(a)** the setup wizard went from three steps to two (`Setup.tsx:17` is `createSignal<1 | 2>(1)`, titles read "STEP 1 OF 2"), but `app.spec.ts:13` still clicks a second NEXT and waits for a `STEP 3` heading — it times out at `:17`. **(b)** `SessionBar` split the finish control: `allDone()` gates `COMPLETE SESSION` and everything else renders `FINISH`, so at the start of a session the button reads FINISH — four tests assert `COMPLETE SESSION` with work outstanding and all four fail. **(c)** `Stepper` gained `fieldLabel`, so the increment button's accessible name became `Increase reps` rather than its visible `+` — `workout.spec.ts:23`'s `getByRole('button', { name: '+' })` finds nothing. In all three the **helper was updated and the specs were not**: `startWorkout` already accepts `/^(FINISH|COMPLETE SESSION)$/`, `completeSetupWizard` carries the comment "onboarding no longer has a read-only step 3", and `fillStepper` uses test ids rather than button names. Helpers are shared, so whoever changed the app noticed them; the specs are executed by nothing, so they rotted. | Fix the six assertions, then fix the reason they rotted — F74's CI job — in the same change, or they will rot again. The 26 passing tests are worth keeping: they cover reload persistence, rest-timer hydration from the worker, resume/abandon, and the joker-set ladder, none of which the unit suite can reach. |
 | F86 | Low; B11a run artifacts | `test-results/.last-run.json`; `.gitignore`; `playwright.config.ts` | `test-results/` is neither configured as Playwright's `outputDir` nor listed in `.gitignore`, and **`test-results/.last-run.json` is tracked**. Running the suite therefore dirties the working tree with untracked per-failure directories (screenshots, videos, error context) and modifies a tracked file. The committed copy reads `{"status": "passed", "failedTests": []}` — a stale receipt asserting the suite is green, in a repo where it is not (F85) and where nothing has run it (F74). Anyone reading it gets the wrong answer. | Add `test-results/` (and `playwright-report/`) to `.gitignore` and `git rm --cached test-results/.last-run.json`. Worth doing before F74's CI job lands, or every run will leave a diff. |
 | F87 | Medium; B11b probe (P29) | `src/test-setup.ts:8-51`; `src/workers/timer.worker.ts:1-33` | `test-setup.ts`'s `MockWorker` re-implements the rest-timer protocol, and it is the **only** implementation any test exercises — `timer.worker.ts` has no test file (B09c), so neither is ever checked against the other. Three divergences, measured side by side: **(a) `pause`** — the stub clears its interval (`vi.getTimerCount()` → 0); the real worker keeps the interval running and gates posting on a `paused` flag (→ 1). **(b) `start` without `restStartedAt`** — the stub falls back to `Date.now()` and posts `[1,2]`; the real worker leaves `restStartedAt` undefined, so its `!= null` guard blocks **every** post (`[]`). Opposite behaviour from the same message. **(c) delivery** — the stub calls `onmessage` synchronously inside the timer tick, so a test can assert immediately after `advanceTimersByTime`; a real `Worker` delivers asynchronously through the message port. The sharpest consequence is for **F68**. Resume timing matches today (first post at 1000 ms) but for unrelated reasons — the stub starts a fresh interval, the real worker keeps the old phase — so the stub reproduces F68's symptom by coincidence, not fidelity. Fix F68 by posting immediately on `resume`, and the stub still will not: **a test written against the fix fails under the stub**, which is the stub blocking its own fix. | Delete the re-implementation and drive the real module: `timer.worker.ts` is 33 lines with no `Worker`-only APIs, so a stub can import it and forward `postMessage` into its `self.onmessage`, giving one implementation for tests and production. Failing that, give `timer.worker.ts` the test file B09c asks for and assert the same protocol table against both. |
+| F88 | Low; B11c call-graph check | `src/store/save-failure-store.ts:109`; `src/store/save-failure-store.test.ts:55`; `src/screens/History.tsx:261` | `sessionIdsWithGaps` is exported with the doc comment "Sessions with at least one unresolved gap, for History's flag" — and **nothing calls it**. `grep -rn sessionIdsWithGaps src/ tests/` outside the store's own file and test returns nothing; History flags gaps per row through `gapsForSession(sid())` instead. The export is dead, and its comment names a consumer that does not exist. Its test — "dedupes session ids for the History flag" — passes, so the dedupe logic is covered while the thing it claims to serve is imaginary: coverage that reads as confidence about an integration there is none of. | Delete the function and its test, or wire History's per-row flag to it if a whole-list query is wanted later. Either way the comment should stop asserting a caller. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -270,7 +277,7 @@ area membership is not permission to review the entire area in one session.
 | B08 | Components, hooks, related tests | **Closed** (B08a–B08h). Reported coverage recovered through bounded verification; F46–F64 opened |
 | B09 | Service worker, timers, notifications and tests | **Closed** (B09a–B09c). L04 resolved into F65; F65–F68 opened |
 | B10 | Build/deploy/config/scripts/public assets | **Closed** (B10a–B10d). F69–F84 opened |
-| B11 | E2E, test infrastructure, domain types and remaining stores | Integration gaps and shared contracts |
+| B11 | E2E, test infrastructure, domain types and remaining stores | **Closed** (B11a–B11c). F85–F88 opened |
 | B12 | Documentation/data relevance and final reconciliation | Scope accounting and cross-file closure |
 
 ## File ledger
@@ -440,12 +447,12 @@ column as work is completed.
 | `src/screens/Workout.test.tsx` | B05 | deep | B05b — all 1755 lines; 94 existing tests passed; evidence below |
 | `src/screens/Workout.tsx` | B05 | deep | B05b — full file; F13 expanded, F14/F15 confirmed; evidence below |
 | `src/service-worker.ts` | B09 | deep | B09a — service worker and offline shell (1/3); evidence below (F65 resolves L04, F66; no test file) |
-| `src/store/save-failure-store.test.ts` | B11 | pending | — |
-| `src/store/save-failure-store.ts` | B11 | pending | — |
+| `src/store/save-failure-store.test.ts` | B11 | deep | B11c — remaining stores (3/3); evidence below (8 cases; covers a dead export) |
+| `src/store/save-failure-store.ts` | B11 | deep | B11c — remaining stores (3/3); evidence below (F88; F51 ownership settled) |
 | `src/store/settings-store.test.ts` | B04 | deep | B04b — settings and import integration (1/3); evidence below |
 | `src/store/settings-store.ts` | B04 | deep | B04b — settings and import integration (1/3); evidence below |
-| `src/store/toast-store.test.ts` | B11 | pending | — |
-| `src/store/toast-store.ts` | B11 | pending | — |
+| `src/store/toast-store.test.ts` | B11 | deep | B11c — remaining stores (3/3); evidence below (4 cases, proportionate) |
+| `src/store/toast-store.ts` | B11 | deep | B11c — remaining stores (3/3); evidence below (clean) |
 | `src/store/workout-store.test.ts` | B05 | deep | B05a — workout store and persistence (2/3); evidence below |
 | `src/store/workout-store.ts` | B05 | deep | B05a — workout store and persistence (2/3); evidence below |
 | `src/test-setup.ts` | B11 | deep | B11b — test infrastructure and shared types (2/3); evidence below (F87) |
@@ -4097,3 +4104,95 @@ and deleted. Single agent; three files deeply reviewed; no application edits.
 **Ledger rows updated:** three rows moved `pending` → `deep`; B11 now has 4 rows
 left. **Next action: B11c — `src/store/save-failure-store.ts` and
 `src/store/toast-store.ts` with their tests**, which closes area B11.
+
+### 2026-09-15 — B11c: remaining stores (closes area B11)
+
+**Revision:** `eb461bc` (B11b, stacked on B11a on `main`). Application files were
+unchanged at batch start and end; no probe files were created. Single agent; two
+stores and their tests deeply reviewed; no application edits. **This closes area
+B11.**
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/store/save-failure-store.ts` | 1–116 | `8911c96a6210fbb38a156cb6e50da43488ef23d8` |
+| `src/store/save-failure-store.test.ts` | 1–75 | `6404b5d1f51e6fe0bf96c5eede26c81e121555e4` |
+| `src/store/toast-store.ts` | 1–12 | `e791e08ebd5452a05fcf56308775565a0887867d` |
+| `src/store/toast-store.test.ts` | 1–47 | `79170c30331515070cd654febcef2706f240c99e` |
+
+**Behavior and invariants traced:**
+
+- `save-failure-store`: the deliberate two-trace design and the failure it exists
+  to prevent, stated at the top of the file — a 2.5 s toast was the only record of
+  a refused write, so a missed toast meant a silently missing set. The in-memory
+  `SaveFailure` carries the retry closure and drives the banner; the serializable
+  `SessionGap` outlives a reload so History can still flag the session. Traced:
+  `loadGaps`'s version check and per-field validation, `persistGaps` swallowing a
+  full or unavailable `localStorage` on purpose, the `MAX_GAPS` cap, and
+  `clearSaveFailure`'s match on `(sessionId, describe)` removing exactly one
+  occurrence so two identical failed sets clear one each.
+- `toast-store`: a signal plus one module-level timeout handle, cleared and
+  replaced on each `showToast` so a second message supersedes the first rather
+  than racing its predecessor's expiry.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/store/save-failure-store.test.ts src/store/toast-store.test.ts` — 2 files, **12 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Call-graph check for F88: `grep -rn sessionIdsWithGaps src/ tests/` returns
+  nothing outside the store and its own test; `History.tsx:261` uses
+  `gapsForSession(sid())`.
+- Schema check (see below): `src/db/schema.ts:23` declares
+  `id INTEGER PRIMARY KEY AUTOINCREMENT` for `sessions`.
+
+**Findings:** F88 (low).
+
+**Substantive negative conclusions:**
+
+- **A session-id reuse bug was hypothesised and ruled out.** The gap log is keyed
+  by `sessionId` and nothing prunes it against existing sessions, so a deleted
+  session's gaps persist in `localStorage` indefinitely. If SQLite reused row ids,
+  a new session could inherit a dead session's gap flag. It cannot:
+  `schema.ts:23` uses `AUTOINCREMENT`, which guarantees ids are never reused even
+  after deletion. Recorded because the hypothesis is reasonable from the store
+  alone and the disproof lives in another file.
+- The residue of that is real but marginal: stale gaps from deleted sessions still
+  count against `MAX_GAPS`, so in a database failing many writes they could evict a
+  live session's gap. The cap is documented as deliberate ("the flag is 'this
+  session has gaps', not a full audit log"), 200 entries is far beyond plausible
+  real use, and the eviction order is oldest-first. Left as an observation.
+- **F51's ownership is settled here.** The store holds the retry closures but does
+  nothing to serialise them — no in-flight set, no single-flight token. That is not
+  a second defect: the store is a record, and the decision about whether a retry is
+  already running belongs to the component that offers the button. F51 stays
+  where B08c put it, on `SaveFailureBanner`. A store-level in-flight set is a valid
+  alternative fix, and is noted on F51 rather than opened again.
+- **`toast-store.ts` is clean.** Twelve lines, one responsibility, and the single
+  shared timeout handle is the right shape — replacing rather than stacking is what
+  makes a rapid second toast behave.
+- `resetSaveFailures` is exported from production code as a test helper and ships
+  in the bundle. Unlike `__e2eResetDb` it carries no `import.meta.env.DEV` guard.
+  Harmless — it mutates only in-memory signals and the gap key — and not worth a
+  finding, but it is the kind of export that earns a guard if the file grows.
+- `resetSaveFailures` does not reset `nextId`, so ids keep climbing across tests.
+  No test depends on a specific id value, and `recordSaveFailure`'s contract is only
+  that ids are distinct, which monotonic counting satisfies.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- `save-failure-store.test.ts` (8 cases) covers recording, distinct ids, clearing
+  one of two identical gaps, unknown-id no-op, session scoping, the versioned
+  `localStorage` key and its removal on clear. What it does **not** cover: the
+  `MAX_GAPS` eviction path, `loadGaps` rejecting a wrong `v` or a malformed entry,
+  and `persistGaps` surviving a throwing `localStorage` — the three branches that
+  exist specifically for hostile conditions. One of its eight cases tests a dead
+  export (F88).
+- `toast-store.test.ts` (4 cases) is proportionate to twelve lines.
+
+**Open questions / remaining ranges:** none carried.
+
+**Area B11 closure:** all 11 ledger rows `deep` with per-file evidence. Four
+findings opened (F85–F88) and F78 amended. The area's headline is F85: the
+end-to-end suite was executed for the first time in this review and fails 6 of 32,
+entirely through spec drift. **Next action: B12 — documentation relevance and the
+final reconciliation (17 rows)**, which owns the completion claim under batch rule
+8 and already carries F36, F76, F82 and F83.
