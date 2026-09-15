@@ -8,14 +8,13 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Area B07 is closed; B08 is open.** B08a–B08f are complete: the whole
-`src/components/modals/**` and `src/components/workout/**` directories,
-`src/hooks/use-confirmation.ts` and the form input primitives are `deep` at
-recorded blobs. Thirty-seven of B08's 54 rows are closed. What is left is the
-rest of `forms/`, plus `stats/`, `ui/` and `layout/` — 17 rows, none over 182 lines.
+**Area B07 is closed; B08 is open.** B08a–B08g are complete: all of
+`src/components/modals/**`, all of `src/components/workout/**`, all of
+`src/components/forms/**` and `src/hooks/use-confirmation.ts` are `deep` at
+recorded blobs. Forty-four of B08's 54 rows are closed. **One slice remains:
+B08h**, the ten rows in `stats/`, `ui/` and `layout/`.
 
-**Four patterns account for nearly everything this area has produced. Look for
-them on purpose in the two remaining slices.**
+**Four patterns account for nearly everything this area has produced.**
 
 1. **No single-flight guard on an async handler wired to `onClick`.** F33, F34,
    F41, F51, F55. The guard belongs in `Modal` — it owns Escape, swallows it with
@@ -23,42 +22,46 @@ them on purpose in the two remaining slices.**
    a call site cannot gate its own close path. `LiftSetupModal.tsx:169` already
    hand-rolls the fix; lift it into `Modal` as a `busy?: boolean` prop.
 2. **Single-slot or snapshotted state standing in for per-item state.** F51, F52,
-   F54, F55's `alreadyAdded`, F57. `Workout.tsx:261-262` shows F52's `<Index>`
-   mitigation was understood and applied to one list and not the other.
-3. **State seeded from props or storage at setup and never re-synced.** F49, F56,
-   F54. `DurationInput.tsx:18-23` is the counter-example done right — a deferred
-   `on(() => props.value, …)` effect that re-syncs without clobbering.
-4. **Cleanup bound to something that can stop existing.** F57 (a sentinel
-   reference overwritten before release) and F58 (a repeat interval cleared only by
-   pointer events on a button that disables itself at the bound, so it never
-   stops). Both leak until unmount.
+   F54, F55's `alreadyAdded`, F57.
+3. **State seeded from props or storage at setup and never re-synced.** F49, F54,
+   F56. `DurationInput.tsx:18-23` is the counter-example done right.
+4. **Cleanup or event handling bound to something that can stop existing, or to a
+   default that is wrong.** F57 (sentinel overwritten before release), F58 (repeat
+   interval cleared only by a button that disables itself), F62
+   (`InlineConfirm.stopPropagation` defaults off inside a clickable row).
 
-**Next batch: B08g — form display and exercise editing.** `ExerciseEditor.tsx`
-(86), `ExerciseSetsBlock.tsx` (67), `LiftSetsByType.tsx` (50), `SetLogControls.tsx`
-(52), `SetReadout.tsx` (51), `PlateDisplay.tsx` (40) and `NotesBlock.tsx` (18) —
-seven files, 364 lines, none with a test file. `SetReadout` carries a question
-B08c left open: it takes an `onClick` (used to open `SetRow`'s and `AccessoryLog`'s
-edit forms) and it needs checking that the tap target is a real control rather than
-a clickable div.
+**A fifth is now clear enough to name: keyboard access is applied unevenly.**
+F60 traps focus in `NotesField`; F61 makes every "edit a logged set" target
+pointer-only. Both sit beside files that get it right — `ExerciseSetsBlock.tsx:38-48`
+and `CollapsibleSection.tsx:68-76` use real buttons with visible focus rings, and
+`AccessoryLog.tsx:92-94` states the rule explicitly. B08h's `InlineConfirm`,
+`ToggleChip` and `BottomNav` are the last place to check it.
 
-Latest run: **B08f complete** — `src/components/forms/Stepper.tsx` (145),
-`NotesField.tsx` (156), `NotesText.tsx` (77), `DurationInput.tsx` (47) and their
-four test files reviewed in full. Eight files marked deep; **99 files deep in
-total.** All 42 existing tests passed
-(`pnpm exec vitest run src/components/forms/Stepper.test.tsx src/components/forms/NotesField.test.tsx src/components/forms/NotesText.test.tsx src/components/forms/DurationInput.test.tsx`);
-`pnpm lint` and `tsc -b` clean (exit 0). Three new findings: **F58** (medium,
-probe-confirmed — a stepper long-pressed to its bound repeats forever, because the
-button disables itself and can no longer deliver the pointerup that clears the
-interval), **F59** (low — `DurationInput`'s `fieldLabel` is passed by none of its
-three call sites, which is exactly the collision it exists to prevent) and **F60**
-(medium, WCAG 2.1.2 — `NotesField` swallows Tab and Shift+Tab on any hand-typed
-bullet line, with the touch escape chips withheld outside list mode, so focus
-cannot leave the textarea without editing the text). `NotesText` is clean. Only
-this tracker changed; probes were created inside `src/`, run, and deleted, leaving
-the tree clean. This card authorizes commit, push and PR; operator acceptance
-remains a separate native Kanban review step.
+**Next batch: B08h — the last slice.** `RecordsPanel.tsx` (182, the area's only
+`partial` row, carrying F22/F23 from B06e), `InlineConfirm.tsx` (57) with
+`InlineConfirm.test.tsx` (67), `ToggleChip.tsx` (33), and the six `layout/` files:
+`BottomNav.tsx` (53), `Toast.tsx` (35), `Rule.tsx` (28), `WeekBadge.tsx` (21),
+`SectionLabel.tsx` (19), `SubLabel.tsx` (17). `RecordsPanel` needs its own
+evidence for the `compact`/`liftId` props and async identity, which is what its
+`partial` status records; F62 also asks whether `InlineConfirm`'s
+`stopPropagation` default should be inverted.
 
-**Remaining work — 80 of 179 ledger rows are not yet `deep`** (99 are). Recounted
+Latest run: **B08g complete** — `src/components/forms/ExerciseEditor.tsx` (86),
+`ExerciseSetsBlock.tsx` (67), `LiftSetsByType.tsx` (50), `SetLogControls.tsx` (52),
+`SetReadout.tsx` (51), `PlateDisplay.tsx` (40) and `NotesBlock.tsx` (18) reviewed
+in full. Seven files marked deep; **106 files deep in total.** None of the seven
+has a test file, so the check was the four suites that render them transitively —
+30 tests passed; `pnpm lint` and `tsc -b` clean (exit 0). Two new findings, both
+probe-confirmed: **F61** (medium, WCAG 2.1.1 — `SetReadout`'s clickable row is a
+bare `div`, so editing a logged set is pointer-only everywhere it is offered) and
+**F62** (medium — `AccessoryLog`'s undo does not stop propagation, so tapping it
+opens the edit form instead and `deleteLastAccessorySet` has no reachable caller).
+`ExerciseEditor`, `ExerciseSetsBlock`, `LiftSetsByType`, `PlateDisplay` and
+`NotesBlock` are clean. Only this tracker changed; probes were created inside
+`src/`, run, and deleted, leaving the tree clean. This card authorizes commit,
+push and PR; operator acceptance remains a separate native Kanban review step.
+
+**Remaining work — 73 of 179 ledger rows are not yet `deep`** (106 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -72,7 +75,7 @@ correct; only the remaining-work totals were not.
 | Area | Rows left | Shape of the work |
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
-| B08 | 17 (16 `reported`, 1 `partial`) | **Open (B08a–B08f done).** Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08g form display + exercise editing, B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
+| B08 | 10 (9 `reported`, 1 `partial`) | **Open (B08a–B08g done).** Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
@@ -186,6 +189,8 @@ claimed here.
 | F58 | Medium; B08f probes (P17, P18) | `src/components/forms/Stepper.tsx:42-53`, `55-63`, `94`, `136` | The long-press repeat is cleared only by `onPointerUp`/`onPointerLeave` on the very button being held, and that button **disables itself the moment the value reaches the bound** (`disabled={props.value >= max()}`). A disabled button dispatches no pointer events, so `clearPress()` never runs and the `setInterval` keeps firing `props.onChange(clampedValue)` every 80 ms **until the component unmounts** — there is no user action that stops it. Probe (max 3, fake timers): value reaches 3, `+` `disabled=true`, 5 onChange calls during the press, then **10 more** in the next 800 ms and **65 total** after ~4.5 s, still climbing. `P18` is the same at the floor: `−` disabled at 0, 20 further `onChange(0)` calls. Control — releasing before the bound — stops cleanly at 5 and stays there. Every bounded stepper is reachable: `DurationInput`'s seconds (`max=59`, ~5 s of holding), `sets` (`max=20`), `reps` (`max=50`), `%TM` (`max=120`), `implementBase` (`max=200`). The parent gets 12.5 writes a second forever, and `clearPress`'s announce-on-release never fires, so the final value is never announced either. | Clear the press from a source the disable cannot silence: bind `pointerup`/`pointercancel` on `window` for the duration of the press, and/or stop the interval inside itself once the clamped value stops changing. `Stepper.test.tsx` has 17 cases covering value display, stepping, clamping, the disabled bounds and the edit input, and **none** touch the long-press path at all. |
 | F59 | Low; B08f source inspection | `src/components/forms/DurationInput.tsx:8-10`, `25`, `34`, `43`; `src/components/workout/AccessoryLog.tsx:193`, `227`; `src/screens/HistoryEdit.tsx:394-397` | `fieldLabel` exists, per its own comment, "so two duration inputs on one screen don't both announce as bare 'minutes'/'seconds'" — and **none of its three call sites pass it**. In `AccessoryLog` the two are simultaneously on screen in the ordinary case: editing a logged timed set renders one while the active-set form renders the other, so a screen reader hears two "Increase minutes" buttons with nothing to tell them apart. | Pass `fieldLabel` at each call site (`"set 2"` / `"this set"` in `AccessoryLog`, the set identity in `HistoryEdit`). Cover it in `DurationInput.test.tsx`, whose nine cases never exercise the prop. |
 | F60 | Medium (WCAG 2.1.2, Level A); B08f probe (P19) | `src/components/forms/NotesField.tsx:107-112`, `137-143` | `handleKeyDown` swallows Tab on **any line matching `/^( *)- (.*)$/`**, regardless of whether list mode is on, and Shift+Tab with it. A user who simply typed `- ` at the start of a line therefore cannot move focus out of the textarea with the keyboard. Probe on `'- first bullet'` with list mode **off**: `Tab defaultPrevented = true`, `Shift+Tab defaultPrevented = true`, and the ←/→ escape chips are not rendered (`listMode()` is false, so `:138` withholds them). Control on a plain line: `defaultPrevented = false`. The only way out is to destroy the bullet — Shift+Tab repeatedly until the line is no longer a bullet — which edits the user's text to regain focus movement. `NotesField` is used on Workout, in `AccessoryLog` and in `HistoryEdit`, not only inside a focus-trapping `Modal`. | Gate the Tab interception on `listMode()` as the Enter handler already is, so a bullet typed by hand behaves like ordinary text; or provide a non-destructive escape (Escape releases the trap for the next Tab). `NotesField.test.tsx` has a case for Tab on a non-bullet line but none asserting that focus can leave a bullet line. |
+| F61 | Medium (WCAG 2.1.1, Level A); B08g probe (P20) | `src/components/forms/SetReadout.tsx:31-34`; `src/components/workout/SetRow.tsx:147`; `src/components/workout/AccessoryLog.tsx:168` | `SetReadout` attaches `onClick` to a bare `<div>` with `cursor-pointer` and **no `role`, no `tabindex` and no key handler**. Probe: `tagName=DIV`, `role=null`, `tabindex=null`, and `queryAllByRole('button')` finds nothing. That div is the app's only affordance for editing an already logged set — `SetRow:147` (`onClick={startEdit}`) for main and cross sets, `AccessoryLog:168` (`onClick={() => startEditSet(i())}`) for accessory sets — so **correcting a mislogged set is pointer-only**, unreachable by keyboard or switch access. The codebase states the opposite standard three files away: `AccessoryLog.tsx:92-94`, "Real `<button>`, not a span with `role=\"button\"`: keyboard support comes free". | Render the row as a `<button>` when `onClick` is set (the pattern `ExerciseSetsBlock.tsx:38-48` and `CollapsibleSection.tsx:68-76` already use), keeping the plain `div` for the read-only case. Note the nesting: the trailing slot holds an `InlineConfirm`, so a `<button>` root would nest interactive content — split the tappable region from the trailing slot rather than wrapping the whole row. `SetReadout.tsx` has no test file. |
+| F62 | Medium; B08g probe (P21) | `src/components/workout/AccessoryLog.tsx:171-181`; `src/components/ui/InlineConfirm.tsx:8`, `20-23`; `src/components/forms/SetReadout.tsx:32` | `InlineConfirm` only calls `e.stopPropagation()` when its optional `stopPropagation` prop is set, and `AccessoryLog` does not set it — while the `SetReadout` it sits inside has `onClick={() => startEditSet(i())}` on its root. So the first tap on **undo** bubbles: the row swaps to the edit form, which unmounts the `InlineConfirm` before its "undo set?" confirmation ever renders. Probe: after clicking `Undo last Dips set` → confirm prompt shown `false`, edit form opened `true`, undo control no longer present. The control is **functionally dead** — cancelling the editor returns to the same readout and the next tap does the same thing, so `deleteLastAccessorySet` has no reachable caller in the UI. `SetRow.tsx:165-171` passes `stopPropagation` and behaves correctly: control probe → confirm shown `true`, edit form `false`. | Pass `stopPropagation` at `AccessoryLog:173`, matching `SetRow`. Better: make `stopPropagation` the default in `InlineConfirm` — it sits in a clickable row at every call site, and the current default is the wrong one. `AccessoryLog.tsx` has no test file; `InlineConfirm.test.tsx` (B08h) never renders it inside a clickable parent. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -297,17 +302,17 @@ column as work is completed.
 | `src/App.tsx` | B01 | deep | B01b — app shell and training-max helpers (1/5); evidence below |
 | `src/components/forms/DurationInput.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (fieldLabel never exercised) |
 | `src/components/forms/DurationInput.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (F59) |
-| `src/components/forms/ExerciseEditor.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/ExerciseSetsBlock.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/LiftSetsByType.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/NotesBlock.tsx` | B08 | reported | Area claim only |
+| `src/components/forms/ExerciseEditor.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean; no test file) |
+| `src/components/forms/ExerciseSetsBlock.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean; correct button idiom) |
+| `src/components/forms/LiftSetsByType.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean) |
+| `src/components/forms/NotesBlock.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean) |
 | `src/components/forms/NotesField.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (11 cases; no focus-escape case) |
 | `src/components/forms/NotesField.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (F60) |
 | `src/components/forms/NotesText.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (6 cases, good coverage) |
 | `src/components/forms/NotesText.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (clean) |
-| `src/components/forms/PlateDisplay.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/SetLogControls.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/SetReadout.tsx` | B08 | reported | Area claim only |
+| `src/components/forms/PlateDisplay.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean) |
+| `src/components/forms/SetLogControls.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (LOG has no in-flight guard; upstream) |
+| `src/components/forms/SetReadout.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (F61, F62) |
 | `src/components/forms/Stepper.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (17 cases; long-press path untested) |
 | `src/components/forms/Stepper.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (F58) |
 | `src/components/layout/BottomNav.tsx` | B08 | reported | Area claim only |
@@ -2937,3 +2942,100 @@ question raised in B08c and is settled by reading `SetReadout.tsx`.
 `ExerciseSetsBlock.tsx`, `LiftSetsByType.tsx`, `SetLogControls.tsx`,
 `SetReadout.tsx`, `PlateDisplay.tsx` and `NotesBlock.tsx`**, none of which has a
 test file.
+
+### 2026-09-15 — B08g: form display and exercise editing
+
+**Revision:** `5b752ac` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; seven implementation components deeply
+reviewed; no application edits. This closes `src/components/forms/**`.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/forms/ExerciseEditor.tsx` | 1–86 | `f622759c42e435221824c3b7e44684e527d4f495` |
+| `src/components/forms/ExerciseSetsBlock.tsx` | 1–67 | `87bac747511745bf331cc13b78ae163ae398c993` |
+| `src/components/forms/LiftSetsByType.tsx` | 1–50 | `2a24e1b88473cc448188d6865154ebd9e48b5e46` |
+| `src/components/forms/SetLogControls.tsx` | 1–52 | `f3772b26420b4fddea2a2df2f7d520439d2b0afb` |
+| `src/components/forms/SetReadout.tsx` | 1–51 | `96a55bb49525aadcf2fd543f916d925e06405337` |
+| `src/components/forms/PlateDisplay.tsx` | 1–40 | `bcf3fcaba1db73c1aca61f26453ac81ba8dbed56` |
+| `src/components/forms/NotesBlock.tsx` | 1–18 | `e2d6df8a067889b6e4754439e75b1fd14780850a` |
+
+**Behavior and invariants traced:**
+
+- `SetReadout`: the single `<weight>lb × <value>` format shared by every logger in
+  every state, the `lg`/`sm` sizes, the four content slots, `alignWeight`'s fixed
+  column, and the documented reason weight and "lb" stay adjacent in the text (so
+  `"135lb"` substring assertions keep working). F61 and F62 both land here.
+- `SetLogControls` / `FieldRow`: the unified active-set cluster — always-visible
+  weight stepper at 2.5 default step, caller-supplied value rows, LOG button.
+- `PlateDisplay`: `calcPlates` memoised over weight, base, mode and the user's
+  plate inventory; the `result() !== null` gate; per-mode labels
+  (`each side`/`plates`, `bar only`/`no plates`). `items()!` is only dereferenced
+  inside the `Show` that proves `result()` non-null.
+- `ExerciseEditor`: the name field's Enter-saves / Escape-cancels pair, the
+  optional category, plate-mode and implement-base sections each gated on their own
+  callback being supplied, and the increment stepper gated on a non-null increment.
+- `ExerciseSetsBlock` and `LiftSetsByType`: the two history renderers that share
+  `SetReadout`; type grouping in `SET_TYPE_DISPLAY_ORDER`, the AMRAP badge and the
+  e1RM trailed on the AMRAP row only, and the optional name button that opens the
+  exercise's history.
+- `NotesBlock`: rule + "Notes" eyebrow + `NotesText`, the shared divider idiom.
+
+**Checks and outcomes:**
+
+- None of these seven files has a test file. The check was the four existing suites
+  that render them transitively — `SetRow.test.tsx` (`SetReadout`),
+  `LiftHistoryModal.test.tsx` (`LiftSetsByType`, `NotesBlock`),
+  `ExerciseHistoryModal.test.tsx` (`ExerciseSetsBlock`) and `NotesText.test.tsx`:
+  4 files, **30 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P20 (`SetReadout` with `onClick`): `tagName=DIV`, `role=null`,
+  `tabindex=null`, `queryAllByRole('button')` → 0. F61.
+- Probe P21 (`AccessoryLog` with one logged set, clicking `Undo last Dips set`):
+  confirm prompt shown `false`, edit form opened `true`, undo control gone.
+  **Control** (`SetRow` completed row, which passes `stopPropagation`): confirm
+  shown `true`, edit form `false`. F62, with the difference isolated to the prop.
+- Not run: the full suite.
+
+**Findings:** F61 (medium, WCAG 2.1.1, confirmed), F62 (medium, confirmed with a
+control).
+
+**Substantive negative conclusions:**
+
+- `ExerciseEditor`, `ExerciseSetsBlock`, `LiftSetsByType`, `PlateDisplay` and
+  `NotesBlock` are clean. `ExerciseSetsBlock.tsx:38-48` in particular is the
+  correct form of what F61 gets wrong — a real `<button>` with an `aria-label` and
+  a `focus-visible` ring — and it sits in the same directory.
+- `SetLogControls`' LOG button carries no disabled or in-flight state, which is
+  pattern 1's shape. **Not opened as a new finding:** the component receives
+  `onLog: () => void` and cannot observe the async work behind it, and the
+  duplicate-save consequences on that path are already F14/F15. The fix belongs
+  with those, by passing a busy flag down rather than by changing this component
+  alone.
+- `ExerciseEditor` relies on `autofocus` on a dynamically inserted `<input>`, which
+  browsers honour inconsistently outside initial page load. Left as an observation:
+  every call site renders it in response to a user action that already moved focus
+  nearby, and no reachable failure was identified.
+- `PlateDisplay`'s two `createMemo`s recompute on `settings.plates` changes as well
+  as weight, which is correct — changing the plate inventory in Settings must
+  update live readouts.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- **All seven files lack a test file.** `SetReadout` is the most consequential: it
+  is rendered by every logger and every history view, it owns the app's set format,
+  and it is where both of this batch's findings live.
+- `ExerciseEditor`'s Enter/Escape key handling and its four optional sections have
+  no direct coverage; `PlateDisplay`'s empty-state labels (`bar only` / `no plates`)
+  are never asserted.
+
+**Open questions / remaining ranges:** B08f's carried question is now answered —
+`SetReadout`'s tap target is a bare `div` (F61). One new question for B08h: F62's
+recommended fix is to invert `InlineConfirm`'s `stopPropagation` default, which
+requires checking its other call sites when that file is reviewed.
+
+**Ledger rows updated:** seven `src/components/forms/**` rows moved `reported` →
+`deep`, closing that directory; B08 now has 10 rows left, all in `stats/`, `ui/`
+and `layout/`. **Next action: B08h — `RecordsPanel.tsx` (the area's only `partial`
+row), `InlineConfirm.tsx` + its test, `ToggleChip.tsx`, and the six `layout/`
+files**, which closes area B08.
