@@ -8,42 +8,50 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Area B07 is CLOSED.** Every `src/lib/**` row queued to B07 is now `deep` at a
-recorded blob, across seven batches (B07a–B07g). No B07 file remains `pending`,
-`partial` or `stale`. Twenty-two findings were opened from this area
-(F24–F45, less the ones opened elsewhere), and leads **L05 is resolved** while
-**L07** gained two further call sites. Nothing in B07 is blocked.
+**Area B07 is closed; B08 is open.** B08a is complete — the modal shell and the
+three post-session dialogs are now `deep` at recorded blobs, and the area-level
+`reported` claim has been replaced with per-file evidence for seven of its rows.
 
-**Next batch: B08a — the start of the components area.** B08 is the largest
-remaining block and the one the `pending` column hides: 52 of its rows are
-`reported`, a prior area-level claim with no recoverable per-file evidence, so each
-still needs bounded verification. Start with the three modals this area's own
-findings already implicate, since the evidence is written and only the component
-rows are missing: `CycleCompleteModal.tsx` (F34, F40 — undisabled buttons firing
-un-awaited callbacks, and a "+X LBS" offer for an archived lift),
-`TmRecommendationModal.tsx` and `AccessoryTmModal.tsx` (F33 — the accept arms that
-re-enter `proceedAfterSession`), with `Modal.test.tsx`/`ModalAsyncStates.tsx` as the
-shared dependency. That slice also settles whether an in-flight guard belongs in
-`Modal` itself or at each call site, which every one of F33/F34/F41 needs.
-Latest run: **B07g complete** — `src/lib/format.ts` (32),
-`src/lib/format.test.ts` (61), `src/lib/lift.ts` (106), `src/lib/lift.test.ts`
-(182), `src/lib/cleanup.ts` (38) and `src/lib/cleanup.test.ts` (60) reviewed in
-full. Six files marked deep; **62 files deep in total.** All 35 existing tests
-passed (`pnpm exec vitest run src/lib/format.test.ts src/lib/lift.test.ts src/lib/cleanup.test.ts`);
-`pnpm lint` and `tsc -b` clean. Three new findings, all probe-confirmed against
-real SQLite: **F43** (medium — `archiveLift` deletes a pending session row without
-its child rows, unlike `discardPendingSession`; an orphaned cross set then sets a
-movement's PR baseline to 582.9 permanently, unreachable by every screen and every
-delete path), **F44** (low — `deleteLift` is an incomplete cascade whose
-"pre-history only" contract is unenforced on a reachable `/setup` route) and
-**F45** (low — CLEANUP archives never-logged exercises that are live assistance
-default picks, emptying Today's slots with only a count in the toast).
-`format.ts` produced **no findings**. Only this tracker changed; no application
-fixes or sub-agents. This card authorizes commit, push and PR; operator acceptance
-remains a separate native Kanban review step.
+**The in-flight-guard question is settled: the guard belongs in `Modal`, not at
+each call site.** F33/F34/F41 all ask for "disable the button while the handler
+runs", but a call site cannot do that alone — `Modal` owns Escape, swallows it
+with `stopPropagation` (`Modal.tsx:102-107`) and calls `onClose` unconditionally,
+so every dialog has a close path its own buttons cannot gate. B08a probe P3
+confirms it: tapping UPDATE TM and then pressing Escape while the accept is still
+awaiting produces `accept:start → dismiss → accept:end`, both callbacks fired once
+— which is F33's duplicate-cycle race reached with **one tap plus one keypress**,
+not the double tap F33 describes. The shape to build is a `busy?: boolean` prop on
+`Modal` that suppresses Escape and the `← BACK` control while set, with call sites
+passing the same flag to `disabled` on their action buttons.
 
-**Remaining work — 117 of 179 ledger rows are not yet `deep`** (62 are). Recounted
-directly from the File ledger at `7992747` this session.
+**Next batch: B08b — the remaining modals.** `LiftSetupModal.tsx` (321),
+`ConfirmationDialog.tsx` (56), `ExerciseHistoryModal.tsx` (55) and
+`LiftHistoryModal.tsx` (71) with `ExerciseHistoryModal.test.tsx` (174) and
+`LiftHistoryModal.test.tsx` (156), plus `src/hooks/use-confirmation.ts` (55),
+which is `ConfirmationDialog`'s other half and the only `pending` row in the area.
+The two history modals are also F46's call sites, so their error paths are the
+natural place to confirm that finding end to end.
+
+Latest run: **B08a complete** — `src/components/modals/Modal.tsx` (196),
+`ModalAsyncStates.tsx` (33), `CycleCompleteModal.tsx` (77),
+`TmRecommendationModal.tsx` (63), `AccessoryTmModal.tsx` (70), `Modal.test.tsx`
+(180) and `TmRecommendationModal.test.tsx` (106) reviewed in full. Seven files
+marked deep; **69 files deep in total.** All 34 existing tests passed
+(`pnpm exec vitest run src/components/modals/Modal.test.tsx src/components/modals/TmRecommendationModal.test.tsx`);
+`pnpm lint` and `tsc -b` clean. Two new findings, both probe-confirmed in jsdom:
+**F46** (low — `ModalAsyncStates` renders its error message and a permanent
+"Loading..." together, because the loading branch tests the same derived `null`
+the error branch produces) and **F47** (low — `CycleCompleteModal` opens with
+focus already on the "+X LBS" doubling button, so Enter arms a non-idempotent TM
+write; `Modal` has an `initialFocus="container"` escape hatch for exactly this and
+only `ConfirmationDialog` uses it). F33 gained the Escape trigger above. Only this
+tracker changed; probes were created inside `src/`, run, and deleted, leaving the
+tree clean. This card authorizes commit, push and PR; operator acceptance remains a
+separate native Kanban review step.
+
+**Remaining work — 110 of 179 ledger rows are not yet `deep`** (69 are). Recounted
+directly from the File ledger at `7992747` during B07g; decremented by the seven
+rows B08a closed.
 
 **Correction:** every earlier card in this document quoted a 134-row ledger
 (e.g. "95 of 134", "39 are"). That total was wrong — the File ledger has always
@@ -55,7 +63,7 @@ correct; only the remaining-work totals were not.
 | Area | Rows left | Shape of the work |
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
-| B08 | 54 (52 `reported`, 1 `partial`, 1 pending) | Largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row still needs bounded verification. |
+| B08 | 47 (45 `reported`, 1 `partial`, 1 pending) | **Open (B08a done).** Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08b remaining modals + `use-confirmation`, B08c workout logging (`SetRow`, `CrossBlockLog`, `SessionBar`, `SaveFailureBanner`, `AmrapTargets`), B08d accessory (`AccessoryLog`, `AccessoryPicker`), B08e `RestTimer`/`CollapsibleSection`, B08f form inputs (`Stepper`, `NotesField`, `NotesText`, `DurationInput`), B08g form display + exercise editing, B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
@@ -141,7 +149,7 @@ claimed here.
 | F30 | Medium; B07b isolated compose probe | `src/lib/calc.ts:21`, `248–252`, `477–480`; `src/lib/workout-compose.ts:73–75`; `src/screens/Settings.tsx:670–690` | `BBS_PERCENTAGES[4]` is `null`, so `calcBbsSets(tm, 4)` returns `[]`. With `supplementalTemplate: 'bbs'` and `deloadSupplemental: 'deload'`, week 4 composes **0** supplemental sets — byte-identical to `'skip'` — while every other template composes 5. `getSupplementalLabel` also returns `null`, so nothing on screen explains the absence. The settings copy promises "run it at deload %", and the same `effectiveSupplementalWeek(4, 'deload') === 4` is what `Workout.tsx:220` feeds the cross-block plan. A user who picked BBS and deliberately chose the *keep-it* deload mode silently gets the *drop-it* one. | Decide BBS's deload semantics and make the three modes total for every template: either give week 4 a BBS percentage (e.g. `0.50`) so `'deload'` means what it says, or have `'deload'` fall back to `'skip'` explicitly and say so in the UI. Cover `deloadSupplemental: 'deload'` in `workout-compose.test.ts` — that mode has no test at all today. |
 | F31 | Low; B07b isolated compose probe | `src/lib/workout-compose.ts:41–57`; `src/db/schema.ts:47–56`, `104`; `src/components/modals/LiftSetupModal.tsx:90–93`; `src/screens/Workout.tsx:121`, `224–241` | Logged cross sets carry only `liftId` (the movement), never a block identity, so `composeCrossSets` matches them to *every* block with that `movementLiftId`. Two blocks on the same movement (plans 3×210 and 3×150) plus a single logged set at 999 compose to `[210, 999, 999, 150, 999, 999]`: one logged set marks set 1 of both blocks done and overrides the remainder of both. `liftHistoryName` (`Workout.tsx:121`) picks whichever block `.find` hits first. `LiftSetupModal` prevents duplicates by filtering the picker, but `liftSupplementals` has only `idx_liftSupplementals_liftId` — no unique index, unlike `idx_assistanceDefaults_lift_section` — so an imported backup (see F08's weak envelope) restores duplicates verbatim. | Add `CREATE UNIQUE INDEX IF NOT EXISTS idx_liftSupplementals_lift_movement ON liftSupplementals(liftId, movementLiftId);` so the UI rule becomes a storage invariant, and reconcile duplicates on import. If per-movement uniqueness is ever meant to be relaxed, cross sets need a block id instead. Add a duplicate-movement case to `workout-compose.test.ts`. |
 | F32 | Low; B07b source trace, probe-confirmed compose behavior | `src/lib/workout-compose.ts:45`, `85–88`; `src/screens/Workout.tsx:220–223`, `228–230` | Logged **self**-supplemental sets survive their plan disappearing — `extraFsl` restores them even when `effectiveSupplementalWeek` returns `null` (probe: skip mode still composes `1@135, 2@135`). Logged **cross** sets have no such path: `composeCrossSets` is a `flatMap` over the plan blocks, so with no block there is no output. Removing a cross block in `LiftSetupModal` mid-session, or switching `deloadSupplemental` to `skip` during a week-4 session, makes already-logged cross work vanish from the Workout screen while its rows stay in the DB and keep counting toward History, PRs and Stats (F22). | Make the two tails symmetric: append logged cross sets whose `liftId` matches no plan block, tagged as unplanned, or state explicitly that cross work is plan-owned and delete/annotate the rows when its block goes away. Cover "logged cross sets with no matching block" in `workout-compose.test.ts`. |
-| F33 | High; B07c concurrent-call probe against real SQLite | `src/screens/Workout.tsx:501-509`, `512-552`; `src/lib/cycle.ts:108-136`; `src/components/modals/TmRecommendationModal.tsx:48-53`; `src/components/modals/AccessoryTmModal.tsx:52-60` | The post-session modal callbacks are the one finishing path outside `runFinishing`, and neither modal disables its ACCEPT button while its handler is awaiting. `handleTmRecommendationAccept` awaits `setTm` *before* clearing `tmRecommendation`, so a second tap re-enters with `rec` still non-null; `handleAccessoryTmAccept` never clears `pendingFinish` at all. Both then call `proceedAfterSession` → `advanceCycleIfComplete` concurrently. `advanceCycleIfComplete` reads the cycle, tests `weekComplete`, and only afterwards opens its transaction, so both calls pass the guard: probe leaves **two cycle rows both numbered 2** (`[{id:1,n:1,end:1},{id:2,n:2},{id:3,n:2}]`) plus a duplicate TM row (`200,205,205`). `db.cycles.orderBy('number').last()` then picks one arbitrarily and the other cycle is unreachable but permanent — cycle numbering, History grouping and every `where('cycleId')` query are wrong from then on. The awaited/sequential case is genuinely idempotent (probe + `cycle.test.ts:325`), so only the concurrent one breaks. | Single-flight the whole post-session chain: extend `runFinishing` (or an equivalent guard) across the accessory-TM and TM-recommendation callbacks, clear `tmRecommendation`/`pendingFinish` before the first await, and disable modal buttons while their handler is in flight. Independently, make `advanceCycleIfComplete` self-guarding — re-read the cycle inside the transaction and abort when `endDate` is already set or a cycle with `number + 1` exists, so a second caller cannot duplicate it. Note this cannot rely on `db.transaction` for isolation while F05/F06 stand. Add a concurrent-call test to `cycle.test.ts`, which has none. |
+| F33 | High; B07c concurrent-call probe against real SQLite | `src/screens/Workout.tsx:501-509`, `512-552`; `src/lib/cycle.ts:108-136`; `src/components/modals/TmRecommendationModal.tsx:48-53`; `src/components/modals/AccessoryTmModal.tsx:52-60` | The post-session modal callbacks are the one finishing path outside `runFinishing`, and neither modal disables its ACCEPT button while its handler is awaiting. `handleTmRecommendationAccept` awaits `setTm` *before* clearing `tmRecommendation`, so a second tap re-enters with `rec` still non-null; `handleAccessoryTmAccept` never clears `pendingFinish` at all. Both then call `proceedAfterSession` → `advanceCycleIfComplete` concurrently. `advanceCycleIfComplete` reads the cycle, tests `weekComplete`, and only afterwards opens its transaction, so both calls pass the guard: probe leaves **two cycle rows both numbered 2** (`[{id:1,n:1,end:1},{id:2,n:2},{id:3,n:2}]`) plus a duplicate TM row (`200,205,205`). `db.cycles.orderBy('number').last()` then picks one arbitrarily and the other cycle is unreachable but permanent — cycle numbering, History grouping and every `where('cycleId')` query are wrong from then on. The awaited/sequential case is genuinely idempotent (probe + `cycle.test.ts:325`), so only the concurrent one breaks. **B08a adds a second, cheaper trigger:** `Modal` owns Escape, stops its propagation and calls `onClose` unconditionally (`Modal.tsx:102-107`), so the dialog's own buttons cannot gate it. Probe P3 — tap UPDATE TM, press Escape while `onAccept` is still awaiting — records `accept:start → dismiss → accept:end` with both callbacks fired once, so `handleTmRecommendationDismiss` enters `proceedAfterSession` while the accept's own call is still pending. One tap plus one keypress reaches the same duplicate-cycle state as the double tap. `AccessoryTmModal`'s UPDATE is likewise live throughout: three taps → three `onAccept` calls, `disabled=false` (its `disabled` only covers the empty selection). | Single-flight the whole post-session chain: extend `runFinishing` (or an equivalent guard) across the accessory-TM and TM-recommendation callbacks, clear `tmRecommendation`/`pendingFinish` before the first await, and disable modal buttons while their handler is in flight. Independently, make `advanceCycleIfComplete` self-guarding — re-read the cycle inside the transaction and abort when `endDate` is already set or a cycle with `number + 1` exists, so a second caller cannot duplicate it. Note this cannot rely on `db.transaction` for isolation while F05/F06 stand. Add a concurrent-call test to `cycle.test.ts`, which has none. **Guard location settled in B08a:** put it in `Modal` as a `busy?: boolean` prop that suppresses Escape and `← BACK`, with each call site passing the same flag to its buttons' `disabled` — a per-call-site guard cannot close the Escape path. |
 | F34 | Medium; B07c staggered-call probe against real SQLite | `src/lib/cycle.ts:167-169`, `187-204`; `src/components/modals/CycleCompleteModal.tsx:48-53`, `66-71`; `src/screens/Workout.tsx:634-641`; `src/screens/Settings.tsx:1040-1043` | `CycleCompleteModal` fires `onDoubleIncrement`/`onDeload` as un-awaited `void` callbacks and never disables the buttons, and neither `applyCycleDoubling` nor `deloadTms` is idempotent — both read the latest TM and append a new row. A second tap after the first read settles compounds: TM **205 → 210 → 215** for one "+10 LBS" button, and **200 → 180 → 160** for one "CUT ALL TMS −10%". Simultaneous taps instead append a duplicate row at the same weight (`205,210,210` / `200,180,180`), which is silent but leaves two TMs at the same instant (see F36). The returned summary even renders the compounded 215, so the readout confirms a change the user asked for once. `applyCycleDoubling` also folds back **by lift name** (`t.liftName === liftName`) while `lifts.name` has no UNIQUE constraint: with two lifts named "Bench", accepting on one rewrites the other's summary row to the wrong weight (`300 → 210`; probe P8). The DB write itself is by `liftId` and stays correct. | Disable the modal's buttons for the duration of their handler and await the callbacks; make the two writes idempotent or guard them behind a single-flight token. Key the summary fold-back on `liftId` — `newTms` should carry the id alongside the name. Add `applyCycleDoubling` and `deloadTms` double-invocation tests; `cycle.test.ts` never imports `applyCycleDoubling` at all. |
 | F35 | Medium; B07c real-SQLite probe (P5) | `src/lib/cycle.ts:119-121`, `234-242`; `src/screens/Settings.tsx:415-442`; `src/screens/Today.tsx:58`, `83-87` | Retiring the sessions that a cycle shrink orphans lives only in `Settings.handleCycleShapeChange:430-434`, not in `advanceCycleIfComplete`. With `hasDeloadWeek: false` reached by any other route, a live week-4 session is stepped over: probe seeds weeks 1–3 complete plus one `pending` week-4 row with a logged set, calls `getNextSessionAdvancingIfDone`, and gets cycle 2 / week 1 while the week-4 row stays `pending` in cycle 1 **with its sets intact**. Today only queries `next.cycleId` so it can never be resumed or discarded; History drops non-`completed` rows so it is never displayed; `RecordsPanel` filters nothing but `liftId`, so its sets keep counting toward the all-time record (F22). The route around the Settings handler is a backup import, whose settings envelope is already weak (F03, F08). | Move the "weeks past the new final week no longer exist" reconcile into `advanceCycleIfComplete` (or a shared helper both callers use) so the invariant holds however `hasDeloadWeek` changes, and decide whether the orphaned sets are deleted or retained as `skipped` history — consistently with whatever F22 settles for record ownership. Cover "advance with a stranded week-4 pending row under a 3-week setting" in `cycle.test.ts`; the existing 3-week block only tests clean cycles. |
 | F36 | Low; B07c probe (P7); reconcile in B12 | `src/lib/training-max.ts:36-39`, `61-75` | The two "current training max" helpers in the same module break ties differently. `getCurrentTm` uses `sortBy('setAt')` and takes the last element — `Array.prototype.sort` is stable, so equal timestamps keep insertion order and the **newest** row wins. `getAllCurrentTms` compares with strict `>` over `toArray()` order, so on a tie the **first** row wins. Probe: two rows for one lift at the same instant, weights 200 then 210 → `getCurrentTm` returns 210, `getAllCurrentTms` returns 200. The table is append-only with no ordering key besides `setAt`, and F33/F34's concurrent paths are exactly what produce same-instant rows; a restored backup (F08) can carry them verbatim. | Give both helpers one tie-break — prefer the higher row id at equal `setAt`, or store a monotonic sequence — and cover a tie in `training-max.test.ts`. `src/lib/training-max.ts` stays `deep` (B01b); this is a cross-file reconcile for B12, not a reopened row. |
@@ -154,6 +162,8 @@ claimed here.
 | F43 | Medium; B07g real-SQLite probe | `src/lib/lift.ts:27-28`; `src/lib/session.ts:17-26`; `src/lib/pr.ts:116-119`; `src/components/stats/RecordsPanel.tsx:65` | Two code paths delete a pending session and only one is a complete cascade. `discardPendingSession` deletes `sets`, `accessorySets`, `accessoryNotes` **and** the row; `archiveLift` deletes only the row. Probe: archiving a lift whose pending session held a main set, a cross set and an accessory set leaves all three behind with a `sessionId` that no longer resolves. `cycle.getRecentWorkingSets` survives this because it checks `sessionById.has(s.sessionId)` (probe: seed window `[]`), but `detectPRs` and `RecordsPanel` query `db.sets.where('liftId')` with **no session join at all**. Probe T1b: the archived day carried a 500×5 cross block for Squat; once Squat has any session of its own, `detectPRs(squat, 405, 5)` reports `prevBestE1Rm: 582.9` — a permanent record derived entirely from a set no screen can display and no deletion path can reach. | Route `archiveLift`'s pending cleanup through `discardPendingSession` rather than re-implementing it, so there is one definition of "discard an attempt". Add the session-existence join to the two readers that lack it (folds into F22/F38's shared-reader fix). Add a child-row assertion to `lift.test.ts:39`, which today checks only that the session row is gone. |
 | F44 | Low; B07g real-SQLite probe | `src/lib/lift.ts:58-70`; `src/screens/Setup.tsx:109-110`, `226`; `src/App.tsx:39-40`, `103` | `deleteLift` removes the lift, its training maxes and its cross blocks in both directions, but **not** its sessions, sets, accessory sets/notes or `assistanceDefaults`. Probe: after deleting a lift with one completed session, `lifts` and `trainingMaxes` are empty while the session, its set and the default-pick row all remain, referencing an id that no longer exists. The doc comment scopes the function to "pre-history use (onboarding roster edits)", but nothing enforces that: `/setup` is a plain route (`App.tsx:103`) and the redirect at `:39-40` only *forces* entry when no training max exists — it does not block entry when one does. A user who navigates back to `/setup` with a full history can press "remove". `getCycleDoublingCandidates` already carries an `if (!lift) continue` guard for exactly this orphan shape. | Either complete the cascade (delete the lift's sessions and their child rows, plus its `assistanceDefaults`) or enforce the contract — refuse when the lift has any session and tell the user to archive instead. Guard the `/setup` route against re-entry once training maxes exist. `deleteLift` is not imported by `lift.test.ts` at all; add coverage for both the no-history and has-history cases. |
 | F45 | Low; B07g real-SQLite probe | `src/lib/cleanup.ts:27-35`; `src/screens/Settings.tsx:284-303` | `buildCleanupPlan` treats "has a surviving logged `accessorySet`" as the only evidence an exercise is in use, so the CLEANUP sweep archives every never-logged exercise — including one the user has just configured as a lift's assistance default and given an accessory training max. Probe T4: Dips with a TM and a live `push` default → `exercisesToArchive: [1]`; after archiving, `getAssistanceDefaults` returns `{}` and Today's push slot is empty. The toast reports only a count ("archived N exercises"), never which ones. Recovery works — the `assistanceDefaults` row is not deleted, so unarchiving restores the pick — but nothing on screen says so. | Treat a live `assistanceDefaults` reference (and arguably an existing `accessoryTrainingMax`) as evidence of use and exclude those exercises from `exercisesToArchive`. List the affected names in the confirmation dialog instead of reporting a bare count afterwards. Add an "exercise is a live default pick" case to `cleanup.test.ts`, which passes no defaults at all today. |
+| F46 | Low; B08a component probe (P1) | `src/components/modals/ModalAsyncStates.tsx:16`, `22-24`; `src/components/modals/ExerciseHistoryModal.tsx:38`; `src/components/modals/LiftHistoryModal.tsx:43` | The state ladder collapses `error` and `loading` onto the same derived value. `list()` returns `null` whenever `props.error` is set *or* the query is still in flight, and the loading branch tests `list() === null` — so an errored history sheet renders the error message **and** a permanent "Loading..." underneath it, forever. Probe: `error="Failed to load history"`, `entries=null` → rendered text `"Failed to load historyLoading..."`; with rows already fetched, `error="boom"`, `entries=[1,2]` → `"boomLoading..."` — the list is correctly withheld but the spinner text is not. The three healthy states are each correct in isolation (`"Loading..."`, the empty sentence, the list). Both history modals set `error` from a failed query, so this is the live path for every load failure in a sheet modal. | Derive one state rather than three independent predicates — `error ? 'error' : entries === null ? 'loading' : entries.length === 0 ? 'empty' : 'list'` — and render a single branch off it. `ModalAsyncStates.tsx` has **no test file at all**; add one covering all four states, the error-with-rows case included. |
+| F47 | Low on its own, medium with F34; B08a component probe (P2) | `src/components/modals/CycleCompleteModal.tsx:48-53`; `src/components/modals/Modal.tsx:46-51`, `91-92`; `src/screens/Workout.tsx:639-641` | `Modal` focuses `focusables()[0]` on open, and in `CycleCompleteModal` the first focusable is the "+X LBS" doubling button — not CONTINUE. Probe: with one doubling candidate, `document.activeElement` on open is the `+10 LBS` button, and two activations of the already-focused control fire `onDoubleIncrement` twice with identical arguments (`[[1,5],[1,5]]`). So the modal opens with a non-idempotent training-max write armed under the next Enter keypress, and F34's compounding (205 → 210 → 215) is reachable from the keyboard without the user ever aiming at the button. `Modal` already carries the fix as a documented prop — `initialFocus="container"`, "for dialogs whose first control is destructive" — and `ConfirmationDialog.tsx:20` is the only call site that uses it, so the codebase recognised the hazard for confirm dialogs and not for this one. | Pass `initialFocus="container"` on `CycleCompleteModal`, and treat "first control performs a write" as the rule for that prop rather than "first control says DELETE". This is orthogonal to F34's disable/await and does not replace it: focus placement changes who can trigger the compounding, not whether it compounds. Add a focus-placement case to a `CycleCompleteModal` test file, which does not exist. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -284,19 +294,19 @@ column as work is completed.
 | `src/components/layout/SubLabel.tsx` | B08 | reported | Area claim only |
 | `src/components/layout/Toast.tsx` | B08 | reported | Area claim only |
 | `src/components/layout/WeekBadge.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/AccessoryTmModal.tsx` | B08 | reported | Area claim only |
+| `src/components/modals/AccessoryTmModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F33 accessory arm) |
 | `src/components/modals/ConfirmationDialog.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/CycleCompleteModal.tsx` | B08 | reported | Area claim only |
+| `src/components/modals/CycleCompleteModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F34, F40, F47) |
 | `src/components/modals/ExerciseHistoryModal.test.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/ExerciseHistoryModal.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/LiftHistoryModal.test.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/LiftHistoryModal.tsx` | B08 | reported | Area claim only |
 | `src/components/modals/LiftSetupModal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/Modal.test.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/Modal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/ModalAsyncStates.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/TmRecommendationModal.test.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/TmRecommendationModal.tsx` | B08 | reported | Area claim only |
+| `src/components/modals/Modal.test.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (coverage gaps listed) |
+| `src/components/modals/Modal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (Escape path, F33 guard location) |
+| `src/components/modals/ModalAsyncStates.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F46; no test file) |
+| `src/components/modals/TmRecommendationModal.test.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (coverage gaps listed) |
+| `src/components/modals/TmRecommendationModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F33 main-lift arm) |
 | `src/components/stats/RecordsPanel.tsx` | B08 | partial | Area claim plus B06e caller-side evidence: F22/F23 confirmed at `42`, `44–47`, `52`, `55–69`, `80–85`, `100`. Still needs its own B08 row for `compact`/`liftId` props and async identity |
 | `src/components/ui/InlineConfirm.test.tsx` | B08 | reported | Area claim only |
 | `src/components/ui/InlineConfirm.tsx` | B08 | reported | Area claim only |
@@ -2273,3 +2283,124 @@ changed; the probes were deleted. Next: **B08a — `CycleCompleteModal.tsx`,
 `TmRecommendationModal.tsx` and `AccessoryTmModal.tsx` with `Modal.tsx` /
 `Modal.test.tsx` / `ModalAsyncStates.tsx` as the shared dependency**, starting from
 F33/F34/F40 and settling where the in-flight guard belongs.
+
+### 2026-09-15 — B08a: modal shell and the three post-session dialogs
+
+**Revision:** `7c6721d8a6e8896ae73b1a7daa239340ee88c289`. Application files were
+unchanged at batch start and end; the two probe files were created inside `src/`
+(vitest resolves only under the project root), run, and deleted, leaving the tree
+clean. Single agent; five implementation files and two test files deeply reviewed;
+no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/modals/Modal.tsx` | 1–196 | `86a2cd195c0cc42bc5b2b4a273fea73c6cd576b4` |
+| `src/components/modals/ModalAsyncStates.tsx` | 1–33 | `1cd97cca0ebdaa1c5bda6b5932f4e7aaf5aff14e` |
+| `src/components/modals/CycleCompleteModal.tsx` | 1–77 | `0acf448e7cdaa55684f6e5e40e2916003313610d` |
+| `src/components/modals/TmRecommendationModal.tsx` | 1–63 | `5677140e3e14bcc9aba29b17054a8f1b521d590c` |
+| `src/components/modals/AccessoryTmModal.tsx` | 1–70 | `f13d408c611b3656e97f88b2f9c8c5c86853facd` |
+| `src/components/modals/Modal.test.tsx` | 1–180 | `153785ba7b5891cf3c63c5b424834974e4fea4ee` |
+| `src/components/modals/TmRecommendationModal.test.tsx` | 1–106 | `7abe82a51e8b7f5b8016cbb5e020e823073dabff` |
+
+**Behavior and invariants traced:**
+
+- `Modal`: the two variants and where each applies, focus capture and restore
+  across mount/unmount, the `FOCUSABLE` selector and its deliberate avoidance of
+  layout-based visibility checks, Tab/Shift+Tab wrapping, the empty-dialog Tab
+  branch, Escape handling, the `labelledBy → label → title` name precedence, the
+  per-instance `titleId` counter, and the sheet header's `← BACK` control. The
+  accessible-name precedence holds at every call site: all eleven `<Modal>` usages
+  in the tree pass a `title`, and `ConfirmationDialog` supplies `label="Confirm"`
+  when its title is absent, so no dialog can render unnamed. No positive `tabindex`
+  exists anywhere in `src/`, so wrapping by DOM order equals wrapping by tab order.
+- `ModalAsyncStates`: the error → loading → empty → list ladder and its single
+  derived `list()` accessor. F46 opened — the loading branch and the error branch
+  are not mutually exclusive.
+- `CycleCompleteModal`: the `newTms` summary, the conditional STRONG CYCLE block,
+  and the three callbacks. Confirmed at the component what F34 and F40 describe at
+  the library: `onDoubleIncrement` and `onDeload` are typed as synchronous `void`
+  callbacks while both handlers in `Workout` are `async`, no button carries a
+  pending or disabled state, and the doubling button only disappears once
+  `applyCycleDoubling` has resolved and `setCycleCompleteData` has replaced the
+  summary (`cycle.ts:203` filters the accepted candidate out) — so the re-entry
+  window is exactly the await. F40's archived lift renders here as a STRONG CYCLE
+  row with no matching entry in the list above it, because `applyCycleDoubling`
+  folds back by `liftName` against `newTms`, which the archived lift never joins.
+  F47 opened on initial focus.
+- `TmRecommendationModal`: the local stepper signal, its `Math.max(45, …)` floor,
+  `aria-live` on the readout, and both action arms. `onAccept` is typed
+  `(newTm: number) => void` while `handleTmRecommendationAccept` is `async`, so the
+  component cannot await it even if it wanted to — the F33 guard cannot be built
+  from inside this component without a prop change or a `Modal`-level flag.
+- `AccessoryTmModal`: per-row opt-in state, the `disabled` on an empty selection,
+  and the filtered `onAccept` payload. The existing `disabled` covers only the
+  empty-selection case, not the in-flight case.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/modals/Modal.test.tsx src/components/modals/TmRecommendationModal.test.tsx` — 2 files, **34 tests passed**.
+- Fresh pass: `pnpm lint` (ESLint: no issues) and `pnpm exec tsc -b` (exit 0).
+- Probe P1 (`ModalAsyncStates`, jsdom render): `error="Failed to load history"`,
+  `entries=null` → rendered text `"Failed to load historyLoading..."`;
+  `error="boom"`, `entries=[1,2]` → `"boomLoading..."`. Controls: `"Loading..."`,
+  `"No sessions yet."` and `"list"` each render alone in the healthy states.
+- Probe P2 (`CycleCompleteModal` with one doubling candidate): `document.activeElement`
+  on open is the `+10 LBS` button; two activations → `onDoubleIncrement` called
+  twice with `[[1,5],[1,5]]`.
+- Probe P3 (`TmRecommendationModal`, accept gated on a manual promise): UPDATE TM
+  then Escape → `["accept:start","dismiss","accept:end"]`, `accept=1`, `dismiss=1`.
+  `AccessoryTmModal`: three taps on UPDATE → three `onAccept` calls, `disabled=false`.
+- Probe P4 (modal-to-modal focus handoff, both a batched swap and a swap across
+  separate microtasks): focus lands inside the newly opened dialog in both
+  orderings, and only one dialog is mounted after the swap. **Negative result — no
+  finding**; the unmounting modal's focus-restore does not steal focus from its
+  successor, which is the ordering the finishing sequence actually produces.
+- Not run: the full suite, and any real-SQLite check — this batch is component-level
+  and its database consequences are already recorded under F33/F34/F40.
+
+**Findings:** F46 (low, confirmed), F47 (low alone / medium with F34, confirmed).
+F33 amended with the Escape trigger and with the settled guard location; F34 and
+F40 reconfirmed at their component call sites without change to their severity.
+
+**Substantive negative conclusions:**
+
+- Both `TmRecommendationModal` and `AccessoryTmModal` seed local signals from props
+  at setup (`createSignal(props.suggestedTm)`, `createSignal(recommendations.map(…))`)
+  and are rendered under a non-keyed `<Show>`, so a *replacement* recommendation
+  arriving while the dialog is open would leave stale local state. This is currently
+  unreachable: `setTmRecommendation` is only called from the `rec` branch of
+  `afterAccessoryStep` after the previous value has been cleared, and `setAccessoryTms`
+  only fires from `completeSession`, which cannot run while a dialog blocks the
+  finishing path. Recorded as a latent hazard that any new caller would trip, not as
+  a finding.
+- `Modal`'s Escape handler calls `stopPropagation` but not `preventDefault`. The
+  comment at `Modal.tsx:99-101` justifies keydown over keyup; the missing
+  `preventDefault` does not matter, because the only native Escape default in play
+  (a number input's revert) is invisible once the dialog unmounts.
+- `AccessoryTmModal` uses a scrolling card (`max-h-[90vh] overflow-y-auto`) where
+  `Modal.tsx:19-21` argues for a sheet. Considered and rejected as a finding: the
+  card's scroll container is the only scrollable region — the dialog root is
+  `fixed inset-0` with no overflow — so the "two nested scroll regions" the comment
+  warns about does not occur.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- `ModalAsyncStates.tsx` has no test file at all; `CycleCompleteModal.tsx` and
+  `AccessoryTmModal.tsx` have none either.
+- `Modal.test.tsx` covers naming, focus placement, Tab wrapping, the empty-dialog
+  branch, focus restore and both variants, but has no case for Escape while a
+  handler is in flight, none for the trap re-querying after the focusable set
+  changes, and none for a dialog rendered with no name at all.
+- `TmRecommendationModal.test.tsx` covers the stepper and both action arms but
+  never asserts that repeated activation of UPDATE TM produces exactly one accept.
+
+**Open questions / remaining ranges:** none carried from this batch. The `busy`
+prop described in the resume card is a recommendation, not a change; F33/F34/F41
+remain open bugs.
+
+**Ledger rows updated:** seven `src/components/modals/**` rows moved
+`reported` → `deep`. B08 now has 47 rows left. **Next action: B08b —
+`LiftSetupModal.tsx`, `ConfirmationDialog.tsx`, `ExerciseHistoryModal.tsx`,
+`LiftHistoryModal.tsx`, `src/hooks/use-confirmation.ts`, with
+`ExerciseHistoryModal.test.tsx` and `LiftHistoryModal.test.tsx`** — confirming F46
+end to end through a history modal's own error path.
