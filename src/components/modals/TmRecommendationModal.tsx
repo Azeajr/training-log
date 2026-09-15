@@ -1,15 +1,19 @@
 import { createSignal } from 'solid-js'
 import Modal from './Modal'
+import { useSingleFlight } from '../../hooks/use-single-flight'
 
 interface Props {
   liftName: string
   currentTm: number
   suggestedTm: number
-  onAccept: (newTm: number) => void
-  onDismiss: () => void
+  onAccept: (newTm: number) => void | Promise<void>
+  onDismiss: () => void | Promise<void>
 }
 
 export default function TmRecommendationModal(props: Props) {
+  // Single-flight: these callbacks write training maxes, which are not
+  // idempotent, and Modal owns close paths a call site cannot gate.
+  const { busy, guard } = useSingleFlight()
   const [value, setValue] = createSignal(props.suggestedTm)
 
   return (
@@ -17,7 +21,8 @@ export default function TmRecommendationModal(props: Props) {
     <Modal
       title="TM ADJUSTMENT"
       label={`Training max adjustment for ${props.liftName}`}
-      onClose={props.onDismiss}
+      onClose={() => { void guard(props.onDismiss)() }}
+      busy={busy()}
       class="bg-surface border border-accent p-6 font-mono max-w-sm w-full"
     >
       <div>
@@ -46,14 +51,16 @@ export default function TmRecommendationModal(props: Props) {
           >+</button>
         </div>
         <button
-          onClick={() => props.onAccept(value())}
-          class="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono mb-2"
+          onClick={() => { void guard(() => props.onAccept(value()))() }}
+          disabled={busy()}
+          class="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono mb-2 disabled:opacity-40"
         >
           UPDATE TM
         </button>
         <button
-          onClick={props.onDismiss}
-          class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-accent hover:text-muted"
+          onClick={() => { void guard(props.onDismiss)() }}
+          disabled={busy()}
+          class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-accent hover:text-muted disabled:opacity-40"
         >
           KEEP CURRENT
         </button>

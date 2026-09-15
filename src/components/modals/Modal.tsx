@@ -49,6 +49,21 @@ interface Props {
    * a delete under the next Enter keypress.
    */
   initialFocus?: 'first' | 'container'
+  /**
+   * A handler owned by this dialog is in flight. Suppresses every close path
+   * Modal itself owns — Escape and "← BACK" — so the dialog cannot be dismissed
+   * into a second, concurrent run of the same work.
+   *
+   * This belongs here rather than at the call site: Modal owns Escape, stops its
+   * propagation and calls `onClose` unconditionally, so a dialog's own buttons
+   * have no way to gate it. Tapping ACCEPT and then pressing Escape while the
+   * handler awaited fired both callbacks, which is one tap and one keypress away
+   * from running a non-idempotent write twice.
+   *
+   * Call sites pass the same flag to their buttons' `disabled`; this covers only
+   * the paths Modal controls.
+   */
+  busy?: boolean
   /** Card headings are accent by default; `text` is for a neutral confirm. */
   titleTone?: 'accent' | 'text'
   /**
@@ -101,8 +116,10 @@ export default function Modal(props: Props) {
   // because focus is trapped inside it, so every keystroke passes through here.
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
+      // Still swallow the key while busy: it must not reach a native default
+      // behind the dialog either. It simply does not close.
       e.stopPropagation()
-      props.onClose()
+      if (!props.busy) props.onClose()
       return
     }
     if (e.key !== 'Tab') return
@@ -140,7 +157,8 @@ export default function Modal(props: Props) {
         <Show when={props.backButton !== false} fallback={<div class="w-14" />}>
           <button
             onClick={() => props.onClose()}
-            class="text-muted hover:text-text text-xs tracking-widest"
+            disabled={props.busy}
+            class="text-muted hover:text-text text-xs tracking-widest disabled:opacity-40"
           >
             ← BACK
           </button>
