@@ -8,62 +8,62 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07 through B11 are CLOSED; B12 is open with B12a and B12b done.**
-173 of 179 ledger rows are `deep`. Six rows remain (B12c), then the final
-reconciliation closes the review.
+**Every file in the ledger is now `deep` — all 179 rows.** Areas B01 through
+B12's per-file review is complete; `pending`, `partial`, `reported`, `stale` and
+`blocked` no longer appear anywhere in the File ledger. **What remains is B12d:
+the final reconciliation under batch rule 8**, which is not a per-file batch —
+it is the completion claim, the cross-file questions, and the findings audit.
 
-**B12 is finding a different failure mode from the earlier areas: the
-documentation is largely accurate, and where it is wrong it is wrong because a
-change was made and its description was not updated.** Three of this review's
-findings turned out to be already documented (F82, F80, F69's scope), and are
-amended rather than left implying nobody knew.
+**B12 found a different failure mode from the earlier areas.** The documentation
+is largely accurate; where it is wrong, a change was made and its description was
+not updated. Four of this review's own findings turned out to be **already
+documented** (F82, F80, F69's scope, and F52's rule as `COMMON_MISTAKES` #6) and
+have been amended rather than left implying nobody knew.
 
 - **F89 (medium)** — `ARCHITECTURE_MAP.md` has drifted from the tree: 11 of 38
-  components absent (including `Modal`), 5 of 21 `lib/` modules absent
-  (`workout-compose`, `performance`, …), `RestThresholds` described with a shape
-  and a `FAIL_NUDGE_RATIO` that do not exist, and `icon-192.png`/`icon-512.png`
-  documented in `public/` when they never existed (F70).
+  components absent (including `Modal`), 5 of 21 `lib/` modules absent,
+  `RestThresholds` described with a shape and a constant that do not exist, and
+  two PWA icons documented that never existed (F70).
 - **F90 (medium)** — PR detection was widened from AMRAP-only to every working
-  set, and **four descriptions still say otherwise**: `README.md`,
-  `RecordsPanel.tsx:71-73`'s comment, and the stale `detectAmrapPRs` name in two
-  docs (F89). The one inside the code is the one most likely to mislead.
-- **F91 (medium)** — `ROADMAP.md`'s **Security** and **Tech Debt** sections both
-  say **"No open items."** True when written, materially false now: 89 findings,
-  several of them squarely in those categories. Two mitigation bullets also
-  overstate — the *Supply chain* bullet credits `--frozen-lockfile` and
-  `pnpm audit signatures` that **F73 shows the deploy step bypasses**, and the
-  *PWA cache* bullet claims `cleanupOutdatedCaches` when the SW hand-rolls its own
-  eviction (third site of that same wrong claim).
-- **F92 (low)** — `docs/INDEX.md` says "Ten recurring failure modes"; there are
-  eleven. Its own stamp predates files it indexes.
-- **F76 widened** to `QUICK_START.md`, and **F70 widened** to `README.md`'s
-  "installable" promise.
+  set; **four descriptions still say otherwise**, including a comment inside
+  `RecordsPanel.tsx` drawing a distinction that no longer exists.
+- **F91 (medium)** — `ROADMAP.md`'s Security and Tech Debt sections both say
+  **"No open items."** Two mitigation bullets also overstate: supply chain (F73
+  bypasses all three controls credited) and `cleanupOutdatedCaches` (the SW
+  hand-rolls eviction — third site of that claim).
+- **F92, F93 (low)** — `docs/INDEX.md` miscounts `COMMON_MISTAKES` entries, and
+  **understates the repo's own verification coverage**: it reports both 2026-08-09
+  records as pending/TODO when one records a Chrome desktop runtime pass and the
+  other's table marks **all five browser legs PASS**. That record also contradicts
+  its own header.
 
-**Worth noting for the reconciliation: `README.md`'s deployment section is
-correct** — "the deployment is path-filtered … and runs the same checks before
-publishing" — so the user-facing document describes CI accurately while both
-agent-facing documents (F76) do not.
+**F79 is sharpened by B12c**: `verify-notify-hardening.js` is not untested
+scaffolding — the swe-hardening record documents a full passing run of all five
+legs against the production build. It ran, it passed, it was written up, and then
+nothing ever ran it again. Its leg A (offline hard reload renders the shell) is
+the healthy-path twin of **F65**, which is why adding a 503 leg is cheap.
 
-**Next batch: B12c — design, analysis and verification records** (6 rows):
-`AMRAP_TARGET_REPS_ANALYSIS.md`, `docs/design/plate-loading-model.md`,
-`docs/ui-consistency-review.md`, and the three `docs/verification/` logs. The
-verification records are the interesting ones: `docs/INDEX.md` describes two of
-them as "Automated evidence; runtime pass pending" and "browser legs TODO", while
-B10c found `scripts/verify-notify-hardening.js` is a complete five-leg harness
-that runs against the production build — so either the records or the index is
-behind. Then **B12d** — the final reconciliation under batch rule 8: every
-in-scope row `deep`, cross-file questions resolved or explicitly blocked, findings
-reconciled, and the deferred F36 tie-break and F82 decision.
+**Next and final batch: B12d — the reconciliation.** Under batch rule 8 it owns:
+every in-scope file `deep` at its applicable revision (now true), cross-file
+questions resolved or explicitly blocked, findings reconciled, and appropriate
+final integration checks. Specific deferred items it must settle: **F36** (the
+`getCurrentTm` / `getAllCurrentTms` tie-break, explicitly deferred to B12),
+**F82** (wire up or delete `demo-seed.json`), and the standing distinction B12a
+surfaced — a finding whose state is documented and deliberate is a different kind
+of open item from one nobody knew about, and the two should not be closed the same
+way.
 
-Latest run: **B12b complete** — `README.md` (105), `ROADMAP.md` (815),
-`ENGINEERING_PASSES.md` (366), `docs/INDEX.md` (55) and `docs/archive/README.md`
-(11) reviewed in full. Five files marked deep; **173 files deep in total.**
-`pnpm lint` and `tsc -b` clean (exit 0). Three new findings (F90, F91, F92); F70
-widened. `ENGINEERING_PASSES.md` and `docs/archive/README.md` are accurate. Only
+Latest run: **B12c complete** — `AMRAP_TARGET_REPS_ANALYSIS.md` (173),
+`docs/design/plate-loading-model.md` (95), `docs/ui-consistency-review.md` (203)
+and the three `docs/verification/` records (47, 91, 73) reviewed in full. Six
+files marked deep; **179 files deep in total — the ledger is complete.**
+`pnpm lint` and `tsc -b` clean (exit 0). One new finding (F93); F79 sharpened.
+`AMRAP_TARGET_REPS_ANALYSIS.md`, `plate-loading-model.md`,
+`ui-consistency-review.md` and the deload-toggle record are all accurate. Only
 this tracker changed; the tree is clean. This card authorizes commit, push and PR;
 operator acceptance remains a separate native Kanban review step.
 
-**Remaining work — 6 of 179 ledger rows are not yet `deep`** (173 are). Recounted
+**Remaining work — 0 of 179 ledger rows are not yet `deep`** (**all 179 are**). The File ledger is complete; what remains is B12d's reconciliation, not further per-file review. Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -79,7 +79,7 @@ correct; only the remaining-work totals were not.
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
-| B12 | 6 pending | **Open (B12a, B12b done).** Remaining slices: B12c design/analysis/verification docs (6 rows), B12d the final reconciliation. |
+| B12 | **0 rows left** | **All 17 rows `deep` (B12a–B12c).** B12d remains: the final reconciliation under batch rule 8 — not a per-file batch. |
 | B11 | **0 — closed** | All 11 rows `deep` across B11a–B11c. F85–F88 opened; F78 amended. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
@@ -209,7 +209,7 @@ claimed here.
 | F76 | Low (documentation); B10b cross-check, reconcile in B12 | `CLAUDE.md:17-19`; `.github/workflows/deploy.yml:39`; `package.json:17` | **The claim appears in two documents.** `CLAUDE.md:17-19` states: "The workflow is path-filtered and runs **no lint and no tests** — `pnpm build && pnpm lint && pnpm test` locally is the only regression gate." The path-filtering half is correct; the rest is not. `deploy.yml:39` runs `pnpm run check:ci`, which is `pnpm lint && pnpm test:coverage && pnpm build`, and it runs **before** the deploy step, so a failure blocks the deploy. The deploy path is in fact the stricter gate of the two — it is the only place `test:coverage` and its 80 % thresholds run. The doc understates the automation, which misdirects effort rather than creating risk, but it is the sentence a contributor (or an agent) reads to decide what CI will catch. | Correct the sentence to describe what the workflow does today, and note that `test:coverage` (not plain `test`) is what gates deploys — which is also why F69's `include` gap matters at the gate rather than only locally. `QUICK_START.md:81-82` repeats it: "CI never runs lint or tests, so `pnpm build && pnpm lint && pnpm test` locally is the only regression gate." Both need the same correction. Fold into B12's documentation reconciliation. |
 | F77 | Low; B10c `eslint --print-config` | `eslint.config.js:9`, `19`, `31`; `scripts/*.js`; `stryker.config.mjs` | Every config block in `eslint.config.js` is scoped to `**/*.{ts,tsx}` or narrower, so **no rule applies to a `.js` or `.mjs` file anywhere in the repo**. Verified: `eslint --print-config scripts/debug-browser.js` resolves **0 rules**, against **92** for `src/lib/calc.ts`. `pnpm lint` therefore walks `scripts/debug-browser.js` (157 lines), `scripts/verify-notify-hardening.js` (256), `stryker.config.mjs` and `eslint.config.js` itself and checks nothing in them. With F71 — no tsconfig project covers `scripts/**` either — those 413 lines of Playwright-driving Node are checked by no tool at all. | Add a config block for `['**/*.{js,mjs}']` extending `js.configs.recommended` with `globals.node`, and widen `tsconfig.node.json` per F71 so the same files get type-checked in JSDoc-less mode or are explicitly excluded on purpose. |
 | F78 | Medium; B10c config cross-check | `playwright.config.ts:38-42`; `vite.config.ts:43-62`; `tests/e2e/` | The Playwright suite starts `pnpm dev` and points at `http://localhost:5173`, so the E2E tests run against the **development server**. `VitePWA` is configured with no `devOptions`, which means the service worker is **not registered in dev at all** — and the dev server serves unbundled modules with none of `public/_headers` applied. So the app's only automated integration suite exercises neither the service worker, nor the production bundle, nor the production CSP and security headers. That is exactly the surface F65 and F66 live on: a cache-poisoning bug in the navigation handler is invisible to every automated test the repo has, by construction rather than by omission. | Point the E2E `webServer` at `vite preview` (port 5175, which `verify-notify-hardening.js` already uses) after a build, so the specs run against the real artifact — or add `devOptions: { enabled: true }` to `VitePWA` if a dev-server suite is wanted as well. Fixing this is a precondition for the F65 regression test, which cannot be written against the current setup. **B11a sharpens the cost:** the switch is not a one-line `webServer` change. Every test depends on `helpers.freshStart`, which `waitForFunction`s on `window.__e2eResetDb` — and `sqlite-client.ts:93` defines that hook inside `if (import.meta.env.DEV)`. Against a production build it never appears and every test hangs. The suite is structurally bound to the dev server by its reset strategy, which is exactly why `verify-notify-hardening.js` resets with a fresh browser context per leg instead and says so in its own header. Either give the E2E suite the same context-per-test reset, or expose a reset path that survives a production build. |
-| F79 | Medium; B10c script inspection | `scripts/verify-notify-hardening.js:1-256`; `package.json:6-20`; `.github/workflows/`; `docs/verification/2026-08-09-swe-hardening.md:49`, `68` | A complete, **CI-ready** service-worker verification harness exists and is invoked by nothing. `verify-notify-hardening.js` spawns `vite preview` against the **production build**, drives the real app in headless Chromium with the **real service worker**, runs five independent legs in fresh browser contexts (A: offline hard reload at `/` and `/workout` renders the shell; B/C/D/E: the page-vs-SW notification matrix), stubs `registration.showNotification` to count fires, prints PASS/FAIL per leg and **exits 1 on failure**. It has no `package.json` script entry and appears in no workflow — it is reachable only by typing `node scripts/verify-notify-hardening.js`, as its own documentation says. Leg A is one 503 away from being F65's regression test. Same family as F74: the capability was built, then left dormant. | Add a `verify:sw` script and a CI job (it needs `pnpm build` first and a Chromium install, so a separate job like the Playwright one F74 asks for). Extend leg A with a poisoned-shell case — serve a 503 navigation, then go offline and assert the shell still renders — which converts F65 from a finding into a guarded regression. |
+| F79 | Medium; B10c script inspection | `scripts/verify-notify-hardening.js:1-256`; `package.json:6-20`; `.github/workflows/`; `docs/verification/2026-08-09-swe-hardening.md:49`, `68` | A complete, **CI-ready** service-worker verification harness exists and is invoked by nothing. `verify-notify-hardening.js` spawns `vite preview` against the **production build**, drives the real app in headless Chromium with the **real service worker**, runs five independent legs in fresh browser contexts (A: offline hard reload at `/` and `/workout` renders the shell; B/C/D/E: the page-vs-SW notification matrix), stubs `registration.showNotification` to count fires, prints PASS/FAIL per leg and **exits 1 on failure**. It has no `package.json` script entry and appears in no workflow — it is reachable only by typing `node scripts/verify-notify-hardening.js`, as its own documentation says. Leg A is one 503 away from being F65's regression test. Same family as F74: the capability was built, then left dormant. **B12c confirms it works:** `docs/verification/2026-08-09-swe-hardening.md` records a full run with all five legs passing, plus the harness caveats (stubbed permission getter, wrapped `showNotification`, shadowed `document.hidden`). So this is not untested scaffolding — it ran, it passed, it was written up, and then nothing ever ran it again. Leg **A** ("offline hard reload at `/` and `/workout` renders the shell") passing is also exactly consistent with **F65**: it exercises the healthy path, and F65 is the poisoned one, which is why adding a 503 leg is cheap. | Add a `verify:sw` script and a CI job (it needs `pnpm build` first and a Chromium install, so a separate job like the Playwright one F74 asks for). Extend leg A with a poisoned-shell case — serve a 503 navigation, then go offline and assert the shell still renders — which converts F65 from a finding into a guarded regression. |
 | F80 | Low; B10c script inspection | `scripts/debug-browser.js:7`, `96-102` | The debug script's headline feature does nothing. It prints `'[debug] wiping IndexedDB (TrainingLog)...'` and calls `indexedDB.deleteDatabase('TrainingLog')`, but **the app uses no IndexedDB** — `grep -rn indexedDB src/` returns nothing outside tests; persistence is OPFS via SQLite WASM (the SAH pool VFS) plus `localStorage` for the workout store and the session-gap log. Deleting a database that never existed resolves successfully and silently, so the default `node scripts/debug-browser.js` — documented as "fresh run (clears DB)" and "a true first-run experience" — leaves every byte of real state in place, and the script then tries to walk the setup wizard that a returning user never sees. The name `TrainingLog` suggests this was correct before the storage layer moved. **Amended in B12a:** the no-op is already known — `QUICK_START.md:36-38` states it plainly ("deletes an IndexedDB named `TrainingLog`, unused since the SQLite migration — it does **not** clear OPFS") and points readers at `pnpm test:e2e` for a genuine first-run state. So this is a documented wart, not an unnoticed bug. What remains is that the script's **own header still claims the opposite** ("Optionally wipes IndexedDB so you get a true first-run experience", and a `--no-wipe` flag that changes nothing), and the script header is what a reader hits first. | Wipe what the app actually uses: `navigator.storage.getDirectory()` + remove the OPFS entries, and `localStorage.clear()`. Until then the `--no-wipe` flag and the default behave identically, so the flag should either work or go. |
 | F81 | Medium; B10d asset inspection | `public/favicon.svg`; `public/icons.svg`; `index.html:14`; `src/index.css:3-18` | **The app's icon set is scaffold leftovers from another project.** `public/icons.svg` is a social-link sprite — its symbols are `bluesky-icon`, `discord-icon`, `documentation-icon`, `github-icon`, `social-icon` and `x-icon` — for links this app does not have. `public/favicon.svg` (9.3 KB) is drawn entirely in purple and blue (`#863bff`, `#7e14ff`, `#47bfff`, `#ede6ff`), which is unrelated to the app's own design tokens: `--color-accent: #4ade80` on `--color-bg: #000000`. It is the icon a user sees in the browser tab and, per `index.html:14`, the only icon reference the document makes. Read with **F70** (the manifest names `icon-192.png` and `icon-512.png`, neither of which exists) and **F72** (`icons.svg` is referenced by nothing; `svg` is not precached), the whole icon story is: no PWA icons, no `apple-touch-icon`, a foreign favicon, and an orphaned template sprite shipping to production. | Draw an icon set for the app and wire it up once: an SVG favicon in the app's own palette, `icon-192.png`/`icon-512.png` for the manifest, and an `apple-touch-icon` link. Delete `icons.svg`. This is the change F70 and F72 are both waiting on — they are not three separate fixes but one asset task, which is why none of them has been done. |
 | F82 | Low; B10d asset inspection | `public/demo-seed.json` | A 44.8 KB export-format JSON that **no code reads** — `grep -rn 'demo-seed' src/ tests/ scripts/` returns nothing — and that `public/` therefore ships verbatim to `dist/`, publicly fetchable at `/demo-seed.json`. It is not a fixture: it carries the full import envelope (`exportedAt: 2026-05-08T18:04:36.896Z`, `version: 1`) and real training history — 4 lifts (OHP/Deadlift/Bench/Squat), 18 training maxes, 2 cycles, 23 sessions, **184 sets**, 18 exercises, 25 accessory sets and a settings row. **Amended in B12a:** this is not an oversight. `.claude/COMMON_MISTAKES.md` #7 documents the exact state — "Demo data is a static asset, not an auto-seed … `public/demo-seed.json` is bundled but nothing reads it; the `VITE_DEMO` declaration was removed" — and records the intended use: import it by hand through Settings → IMPORT JSON. `ARCHITECTURE_MAP.md` says the same. So the file has a documented purpose and a recorded decision behind it; what remains is that the purpose is served by a 45 KB published copy of the author's real training log, which nothing in the app fetches. | Decide which it is: wire it to an actual demo/seed path, move it out of `public/` into a fixture directory if it is test data, or delete it. Note that the tracker scoped this file in deliberately ("Tracked `public/demo-seed.json` is in scope"), so the decision belongs in B12's reconciliation if it is not made sooner. |
@@ -223,6 +223,7 @@ claimed here.
 | F90 | Medium; B12b code-vs-doc diff | `README.md` (Features → AMRAP tracking); `src/components/stats/RecordsPanel.tsx:71-73`; `src/lib/pr.ts:113-133` | **PR detection was widened from AMRAP-only to every working set, and four descriptions still say otherwise.** `detectPRs` builds its baseline from the lift's own non-cross sets **plus** cross sets attributed to it, each filtered by `isWorkingPerformance` — a hard main, joker or supplemental set all count. But `README.md` tells users an e1RM PR is "higher Wathan estimated 1RM than any prior **AMRAP**", and `RecordsPanel.tsx:71-73` carries the comment "This is intentionally broader than the **AMRAP-only PR toast**" — describing a distinction between the panel and the toast that no longer exists, since both now compute over the same working-set population. F89 records the other half of the same drift: the function is still called `detectAmrapPRs` in `ARCHITECTURE_MAP.md` and `QUICK_START.md:62`. One widening, four stale descriptions, and the one inside the code is the one most likely to mislead the next person editing `RecordsPanel`. | Correct all four against `pr.ts`. Note that F38 is the substantive version of this question — three readers of "what counts as a record" applying three different filters — so the doc fix and F38's shared-query fix should land together, or the docs will describe the pre-F38 behaviour again. |
 | F91 | Medium; B12b relevance check | `ROADMAP.md:728-762` (Security), `:765-767` (Tech Debt) | Both sections declare **"No open items."** That was true when written and is now materially false: this review has opened **89 findings**, of which several sit squarely in those two categories — F65 (high: one 503 poisons the offline shell permanently), F73 (supply chain), F41 and F08 (missing storage invariants, weak import envelope) for Security; F69, F71, F74, F77, F79, F85 and F87 (a blind coverage gate, directories no tool checks, two dormant suites, a failing E2E suite, a stub that diverges from the code it stands in for) for Tech Debt. Two specific mitigation claims also **overstate what is in place**: the *Supply chain* bullet credits least-privilege, `--frozen-lockfile` and `pnpm audit signatures` — and **F73 shows the deploy step's `pnpm dlx wrangler` bypasses all three**, running an unpinned executable with a production token; and the *PWA cache* bullet claims `cleanupOutdatedCaches: true` when the service worker imports no workbox runtime and hand-rolls its own `precache-`-prefixed eviction instead (the same wrong claim appears at `vite.config.ts:48` and in `ARCHITECTURE_MAP.md`'s PWA pattern — three sites, one origin). | Feed this review's findings back into both sections as part of B12d rather than leaving "No open items" standing, and correct the two mitigation bullets to describe what the code does. The CSP bullet, the `assertIdent` guard, the persisted-store allowlist and the `__e2eResetDb` DEV gate were all checked and are accurate — the section is well-written, just out of date. |
 | F92 | Low; B12b count check | `docs/INDEX.md:12`, `:55` | `docs/INDEX.md` describes `.claude/COMMON_MISTAKES.md` as **"Ten recurring failure modes"**; there are **eleven** (#11, the service-worker `setTimeout` entry, was added without updating the index). Its own footer reads `**Last Updated**: 2026-07-29` while the file indexes two verification documents dated 2026-08-09 and describes `ui-consistency-review.md` as resolved on 2026-08-08 — so the index was edited after its own stamp. Both are small, but this is the file whose entire job is to describe the other files accurately. | Correct the count, refresh the stamp, and consider dropping the count from the description so it cannot drift again. Checked and correct in the same file: the "Seven self-contained agent prompts" for `ENGINEERING_PASSES.md` (passes 1–7), and the ROADMAP description ("changelog, planned features, security posture, tech debt") which matches its four sections. |
+| F93 | Low; B12c record check | `docs/INDEX.md:41-45`; `docs/verification/2026-08-09-swe-hardening.md:4-6` | **The state of the two 2026-08-09 verification records is misreported in three places, all in the stale-pessimistic direction.** `docs/INDEX.md` describes `2026-08-09-rest-timer-notifications.md` as "Automated evidence; runtime pass **pending**" — the record's own verdict is "PASS — automated tests **+ Chrome desktop runtime pass**", naming which legs remain unverified. It describes `2026-08-09-swe-hardening.md` as "Automated evidence; **browser legs TODO**" — that record's runtime table marks **all five legs A–E as PASS**, executed by `scripts/verify-notify-hardening.js` against the production build. And the swe-hardening record **contradicts itself**: its header still reads "Runtime legs requiring a browser … listed as TODO below" directly above the table that marks them all passed. The header and the index were both written before the legs ran and never updated after. The effect is that the repo understates its own verification coverage — a reader deciding whether the offline shell has ever been checked in a browser is told no, when the answer is yes and the harness is committed. | Correct the record's header to match its table, and correct both index entries. Worth doing alongside F79 (wiring that harness into CI), since the same reader question — "has this actually been verified?" — is what both findings are about. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -306,18 +307,18 @@ column as work is completed.
 | `.github/workflows/ci.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F74, F75) |
 | `.github/workflows/deploy.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F73, F74, F75, F76) |
 | `.gitignore` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F83) |
-| `AMRAP_TARGET_REPS_ANALYSIS.md` | B12 | pending | — |
+| `AMRAP_TARGET_REPS_ANALYSIS.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (current and accurate) |
 | `CLAUDE.md` | B12 | deep | B12a — agent-facing documentation (1/4); evidence below (F76; stale Last Updated) |
 | `ENGINEERING_PASSES.md` | B12 | deep | B12b — project documentation (2/4); evidence below (current; lib listing illustrative not exhaustive) |
 | `README.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F90; deploy section correct where F76 docs are wrong) |
 | `ROADMAP.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F91) |
 | `docs/INDEX.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F92) |
 | `docs/archive/README.md` | B12 | deep | B12b — project documentation (2/4); evidence below (accurate — archive is empty) |
-| `docs/design/plate-loading-model.md` | B12 | pending | — |
-| `docs/ui-consistency-review.md` | B12 | pending | — |
-| `docs/verification/2026-06-27-deload-toggle.md` | B12 | pending | — |
-| `docs/verification/2026-08-09-rest-timer-notifications.md` | B12 | pending | — |
-| `docs/verification/2026-08-09-swe-hardening.md` | B12 | pending | — |
+| `docs/design/plate-loading-model.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (accurate rationale record) |
+| `docs/ui-consistency-review.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (nine findings, resolved as described) |
+| `docs/verification/2026-06-27-deload-toggle.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (accurate) |
+| `docs/verification/2026-08-09-rest-timer-notifications.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (accurate; carries a historical banner — F93 is the index entry) |
+| `docs/verification/2026-08-09-swe-hardening.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (F93 — header contradicts its own table) |
 | `eslint.config.js` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (F77; amends F71) |
 | `index.html` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F70 apple-touch-icon; CSP meta checked) |
 | `package.json` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (check:ci composition; no wrangler dep) |
@@ -4385,3 +4386,89 @@ is behind.
 left. **Next action: B12c — `AMRAP_TARGET_REPS_ANALYSIS.md`,
 `docs/design/plate-loading-model.md`, `docs/ui-consistency-review.md` and the three
 `docs/verification/` records.**
+
+### 2026-09-15 — B12c: design, analysis and verification records
+
+**Revision:** `088b23e` (B12b). No application files were touched; no probes.
+Single agent; six documents deeply reviewed. **This completes the File ledger:
+all 179 rows are `deep`.**
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `AMRAP_TARGET_REPS_ANALYSIS.md` | 1–173 | `456f8409b656b8e27699c1aa5e4dc63f5428b9a7` |
+| `docs/design/plate-loading-model.md` | 1–95 | `e38da640dad553534a2f4f8e524099926f996141` |
+| `docs/ui-consistency-review.md` | 1–203 | `c7714aab50f18c6a3c8b7bafb657803b0388cd6e` |
+| `docs/verification/2026-06-27-deload-toggle.md` | 1–47 | `56ea8b132b33e2e8161829bf97b82836e1a2e7fe` |
+| `docs/verification/2026-08-09-rest-timer-notifications.md` | 1–91 | `87657c83387a1578a722eb5049fea78b56c1abbb` |
+| `docs/verification/2026-08-09-swe-hardening.md` | 1–73 | `dfdfa950e05c42d59c3ece205df02b62843ac277` |
+
+**Claims verified against the code and against each other:**
+
+| Claim | Where | Verdict |
+|---|---|---|
+| AMRAP path is weeks 1–3 only (`isAmrap: week !== 4 && i === 2`) | AMRAP analysis | **correct** |
+| Seed is a median over recent per-week bests, inverted through Wathan | AMRAP analysis | **correct** |
+| Qualifying work = own non-cross + attributed cross, under `isWorkingPerformance` | AMRAP analysis | **correct** — and the same population F90 shows `detectPRs` uses |
+| `plateMode`/`implementBase` shipped, replacing the `usesBarbell` boolean | plate-loading design | **correct** |
+| Nine UI findings, all validated then fixed in one pass | `ui-consistency-review.md`, `docs/INDEX.md` | **correct** — nine numbered findings present |
+| Deload toggle verified at `e72e46d` | deload-toggle record | **correct**, and self-scoped |
+| Rest-timer record covers pre-checkpoint behaviour | that record's banner | **correct** — banner added when the behaviour changed 2026-09-11 |
+| "runtime pass pending" for the rest-timer record | `docs/INDEX.md` | **wrong** — the record records a Chrome desktop runtime pass — F93 |
+| "browser legs TODO" for the swe-hardening record | `docs/INDEX.md` | **wrong** — all five legs marked PASS — F93 |
+| "Runtime legs … listed as TODO below" | swe-hardening record header | **contradicts its own table** — F93 |
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Count check: nine numbered findings in `docs/ui-consistency-review.md`, matching
+  both its own status line and `docs/INDEX.md`.
+- Cross-check: the swe-hardening record's runtime table (legs A–E, all PASS,
+  executed by `scripts/verify-notify-hardening.js` against `vite preview`) against
+  its own header and against `docs/INDEX.md`.
+- Not run: the test suites — this batch changes no code. The verification harness
+  was **not** re-run here; B10c reviewed it and this batch reads its record.
+
+**Findings:** F93 (low). **F79 sharpened** with the evidence that the harness has
+demonstrably run and passed.
+
+**Substantive negative conclusions:**
+
+- **`AMRAP_TARGET_REPS_ANALYSIS.md` is the most rigorous document in the repo** and
+  is fully current. It states the week-4 exclusion with the code that enforces it,
+  explains the one-performance-per-(cycle, week) ranking including why a redo
+  supersedes the attempt it replaces, and its conclusion — that the two defects
+  found were in *what qualifies as a performance* rather than in the math — matches
+  what the code now does. Notably it references `src/lib/performance.ts` and
+  `src/lib/workout-compose.ts`, **two of the five modules `ARCHITECTURE_MAP.md`
+  omits** (F89): the analysis doc knows about modules the architecture map does not.
+- **`2026-08-09-rest-timer-notifications.md` carries a "historical" banner** added
+  when the two-bell checkpoint model shipped on 2026-09-11, scoping itself to the
+  behaviour it actually verified. That is the correct way to age a verification
+  record, and it is why F93 is about the *index* entry rather than this record.
+- `docs/design/plate-loading-model.md` is an accurate shipped-rationale record, and
+  its "Out of scope" section (pulley ratio, landmine/lever) is honest about what the
+  model deliberately does not attempt.
+- `docs/ui-consistency-review.md` retains a "Validation checklist (for the
+  validating session)" section although that session happened and the document is
+  marked resolved. Harmless — the resolutions are recorded inline beneath each
+  finding, so the checklist reads as history rather than as an instruction. Not
+  opened.
+- The swe-hardening record's **harness caveats are properly disclosed** — stubbed
+  `Notification.permission`, `showNotification` wrapped through a Playwright worker
+  handle, `document.hidden` shadowed because CDP visibility emulation was
+  unavailable. A verification record that states what it faked is worth more than
+  one that claims a clean pass, and this one does it well.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- Nothing re-runs the verification harnesses or re-checks these records against the
+  code, so a record can drift from PASS to inaccurate with no signal — which is
+  what F93 documents happening to the index entries, and F79 to the harness itself.
+
+**Open questions / remaining ranges:** B12b's carried question is answered — the
+index is behind, and so is the swe-hardening record's own header. Nothing further
+carried; the remaining items belong to B12d.
+
+**Ledger rows updated:** six B12 rows moved `pending` → `deep`. **The File ledger
+is complete: 179 of 179 rows `deep`, with no row in any other state.** **Next
+action: B12d — the final reconciliation under batch rule 8.**
