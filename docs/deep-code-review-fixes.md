@@ -9,15 +9,15 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | | Count |
 |---|---|
-| Findings | **100** (F01–F100; F95–F100 opened during fix work) |
-| `open` | **80** |
+| Findings | **101** (F01–F101; F95–F101 opened during fix work) |
+| `open` | **78** |
 | `wip` | 0 |
-| `fixed` | **19** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F42, F47, F65, F66, F73, F79, F95, F96, F97 |
+| `fixed` | **22** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F41, F42, F47, F51, F55, F65, F66, F73, F79, F95, F96, F97 |
 | `fixed-by` | **1** — F43 (reader half; F99 carries the rest) |
 | `wontfix` | 0 |
 | `blocked` | 0 |
 
-**By severity: 14 High / 52 Medium / 34 Low.**
+**By severity: 14 High / 52 Medium / 35 Low.**
 
 > **Count correction.** `deep-code-review.md:34` says "12 high". Counted directly
 > from its own findings table, **13** rows carry High: F01, F02, F04, F05, F07,
@@ -62,7 +62,7 @@ Seven root-cause patterns from `deep-code-review.md:38-53`. A finding can sit in
 
 | ID | Pattern | Members | Owner |
 |---|---|---|---|
-| C1 | No single-flight guard on an async `onClick` | F33 ✅, F34 ✅, F41, F51, F55 | **F33** (done) — the guard belongs in `Modal` as `busy?: boolean` (settled in B08a; a per-call-site guard cannot close the Escape path) |
+| C1 | No single-flight guard on an async `onClick` | F33 ✅, F34 ✅, F41 ✅, F51 ✅, F55 ✅ — **cluster closed** | **F33** (done) — the guard belongs in `Modal` as `busy?: boolean` (settled in B08a; a per-call-site guard cannot close the Escape path) |
 | C2 | Single-slot or snapshotted state standing in for per-item state | F51, F52, F54, F55, F57, F63 | None — per-file fixes |
 | C3 | State seeded once and never re-synced, or re-synced over the user | F49, F54, F56, F63 | None — `DurationInput.tsx:18-23` is the counter-example done right |
 | C4 | Cleanup or a default bound to something that can stop existing | F57, F58, F62 | None — per-file fixes |
@@ -129,7 +129,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F38 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `013e0f9` · `pr.test.ts` ×4 | The three readers now share one rule via `lib/performance.ts`. The live-session clause is what lets the toast and the History badge agree while the toast still works mid-workout — `pr.ts:78-84` asserted that invariant and did not hold it. |
 | F39 | Medium | B07 | — | `src/lib/tm-recommendations.ts` | `open` | — | — |
 | F40 | Low | B07 | — | `src/lib/tm-recommendations.ts` | `open` | — | — |
-| F41 | Low | B07 | C1 | `src/lib/exercise.ts` | `open` | — | — |
+| F41 | Low | B07 | C1 | `src/lib/exercise.ts` | `fixed` | `<pending>` · `exercise.test.ts` ×3 | Application rule became a storage invariant: `idx_exercises_name_nocase` on `exercises(TRIM(LOWER(name)))`. Placed in **`ADDITIVE_MIGRATIONS`, not `SCHEMA`** — `init()` runs `SCHEMA` unguarded on *every* boot, so a DB already holding duplicates would fail to start; as a migration the error is swallowed and that DB skips the index. Same reasoning as `idx_accessoryNotes_session_exercise`. The constraint failure is translated back to `ExerciseNameConflictError` so a lost race reads like a deliberate duplicate. |
 | F42 | Low | B07 | — | `src/lib/exercise-history.ts` | `fixed` | `013e0f9` · `exercise-history.test.ts` ×2 | `getLiftHistory` matched the lift's **own** sessions only, so cross work logged on another lift's day was invisible — while counting toward the same lift's PR toast, Stats record and AMRAP seed. Now resolved through `baselineSets`. |
 | F43 | Medium | B07 | — | `src/lib/lift.ts` | `fixed-by` | `013e0f9` · reader half only | **Reader half only.** `db.sets.where('liftId')` had no session join, so sets orphaned by `archiveLift` scored permanent records no screen could display; `baselineSets` resolves cross work through its session and drops orphans. **`archiveLift`'s missing cascade is NOT fixed** — that is a separate defect and stays open as F99. |
 | F44 | Low | B07 | — | `src/lib/lift.ts` | `open` | — | — |
@@ -139,11 +139,11 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F48 | Medium | B08 | — | `src/hooks/use-confirmation.ts` | `open` | — | — |
 | F49 | Low | B08 | C3 | `src/components/modals/LiftSetupModal.tsx` | `open` | — | — |
 | F50 | Medium | B08 | — | `src/components/modals/LiftSetupModal.tsx` | `open` | — | — |
-| F51 | Medium | B08 | C1,C2 | `src/components/workout/SaveFailureBanner.tsx` | `open` | — | — |
+| F51 | Medium | B08 | C1,C2 | `src/components/workout/SaveFailureBanner.tsx` | `fixed` | `<pending>` · `SaveFailureBanner.test.tsx` ×3 | `retrying` is a set of ids, not one `number | null` slot. It tracked in-flight state for a **list**, so retrying B re-enabled A while A was still in flight, and whichever settled first cleared the marker for both — on the one path whose purpose is recovering a set already lost once. |
 | F52 | Medium | B08 | C2 | `src/screens/Workout.tsx` | `open` | — | B12: `.claude/COMMON_MISTAKES.md` #6 states this defect exactly and prescribes the fix. Known state — decide fix vs wontfix. |
 | F53 | Low <br><sub>cosmetic</sub> | B08 | — | `src/components/workout/AmrapTargets.tsx` | `open` | — | — |
 | F54 | Medium | B08 | C2,C3 | `src/components/workout/AccessoryPicker.tsx` | `open` | — | — |
-| F55 | Medium | B08 | C1,C2 | `src/components/workout/AccessoryPicker.tsx` | `open` | — | — |
+| F55 | Medium | B08 | C1,C2 | `src/components/workout/AccessoryPicker.tsx` | `fixed` | `<pending>` · `AccessoryPicker.test.tsx` ×2 | Both commit paths single-flight via `useSingleFlight`, and `alreadyAdded` is now derived **live** from `workout.activeAccessories` rather than snapshotted into `rows()` at load time, so the guard can see an add made by the previous tap. |
 | F56 | Low | B08 | C3 | `src/components/workout/AccessoryLog.tsx` | `open` | — | — |
 | F57 | Medium | B08 | C2,C4 | `src/components/workout/RestTimer.tsx` | `open` | — | — |
 | F58 | Medium | B08 | C4 | `src/components/forms/Stepper.tsx` | `open` | — | — |
@@ -189,6 +189,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F98 | Low | — | — | `src/db/seed.ts` | `open` | — | **Opened during fix work.** `_seedDatabase` does `db.lifts.clear()` then `db.lifts.bulkAdd(LIFTS)` as two statements. bulkAdd's own transaction never covered the `clear`, so this pair has never been atomic: a failure between them leaves the roster empty. Pre-existing and unchanged by the F05 work — noted rather than folded in, since it is a different defect from the one being fixed. Wrap the pair in `db.transaction`. |
 | F99 | Medium | — | — | `src/lib/lift.ts` | `open` | — | **Split out of F43.** `archiveLift` deletes a pending session row but not its `sets`, `accessorySets` or `accessoryNotes`, while `discardPendingSession` does a complete cascade. The reader half of F43 is fixed (orphans no longer score records), but the orphans are still created. Route `archiveLift`'s cleanup through `discardPendingSession` so there is one definition of "discard an attempt". |
 | F100 | Low | — | — | `src/lib/cycle.ts` | `open` | — | **Noted during C1, not fixed.** `deloadTms` cannot be made idempotent: it is relative (`weight × 0.9` of whatever is current) and nothing records that a training-max row came from a deload rather than from the user, so the library cannot distinguish a second tap from a second cycle's deload. Its only guard is single-flight at the modal, which is now in place. A real fix needs the `source` provenance column **F39** asks for; folding these two together is the cheaper path. |
+| F101 | Low | — | C1 | `src/db/schema.ts` | `open` | — | **Noted while fixing F41.** `idx_exercises_name_nocase` is an additive migration, and migrations run inside a swallowed try/catch — deliberately, so a DB holding duplicates still boots. The consequence is that exactly those installs silently keep no uniqueness guarantee, and nothing tells them. Reconcile duplicate exercise names on import and at migration time (merge or suffix), then create the index, so the invariant holds everywhere rather than only where it happened to already hold. |
 
 ## Open leads
 

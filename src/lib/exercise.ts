@@ -17,6 +17,15 @@ async function assertUniqueExerciseName(db: TrainingDB, name: string, excludeId?
   if (duplicate) throw new ExerciseNameConflictError(name)
 }
 
+/**
+ * The name check above is a check-then-act, so two concurrent callers can both
+ * pass it. `idx_exercises_name_nocase` is what actually holds the line; this
+ * turns the constraint failure back into the error callers already handle, so a
+ * lost race reads the same as a duplicate typed in deliberately.
+ */
+const isNameConflict = (err: unknown): boolean =>
+  err instanceof Error && /UNIQUE constraint|idx_exercises_name_nocase/i.test(err.message)
+
 export async function createExercise(
   db: TrainingDB,
   name: string,
@@ -25,13 +34,23 @@ export async function createExercise(
 ): Promise<number> {
   const trimmedName = name.trim()
   await assertUniqueExerciseName(db, trimmedName)
-  return db.exercises.add({ name: trimmedName, type, category })
+  try {
+    return await db.exercises.add({ name: trimmedName, type, category })
+  } catch (err) {
+    if (isNameConflict(err)) throw new ExerciseNameConflictError(trimmedName)
+    throw err
+  }
 }
 
 export async function renameExercise(db: TrainingDB, id: number, name: string): Promise<void> {
   const trimmedName = name.trim()
   await assertUniqueExerciseName(db, trimmedName, id)
-  await db.exercises.update(id, { name: trimmedName })
+  try {
+    await db.exercises.update(id, { name: trimmedName })
+  } catch (err) {
+    if (isNameConflict(err)) throw new ExerciseNameConflictError(trimmedName)
+    throw err
+  }
 }
 
 export async function setExerciseCategory(db: TrainingDB, id: number, category: ExerciseCategory): Promise<void> {

@@ -87,4 +87,77 @@ describe('SaveFailureBanner', () => {
     expect(screen.getByText('Main set 2')).toBeInTheDocument()
     expect(screen.getAllByText('Not saved')).toHaveLength(2)
   })
+
+  // ── F51 ───────────────────────────────────────────────────────────────────
+  // `retrying` was a single `number | null` tracking in-flight state for a LIST,
+  // so it got two things wrong at once: retrying B re-enabled A's button while
+  // A's write was still in flight, and whichever settled first cleared the
+  // marker for both. The retry closure re-attempts the original write, so a
+  // duplicate accepted retry writes the set twice — on the one path whose whole
+  // purpose is recovering a set that was already lost once.
+  describe('concurrent retries', () => {
+    function deferred() {
+      let release!: () => void
+      const parked = new Promise<void>(r => { release = r })
+      return { fn: vi.fn(() => parked), release: () => release() }
+    }
+
+    it('keeps each failure disabled independently while in flight (F51)', async () => {
+      const a = deferred()
+      const b = deferred()
+      recordSaveFailure({ sessionId: 1, describe: 'set A', message: 'boom', retry: a.fn })
+      recordSaveFailure({ sessionId: 1, describe: 'set B', message: 'boom', retry: b.fn })
+      render(() => <SaveFailureBanner />)
+
+      const buttons = () => screen.getAllByRole('button', { name: /RETRY/i })
+      fireEvent.click(buttons()[0])
+      await waitFor(() => expect(buttons()[0]).toBeDisabled())
+      fireEvent.click(buttons()[1])
+      await waitFor(() => expect(buttons()[1]).toBeDisabled())
+
+      // A's write is still in flight, so A must stay disabled.
+      expect(buttons()[0]).toBeDisabled()
+      a.release(); b.release()
+    })
+
+    it('does not re-run a retry that is already in flight (F51)', async () => {
+      const a = deferred()
+      const b = deferred()
+      recordSaveFailure({ sessionId: 1, describe: 'set A', message: 'boom', retry: a.fn })
+      recordSaveFailure({ sessionId: 1, describe: 'set B', message: 'boom', retry: b.fn })
+      render(() => <SaveFailureBanner />)
+
+      const buttons = () => screen.getAllByRole('button', { name: /RETRY/i })
+      fireEvent.click(buttons()[0])
+      await waitFor(() => expect(buttons()[0]).toBeDisabled())
+      fireEvent.click(buttons()[1])
+      await waitFor(() => expect(buttons()[1]).toBeDisabled())
+      // Third tap on A: under one shared slot A had been re-enabled by B.
+      fireEvent.click(buttons()[0])
+
+      expect(a.fn).toHaveBeenCalledTimes(1)
+      a.release(); b.release()
+    })
+
+    it("one retry settling does not clear another's in-flight marker (F51)", async () => {
+      const a = deferred()
+      const b = deferred()
+      recordSaveFailure({ sessionId: 1, describe: 'set A', message: 'boom', retry: a.fn })
+      recordSaveFailure({ sessionId: 1, describe: 'set B', message: 'boom', retry: b.fn })
+      render(() => <SaveFailureBanner />)
+
+      const buttons = () => screen.getAllByRole('button', { name: /RETRY/i })
+      fireEvent.click(buttons()[0])
+      await waitFor(() => expect(buttons()[0]).toBeDisabled())
+      fireEvent.click(buttons()[1])
+      await waitFor(() => expect(buttons()[1]).toBeDisabled())
+
+      a.release()
+      await waitFor(() => expect(screen.queryByText('set A')).not.toBeInTheDocument())
+      // B is still pending; its button must still be disabled.
+      expect(screen.getAllByRole('button', { name: /RETRY/i })[0]).toBeDisabled()
+      b.release()
+    })
+  })
+
 })

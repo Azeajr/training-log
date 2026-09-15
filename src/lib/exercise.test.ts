@@ -3,7 +3,7 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import {
-  createExercise, renameExercise, setExerciseCategory,
+  createExercise, renameExercise, setExerciseCategory, ExerciseNameConflictError,
   archiveExercise, unarchiveExercise,
 } from './exercise'
 import * as assistance from './assistance'
@@ -112,5 +112,45 @@ describe('unarchiveExercise', () => {
     await archiveExercise(db, id)
     await unarchiveExercise(db, id)
     expect((await db.exercises.get(id))?.archived).toBe(false)
+  })
+})
+
+// ── F41 ─────────────────────────────────────────────────────────────────────
+// assertUniqueExerciseName loads the table, checks for a match, then writes —
+// a check-then-act with no storage constraint behind it. Two concurrent creates
+// both pass the check, and the repair path closes behind them: renameExercise
+// on either twin now rejects, because the check sees the other.
+describe('exercise name uniqueness is a storage invariant', () => {
+  it('does not create two exercises with the same name concurrently (F41)', async () => {
+    const results = await Promise.allSettled([
+      createExercise(db, 'Dips', 'reps'),
+      createExercise(db, 'Dips', 'reps'),
+    ])
+    const created = results.filter(r => r.status === 'fulfilled')
+    expect(created).toHaveLength(1)
+    expect(await db.exercises.toArray()).toHaveLength(1)
+    // A lost race must read as a name conflict, not as a raw SQLite error —
+    // Settings catches ExerciseNameConflictError to show the friendly message.
+    const rejected = results.find(r => r.status === 'rejected')
+    expect((rejected as PromiseRejectedResult).reason)
+      .toBeInstanceOf(ExerciseNameConflictError)
+  })
+
+  it('rejects a case- and whitespace-insensitive duplicate at the storage layer (F41)', async () => {
+    await createExercise(db, 'Dips', 'reps')
+    // Bypass the application check entirely — an imported backup restores rows
+    // verbatim, which is the route that reaches this without any race.
+    await expect(db.exercises.add({ name: '  dips  ', type: 'reps' })).rejects.toThrow()
+    expect(await db.exercises.toArray()).toHaveLength(1)
+  })
+
+  it('leaves rename working after a concurrent create (F41)', async () => {
+    await Promise.allSettled([
+      createExercise(db, 'Dips', 'reps'),
+      createExercise(db, 'Dips', 'reps'),
+    ])
+    const rows = await db.exercises.toArray()
+    expect(rows).toHaveLength(1)
+    await expect(renameExercise(db, rows[0].id!, 'Ring Dips')).resolves.toBeUndefined()
   })
 })

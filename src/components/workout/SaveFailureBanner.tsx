@@ -5,11 +5,18 @@ import { failures, clearSaveFailure, type SaveFailure } from '../../store/save-f
 // glance case; this stays put until the user retries or dismisses, so a set the
 // database refused can't disappear unnoticed while the user is under the bar.
 export default function SaveFailureBanner() {
-  const [retrying, setRetrying] = createSignal<number | null>(null)
+  // A set of ids, not one slot. This tracked in-flight state for a LIST with a
+  // single `number | null`, which got two things wrong at once: retrying B
+  // re-enabled A's button while A's write was still in flight, and whichever
+  // settled first cleared the marker for both. The retry closure re-attempts the
+  // original write, so a duplicate accepted retry wrote the set twice — on the
+  // one path whose whole purpose is recovering a set already lost once.
+  const [retrying, setRetrying] = createSignal<ReadonlySet<number>>(new Set())
+  const isRetrying = (id: number) => retrying().has(id)
 
   const handleRetry = async (f: SaveFailure) => {
-    if (!f.retry) return
-    setRetrying(f.id)
+    if (!f.retry || isRetrying(f.id)) return
+    setRetrying(prev => new Set(prev).add(f.id))
     try {
       await f.retry()
       clearSaveFailure(f.id)
@@ -17,7 +24,11 @@ export default function SaveFailureBanner() {
       // Still failing. Leave the banner up — it is the record that the set is
       // missing, and a second failure is not new information to announce.
     } finally {
-      setRetrying(null)
+      setRetrying(prev => {
+        const next = new Set(prev)
+        next.delete(f.id)
+        return next
+      })
     }
   }
 
@@ -34,10 +45,10 @@ export default function SaveFailureBanner() {
                 <Show when={f.retry}>
                   <button
                     onClick={() => void handleRetry(f)}
-                    disabled={retrying() === f.id}
+                    disabled={isRetrying(f.id)}
                     class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase disabled:opacity-40"
                   >
-                    {retrying() === f.id ? 'RETRYING…' : 'RETRY'}
+                    {isRetrying(f.id) ? 'RETRYING…' : 'RETRY'}
                   </button>
                 </Show>
                 <button

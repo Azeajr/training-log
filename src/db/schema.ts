@@ -135,6 +135,16 @@ export const ADDITIVE_MIGRATIONS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_accessoryNotes_session_exercise ON accessoryNotes(sessionId, exerciseId)`,
   `ALTER TABLE settings ADD COLUMN highRepDiscount TEXT`,
   `ALTER TABLE settings ADD COLUMN restTimerNotifications INTEGER`,
+  // One exercise per name, case- and whitespace-insensitively. The application
+  // already enforced this (assertUniqueExerciseName) but only as a check-then-
+  // act with nothing behind it: two concurrent creates both passed, and an
+  // imported backup restored duplicates verbatim. Once duplicated, the repair
+  // path closed too — renaming either twin rejected because the check saw the
+  // other. Same placement reasoning as idx_accessoryNotes_session_exercise
+  // above: SCHEMA exec is unguarded and runs on every boot, so a DB that
+  // already holds duplicates would fail to start; as a migration the error is
+  // swallowed and that DB simply skips the index.
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_exercises_name_nocase ON exercises(TRIM(LOWER(name)))`,
 ] as const
 
 export const ALL_TABLES = [
