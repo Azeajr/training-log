@@ -93,8 +93,8 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F02 | **High** | B01 | — | `src/db/sqlite.worker.ts` | `open` | — | — |
 | F03 | Medium | B04 | C6 | `src/lib/export-import.ts` | `open` | — | Settings allowlist drops `hasDeloadWeek: false`; pairs with F08. |
 | F04 | **High** | B01 | — | `src/db/sqlite-client.ts` | `open` | — | — |
-| F05 | **High** | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `<pending>` · `transaction.test.ts` ×3 | **Root cause was the inference, not the arithmetic.** A depth counter cannot tell a nested call from an unrelated concurrent one once the outer body has awaited. Fixed by removing the question: `transaction()` now serializes, and `bulkAdd` no longer opens one of its own, so nothing nests. `txDepth` deleted. |
-| F06 | Medium | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `<pending>` · `transaction.test.ts` ×2 | Deleted with the counter it corrupted — there is no depth to get stuck above zero. BEGIN now runs inside the queued turn, and the queue is handed on in a `finally` even when a caller never got a turn. |
+| F05 | **High** | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `f3e2a6d` · `transaction.test.ts` ×3 | **Root cause was the inference, not the arithmetic.** A depth counter cannot tell a nested call from an unrelated concurrent one once the outer body has awaited. Fixed by removing the question: `transaction()` now serializes, and `bulkAdd` no longer opens one of its own, so nothing nests. `txDepth` deleted. |
+| F06 | Medium | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `f3e2a6d` · `transaction.test.ts` ×2 | Deleted with the counter it corrupted — there is no depth to get stuck above zero. BEGIN now runs inside the queued turn, and the queue is handed on in a `finally` even when a caller never got a turn. |
 | F07 | **High** | B02 | — | `src/db/seed.ts` | `open` | — | — |
 | F08 | **High** | B04 | C6 | `src/lib/export-import.ts` | `open` | — | Envelope validation; precondition for F03/F28/F31/F41 import-restore paths. |
 | F09 | Medium | B04 | — | `src/lib/export-import.ts` | `open` | — | — |
