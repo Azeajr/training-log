@@ -8,60 +8,74 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Every file in the ledger is now `deep` — all 179 rows.** Areas B01 through
-B12's per-file review is complete; `pending`, `partial`, `reported`, `stale` and
-`blocked` no longer appear anywhere in the File ledger. **What remains is B12d:
-the final reconciliation under batch rule 8**, which is not a per-file batch —
-it is the completion claim, the cross-file questions, and the findings audit.
+# ✅ REVIEW COMPLETE — 2026-09-15
 
-**B12 found a different failure mode from the earlier areas.** The documentation
-is largely accurate; where it is wrong, a change was made and its description was
-not updated. Four of this review's own findings turned out to be **already
-documented** (F82, F80, F69's scope, and F52's rule as `COMMON_MISTAKES` #6) and
-have been amended rather than left implying nobody knew.
+**All 179 ledger rows are `deep`. All twelve areas (B01–B12) are closed. The
+four conditions of batch rule 8 are met**; the evidence for each is in the B12d
+entry at the end of this document.
 
-- **F89 (medium)** — `ARCHITECTURE_MAP.md` has drifted from the tree: 11 of 38
-  components absent (including `Modal`), 5 of 21 `lib/` modules absent,
-  `RestThresholds` described with a shape and a constant that do not exist, and
-  two PWA icons documented that never existed (F70).
-- **F90 (medium)** — PR detection was widened from AMRAP-only to every working
-  set; **four descriptions still say otherwise**, including a comment inside
-  `RecordsPanel.tsx` drawing a distinction that no longer exists.
-- **F91 (medium)** — `ROADMAP.md`'s Security and Tech Debt sections both say
-  **"No open items."** Two mitigation bullets also overstate: supply chain (F73
-  bypasses all three controls credited) and `cleanupOutdatedCaches` (the SW
-  hand-rolls eviction — third site of that claim).
-- **F92, F93 (low)** — `docs/INDEX.md` miscounts `COMMON_MISTAKES` entries, and
-  **understates the repo's own verification coverage**: it reports both 2026-08-09
-  records as pending/TODO when one records a Chrome desktop runtime pass and the
-  other's table marks **all five browser legs PASS**. That record also contradicts
-  its own header.
+| Rule 8 condition | Status |
+|---|---|
+| Every in-scope file `deep` at its applicable revision | **Met** — 179/179, no row in any other state |
+| Cross-file questions resolved or explicitly blocked | **Met** — L01–L05 and L07 resolved; **L06 explicitly blocked on authorization** (it needs a failure-injection pass, which is a different kind of work and was never authorized) |
+| Findings reconciled | **Met** — 94 findings recorded with severity, evidence and current state; F36 decided, F82 decided, F52/F70/F76/F78/F79/F80/F82 amended against later evidence |
+| Appropriate final integration checks | **Met** — `pnpm check:ci` green: 48 files / **1,094 tests passing**, coverage **93% stmts / 85.4% branch / 91.7% funcs / 95.9% lines**, production build clean |
 
-**F79 is sharpened by B12c**: `verify-notify-hardening.js` is not untested
-scaffolding — the swe-hardening record documents a full passing run of all five
-legs against the production build. It ran, it passed, it was written up, and then
-nothing ever ran it again. Its leg A (offline hard reload renders the shell) is
-the healthy-path twin of **F65**, which is why adding a 503 leg is cheap.
+**What this does NOT claim.** Review completion and bug resolution are separate
+states, as rule 8 says. **No application or test file was changed at any point in
+this review** — all 94 findings remain open. Specifically not claimed: that the
+app is correct (F65 is a high-severity live defect), that the test suite is
+trustworthy end to end (**F85: 6 of 32 E2E tests fail**), or that the
+mobile-specific items are settled (**F67 needs a device check** and is recorded as
+unverified, per this project's rule about mobile claims).
 
-**Next and final batch: B12d — the reconciliation.** Under batch rule 8 it owns:
-every in-scope file `deep` at its applicable revision (now true), cross-file
-questions resolved or explicitly blocked, findings reconciled, and appropriate
-final integration checks. Specific deferred items it must settle: **F36** (the
-`getCurrentTm` / `getAllCurrentTms` tie-break, explicitly deferred to B12),
-**F82** (wire up or delete `demo-seed.json`), and the standing distinction B12a
-surfaced — a finding whose state is documented and deliberate is a different kind
-of open item from one nobody knew about, and the two should not be closed the same
-way.
+## The findings, in one view
 
-Latest run: **B12c complete** — `AMRAP_TARGET_REPS_ANALYSIS.md` (173),
-`docs/design/plate-loading-model.md` (95), `docs/ui-consistency-review.md` (203)
-and the three `docs/verification/` records (47, 91, 73) reviewed in full. Six
-files marked deep; **179 files deep in total — the ledger is complete.**
-`pnpm lint` and `tsc -b` clean (exit 0). One new finding (F93); F79 sharpened.
-`AMRAP_TARGET_REPS_ANALYSIS.md`, `plate-loading-model.md`,
-`ui-consistency-review.md` and the deload-toggle record are all accurate. Only
-this tracker changed; the tree is clean. This card authorizes commit, push and PR;
-operator acceptance remains a separate native Kanban review step.
+**94 findings — 12 high, ~48 medium, ~32 low** (F47 and F70 carry conditional
+severities). They are not 94 unrelated bugs; they cluster into seven patterns,
+each with a one-place fix:
+
+1. **No single-flight guard on an async `onClick`** — F33, F34, F41, F51, F55.
+   The guard belongs in `Modal`, which owns Escape and so owns a close path no
+   call site can gate. `LiftSetupModal.tsx:169` already hand-rolls it.
+2. **Single-slot or snapshotted state standing in for per-item state** — F51,
+   F52, F54, F55, F57, F63.
+3. **State seeded once and never re-synced, or re-synced over the user** — F49,
+   F54, F56, F63. `DurationInput.tsx:18-23` is the counter-example done right.
+4. **Cleanup or a default bound to something that can stop existing** — F57, F58,
+   F62.
+5. **Uneven keyboard and screen-reader access** — F59, F60, F61, F64. In each
+   case a neighbouring file does it correctly.
+6. **Unvalidated external data written to durable storage or trusted as control
+   flow** — F65, F66 (a response *status*), F03/F08 (a restored envelope), F67
+   (an engine capability assumed rather than tested).
+7. **A change made and its description not updated** — F76, F89, F90, F91, F92,
+   F93, and F84. This is B12's whole story.
+
+## If only a few things get fixed
+
+1. **F65 (high)** — one 503 while online permanently poisons the offline shell.
+   For an offline-first training log this is the product's core promise failing.
+   **Fix it with F79**: wire `verify-notify-hardening.js` into CI and add a 503
+   leg to it. That harness already exists, already passes, and its leg A is the
+   healthy-path twin of this bug. F78 is the precondition.
+2. **F85 + F74** — the E2E suite fails 6 of 32 and nothing runs it. Fixing the
+   assertions without wiring up CI returns it to exactly the state that produced
+   the finding.
+3. **F69** — the coverage gate measures a third of the codebase; 22 of the 23
+   findings from B08 and B09 live where it cannot see.
+4. **F73** — `pnpm dlx wrangler` runs unpinned with a production token, past
+   every supply-chain control the repo otherwise applies.
+5. **F94** — one missing index on the table the mid-set PR check scans.
+
+## Read the documentation findings differently
+
+B12 established that **four findings this review opened were already documented**
+— F82 (`COMMON_MISTAKES` #7), F80 (`QUICK_START:36-38`), F69's scope
+(`QUICK_START:22`), and F52's rule (`COMMON_MISTAKES` #6, which states the defect
+exactly and prescribes the fix). Those are **known, deliberate states**, not
+oversights, and they should not be closed the same way as a finding nobody knew
+about. The amendments are recorded on each finding.
 
 **Remaining work — 0 of 179 ledger rows are not yet `deep`** (**all 179 are**). The File ledger is complete; what remains is B12d's reconciliation, not further per-file review. Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
@@ -79,7 +93,7 @@ correct; only the remaining-work totals were not.
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
-| B12 | **0 rows left** | **All 17 rows `deep` (B12a–B12c).** B12d remains: the final reconciliation under batch rule 8 — not a per-file batch. |
+| B12 | **0 — closed** | All 17 rows `deep` (B12a–B12c); B12d discharged rule 8. F89–F94 opened; F36 and F82 decided; seven findings amended. |
 | B11 | **0 — closed** | All 11 rows `deep` across B11a–B11c. F85–F88 opened; F78 amended. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
@@ -166,7 +180,7 @@ claimed here.
 | F33 | High; B07c concurrent-call probe against real SQLite | `src/screens/Workout.tsx:501-509`, `512-552`; `src/lib/cycle.ts:108-136`; `src/components/modals/TmRecommendationModal.tsx:48-53`; `src/components/modals/AccessoryTmModal.tsx:52-60` | The post-session modal callbacks are the one finishing path outside `runFinishing`, and neither modal disables its ACCEPT button while its handler is awaiting. `handleTmRecommendationAccept` awaits `setTm` *before* clearing `tmRecommendation`, so a second tap re-enters with `rec` still non-null; `handleAccessoryTmAccept` never clears `pendingFinish` at all. Both then call `proceedAfterSession` → `advanceCycleIfComplete` concurrently. `advanceCycleIfComplete` reads the cycle, tests `weekComplete`, and only afterwards opens its transaction, so both calls pass the guard: probe leaves **two cycle rows both numbered 2** (`[{id:1,n:1,end:1},{id:2,n:2},{id:3,n:2}]`) plus a duplicate TM row (`200,205,205`). `db.cycles.orderBy('number').last()` then picks one arbitrarily and the other cycle is unreachable but permanent — cycle numbering, History grouping and every `where('cycleId')` query are wrong from then on. The awaited/sequential case is genuinely idempotent (probe + `cycle.test.ts:325`), so only the concurrent one breaks. **B08a adds a second, cheaper trigger:** `Modal` owns Escape, stops its propagation and calls `onClose` unconditionally (`Modal.tsx:102-107`), so the dialog's own buttons cannot gate it. Probe P3 — tap UPDATE TM, press Escape while `onAccept` is still awaiting — records `accept:start → dismiss → accept:end` with both callbacks fired once, so `handleTmRecommendationDismiss` enters `proceedAfterSession` while the accept's own call is still pending. One tap plus one keypress reaches the same duplicate-cycle state as the double tap. `AccessoryTmModal`'s UPDATE is likewise live throughout: three taps → three `onAccept` calls, `disabled=false` (its `disabled` only covers the empty selection). | Single-flight the whole post-session chain: extend `runFinishing` (or an equivalent guard) across the accessory-TM and TM-recommendation callbacks, clear `tmRecommendation`/`pendingFinish` before the first await, and disable modal buttons while their handler is in flight. Independently, make `advanceCycleIfComplete` self-guarding — re-read the cycle inside the transaction and abort when `endDate` is already set or a cycle with `number + 1` exists, so a second caller cannot duplicate it. Note this cannot rely on `db.transaction` for isolation while F05/F06 stand. Add a concurrent-call test to `cycle.test.ts`, which has none. **Guard location settled in B08a:** put it in `Modal` as a `busy?: boolean` prop that suppresses Escape and `← BACK`, with each call site passing the same flag to its buttons' `disabled` — a per-call-site guard cannot close the Escape path. |
 | F34 | Medium; B07c staggered-call probe against real SQLite | `src/lib/cycle.ts:167-169`, `187-204`; `src/components/modals/CycleCompleteModal.tsx:48-53`, `66-71`; `src/screens/Workout.tsx:634-641`; `src/screens/Settings.tsx:1040-1043` | `CycleCompleteModal` fires `onDoubleIncrement`/`onDeload` as un-awaited `void` callbacks and never disables the buttons, and neither `applyCycleDoubling` nor `deloadTms` is idempotent — both read the latest TM and append a new row. A second tap after the first read settles compounds: TM **205 → 210 → 215** for one "+10 LBS" button, and **200 → 180 → 160** for one "CUT ALL TMS −10%". Simultaneous taps instead append a duplicate row at the same weight (`205,210,210` / `200,180,180`), which is silent but leaves two TMs at the same instant (see F36). The returned summary even renders the compounded 215, so the readout confirms a change the user asked for once. `applyCycleDoubling` also folds back **by lift name** (`t.liftName === liftName`) while `lifts.name` has no UNIQUE constraint: with two lifts named "Bench", accepting on one rewrites the other's summary row to the wrong weight (`300 → 210`; probe P8). The DB write itself is by `liftId` and stays correct. | Disable the modal's buttons for the duration of their handler and await the callbacks; make the two writes idempotent or guard them behind a single-flight token. Key the summary fold-back on `liftId` — `newTms` should carry the id alongside the name. Add `applyCycleDoubling` and `deloadTms` double-invocation tests; `cycle.test.ts` never imports `applyCycleDoubling` at all. |
 | F35 | Medium; B07c real-SQLite probe (P5) | `src/lib/cycle.ts:119-121`, `234-242`; `src/screens/Settings.tsx:415-442`; `src/screens/Today.tsx:58`, `83-87` | Retiring the sessions that a cycle shrink orphans lives only in `Settings.handleCycleShapeChange:430-434`, not in `advanceCycleIfComplete`. With `hasDeloadWeek: false` reached by any other route, a live week-4 session is stepped over: probe seeds weeks 1–3 complete plus one `pending` week-4 row with a logged set, calls `getNextSessionAdvancingIfDone`, and gets cycle 2 / week 1 while the week-4 row stays `pending` in cycle 1 **with its sets intact**. Today only queries `next.cycleId` so it can never be resumed or discarded; History drops non-`completed` rows so it is never displayed; `RecordsPanel` filters nothing but `liftId`, so its sets keep counting toward the all-time record (F22). The route around the Settings handler is a backup import, whose settings envelope is already weak (F03, F08). | Move the "weeks past the new final week no longer exist" reconcile into `advanceCycleIfComplete` (or a shared helper both callers use) so the invariant holds however `hasDeloadWeek` changes, and decide whether the orphaned sets are deleted or retained as `skipped` history — consistently with whatever F22 settles for record ownership. Cover "advance with a stranded week-4 pending row under a 3-week setting" in `cycle.test.ts`; the existing 3-week block only tests clean cycles. |
-| F36 | Low; B07c probe (P7); reconcile in B12 | `src/lib/training-max.ts:36-39`, `61-75` | The two "current training max" helpers in the same module break ties differently. `getCurrentTm` uses `sortBy('setAt')` and takes the last element — `Array.prototype.sort` is stable, so equal timestamps keep insertion order and the **newest** row wins. `getAllCurrentTms` compares with strict `>` over `toArray()` order, so on a tie the **first** row wins. Probe: two rows for one lift at the same instant, weights 200 then 210 → `getCurrentTm` returns 210, `getAllCurrentTms` returns 200. The table is append-only with no ordering key besides `setAt`, and F33/F34's concurrent paths are exactly what produce same-instant rows; a restored backup (F08) can carry them verbatim. | Give both helpers one tie-break — prefer the higher row id at equal `setAt`, or store a monotonic sequence — and cover a tie in `training-max.test.ts`. `src/lib/training-max.ts` stays `deep` (B01b); this is a cross-file reconcile for B12, not a reopened row. |
+| F36 | Low; B07c probe (P7); reconcile in B12 | `src/lib/training-max.ts:36-39`, `61-75` | The two "current training max" helpers in the same module break ties differently. `getCurrentTm` uses `sortBy('setAt')` and takes the last element — `Array.prototype.sort` is stable, so equal timestamps keep insertion order and the **newest** row wins. `getAllCurrentTms` compares with strict `>` over `toArray()` order, so on a tie the **first** row wins. Probe: two rows for one lift at the same instant, weights 200 then 210 → `getCurrentTm` returns 210, `getAllCurrentTms` returns 200. The table is append-only with no ordering key besides `setAt`, and F33/F34's concurrent paths are exactly what produce same-instant rows; a restored backup (F08) can carry them verbatim. | **Reconciled in B12d — decision: standardise on "highest `id` wins at equal `setAt`".** `schema.ts:11` declares `trainingMaxes.id INTEGER PRIMARY KEY AUTOINCREMENT`, so the id is monotonic and never reused: the highest id at a given instant *is* the newest insert. That makes it a correct tie-break requiring no new column, and it **preserves `getCurrentTm`'s existing behaviour** (stable sort, newest-last) while changing `getAllCurrentTms`, which is the helper currently disagreeing with it. Cover a tie in `training-max.test.ts`. `src/lib/training-max.ts` stays `deep` (B01b); this is a cross-file reconcile for B12, not a reopened row. |
 | F37 | Medium; B07d real-SQLite probe | `src/lib/pr.ts:106-119` | The "this lift has no history at all" guard returns at line 108 **before** the cross-set query at line 116, and `db.sessions.where('liftId')` only finds the movement's *own* sessions. A movement whose history is entirely cross work is therefore scored against nothing: probe seeds two cross blocks for lift 2 at 400×5 and 405×5 (e1RM 466) inside lift 1's sessions, then `detectPRs(db, 2, 600, 5)` — e1RM 699 — returns `{repPr: false, e1RmPr: false}` with **no `prevBestE1Rm` field at all**. Adding one *empty* own session for lift 2 flips the identical call to `e1RmPr: true, prevBestE1Rm: 466`, so the answer turns on a session row's existence rather than on the lift's actual history. `Workout.checkPr` passes the movement's `liftId` for every cross set (`Workout.tsx:317-321`), so this is the live path; reachable whenever a cross block is logged before the movement's own training day comes round. | Move the empty-history check after both queries — decide it on `prior.length`, which already has its own branch at line 124 — or query cross sets first. Keep the existing "first work on a lift with no history is not a toast" behavior if that is wanted (`pr.test.ts:24` pins it), but base it on the combined set list. Add a cross-only-history case to `pr.test.ts`; `pr.test.ts:133` only covers a movement that already owns a session. |
 | F38 | Medium; B07d real-SQLite probe | `src/lib/pr.ts:106`; `src/screens/History.tsx:399`; `src/components/stats/RecordsPanel.tsx:52` | Three features now answer "what counts as a record" three different ways. `detectPRs` (the mid-set toast) queries `db.sessions.where('liftId')` with **no status filter**; `History.loadPrs` feeds `prSessionIds` from **`completed` sessions only**; `RecordsPanel` filters **nothing but `liftId`** (F22). Probe: with one `skipped` session holding 400×5, `detectPRs(db, 1, 300, 5)` reports `prevBestE1Rm: 466` and no PR, while History's baseline for the same database is empty and `prSessionIds` badges the very next session. A `pending` session behaves identically. The reverse also holds — F37's probe shows History badging two sessions the toast never announced. `pr.ts:78-84` states the invariant this breaks: "the toast has to read the same history or the two disagree about the same session." | Settle F22's ownership rule once and apply it in all three readers; the natural home is a shared "performance records for a lift" query in `pr.ts` or `performance.ts` that History, Workout and `RecordsPanel` all call, rather than three `db.sessions` queries with three different filters. Note the live `pending` session is a genuine special case for the toast — its own earlier sets must stay in the baseline — so the rule is "completed, plus the session being logged", not simply "completed". Cover a skipped-session baseline in `pr.test.ts`, whose helper writes `status: 'completed'` for every fixture. |
 | F39 | Medium; B07e real-SQLite probe | `src/lib/tm-recommendations.ts:9`, `101-108`; `src/screens/Workout.tsx:634-641`; `src/screens/Settings.tsx:1040-1043`; `src/lib/cycle.ts:128-133` | Whether a training max was written by auto-progression or chosen by the user is inferred from a **60-second wall clock** (`CYCLE_START_TOLERANCE_MS`) rather than recorded. `advanceCycleIfComplete` creates the new cycle and its progressed TMs in one transaction, so those land inside the window — but the CYCLE COMPLETE modal that opens immediately afterwards writes TMs too (`applyCycleDoubling`, `deloadTms`), and those land on whichever side of the window the user's dwell time puts them. Probe R6 holds the data and the user action fixed and varies only the tap delay: tapped at 10 s or 59 s the lift is a doubling candidate at the end of the next cycle; tapped at 61 s or 5 min it is **silently disqualified**, because `hasBump` reads the modal's own write as a mid-cycle user bump. Racking a bar, answering a text, or a phone locking between the roll-over and the tap changes the program's behavior a cycle later, with nothing on screen to explain it. | Record provenance instead of inferring it — add a `source` column (`'progression' \| 'manual' \| 'deload' \| 'doubling'`) to `trainingMaxes`, or stamp progression rows with the `cycleId` they open, and have `hasBump` test that rather than a timestamp delta. Failing that, tie the tolerance to the cycle's own creation rather than to `startDate`, and cover a >60 s post-modal write in `tm-recommendations.test.ts` — the existing boundary tests at `:497` only exercise a synthetic TM row, never the modal path that produces one. |
@@ -224,13 +238,14 @@ claimed here.
 | F91 | Medium; B12b relevance check | `ROADMAP.md:728-762` (Security), `:765-767` (Tech Debt) | Both sections declare **"No open items."** That was true when written and is now materially false: this review has opened **89 findings**, of which several sit squarely in those two categories — F65 (high: one 503 poisons the offline shell permanently), F73 (supply chain), F41 and F08 (missing storage invariants, weak import envelope) for Security; F69, F71, F74, F77, F79, F85 and F87 (a blind coverage gate, directories no tool checks, two dormant suites, a failing E2E suite, a stub that diverges from the code it stands in for) for Tech Debt. Two specific mitigation claims also **overstate what is in place**: the *Supply chain* bullet credits least-privilege, `--frozen-lockfile` and `pnpm audit signatures` — and **F73 shows the deploy step's `pnpm dlx wrangler` bypasses all three**, running an unpinned executable with a production token; and the *PWA cache* bullet claims `cleanupOutdatedCaches: true` when the service worker imports no workbox runtime and hand-rolls its own `precache-`-prefixed eviction instead (the same wrong claim appears at `vite.config.ts:48` and in `ARCHITECTURE_MAP.md`'s PWA pattern — three sites, one origin). | Feed this review's findings back into both sections as part of B12d rather than leaving "No open items" standing, and correct the two mitigation bullets to describe what the code does. The CSP bullet, the `assertIdent` guard, the persisted-store allowlist and the `__e2eResetDb` DEV gate were all checked and are accurate — the section is well-written, just out of date. |
 | F92 | Low; B12b count check | `docs/INDEX.md:12`, `:55` | `docs/INDEX.md` describes `.claude/COMMON_MISTAKES.md` as **"Ten recurring failure modes"**; there are **eleven** (#11, the service-worker `setTimeout` entry, was added without updating the index). Its own footer reads `**Last Updated**: 2026-07-29` while the file indexes two verification documents dated 2026-08-09 and describes `ui-consistency-review.md` as resolved on 2026-08-08 — so the index was edited after its own stamp. Both are small, but this is the file whose entire job is to describe the other files accurately. | Correct the count, refresh the stamp, and consider dropping the count from the description so it cannot drift again. Checked and correct in the same file: the "Seven self-contained agent prompts" for `ENGINEERING_PASSES.md` (passes 1–7), and the ROADMAP description ("changelog, planned features, security posture, tech debt") which matches its four sections. |
 | F93 | Low; B12c record check | `docs/INDEX.md:41-45`; `docs/verification/2026-08-09-swe-hardening.md:4-6` | **The state of the two 2026-08-09 verification records is misreported in three places, all in the stale-pessimistic direction.** `docs/INDEX.md` describes `2026-08-09-rest-timer-notifications.md` as "Automated evidence; runtime pass **pending**" — the record's own verdict is "PASS — automated tests **+ Chrome desktop runtime pass**", naming which legs remain unverified. It describes `2026-08-09-swe-hardening.md` as "Automated evidence; **browser legs TODO**" — that record's runtime table marks **all five legs A–E as PASS**, executed by `scripts/verify-notify-hardening.js` against the production build. And the swe-hardening record **contradicts itself**: its header still reads "Runtime legs requiring a browser … listed as TODO below" directly above the table that marks them all passed. The header and the index were both written before the legs ran and never updated after. The effect is that the repo understates its own verification coverage — a reader deciding whether the offline shell has ever been checked in a browser is told no, when the answer is yes and the harness is committed. | Correct the record's header to match its table, and correct both index entries. Worth doing alongside F79 (wiring that harness into CI), since the same reader question — "has this actually been verified?" — is what both findings are about. |
+| F94 | Medium; B12d schema check, resolves L07(2) | `src/db/schema.ts:97-104`; `src/lib/pr.ts:116-117`; `src/lib/cycle.ts:287`; `src/components/stats/RecordsPanel.tsx:65` | **`sets.liftId` is the only foreign key in the schema with no index.** `schema.ts` declares eight indexes — `trainingMaxes(liftId)`, `sessions(cycleId)`, `sessions(liftId)`, `sets(sessionId)`, `accessorySets(sessionId)`, `accessoryNotes(sessionId)`, `accessoryTrainingMaxes(exerciseId)`, `liftSupplementals(liftId)` — and **no `idx_sets_liftId`**, while three separate call sites query `db.sets.where('liftId')`: `RecordsPanel.tsx:65` (once per lift on `/stats` and History's by-lift view), `cycle.ts:287` inside `getRecentWorkingSets` (the AMRAP seed, on workout load), and — the one that matters — **`pr.ts:116-117` inside `detectPRs`, which runs on every single logged set**. So the mid-workout PR check does a full scan of `sets`, the largest table in the database, once per set, on a phone. L07 framed this as a `RecordsPanel` concern; the hot path is the PR toast. | `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId);` — and per `COMMON_MISTAKES` #1 it belongs in `ADDITIVE_MIGRATIONS` as well as `SCHEMA`, since it must reach deployed OPFS databases. It cannot fail against existing rows (no uniqueness), so either location is safe. Measure `detectPRs` against a realistic set count before and after rather than assuming the win. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
-| L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
+| L02 | **Resolved** into F14/F15 + F54–F56 (B12d) | `src/screens/Workout.tsx`; accessory components reviewed in B08d | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. **Closed in B12d:** B08d reviewed `AccessoryLog` and `AccessoryPicker` in full and opened F54, F55 and F56. The original unspecified accessory-editing concern was never independently recovered and is not recoverable — it is recorded as lost rather than carried, per rule 5's prohibition on inventing evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
 | L04 | **Resolved into confirmed F65** (B09a probe P23) | `src/service-worker.ts:63-73` | HTTP 503 navigation response replaces a good cached shell; later offline navigation returns the cached error. Root cause located: the network-first navigation handler caches every resolved response with no `response.ok` check, so any server error status is written over `/index.html`. Reproduced end to end — see F65. | Closed as a lead; the fix and test guidance live on F65. |
 | L05 | Resolved into confirmed F33/F34 (B07c probes) | `src/screens/Workout.tsx:501–552`, `634–641`; `src/lib/cycle.ts:108–136`, `167–204`; TM/cycle modal callbacks | Post-session accept/dismiss callbacks are outside runFinishing; modal controls do not await/disable competing callbacks. Concurrent progression does use the same pre-transaction cycle snapshot — both callers pass the `weekComplete` guard and duplicate the cycle. | Use F33 for the double-advance and F34 for the compounding TM writes. The dismiss arms clear their signal before awaiting and are safe; modal *error* recovery (a rejected `setTm`/`applyAccessoryTm` inside these handlers) is still unprobed and belongs to B08's modal rows. |
-| L06 | Lead; B06a source inspection only, no injected failure | `src/screens/Today.tsx:43–71`, `113–122`, `135–148`, `174–192`; `src/components/workout/AccessoryPicker.tsx:118–143` | Today fires load/start without a catch or local error state; defaults load after startSession, and selection/cross-preview failures have no local recovery UI. The default-mode picker also swallows persistence failure before reporting a successful pick, while launch rereads the DB. Exact user-visible failure and retry outcomes remain unprobed. | In a separately authorized follow-up, inject failures at initial load, abandon/delete, session insert, default seeding, cross-preview, and default-picker persistence. Check partial state, promise ownership, recoverability and late settlement after navigation; keep B08 component review separate. |
-| L07 | Lead; B06e source inspection, re-verified against the tree at `9cfe025` during B07a salvage; no probe | `src/components/stats/RecordsPanel.tsx:42`, `65`, `74`, `76`; `src/db/schema.ts:97–104` | Two defects in `RecordsPanel` that F22/F23 do not cover. (1) **Stale discount:** `createEffect(() => { void load(props.liftId) })` tracks only `props.liftId`; `settings.highRepDiscount` is read at lines 74 and 76 inside `load`, after two awaits and therefore outside the tracking scope, so changing the high-rep discount never refreshes the records panel — the user sees e1RM figures computed under the previous setting until the lift is re-selected. (2) **Unindexed scan:** `db.sets.where('liftId')` at line 65 has no supporting index; `schema.ts` declares `idx_sets_sessionId` but no `idx_sets_liftId`, so every cross-set lookup is a full scan of the largest table. Both confirmed by source inspection, neither reproduced under load or timed. | Track the discount explicitly (read `settings.highRepDiscount` in the effect body, or pass it as a `load` argument) and cover a discount change with a Stats test. Add `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId);` alongside the existing indexes, then measure the cross-set path with a realistic set count before and after. Two further observations from the same run need no separate ID: orphaned cross-set attribution is already inside F22's recommended fix, and the fallback to 0 for lifts with no training max is cosmetic. |
+| L06 | **Open — explicitly deferred** (B12d); B06a source inspection only, no injected failure | `src/screens/Today.tsx:43–71`, `113–122`, `135–148`, `174–192`; `src/components/workout/AccessoryPicker.tsx:118–143` | Today fires load/start without a catch or local error state; defaults load after startSession, and selection/cross-preview failures have no local recovery UI. The default-mode picker also swallows persistence failure before reporting a successful pick, while launch rereads the DB. Exact user-visible failure and retry outcomes remain unprobed. | In a separately authorized follow-up, inject failures at initial load, abandon/delete, session insert, default seeding, cross-preview, and default-picker persistence. Check partial state, promise ownership, recoverability and late settlement after navigation; keep B08 component review separate. **B12d disposition:** this is the one cross-file question the review does not resolve, and it is deferred by **scope, not by missing evidence**. The lead asks for a failure-injection pass — inject at initial load, abandon/delete, session insert, default seeding, cross-preview and default-picker persistence — which was never authorized and is a different kind of work from reading code. B08's component review is complete and was deliberately kept separate. Recorded as **explicitly blocked on authorization** under batch rule 8. |
+| L07 | **Resolved** (B12d): (1) assessed and not opened, (2) opened as F94 | `src/components/stats/RecordsPanel.tsx:42`, `65`, `74`, `76`; `src/db/schema.ts:97–104` | Two defects in `RecordsPanel` that F22/F23 do not cover. (1) **Stale discount:** `createEffect(() => { void load(props.liftId) })` tracks only `props.liftId`; `settings.highRepDiscount` is read at lines 74 and 76 inside `load`, after two awaits and therefore outside the tracking scope, so changing the high-rep discount never refreshes the records panel — the user sees e1RM figures computed under the previous setting until the lift is re-selected. (2) **Unindexed scan:** `db.sets.where('liftId')` at line 65 has no supporting index; `schema.ts` declares `idx_sets_sessionId` but no `idx_sets_liftId`, so every cross-set lookup is a full scan of the largest table. Both confirmed by source inspection, neither reproduced under load or timed. | Track the discount explicitly (read `settings.highRepDiscount` in the effect body, or pass it as a `load` argument) and cover a discount change with a Stats test. Add `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId);` alongside the existing indexes, then measure the cross-set path with a realistic set count before and after. **B12d disposition — both halves settled.** (1) The stale-discount defect was re-examined in B08h with `RecordsPanel` under full review: the read is indeed outside the tracking scope, but it is **not reachable** — `RecordsPanel` renders only on `/stats` and `/history`, `highRepDiscount` is changeable only on `/settings`, and every path between them unmounts and remounts the panel. Recorded as a latent hazard, not opened. (2) The missing index is confirmed and **opened as F94**, with a wider blast radius than this lead described: `sets.liftId` is the only unindexed foreign key in the schema, and its hottest caller is `detectPRs`, which runs on every logged set — not `RecordsPanel`. Two further observations from the same run need no separate ID: orphaned cross-set attribution is already inside F22's recommended fix, and the fallback to 0 for lifts with no training max is cosmetic. |
 
 ## Batch rules and completion evidence
 
@@ -285,7 +300,7 @@ area membership is not permission to review the entire area in one session.
 | B09 | Service worker, timers, notifications and tests | **Closed** (B09a–B09c). L04 resolved into F65; F65–F68 opened |
 | B10 | Build/deploy/config/scripts/public assets | **Closed** (B10a–B10d). F69–F84 opened |
 | B11 | E2E, test infrastructure, domain types and remaining stores | **Closed** (B11a–B11c). F85–F88 opened |
-| B12 | Documentation/data relevance and final reconciliation | Scope accounting and cross-file closure |
+| B12 | Documentation/data relevance and final reconciliation | **Closed** (B12a–B12d). F89–F94 opened; review complete |
 
 ## File ledger
 
@@ -4472,3 +4487,96 @@ carried; the remaining items belong to B12d.
 **Ledger rows updated:** six B12 rows moved `pending` → `deep`. **The File ledger
 is complete: 179 of 179 rows `deep`, with no row in any other state.** **Next
 action: B12d — the final reconciliation under batch rule 8.**
+
+### 2026-09-15 — B12d: final reconciliation (closes the review)
+
+**Revision:** `9b755b5` (B12c). No application files were touched at any point in
+this review. Single agent. This batch reviews no new files — the File ledger was
+completed by B12c — and instead discharges batch rule 8.
+
+**Rule 8, condition by condition:**
+
+**1. Every in-scope file `deep` at its applicable revision.** Verified by count:
+179 ledger rows matching `| path | area | deep |`, and **zero** matching
+`pending`, `partial`, `reported`, `stale` or `blocked`. The `reported` status —
+the area-level claim that once covered 52 unverified `src/components/**` rows —
+no longer appears anywhere in the document.
+
+**2. Cross-file questions resolved or explicitly blocked.**
+
+| Lead | Disposition |
+|---|---|
+| L01 | Resolved into confirmed F07 |
+| L02 | **Closed in B12d** — F14/F15 for save ordering, plus F54–F56 from B08d's accessory review. The original unspecified accessory-editing concern was never independently recovered and is recorded as lost rather than carried, per rule 5 |
+| L03 | Resolved into confirmed F13 |
+| L04 | **Resolved into confirmed F65** — reproduced in B09a, the last lead in the tracker that had never been reproduced |
+| L05 | Resolved into confirmed F33/F34 |
+| L06 | **Open — explicitly blocked on authorization.** Deferred by scope, not by missing evidence: it asks for a failure-injection pass across Today's load/start/abandon paths, which is different work from reading code and was never authorized |
+| L07 | **Resolved in B12d.** (1) The stale-discount read is real but unreachable — B08h traced it with `RecordsPanel` under full review; every route that changes `highRepDiscount` remounts the panel. Recorded as a latent hazard, not opened. (2) The missing index is confirmed and **opened as F94**, with a wider blast radius than the lead described |
+
+**3. Findings reconciled.** 94 findings carry a severity, a location, evidence and
+a current state. Settled in this batch:
+
+- **F36 decided** (it was explicitly deferred to B12): standardise both "current
+  training max" helpers on **"highest `id` wins at equal `setAt`"**.
+  `schema.ts:11` makes `trainingMaxes.id` `AUTOINCREMENT`, so the id is monotonic
+  and never reused — the highest id at an instant *is* the newest insert. This
+  needs no new column and preserves `getCurrentTm`'s current behaviour while
+  correcting `getAllCurrentTms`, the helper that disagrees with it.
+- **F82 decided**: keep the file, move it out of `public/`. B12a established the
+  state is documented and deliberate (`COMMON_MISTAKES` #7), so the finding is not
+  "nobody wired this up". What remains is that a manual-import convenience is
+  served by publishing 44.8 KB of the author's real training history — 23 sessions,
+  184 sets — to the web on every deploy. Moving it to a non-served path keeps the
+  documented workflow (the user picks a file; it need not be a URL) and drops both
+  the payload and the exposure. If it must stay served, that is a deliberate choice
+  and should be written down as one.
+- **Seven findings amended against later evidence** rather than left standing as
+  first written: F52 (cites `COMMON_MISTAKES` #6, which states its rule), F70
+  (README's installability promise), F71 (ESLint does reference `tsconfig.e2e.json`
+  — the original "referenced by nothing" was too strong), F76 (the claim appears in
+  two documents), F78 (the DEV-only reset hook makes the fix structural), F79 (the
+  harness demonstrably ran and passed), F80 and F82 (both states already
+  documented). Corrections were recorded where the finding lives, not silently.
+
+**4. Appropriate final integration checks.** `pnpm run check:ci` — the same
+command `deploy.yml` gates production on — run in full:
+
+| Gate | Result |
+|---|---|
+| `pnpm lint` | **PASS** |
+| `pnpm test:coverage` | **PASS** — 48 files, **1,094 tests** |
+| Coverage vs the 80% gate | **PASS** — statements 93% (3669/3945), branches 85.43% (1273/1490), functions 91.69% (1247/1360), lines 95.92% (2705/2820) |
+| `pnpm build` | **PASS** — production bundle emitted, injectManifest ran |
+
+The coverage numbers are strong *within the measured set*, which is exactly F69's
+point: that set is `lib/` + `screens/` + `store/` only, and 22 of the 23 findings
+opened in B08 and B09 live outside it.
+
+**What this review did not do, stated plainly:**
+
+- **No application or test file was changed.** Rule 4 held for all twelve areas.
+  Every probe was created, run, and deleted; the working tree was verified clean at
+  every commit. All 94 findings are therefore open.
+- **The E2E suite fails** — F85, 6 of 32 — and this review did not fix it.
+- **F67 is unverified.** The `new Notification(...)` platform question needs a real
+  device (installed PWA, permission granted, tab hidden, one rest bell). It is
+  recorded as needing that check rather than asserted, per this project's standing
+  rule about mobile claims.
+- **L06 is not resolved**, and is recorded as blocked on authorization rather than
+  quietly dropped.
+- Performance findings (F94, and the N+1 shape noted in B08h) were identified by
+  inspection and **not measured**. Each says so.
+
+**Findings:** F94 (medium, resolves L07(2)).
+
+**Where to start, if only a few things get fixed:** F65 with F79 and F78 (one 503
+permanently breaks the offline shell; the harness that would catch it exists and
+passes); then F85 with F74 (fixing the specs without running them anywhere returns
+them to the state that produced the finding); then F69, F73 and F94. The reasoning
+is in the completion card at the top of this document.
+
+**Ledger rows updated:** none — B12d reviews no files. **Area B12 is closed and
+the review is complete.** The next action is not another batch: it is deciding
+which findings to fix, in what order, and whether the fixes are done here or
+handed to `ENGINEERING_PASSES.md`'s prompts.
