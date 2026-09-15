@@ -8,63 +8,74 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07, B08 and B09 are CLOSED; B10 is open with B10a–B10c done.** 144 of
-179 ledger rows are `deep`. **Seven B10 rows remain — B10d closes the area.**
+**Areas B07, B08, B09 and B10 are all CLOSED.** All 25 B10 rows are `deep`
+across four batches (B10a–B10d). **151 of 179 ledger rows are now `deep`**, and
+`reported` no longer appears anywhere in the ledger. **Two areas remain: B11
+(11 rows) and B12 (17 rows).**
 
-**B10 has one theme, and it is not that the checks are bad. It is that the good
-ones are aimed away from the risk, or aimed at nothing.**
+**B10's theme, in one sentence: the checks this repo has are good, and they are
+aimed away from the risk — or at nothing at all.**
 
 - **F69 (medium) — the coverage gate measures the wrong half.** `include` is
-  `lib` + `screens` + `store`. Of the 23 findings opened in B08 and B09, **22 live
-  in files the 80 % gate cannot see** — and `test:coverage` is what `deploy.yml`
-  runs, so the blind spot sits at the production gate. Stryker repeats the shape:
-  `mutate` is `src/lib/**` only.
+  `lib` + `screens` + `store`, so of the 23 findings opened in B08 and B09, **22
+  live in files the 80 % gate cannot see** — and `test:coverage` is what
+  `deploy.yml` runs, so the blind spot sits at the production gate. Stryker
+  repeats the shape (`mutate: src/lib/**` only).
 - **F74 + F79 (medium) — two built capabilities left dormant.** No workflow runs
   Playwright, so `tests/e2e/**` never executes; and
-  `scripts/verify-notify-hardening.js` — a complete harness that drives the
-  **production build with the real service worker** through five pass/fail legs and
-  exits 1 on failure — is invoked by no script and no workflow.
-- **F78 (medium) — and the suite that does exist cannot see the service worker
-  anyway.** Playwright starts `pnpm dev`, and `VitePWA` has no `devOptions`, so no
-  SW is registered. F65 and F66 are invisible to every automated test by
-  construction.
-- **F70 (medium)** — the manifest names two icons that do not exist, with no
-  `apple-touch-icon`; installability fails while the build stays green.
-- **F71 + F77 (low/medium) — whole directories are checked by nothing.**
-  `tsc` never compiles `tests/e2e/**`, and ESLint resolves **0 rules** for any
-  `.js`/`.mjs` file, so 413 lines of Playwright-driving Node in `scripts/` are
-  neither linted nor type-checked.
+  `scripts/verify-notify-hardening.js` — a complete harness driving the
+  **production build with the real service worker** through five pass/fail legs,
+  exiting 1 on failure — is invoked by no script and no workflow.
+- **F78 (medium) — and the suite that exists cannot see the service worker.**
+  Playwright starts `pnpm dev`; `VitePWA` has no `devOptions`, so no SW is
+  registered. F65 and F66 are invisible to every automated test by construction.
+- **F70 + F72 + F81 (medium) — the icon set was never made.** The manifest names
+  two PNGs that do not exist; there is no `apple-touch-icon`; `favicon.svg` is a
+  purple/blue glyph unrelated to the app's black-and-green palette; and
+  `icons.svg` is a **bluesky/discord/github/x** social sprite from a scaffold,
+  shipping to production referenced by nothing. These are one asset task, not
+  three fixes, which is why none is done.
 - **F73 (medium, supply chain)** — `pnpm dlx wrangler` is unpinned and absent from
-  the lockfile, run with `CLOUDFLARE_API_TOKEN` in env, past every other control
-  the repo has.
-- **F75, F76, F80 (low)** — CI is `pull_request`-only; `CLAUDE.md` understates the
-  deploy gate; and `debug-browser.js`'s "clears DB" wipes IndexedDB, which this app
-  does not use.
+  the lockfile, run with `CLOUDFLARE_API_TOKEN` in env, past `--frozen-lockfile`,
+  `pnpm audit signatures`, the pinned `packageManager` and dependabot.
+- **F71 + F77 — whole directories are checked by nothing.** `tsc` never compiles
+  `tests/e2e/**`, and ESLint resolves **0 rules** for any `.js`/`.mjs`, so 413
+  lines of Playwright-driving Node in `scripts/` have no linter and no type
+  checker.
+- **F75, F76, F80, F82, F83, F84 (low)** — CI is `pull_request`-only; `CLAUDE.md`
+  understates the deploy gate; `debug-browser.js`'s "clears DB" wipes IndexedDB
+  the app does not use; `demo-seed.json` is 44.8 KB of real training history that
+  no code reads and every deploy publishes; `.gitignore` hides `.claude/` while
+  `CLAUDE.md` points at three tracked files inside it; and
+  `migrate-history.py`'s hardcoded tables have already drifted from `seed.ts`.
 
-**The single highest-leverage fix in this area** is wiring `verify-notify-hardening.js`
-into CI and adding a 503 leg to it: that one change turns F65 — the highest-severity
-open finding in the tracker — from a documented bug into a guarded regression, using
-a harness that already exists.
+**The single highest-leverage fix in the repo right now** is wiring
+`verify-notify-hardening.js` into CI and adding a 503 leg to it. That one change
+turns **F65** — the highest-severity open finding in the tracker — from a
+documented bug into a guarded regression, using a harness that already exists and
+already asserts the healthy version of the same behaviour (leg A).
 
-**Next batch: B10d — data, assets, css and ignore files, which closes B10.**
-`scripts/migrate-history.py` (396), `public/demo-seed.json` (2,596),
-`public/favicon.svg`, `public/icons.svg` (F72's orphan), `src/index.css` (58),
-`.gitignore` (40) and `.claudeignore` (33). The seed JSON is tracked production
-data and is in scope per the tracker's own note; `migrate-history.py` is the only
-Python in the repo and, like the other scripts, is covered by no linter or type
-checker.
+**Next area: B11 — E2E, test infrastructure, domain types and remaining stores
+(11 rows).** Start with `tests/e2e/**`, which B10 just characterised from the
+outside: F71 says it is never type-checked, F74 says it is never run, and F78 says
+it runs against an environment with no service worker. Reviewing the specs
+themselves is what turns those three into a concrete statement about what
+integration coverage the project actually has. `src/test-setup.ts` belongs in the
+same slice — B09c recorded that its `MockWorker` re-implements
+`timer.worker.ts`'s protocol with nothing to catch drift. **B12** (17 rows:
+documentation relevance and the final reconciliation) closes the review, and
+already carries F76 and F82.
 
-Latest run: **B10c complete** — `scripts/verify-notify-hardening.js` (256),
-`scripts/debug-browser.js` (157), `eslint.config.js` (42), `stryker.config.mjs`
-(19) and `playwright.config.ts` (43) reviewed in full. Five files marked deep;
-**144 files deep in total.** `pnpm lint` and `tsc -b` clean (exit 0). Four new
-findings (F77–F80); **F71 amended** — `eslint.config.js:34` does reference
-`tsconfig.e2e.json`, so that file is used for type-aware linting but still never
-compiled. `stryker.config.mjs` is clean. Only this tracker changed; the tree is
-clean. This card authorizes commit, push and PR; operator acceptance remains a
-separate native Kanban review step.
+Latest run: **B10d complete** — `scripts/migrate-history.py` (396),
+`public/demo-seed.json` (2,596), `public/favicon.svg`, `public/icons.svg`,
+`src/index.css` (58), `.gitignore` (40) and `.claudeignore` (33) reviewed in full.
+Seven files marked deep; **151 files deep in total.** `pnpm lint` and `tsc -b`
+clean (exit 0). Four new findings (F81–F84). `src/index.css` and `.claudeignore`
+are clean. Only this tracker changed; the tree is clean. This card authorizes
+commit, push and PR; operator acceptance remains a separate native Kanban review
+step.
 
-**Remaining work — 35 of 179 ledger rows are not yet `deep`** (144 are). Recounted
+**Remaining work — 28 of 179 ledger rows are not yet `deep`** (151 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -79,7 +90,7 @@ correct; only the remaining-work totals were not.
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
-| B10 | 7 pending | **Open (B10a–B10c done).** Build/deploy/config/scripts/public assets. Remaining slice: B10d — data, assets, css and ignore files (7 rows). |
+| B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
@@ -212,6 +223,10 @@ claimed here.
 | F78 | Medium; B10c config cross-check | `playwright.config.ts:38-42`; `vite.config.ts:43-62`; `tests/e2e/` | The Playwright suite starts `pnpm dev` and points at `http://localhost:5173`, so the E2E tests run against the **development server**. `VitePWA` is configured with no `devOptions`, which means the service worker is **not registered in dev at all** — and the dev server serves unbundled modules with none of `public/_headers` applied. So the app's only automated integration suite exercises neither the service worker, nor the production bundle, nor the production CSP and security headers. That is exactly the surface F65 and F66 live on: a cache-poisoning bug in the navigation handler is invisible to every automated test the repo has, by construction rather than by omission. | Point the E2E `webServer` at `vite preview` (port 5175, which `verify-notify-hardening.js` already uses) after a build, so the specs run against the real artifact — or add `devOptions: { enabled: true }` to `VitePWA` if a dev-server suite is wanted as well. Fixing this is a precondition for the F65 regression test, which cannot be written against the current setup. |
 | F79 | Medium; B10c script inspection | `scripts/verify-notify-hardening.js:1-256`; `package.json:6-20`; `.github/workflows/`; `docs/verification/2026-08-09-swe-hardening.md:49`, `68` | A complete, **CI-ready** service-worker verification harness exists and is invoked by nothing. `verify-notify-hardening.js` spawns `vite preview` against the **production build**, drives the real app in headless Chromium with the **real service worker**, runs five independent legs in fresh browser contexts (A: offline hard reload at `/` and `/workout` renders the shell; B/C/D/E: the page-vs-SW notification matrix), stubs `registration.showNotification` to count fires, prints PASS/FAIL per leg and **exits 1 on failure**. It has no `package.json` script entry and appears in no workflow — it is reachable only by typing `node scripts/verify-notify-hardening.js`, as its own documentation says. Leg A is one 503 away from being F65's regression test. Same family as F74: the capability was built, then left dormant. | Add a `verify:sw` script and a CI job (it needs `pnpm build` first and a Chromium install, so a separate job like the Playwright one F74 asks for). Extend leg A with a poisoned-shell case — serve a 503 navigation, then go offline and assert the shell still renders — which converts F65 from a finding into a guarded regression. |
 | F80 | Low; B10c script inspection | `scripts/debug-browser.js:7`, `96-102` | The debug script's headline feature does nothing. It prints `'[debug] wiping IndexedDB (TrainingLog)...'` and calls `indexedDB.deleteDatabase('TrainingLog')`, but **the app uses no IndexedDB** — `grep -rn indexedDB src/` returns nothing outside tests; persistence is OPFS via SQLite WASM (the SAH pool VFS) plus `localStorage` for the workout store and the session-gap log. Deleting a database that never existed resolves successfully and silently, so the default `node scripts/debug-browser.js` — documented as "fresh run (clears DB)" and "a true first-run experience" — leaves every byte of real state in place, and the script then tries to walk the setup wizard that a returning user never sees. The name `TrainingLog` suggests this was correct before the storage layer moved. | Wipe what the app actually uses: `navigator.storage.getDirectory()` + remove the OPFS entries, and `localStorage.clear()`. Until then the `--no-wipe` flag and the default behave identically, so the flag should either work or go. |
+| F81 | Medium; B10d asset inspection | `public/favicon.svg`; `public/icons.svg`; `index.html:14`; `src/index.css:3-18` | **The app's icon set is scaffold leftovers from another project.** `public/icons.svg` is a social-link sprite — its symbols are `bluesky-icon`, `discord-icon`, `documentation-icon`, `github-icon`, `social-icon` and `x-icon` — for links this app does not have. `public/favicon.svg` (9.3 KB) is drawn entirely in purple and blue (`#863bff`, `#7e14ff`, `#47bfff`, `#ede6ff`), which is unrelated to the app's own design tokens: `--color-accent: #4ade80` on `--color-bg: #000000`. It is the icon a user sees in the browser tab and, per `index.html:14`, the only icon reference the document makes. Read with **F70** (the manifest names `icon-192.png` and `icon-512.png`, neither of which exists) and **F72** (`icons.svg` is referenced by nothing; `svg` is not precached), the whole icon story is: no PWA icons, no `apple-touch-icon`, a foreign favicon, and an orphaned template sprite shipping to production. | Draw an icon set for the app and wire it up once: an SVG favicon in the app's own palette, `icon-192.png`/`icon-512.png` for the manifest, and an `apple-touch-icon` link. Delete `icons.svg`. This is the change F70 and F72 are both waiting on — they are not three separate fixes but one asset task, which is why none of them has been done. |
+| F82 | Low; B10d asset inspection | `public/demo-seed.json` | A 44.8 KB export-format JSON that **no code reads** — `grep -rn 'demo-seed' src/ tests/ scripts/` returns nothing — and that `public/` therefore ships verbatim to `dist/`, publicly fetchable at `/demo-seed.json`. It is not a fixture: it carries the full import envelope (`exportedAt: 2026-05-08T18:04:36.896Z`, `version: 1`) and real training history — 4 lifts (OHP/Deadlift/Bench/Squat), 18 training maxes, 2 cycles, 23 sessions, **184 sets**, 18 exercises, 25 accessory sets and a settings row. Whatever it was staged for (a demo mode, a seeding path) was never wired up, so the cost today is a published copy of the author's training log and 45 KB of dead weight in every deploy. | Decide which it is: wire it to an actual demo/seed path, move it out of `public/` into a fixture directory if it is test data, or delete it. Note that the tracker scoped this file in deliberately ("Tracked `public/demo-seed.json` is in scope"), so the decision belongs in B12's reconciliation if it is not made sooner. |
+| F83 | Low; B10d `git check-ignore` | `.gitignore:28`; `CLAUDE.md:32-34`, `41-42` | `.gitignore` ignores `.claude/`, yet **five files under it are tracked** — `ARCHITECTURE_MAP.md`, `COMMON_MISTAKES.md`, `QUICK_START.md`, `completions/README.md`, `sessions/README.md` — and `CLAUDE.md` names the first three as the project's key documents. Already-tracked files are unaffected by a later ignore rule, so the current five are safe; anything **new** added there is silently invisible. `git check-ignore -v .claude/NEW_DOC.md` → `.gitignore:28:.claude/`. A contributor or agent writing a fourth key document in the directory the project points at gets no warning from `git status` and the file never reaches the repo. | Narrow the rule to the local-only subtrees and let the documentation through: replace `.claude/` with `.claude/settings.local.json` and `.claude/agents/` (which is what the ignore is actually for — see the ignored entries listed by `git status --ignored`). |
+| F84 | Low; B10d cross-check | `scripts/migrate-history.py:23-51`; `src/db/seed.ts:5-31` | The migration script hardcodes its own copies of the lift and exercise tables with fixed ids, under a comment stating they "must match seed.ts order so IDs are 1–4", and **they have already drifted**. The lifts still match. The exercises do not: id 3 is `"Curls"` in the script and `'Bicep Curls'` in `seed.ts`, and `seed.ts` has since grown to **20** exercises (`Reverse Nordic`, `Pull Through`) against the script's 18. A migration run today emits `{"id": 3, "name": "Curls"}` into an import envelope that `importJson` validates weakly (**F08**), landing a second exercise alongside the seeded `Bicep Curls` — and **F41** records that once two exercises share a name the repair path is closed, because `renameExercise` rejects on the twin. A one-shot tool, but its one shot is a user's entire history. | Have the script read the tables from a single source rather than restating them — generate them from `seed.ts`, or emit exercises by name without ids and let the importer resolve them. At minimum, re-sync the two tables and add a test that fails when they diverge. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -271,7 +286,7 @@ area membership is not permission to review the entire area in one session.
 | B07 | Calculation, progression, composition and other libraries/tests | **Closed** (B07a–B07g). Numeric boundaries and domain invariants; F24–F45 opened |
 | B08 | Components, hooks, related tests | **Closed** (B08a–B08h). Reported coverage recovered through bounded verification; F46–F64 opened |
 | B09 | Service worker, timers, notifications and tests | **Closed** (B09a–B09c). L04 resolved into F65; F65–F68 opened |
-| B10 | Build/deploy/config/scripts/public assets | Deployment assumptions and operational failures |
+| B10 | Build/deploy/config/scripts/public assets | **Closed** (B10a–B10d). F69–F84 opened |
 | B11 | E2E, test infrastructure, domain types and remaining stores | Integration gaps and shared contracts |
 | B12 | Documentation/data relevance and final reconciliation | Scope accounting and cross-file closure |
 
@@ -290,11 +305,11 @@ column as work is completed.
 | `.claude/QUICK_START.md` | B12 | pending | — |
 | `.claude/completions/README.md` | B12 | pending | — |
 | `.claude/sessions/README.md` | B12 | pending | — |
-| `.claudeignore` | B10 | pending | — |
+| `.claudeignore` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (clean) |
 | `.github/dependabot.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (clean) |
 | `.github/workflows/ci.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F74, F75) |
 | `.github/workflows/deploy.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F73, F74, F75, F76) |
-| `.gitignore` | B10 | pending | — |
+| `.gitignore` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F83) |
 | `AMRAP_TARGET_REPS_ANALYSIS.md` | B12 | pending | — |
 | `CLAUDE.md` | B12 | pending | — |
 | `ENGINEERING_PASSES.md` | B12 | pending | — |
@@ -314,11 +329,11 @@ column as work is completed.
 | `pnpm-lock.yaml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (integrity artifact; v9.0, frozen in both workflows) |
 | `pnpm-workspace.yaml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (clean; override verified live in the lock) |
 | `public/_headers` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (clean; CSP matches the other two copies) |
-| `public/demo-seed.json` | B10 | pending | — |
-| `public/favicon.svg` | B10 | pending | — |
-| `public/icons.svg` | B10 | pending | — |
+| `public/demo-seed.json` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F82) |
+| `public/favicon.svg` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F81) |
+| `public/icons.svg` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F81, F72) |
 | `scripts/debug-browser.js` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (F80) |
-| `scripts/migrate-history.py` | B10 | pending | — |
+| `scripts/migrate-history.py` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F84) |
 | `scripts/verify-notify-hardening.js` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (F79 — CI-ready, invoked by nothing) |
 | `src/App.tsx` | B01 | deep | B01b — app shell and training-max helpers (1/5); evidence below |
 | `src/components/forms/DurationInput.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (fieldLabel never exercised) |
@@ -384,7 +399,7 @@ column as work is completed.
 | `src/db/sqlite-test-client.ts` | B02 | deep | B02b — table layer and test client (3/5); evidence below |
 | `src/db/sqlite.worker.ts` | B01 | deep | B01a; full file; findings/evidence below |
 | `src/hooks/use-confirmation.ts` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F48; no test file) |
-| `src/index.css` | B10 | pending | — |
+| `src/index.css` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (clean) |
 | `src/lib/accessory-tm.test.ts` | B07 | deep | B07e — all 96 lines; 9 tests passed; test gaps below |
 | `src/lib/accessory-tm.ts` | B07 | deep | B07e — all 78 lines; no findings; slate guard probed across six shapes |
 | `src/lib/assistance.test.ts` | B07 | deep | B07f — all 274 lines; 28 tests passed; test gaps below |
@@ -3814,3 +3829,93 @@ than left open here.
 left. **Next action: B10d — `scripts/migrate-history.py`, `public/demo-seed.json`,
 `public/favicon.svg`, `public/icons.svg`, `src/index.css`, `.gitignore` and
 `.claudeignore`**, which closes area B10.
+
+### 2026-09-15 — B10d: data, assets, css and ignore files (closes area B10)
+
+**Revision:** `1c99c45` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; no probe files were created — the
+evidence here is asset inspection, `git check-ignore`, and a cross-check against
+`seed.ts`. Single agent; seven files deeply reviewed; no application edits.
+**This closes area B10.**
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `scripts/migrate-history.py` | 1–396 | `d3f64e6d1ed4d167fb6ddde6a0cabbedcb4c44ec` |
+| `public/demo-seed.json` | 1–2596 (structure reviewed, not line by line) | `d6caa4ed41bd930773613740e05ed12dc80d914d` |
+| `public/favicon.svg` | asset, reviewed by content | `6893eb13237060adc0c968a690149a49faa2d7d3` |
+| `public/icons.svg` | asset, reviewed by content | `e9522193d9f796a9748e9ad8c952a5df73c87db9` |
+| `src/index.css` | 1–58 | `58cd9bfcc5a9feff9602f1bca0e627017b7dd835` |
+| `.gitignore` | 1–40 | `c03a5b4b216cd71c4e03b2a62665e9ebba7abd1f` |
+| `.claudeignore` | 1–33 | `79ee67ab74451b3854ca90d9ac3b6c35410ce309` |
+
+**Behavior and invariants traced:**
+
+- `migrate-history.py`: the CSV → import-JSON pipeline — `determine_week` and
+  `calc_tm` inferring cycle position from main and FSL set shapes, `assign_cycles`,
+  `build_json` emitting the full export envelope, and the `--ohp/--dl/--bench/--squat`
+  TM overrides. Its hardcoded `LIFTS`/`EXERCISES` tables and their stated coupling
+  to `seed.ts` are F84.
+- `public/demo-seed.json`: the envelope shape and record counts (F82).
+- `src/index.css`: the `@theme` token set, `--nav-h` with `env(safe-area-inset-bottom)`,
+  the narrowed `user-select`/`-webkit-touch-callout` rule and the reasoning behind
+  it, and the app-wide `prefers-reduced-motion` collapse.
+- `.gitignore` and `.claudeignore`: what each actually excludes, including the
+  `training-log-*.json` rule that covers the local export files in the working tree.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Evidence for F81: `grep -oE '<symbol id="[^"]+"' public/icons.svg` →
+  `bluesky-icon`, `discord-icon`, `documentation-icon`, `github-icon`,
+  `social-icon`, `x-icon`; `grep -oE 'fill="#[0-9a-fA-F]{6}"' public/favicon.svg` →
+  `#47bfff`, `#7e14ff`, `#863bff`, `#ede6ff`, against `--color-accent: #4ade80` and
+  `--color-bg: #000000` in `src/index.css`.
+- Evidence for F82: `grep -rn 'demo-seed' src/ tests/ scripts/` returns nothing;
+  parsing the file gives `exportedAt: 2026-05-08T18:04:36.896Z`, `version: 1`, and
+  counts of 4 lifts / 18 trainingMaxes / 2 cycles / 23 sessions / 184 sets / 18
+  exercises / 25 accessorySets / 1 settings row.
+- Evidence for F83: `git ls-files .claude/` lists five tracked files;
+  `git check-ignore -v .claude/NEW_DOC.md` → `.gitignore:28:.claude/`.
+- Evidence for F84: `seed.ts:14` has `Bicep Curls` where the script's id 3 is
+  `Curls`, and `seed.ts` lists 20 exercises (`Reverse Nordic`, `Pull Through`
+  added) against the script's 18.
+- Not run: the migration script (it needs a user CSV), and no full suite.
+
+**Findings:** F81 (medium), F82 (low), F83 (low), F84 (low).
+
+**Substantive negative conclusions:**
+
+- **`src/index.css` is clean**, and the comment at `:24-35` explaining why
+  `user-select: none` was pulled off the app root and scoped to controls is exactly
+  the kind of reasoning worth keeping — it names the regression it fixed (notes,
+  training maxes and exercise names becoming unselectable). One cross-reference
+  rather than a new finding: the selector list is
+  `button, nav, label, [role="button"]`, and **F61**'s `SetReadout` tap target is a
+  bare `div` with no role, so a long-press on a logged set still raises the iOS
+  callout. That is a second small consequence of F61, not a defect in this file.
+- **`.claudeignore` is clean** and consistent with `CLAUDE.md`'s "never auto-load"
+  list.
+- The `training-log-*.json` rule at `.gitignore:32` correctly covers the local
+  export files sitting in the working tree, so they are untracked by intent rather
+  than by accident.
+- `migrate-history.py` is otherwise sound for a one-shot tool: argparse with
+  documented overrides, stdout output meant for redirection, and week/TM inference
+  that is explicit about being a guess the user should verify. Being Python, it is
+  outside ESLint and `tsc` by nature rather than by the oversight F77 describes.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- Nothing asserts that `migrate-history.py`'s tables still match `seed.ts` (F84),
+  that the manifest's icons exist (F70/F81), or that files in `public/` are
+  referenced by something (F72/F82). All three are single-assertion CI checks
+  against drift that has already happened.
+
+**Open questions / remaining ranges:** none carried. F82's "wire it up or delete
+it" decision is flagged for B12 if it is not made sooner, since the tracker scoped
+that file in deliberately.
+
+**Area B10 closure:** all 25 ledger rows `deep` with per-file evidence. Sixteen
+findings opened (F69–F84) and F71 amended in place after B10c found that
+`eslint.config.js` does reference `tsconfig.e2e.json`. **Next action: B11 — E2E,
+test infrastructure, domain types and remaining stores (11 rows)**, starting with
+`tests/e2e/**`, which B10 characterised from the outside through F71, F74 and F78.
