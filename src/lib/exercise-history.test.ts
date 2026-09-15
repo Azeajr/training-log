@@ -244,3 +244,39 @@ describe('getLiftHistory', () => {
     expect(result[0].sets[0].weight).toBe(170)
   })
 })
+
+// ── F42 ─────────────────────────────────────────────────────────────────────
+describe('getLiftHistory and cross work', () => {
+  it("includes the lift's cross work logged on another lift's day (F42)", async () => {
+    await db.sessions.bulkAdd([
+      { id: 1, cycleId: 1, liftId: 1, week: 1, date: new Date('2026-01-06T12:00:00'), notes: null, status: 'completed' },
+      { id: 2, cycleId: 1, liftId: 2, week: 1, date: new Date('2026-01-08T12:00:00'), notes: null, status: 'completed' },
+    ])
+    await db.sets.bulkAdd([
+      // Squat's own day.
+      { id: 1, sessionId: 1, type: 'main', setNumber: 1, weight: 275, reps: 8, isAmrap: false },
+      // Squat trained as a cross block on Bench's day — heavier than anything
+      // above, and already counted by the PR toast, Stats and the AMRAP seed.
+      { id: 2, sessionId: 2, type: 'cross', setNumber: 1, weight: 315, reps: 5, isAmrap: false, liftId: 1 },
+    ])
+
+    const result = await getLiftHistory(db, 1)
+    const weights = result.flatMap(e => e.sets.map(s => s.weight)).sort((a, b) => a - b)
+    expect(weights).toEqual([275, 315])
+  })
+
+  it('does not include cross work from an unfinished session (F42 + F22)', async () => {
+    await db.sessions.bulkAdd([
+      { id: 1, cycleId: 1, liftId: 1, week: 1, date: new Date('2026-01-06T12:00:00'), notes: null, status: 'completed' },
+      { id: 2, cycleId: 1, liftId: 2, week: 1, date: new Date('2026-01-08T12:00:00'), notes: null, status: 'skipped' },
+    ])
+    await db.sets.bulkAdd([
+      { id: 1, sessionId: 1, type: 'main', setNumber: 1, weight: 275, reps: 8, isAmrap: false },
+      { id: 2, sessionId: 2, type: 'cross', setNumber: 1, weight: 315, reps: 5, isAmrap: false, liftId: 1 },
+    ])
+
+    const result = await getLiftHistory(db, 1)
+    const weights = result.flatMap(e => e.sets.map(s => s.weight))
+    expect(weights).toEqual([275])
+  })
+})

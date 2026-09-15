@@ -1,7 +1,7 @@
 import { createSignal, createEffect, For, Show } from 'solid-js'
 import { db } from '../../db/index'
 import { estimated1RM } from '../../lib/calc'
-import { bestEstimatedPerformance, isWorkingPerformance } from '../../lib/performance'
+import { bestEstimatedPerformance, baselineWorkingSets } from '../../lib/performance'
 import { settings } from '../../store/settings-store'
 import Rule from '../layout/Rule'
 
@@ -49,24 +49,16 @@ export default function RecordsPanel(props: Props) {
     const recRows: RecordRow[] = []
     const tmRows: TmRow[] = []
     for (const l of lifts) {
-      const sessions = await db.sessions.where('liftId').equals(l.id!).toArray()
-      const sessionIds = sessions.map(s => s.id!).filter(Boolean)
       const record: RecordRow = { name: l.name, e1rm: null, weight: null, reps: null, maxWeight: null, maxWeightReps: null }
-      const ownSets = sessionIds.length > 0
-        ? await db.sets.where('sessionId').anyOf(sessionIds).toArray()
-        : []
 
       // Heaviest weight actually lifted — measured, never estimated. Warmups and
       // failed (0-rep) sets don't count. Cross sets belong to the movement lift
       // they train, not the session's lift, so they're attributed by their own
-      // liftId: this lift's sessions contribute their non-cross work, and cross
-      // blocks tagged with this lift count even though they live in another
-      // lift's session. Ties on weight keep the set with more reps.
-      const crossSets = await db.sets.where('liftId').equals(l.id!).toArray()
-      const working = [
-        ...ownSets.filter(s => s.type !== 'warmup' && s.type !== 'cross'),
-        ...crossSets.filter(s => s.type === 'cross'),
-      ].filter(isWorkingPerformance)
+      // liftId. Ownership is decided once, in baselineWorkingSets: a record here
+      // has to be one History will also show, which is what this panel used to
+      // get wrong — it filtered nothing but liftId, so skipped and abandoned
+      // work set permanent records. Ties on weight keep the set with more reps.
+      const working = await baselineWorkingSets(db, l.id!)
 
       // Best e1RM across all successful working sets. This is intentionally
       // broader than the AMRAP-only PR toast: a hard main, joker, supplemental,

@@ -1,7 +1,7 @@
 import type { TrainingDB } from '../db/index'
 import type { HighRepDiscount } from '../types/domain'
 import { estimated1RM } from './calc'
-import { isWorkingPerformance } from './performance'
+import { isWorkingPerformance, baselineSets } from './performance'
 
 export interface PrResult {
   repPr: boolean
@@ -99,25 +99,23 @@ export async function detectPRs(
   reps: number,
   excludeSetId?: number,
   discount: HighRepDiscount = 'off',
+  liveSessionId?: number,
 ): Promise<PrResult> {
   const newE1Rm = estimated1RM(weight, reps, discount)
   if (reps < 1) return { repPr: false, e1RmPr: false, newE1Rm }
 
-  const sessions = await db.sessions.where('liftId').equals(liftId).toArray()
-  const sessionIds = sessions.map(s => s.id!).filter(Boolean)
-  if (sessionIds.length === 0) {
+  // One ownership rule, shared with RecordsPanel and the History badge.
+  const { own, cross, sessionsById } = await baselineSets(db, liftId, liveSessionId)
+  // "This lift has no history at all" is still not a toast (pr.test.ts pins it),
+  // but it is now decided on every qualifying session that contributed —
+  // including the ones holding only cross work. It used to be decided on the
+  // lift's OWN session rows before the cross query ran, so a movement trained
+  // entirely as cross work was scored against nothing (F37).
+  if (sessionsById.size === 0) {
     return { repPr: false, e1RmPr: false, newE1Rm }
   }
 
-  const ownSets = await db.sets
-    .where('sessionId').anyOf(sessionIds)
-    .filter(s => s.type !== 'cross' && isWorkingPerformance(s))
-    .toArray()
-  const crossSets = await db.sets
-    .where('liftId').equals(liftId)
-    .filter(s => s.type === 'cross' && isWorkingPerformance(s))
-    .toArray()
-  let prior = [...ownSets, ...crossSets]
+  let prior = [...own, ...cross].filter(isWorkingPerformance)
   if (excludeSetId != null) {
     prior = prior.filter(s => s.id !== excludeSetId)
   }

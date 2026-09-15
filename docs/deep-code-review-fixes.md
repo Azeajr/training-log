@@ -9,15 +9,15 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | | Count |
 |---|---|
-| Findings | **98** (F01–F98; F95–F98 opened during fix work) |
-| `open` | **87** |
+| Findings | **99** (F01–F99; F95–F99 opened during fix work) |
+| `open` | **83** |
 | `wip` | 0 |
-| `fixed` | **11** — F02, F04, F05, F06, F65, F66, F73, F79, F95, F96, F97 |
-| `fixed-by` | 0 |
+| `fixed` | **15** — F02, F04, F05, F06, F22, F37, F38, F42, F65, F66, F73, F79, F95, F96, F97 |
+| `fixed-by` | **1** — F43 (reader half; F99 carries the rest) |
 | `wontfix` | 0 |
 | `blocked` | 0 |
 
-**By severity: 14 High / 51 Medium / 33 Low.**
+**By severity: 14 High / 52 Medium / 33 Low.**
 
 > **Count correction.** `deep-code-review.md:34` says "12 high". Counted directly
 > from its own findings table, **13** rows carry High: F01, F02, F04, F05, F07,
@@ -110,7 +110,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F19 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
 | F20 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
 | F21 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
-| F22 | **High** | B06 | — | `src/components/stats/RecordsPanel.tsx` | `open` | — | Ownership rule for "what counts as a record" — settle before F38/F43/F63. |
+| F22 | **High** | B06 | — | `src/components/stats/RecordsPanel.tsx` | `fixed` | `<pending>` · `Stats.test.tsx` ×3 | **Ownership rule settled: completed sessions, plus the one being logged.** Stats filtered nothing but `liftId`, so skipped and abandoned work set permanent records History would never show. Now reads `baselineWorkingSets`. |
 | F23 | Medium | B06 | — | `src/components/stats/RecordsPanel.tsx` | `open` | — | — |
 | F24 | Medium | B07 | — | `src/lib/calc.ts` | `open` | — | Notification-layer tail confirmed in B09b (P26). |
 | F25 | Medium | B07 | — | `src/lib/calc.ts` | `open` | — | — |
@@ -125,13 +125,13 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F34 | Medium | B07 | C1 | `src/lib/cycle.ts` | `open` | — | — |
 | F35 | Medium | B07 | — | `src/lib/cycle.ts` | `open` | — | — |
 | F36 | Low | B07 | — | `src/lib/training-max.ts` | `open` | — | Decided in B12d: highest `id` wins at equal `setAt`. Fix is mechanical. |
-| F37 | Medium | B07 | — | `src/lib/pr.ts` | `open` | — | — |
-| F38 | Medium | B07 | — | `src/lib/pr.ts` | `open` | — | Folds into F22 shared-reader fix. |
+| F37 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `<pending>` · `pr.test.ts` cross-history case | Not in the planned chunk — fixed as a consequence of the shared reader. The "no history at all" guard tested the lift's **own** session rows and returned before the cross query ran, so a movement trained entirely as cross work was scored against nothing. It is now decided on every qualifying session, cross-only included. Both previously pinned behaviours preserved. |
+| F38 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `<pending>` · `pr.test.ts` ×4 | The three readers now share one rule via `lib/performance.ts`. The live-session clause is what lets the toast and the History badge agree while the toast still works mid-workout — `pr.ts:78-84` asserted that invariant and did not hold it. |
 | F39 | Medium | B07 | — | `src/lib/tm-recommendations.ts` | `open` | — | — |
 | F40 | Low | B07 | — | `src/lib/tm-recommendations.ts` | `open` | — | — |
 | F41 | Low | B07 | C1 | `src/lib/exercise.ts` | `open` | — | — |
-| F42 | Low | B07 | — | `src/lib/exercise-history.ts` | `open` | — | Folds into F22/F38 shared-reader fix. |
-| F43 | Medium | B07 | — | `src/lib/lift.ts` | `open` | — | Folds into F22/F38 shared-reader fix. |
+| F42 | Low | B07 | — | `src/lib/exercise-history.ts` | `fixed` | `<pending>` · `exercise-history.test.ts` ×2 | `getLiftHistory` matched the lift's **own** sessions only, so cross work logged on another lift's day was invisible — while counting toward the same lift's PR toast, Stats record and AMRAP seed. Now resolved through `baselineSets`. |
+| F43 | Medium | B07 | — | `src/lib/lift.ts` | `fixed-by` | `<pending>` · reader half only | **Reader half only.** `db.sets.where('liftId')` had no session join, so sets orphaned by `archiveLift` scored permanent records no screen could display; `baselineSets` resolves cross work through its session and drops orphans. **`archiveLift`'s missing cascade is NOT fixed** — that is a separate defect and stays open as F99. |
 | F44 | Low | B07 | — | `src/lib/lift.ts` | `open` | — | — |
 | F45 | Low | B07 | — | `src/lib/cleanup.ts` | `open` | — | — |
 | F46 | Low | B08 | — | `src/components/modals/ModalAsyncStates.tsx` | `open` | — | — |
@@ -187,6 +187,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F96 | Medium | — | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · all 7 legs | **Opened during fix work.** The harness the review called "already exists, already passes" failed **all six legs**: `completeSetupWizard` drove a three-step wizard with `data-testid` selectors, and the wizard is now two steps with no testids in a production build. F79's own thesis, demonstrated — a dormant capability decays. |
 | F97 | Medium | — | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · exit 0 in 22s | **Opened during fix work.** The 200s watchdog `setTimeout` was never cleared or unref'd, so a fully passing run sat for 200s and then `process.exit(3)`. Wiring the harness into CI without this would have failed every build. |
 | F98 | Low | — | — | `src/db/seed.ts` | `open` | — | **Opened during fix work.** `_seedDatabase` does `db.lifts.clear()` then `db.lifts.bulkAdd(LIFTS)` as two statements. bulkAdd's own transaction never covered the `clear`, so this pair has never been atomic: a failure between them leaves the roster empty. Pre-existing and unchanged by the F05 work — noted rather than folded in, since it is a different defect from the one being fixed. Wrap the pair in `db.transaction`. |
+| F99 | Medium | — | — | `src/lib/lift.ts` | `open` | — | **Split out of F43.** `archiveLift` deletes a pending session row but not its `sets`, `accessorySets` or `accessoryNotes`, while `discardPendingSession` does a complete cascade. The reader half of F43 is fixed (orphans no longer score records), but the orphans are still created. Route `archiveLift`'s cleanup through `discardPendingSession` so there is one definition of "discard an attempt". |
 
 ## Open leads
 
