@@ -1,5 +1,6 @@
 import type { TrainingDB } from '../db/index'
 import type { AccessorySet, Set } from '../types/domain'
+import { baselineSets } from './performance'
 
 export interface ExerciseHistoryEntry {
   date: Date
@@ -64,27 +65,28 @@ export async function getExerciseHistory(db: TrainingDB, exerciseId: number): Pr
 }
 
 export async function getLiftHistory(db: TrainingDB, liftId: number): Promise<LiftHistoryEntry[]> {
-  const sessions = await db.sessions
-    .where('liftId').equals(liftId)
-    .filter(s => s.status === 'completed')
-    .toArray()
-
-  sessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-  if (sessions.length === 0) return []
-
-  const sessionIds = sessions.map(s => s.id!)
-  const sets = await db.sets
-    .where('sessionId').anyOf(sessionIds)
-    .filter(s => !s.liftId || s.liftId === liftId)
-    .toArray()
+  // "What did I do last time" has to include this lift's cross work. The
+  // session query used to match the lift's OWN sessions only, so a 315x5 cross
+  // block logged on another lift's day was invisible here — while counting
+  // toward the same lift's PR toast, Stats record and AMRAP seed. Ownership is
+  // decided once, in baselineSets, which resolves cross work through whichever
+  // session holds it.
+  const { own, cross, sessionsById } = await baselineSets(db, liftId)
+  if (sessionsById.size === 0) return []
 
   const grouped = new Map<number, Set[]>()
-  for (const s of sets) {
+  for (const s of [...own, ...cross]) {
+    // A session's own non-cross sets can belong to another movement entirely
+    // when they carry an explicit liftId; keep only this lift's work.
+    if (s.type !== 'cross' && s.liftId && s.liftId !== liftId) continue
     const list = grouped.get(s.sessionId)
     if (list) list.push(s)
     else grouped.set(s.sessionId, [s])
   }
+
+  const sessions = [...sessionsById.values()]
+    .filter(s => s.id != null && grouped.has(s.id))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   const out: LiftHistoryEntry[] = []
   for (const session of sessions) {

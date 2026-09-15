@@ -1752,4 +1752,44 @@ describe('Workout screen — AMRAP PR toast', () => {
     await waitFor(() => expect(toast()).toContain('e1RM'))
     expect(toast()).not.toContain('REP PR')
   })
+
+  // The record baseline is completed sessions plus the one being logged. The
+  // live session is `pending` while the workout happens, so if Workout stops
+  // passing it to detectPRs the toast is measured against a history that
+  // excludes everything done today — in the session it exists to report on.
+  it('scores against sets logged earlier in this same live session', async () => {
+    // BENCH is the live session (id 1, pending). Put earlier work in it, the
+    // way logging a joker before the AMRAP would.
+    // A completed session so the baseline is not empty — otherwise "no history
+    // at all is not a toast" hides whether the live session was consulted.
+    await seedPriorAmrap(100, 5)  // e1RM ≈ 117, well under the 170×5 to come
+    await db.sets.add({ sessionId: 1, type: 'joker', setNumber: 1, weight: 400, reps: 8, isAmrap: false })
+    startSession(BENCH)
+    renderWorkout()
+    // The toast store is module-level and can still hold a previous test's
+    // message, so assert on CHANGE rather than content.
+    const before = toast()
+
+    await logNSets(6) // AMRAP at 170×5, e1RM ≈ 198
+
+    // 198 does not beat the 400×8 logged earlier in this very session, so no
+    // toast fires. If Workout stops passing the live session to detectPRs that
+    // set becomes invisible and a PR is announced instead.
+    await new Promise(r => setTimeout(r, 50))
+    expect(toast()).toBe(before)
+  })
+
+  it('does not score against a skipped session (F22/F38)', async () => {
+    const sessionId = await db.sessions.add({
+      cycleId: 1, liftId: 1, week: 1, date: new Date('2026-01-01'), notes: null, status: 'skipped',
+    })
+    // Abandoned work that History will never show must not suppress a real PR.
+    await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight: 400, reps: 8, isAmrap: true })
+    startSession(BENCH)
+    renderWorkout()
+
+    await logNSets(6)
+
+    await waitFor(() => expect(toast()).toContain('e1RM'))
+  })
 })
