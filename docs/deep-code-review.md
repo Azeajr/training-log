@@ -8,60 +8,66 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Area B07 is closed; B08 is open.** B08a–B08g are complete: all of
-`src/components/modals/**`, all of `src/components/workout/**`, all of
-`src/components/forms/**` and `src/hooks/use-confirmation.ts` are `deep` at
-recorded blobs. Forty-four of B08's 54 rows are closed. **One slice remains:
-B08h**, the ten rows in `stats/`, `ui/` and `layout/`.
+**Areas B07 and B08 are both CLOSED.** Every `src/components/**` row and
+`src/hooks/use-confirmation.ts` is now `deep` at a recorded blob, across eight
+batches (B08a–B08h). No B08 file remains `pending`, `partial` or `reported`: the
+area-level claim that hid 52 unverified rows has been replaced with per-file
+evidence for all 54. Nineteen findings were opened from this area (**F46–F64**),
+and F33, F34, F40 and F52 gained new triggers or symptoms. Nothing in B08 is
+blocked.
 
-**Four patterns account for nearly everything this area has produced.**
+**Next batch: B09a — the service worker.** B09 is 10 rows (`src/service-worker.ts`,
+timers, notifications and their tests) and carries **L04**, the only unresolved
+lead with no probe behind it: an HTTP 503 navigation response appears to replace a
+good cached shell. Start there — `src/service-worker.ts` with its test — because
+L04 is the last lead in the tracker that has never been reproduced, and because
+F24's notification tail (`notifications.ts:52-56` arming both rest checkpoints at
+absolute times, so an inverted config fires them out of order) is in the same
+slice. B08e's `RestTimer` review is the caller-side context for both and is now
+`deep`.
 
-1. **No single-flight guard on an async handler wired to `onClick`.** F33, F34,
-   F41, F51, F55. The guard belongs in `Modal` — it owns Escape, swallows it with
+**What B08 found, as five patterns rather than nineteen separate bugs.** Each one
+has more instances than the findings list them under, and each has a
+one-place fix:
+
+1. **No single-flight guard on an async handler wired to `onClick`** — F33, F34,
+   F41, F51, F55. The guard belongs in `Modal`: it owns Escape, swallows it with
    `stopPropagation` (`Modal.tsx:102-107`) and calls `onClose` unconditionally, so
-   a call site cannot gate its own close path. `LiftSetupModal.tsx:169` already
+   no call site can gate its own close path. `LiftSetupModal.tsx:169` already
    hand-rolls the fix; lift it into `Modal` as a `busy?: boolean` prop.
-2. **Single-slot or snapshotted state standing in for per-item state.** F51, F52,
-   F54, F55's `alreadyAdded`, F57.
-3. **State seeded from props or storage at setup and never re-synced.** F49, F54,
-   F56. `DurationInput.tsx:18-23` is the counter-example done right.
-4. **Cleanup or event handling bound to something that can stop existing, or to a
-   default that is wrong.** F57 (sentinel overwritten before release), F58 (repeat
-   interval cleared only by a button that disables itself), F62
-   (`InlineConfirm.stopPropagation` defaults off inside a clickable row).
+2. **Single-slot or snapshotted state standing in for per-item state** — F51 (one
+   `retrying` id for a list), F52 (`For` over freshly built wrappers), F54 (one TM
+   buffer across exercises), F55 (`alreadyAdded` snapshotted at load), F57 (one
+   `wakeLock` variable written by two effects).
+3. **State seeded once and never re-synced, or re-synced over the user** — F49,
+   F54, F56, F63. `DurationInput.tsx:18-23` is the counter-example done right.
+4. **Cleanup or a default bound to something that can stop existing, or that is
+   simply the wrong default** — F57, F58 (an interval cleared only by a button that
+   disables itself), F62 (`InlineConfirm.stopPropagation` defaults off inside a
+   clickable row).
+5. **Keyboard and screen-reader access applied unevenly** — F60 (focus trapped in
+   `NotesField`), F61 (editing a logged set is pointer-only), F64 (80 hyphens in
+   every divider's accessible text), F59. In each case a neighbouring file does it
+   correctly and one of them states the rule in a comment
+   (`AccessoryLog.tsx:92-94`, `Modal.tsx:148-152`).
 
-**A fifth is now clear enough to name: keyboard access is applied unevenly.**
-F60 traps focus in `NotesField`; F61 makes every "edit a logged set" target
-pointer-only. Both sit beside files that get it right — `ExerciseSetsBlock.tsx:38-48`
-and `CollapsibleSection.tsx:68-76` use real buttons with visible focus rings, and
-`AccessoryLog.tsx:92-94` states the rule explicitly. B08h's `InlineConfirm`,
-`ToggleChip` and `BottomNav` are the last place to check it.
+Latest run: **B08h complete** — `src/components/stats/RecordsPanel.tsx` (182),
+`ui/InlineConfirm.tsx` (57), `ui/InlineConfirm.test.tsx` (67), `ui/ToggleChip.tsx`
+(33) and the six `layout/` files (`BottomNav` 53, `Toast` 35, `Rule` 28,
+`WeekBadge` 21, `SectionLabel` 19, `SubLabel` 17) reviewed in full. Ten files
+marked deep; **116 files deep in total.** All 6 existing tests passed
+(`pnpm exec vitest run src/components/ui/InlineConfirm.test.tsx`); `pnpm lint` and
+`tsc -b` clean (exit 0). Two new findings: **F63** (medium, probe-confirmed —
+`RecordsPanel` has no request-identity guard, so a stale load overwrites the lift
+the user actually selected, and it never re-enters its loading state) and **F64**
+(low — `Rule` puts 80 literal hyphens in the accessible text at 15 of its 16 call
+sites). `ToggleChip`, `Toast`, `BottomNav`, `WeekBadge`, `SectionLabel`,
+`SubLabel` and `InlineConfirm` itself are clean. Only this tracker changed; probes
+were created inside `src/`, run, and deleted, leaving the tree clean. This card
+authorizes commit, push and PR; operator acceptance remains a separate native
+Kanban review step.
 
-**Next batch: B08h — the last slice.** `RecordsPanel.tsx` (182, the area's only
-`partial` row, carrying F22/F23 from B06e), `InlineConfirm.tsx` (57) with
-`InlineConfirm.test.tsx` (67), `ToggleChip.tsx` (33), and the six `layout/` files:
-`BottomNav.tsx` (53), `Toast.tsx` (35), `Rule.tsx` (28), `WeekBadge.tsx` (21),
-`SectionLabel.tsx` (19), `SubLabel.tsx` (17). `RecordsPanel` needs its own
-evidence for the `compact`/`liftId` props and async identity, which is what its
-`partial` status records; F62 also asks whether `InlineConfirm`'s
-`stopPropagation` default should be inverted.
-
-Latest run: **B08g complete** — `src/components/forms/ExerciseEditor.tsx` (86),
-`ExerciseSetsBlock.tsx` (67), `LiftSetsByType.tsx` (50), `SetLogControls.tsx` (52),
-`SetReadout.tsx` (51), `PlateDisplay.tsx` (40) and `NotesBlock.tsx` (18) reviewed
-in full. Seven files marked deep; **106 files deep in total.** None of the seven
-has a test file, so the check was the four suites that render them transitively —
-30 tests passed; `pnpm lint` and `tsc -b` clean (exit 0). Two new findings, both
-probe-confirmed: **F61** (medium, WCAG 2.1.1 — `SetReadout`'s clickable row is a
-bare `div`, so editing a logged set is pointer-only everywhere it is offered) and
-**F62** (medium — `AccessoryLog`'s undo does not stop propagation, so tapping it
-opens the edit form instead and `deleteLastAccessorySet` has no reachable caller).
-`ExerciseEditor`, `ExerciseSetsBlock`, `LiftSetsByType`, `PlateDisplay` and
-`NotesBlock` are clean. Only this tracker changed; probes were created inside
-`src/`, run, and deleted, leaving the tree clean. This card authorizes commit,
-push and PR; operator acceptance remains a separate native Kanban review step.
-
-**Remaining work — 73 of 179 ledger rows are not yet `deep`** (106 are). Recounted
+**Remaining work — 63 of 179 ledger rows are not yet `deep`** (116 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -75,7 +81,7 @@ correct; only the remaining-work totals were not.
 | Area | Rows left | Shape of the work |
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
-| B08 | 10 (9 `reported`, 1 `partial`) | **Open (B08a–B08g done).** Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
+| B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
@@ -191,6 +197,8 @@ claimed here.
 | F60 | Medium (WCAG 2.1.2, Level A); B08f probe (P19) | `src/components/forms/NotesField.tsx:107-112`, `137-143` | `handleKeyDown` swallows Tab on **any line matching `/^( *)- (.*)$/`**, regardless of whether list mode is on, and Shift+Tab with it. A user who simply typed `- ` at the start of a line therefore cannot move focus out of the textarea with the keyboard. Probe on `'- first bullet'` with list mode **off**: `Tab defaultPrevented = true`, `Shift+Tab defaultPrevented = true`, and the ←/→ escape chips are not rendered (`listMode()` is false, so `:138` withholds them). Control on a plain line: `defaultPrevented = false`. The only way out is to destroy the bullet — Shift+Tab repeatedly until the line is no longer a bullet — which edits the user's text to regain focus movement. `NotesField` is used on Workout, in `AccessoryLog` and in `HistoryEdit`, not only inside a focus-trapping `Modal`. | Gate the Tab interception on `listMode()` as the Enter handler already is, so a bullet typed by hand behaves like ordinary text; or provide a non-destructive escape (Escape releases the trap for the next Tab). `NotesField.test.tsx` has a case for Tab on a non-bullet line but none asserting that focus can leave a bullet line. |
 | F61 | Medium (WCAG 2.1.1, Level A); B08g probe (P20) | `src/components/forms/SetReadout.tsx:31-34`; `src/components/workout/SetRow.tsx:147`; `src/components/workout/AccessoryLog.tsx:168` | `SetReadout` attaches `onClick` to a bare `<div>` with `cursor-pointer` and **no `role`, no `tabindex` and no key handler**. Probe: `tagName=DIV`, `role=null`, `tabindex=null`, and `queryAllByRole('button')` finds nothing. That div is the app's only affordance for editing an already logged set — `SetRow:147` (`onClick={startEdit}`) for main and cross sets, `AccessoryLog:168` (`onClick={() => startEditSet(i())}`) for accessory sets — so **correcting a mislogged set is pointer-only**, unreachable by keyboard or switch access. The codebase states the opposite standard three files away: `AccessoryLog.tsx:92-94`, "Real `<button>`, not a span with `role=\"button\"`: keyboard support comes free". | Render the row as a `<button>` when `onClick` is set (the pattern `ExerciseSetsBlock.tsx:38-48` and `CollapsibleSection.tsx:68-76` already use), keeping the plain `div` for the read-only case. Note the nesting: the trailing slot holds an `InlineConfirm`, so a `<button>` root would nest interactive content — split the tappable region from the trailing slot rather than wrapping the whole row. `SetReadout.tsx` has no test file. |
 | F62 | Medium; B08g probe (P21) | `src/components/workout/AccessoryLog.tsx:171-181`; `src/components/ui/InlineConfirm.tsx:8`, `20-23`; `src/components/forms/SetReadout.tsx:32` | `InlineConfirm` only calls `e.stopPropagation()` when its optional `stopPropagation` prop is set, and `AccessoryLog` does not set it — while the `SetReadout` it sits inside has `onClick={() => startEditSet(i())}` on its root. So the first tap on **undo** bubbles: the row swaps to the edit form, which unmounts the `InlineConfirm` before its "undo set?" confirmation ever renders. Probe: after clicking `Undo last Dips set` → confirm prompt shown `false`, edit form opened `true`, undo control no longer present. The control is **functionally dead** — cancelling the editor returns to the same readout and the next tap does the same thing, so `deleteLastAccessorySet` has no reachable caller in the UI. `SetRow.tsx:165-171` passes `stopPropagation` and behaves correctly: control probe → confirm shown `true`, edit form `false`. | Pass `stopPropagation` at `AccessoryLog:173`, matching `SetRow`. Better: make `stopPropagation` the default in `InlineConfirm` — it sits in a clickable row at every call site, and the current default is the wrong one. `AccessoryLog.tsx` has no test file; `InlineConfirm.test.tsx` (B08h) never renders it inside a clickable parent. |
+| F63 | Medium; B08h probes (P22, P22b) | `src/components/stats/RecordsPanel.tsx:38`, `42`, `44-101`; `src/screens/History.tsx:612` | `createEffect(() => { void load(props.liftId) })` launches an async load with **no request-identity guard and no re-entry into the loading state**, and `History.tsx:612` passes `liftId={selectedLiftId()!}` — a live signal — so switching the selected lift is the ordinary path. Two defects follow. (a) **Last to settle wins, not last requested.** Probe with lift 1's query delayed: select lift 1, switch to lift 2 before it lands; lift 2's records render correctly, then lift 1's stale load overwrites them — with `liftId=2` selected the panel shows `Bench? true, Squat? false`, weights `111` present and `222` gone. The user sees another lift's PRs under the lift they picked, and nothing corrects it until the effect runs again. (b) `setLoading(false)` is never undone, so after the first load a switch shows the **previous** lift's numbers with no loading indicator — probe: immediately after switching, `111` still on screen, `Loading` absent. This is the row's own B08 evidence; the `partial` status it carried from B06e was for F22/F23 at the caller. | Guard on request identity — capture a token or the `liftId` and discard a result whose `props.liftId` has moved on — and `setLoading(true)` at the top of `load`. `createResource` keyed on `props.liftId` does both and is the idiomatic fix here. `RecordsPanel.tsx` has no test file. |
+| F64 | Low; B08h source inspection | `src/components/layout/Rule.tsx:1`, `17-27`; `src/components/modals/Modal.tsx:148-152` | `Rule` renders `'-'.repeat(80)` as ordinary text, so its 80 hyphens are part of the accessible text of every section divider in the app. **16 `<Rule>` call sites exist and exactly one passes `aria-hidden`** — `Modal.tsx:152`, whose comment names the problem precisely: "the right look and a terrible accessible name". Every other divider (`LiftSetupModal`'s EQUIPMENT / CROSS-LIFT SUPPLEMENTAL, `RecordsPanel`'s RECORDS and TRAINING MAX . PROGRESSION, and the Settings and Setup groups) reads its label wrapped in dash fill. The fix that was applied once at a call site belongs in the component. | Inside `Rule`, wrap the dash runs in `<span aria-hidden="true">` and leave only the label in the accessible text; callers then need no `aria-hidden` at all and `Modal` can drop its workaround. `Rule.tsx` has no test file. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -248,7 +256,7 @@ area membership is not permission to review the entire area in one session.
 | B05 | Workout store, session logic, workout screen | L02/L03; lifecycle and save ordering |
 | B06 | Other screens and screen tests | Navigation, failure states, state consistency |
 | B07 | Calculation, progression, composition and other libraries/tests | **Closed** (B07a–B07g). Numeric boundaries and domain invariants; F24–F45 opened |
-| B08 | Components, hooks, related tests | Recover reported coverage through bounded verification; edits and async state |
+| B08 | Components, hooks, related tests | **Closed** (B08a–B08h). Reported coverage recovered through bounded verification; F46–F64 opened |
 | B09 | Service worker, timers, notifications and tests | L04; offline and notification lifecycle |
 | B10 | Build/deploy/config/scripts/public assets | Deployment assumptions and operational failures |
 | B11 | E2E, test infrastructure, domain types and remaining stores | Integration gaps and shared contracts |
@@ -315,12 +323,12 @@ column as work is completed.
 | `src/components/forms/SetReadout.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (F61, F62) |
 | `src/components/forms/Stepper.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (17 cases; long-press path untested) |
 | `src/components/forms/Stepper.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (F58) |
-| `src/components/layout/BottomNav.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/Rule.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/SectionLabel.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/SubLabel.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/Toast.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/WeekBadge.tsx` | B08 | reported | Area claim only |
+| `src/components/layout/BottomNav.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean; active-session dot has no text) |
+| `src/components/layout/Rule.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (F64) |
+| `src/components/layout/SectionLabel.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean) |
+| `src/components/layout/SubLabel.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean) |
+| `src/components/layout/Toast.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean; always-mounted live region) |
+| `src/components/layout/WeekBadge.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean; week-4 literal checked against cycleFinalWeek) |
 | `src/components/modals/AccessoryTmModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F33 accessory arm) |
 | `src/components/modals/ConfirmationDialog.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (clean; busy-gating not needed) |
 | `src/components/modals/CycleCompleteModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F34, F40, F47) |
@@ -334,10 +342,10 @@ column as work is completed.
 | `src/components/modals/ModalAsyncStates.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F46; no test file) |
 | `src/components/modals/TmRecommendationModal.test.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (coverage gaps listed) |
 | `src/components/modals/TmRecommendationModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F33 main-lift arm) |
-| `src/components/stats/RecordsPanel.tsx` | B08 | partial | Area claim plus B06e caller-side evidence: F22/F23 confirmed at `42`, `44–47`, `52`, `55–69`, `80–85`, `100`. Still needs its own B08 row for `compact`/`liftId` props and async identity |
-| `src/components/ui/InlineConfirm.test.tsx` | B08 | reported | Area claim only |
-| `src/components/ui/InlineConfirm.tsx` | B08 | reported | Area claim only |
-| `src/components/ui/ToggleChip.tsx` | B08 | reported | Area claim only |
+| `src/components/stats/RecordsPanel.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (F63; supersedes the `partial` note — F22/F23 stay open at the caller) |
+| `src/components/ui/InlineConfirm.test.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (6 cases; no default-off-in-clickable-parent case) |
+| `src/components/ui/InlineConfirm.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (F62 default; clean otherwise) |
+| `src/components/ui/ToggleChip.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean; real button, aria-pressed) |
 | `src/components/workout/AccessoryLog.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (F56; no test file) |
 | `src/components/workout/AccessoryPicker.test.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (recency window only) |
 | `src/components/workout/AccessoryPicker.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (F54, F55) |
@@ -3039,3 +3047,118 @@ requires checking its other call sites when that file is reviewed.
 and `layout/`. **Next action: B08h — `RecordsPanel.tsx` (the area's only `partial`
 row), `InlineConfirm.tsx` + its test, `ToggleChip.tsx`, and the six `layout/`
 files**, which closes area B08.
+
+### 2026-09-15 — B08h: stats, ui and layout (closes area B08)
+
+**Revision:** `1e35eb4` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; nine implementation components and one
+test file deeply reviewed; no application edits. **This closes area B08.**
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/stats/RecordsPanel.tsx` | 1–182 | `6e8a187e49067431504e60813f40742699abe0b1` |
+| `src/components/ui/InlineConfirm.tsx` | 1–57 | `2578bbf2c9242fbad4c82e3c87803379f26bf4ed` |
+| `src/components/ui/InlineConfirm.test.tsx` | 1–67 | `63a5e341e103fdb6b1f93c25a464e9c22a1ca623` |
+| `src/components/ui/ToggleChip.tsx` | 1–33 | `005531e959a96844d0d6a795e25ad97cc1ba5dd0` |
+| `src/components/layout/BottomNav.tsx` | 1–53 | `45fb514f7ac38d263c1c1ee0f8095b9f8458632a` |
+| `src/components/layout/Toast.tsx` | 1–35 | `00624e0a0dc6f314a95c7638964cc8c5c5831616` |
+| `src/components/layout/Rule.tsx` | 1–28 | `bd2d0759154a6a114df8d65b86b179d32a8b5213` |
+| `src/components/layout/WeekBadge.tsx` | 1–21 | `259e83b807d2536ad642c993426db47c1f909a5b` |
+| `src/components/layout/SectionLabel.tsx` | 1–19 | `0b7449e33f677aba153d24b3817935951d993b49` |
+| `src/components/layout/SubLabel.tsx` | 1–17 | `50ed11a97227b2a106584a58d3c02ba25ef4a42e` |
+
+**Behavior and invariants traced:**
+
+- `RecordsPanel`: both summaries and the `compact`/`liftId` prop pair that its
+  `partial` status asked about — `compact` drops the section rules and the TM
+  block for embedding above History's chart, `liftId` narrows the roster to one
+  lift. The performance attribution rule was traced in full: a lift's own
+  non-warmup, non-cross sets **plus** cross sets tagged with that lift's `liftId`
+  from other lifts' sessions, filtered by `isWorkingPerformance`, with `maxWeight`
+  measured and `e1rm` estimated over the same set, ties on weight broken by reps.
+  The TM sequence collapses runs of equal weights so the arrow chain shows only
+  real changes. F63 opened on the async identity question.
+- `InlineConfirm`: the two-step trigger → "yes/no" swap, the `ariaLabel`
+  derivations for both buttons, and the optional `stopPropagation`. The component
+  is correct in itself; F62 is about its **default** and the one call site that
+  relies on it.
+- `ToggleChip`: a real `<button>` with `aria-pressed` and an optional `ariaLabel`
+  for glyph-only chips.
+- `BottomNav`: four router `<A>`s with active/inactive classes, the safe-area
+  padding, the active-session dot, and the documented reason there is no STATS tab.
+- `Toast`: the always-mounted `role="status"` live region with `aria-live` and
+  `aria-atomic` stated together, and the bottom offset that steps up over whichever
+  of `RestTimer`/`SessionBar` owns the strip.
+- `Rule`, `WeekBadge`, `SectionLabel`, `SubLabel`: the divider and eyebrow idioms.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/ui/InlineConfirm.test.tsx` — **6 tests passed**. Eight of this batch's ten files have no test file.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P22 (`RecordsPanel` with `db.lifts.orderBy().toArray()` delayed 60 ms on
+  the first call only; two lifts, Bench@111 and Squat@222): rendered with
+  `liftId=1`, switched to `2` before the first load settled. Lift 2's records
+  rendered correctly first, then the stale load landed — final state with
+  `liftId=2` selected: `Bench? true, Squat? false`, `111` on screen, `222` gone.
+- Probe P22b (same panel, no delay): after the first load, switching `liftId`
+  leaves `111` on screen with `Loading` absent until the new load lands. F63(b).
+- Verified by grep rather than probe: 16 `<Rule>` call sites in `src/`, exactly one
+  passing `aria-hidden` (F64).
+- Not run: the full suite.
+
+**Findings:** F63 (medium, confirmed on both halves), F64 (low, source inspection).
+
+**Substantive negative conclusions:**
+
+- `RecordsPanel` reads `settings.highRepDiscount` **after** an await inside
+  `load()`, so that read is outside Solid's tracking and changing the discount does
+  not refresh the panel. **Not opened as a finding:** `RecordsPanel` only appears
+  on `/stats` and `/history`, and the discount is only changeable on `/settings`, so
+  every path that changes it remounts the panel before it is next seen. Recorded
+  because the same shape in `PlateDisplay` *is* tracked (`createMemo` reading
+  `settings.plates` synchronously), and a future screen showing both would diverge.
+- `RecordsPanel`'s session query carries no status filter (`:52`), so `pending` and
+  `skipped` sessions contribute records. That is F22/F38, already open and owned by
+  the shared-query fix those findings describe; confirmed here at the component and
+  not reopened.
+- `InlineConfirm`, `ToggleChip`, `Toast`, `BottomNav`, `WeekBadge`, `SectionLabel`
+  and `SubLabel` are clean. `Toast` in particular documents and implements the
+  correct live-region pattern — container always mounted, text mutated — which is
+  the opposite of the mistake F46 makes with its loading text.
+- `WeekBadge` tests `props.week === 4` for the DELOAD marker, which reads like the
+  hardcoded week 4 that `CLAUDE.md` warns against. Checked and **correct**: week 4
+  only exists when `hasDeloadWeek` is on (`cycleFinalWeek`), so under a 3-week
+  setting the branch is unreachable, and a historical week-4 session recorded
+  before the setting changed *should* still show DELOAD. No change wanted.
+- `BottomNav`'s active-session dot is a bare styled `<span>` with no text or label,
+  so a screen reader hears "WORKOUT" identically whether or not a session is live.
+  Left as an observation rather than a finding — the Today screen states session
+  status in text, so the information is not only in the dot.
+- `N+1` query shape in `RecordsPanel.load` (three to four awaited queries per lift,
+  serially) is a performance observation, not a correctness finding; it is bounded
+  by the active roster size.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- Eight of this batch's ten files have no test file, including `RecordsPanel.tsx`
+  (182 lines, two summaries, the whole cross-set attribution rule, and F63).
+- `InlineConfirm.test.tsx` (6 cases) covers `stopPropagation` **when the prop is
+  set**, on both the trigger and the yes/no pair — and has no case for the default
+  (unset) behaviour inside a clickable parent, which is exactly F62's shape.
+- `Rule.tsx`, `ToggleChip.tsx`, `Toast.tsx` and `BottomNav.tsx` have no tests;
+  `Toast`'s live-region contract is stated only in a comment.
+
+**Open questions / remaining ranges:** B08g's carried question is answered —
+`InlineConfirm`'s other call sites (`SetRow.tsx:165`, `AccessoryLog.tsx:119` and
+`:173`) were checked while reviewing this file, and inverting the
+`stopPropagation` default would be safe for all of them: two already pass it and
+the third (`AccessoryLog:119`, the ✕ remove control in the header row) sits in a
+non-clickable parent where stopping propagation changes nothing. F62's stronger
+fix is therefore viable. Nothing else carried.
+
+**Area B08 closure:** all 54 ledger rows `deep` with per-file evidence; the
+`reported` status no longer appears anywhere in the ledger. Nineteen findings
+opened (F46–F64); F33, F34, F40 and F52 extended. **Next action: B09a —
+`src/service-worker.ts` and its test**, carrying L04 (the 503 navigation response
+replacing a good cached shell, still never reproduced) and F24's notification tail.
