@@ -8,65 +8,74 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07, B08 and B09 are all CLOSED.** All 10 B09 rows are `deep` across
-three batches (B09a–B09c). **126 of 179 ledger rows are now `deep`**, and the
-`reported` status is gone from the tracker entirely.
+**Areas B07, B08, B09 and B10 are all CLOSED.** All 25 B10 rows are `deep`
+across four batches (B10a–B10d). **151 of 179 ledger rows are now `deep`**, and
+`reported` no longer appears anywhere in the ledger. **Two areas remain: B11
+(11 rows) and B12 (17 rows).**
 
-**B09 was opened to settle two things, and both are settled.**
+**B10's theme, in one sentence: the checks this repo has are good, and they are
+aimed away from the risk — or at nothing at all.**
 
-- **L04 is resolved** — it was the last lead in this tracker never reproduced.
-  B09a probe P23 reproduces it and locates the cause: the network-first
-  navigation handler writes **every** resolved response over the cached shell
-  with no `response.ok` check (`service-worker.ts:66-69`). One 503 while online,
-  then an offline cold launch, and the app serves `503 SERVICE UNAVAILABLE`
-  instead of itself — permanently, until another successful online navigation.
-  Opened as **F65 (high)**; **F66 (medium)** is the same missing check on the
-  cache-first precache branch, where a bad response is never re-fetched at all.
-- **F24's notification tail is confirmed** (B09b probe P26). With
-  `restTimer1=240`/`restTimer2=60` the tray shows *"Second bell"* at 60 s and
-  *"First bell"* at 240 s, and because both carry `tag: 'rest-timer'` the later
-  one **replaces** the earlier — the surviving notification is for the checkpoint
-  that already passed. F24 is amended rather than duplicated, and its fix now
-  wants an upper clamp too (`Settings.tsx:475` bounds only the floor).
+- **F69 (medium) — the coverage gate measures the wrong half.** `include` is
+  `lib` + `screens` + `store`, so of the 23 findings opened in B08 and B09, **22
+  live in files the 80 % gate cannot see** — and `test:coverage` is what
+  `deploy.yml` runs, so the blind spot sits at the production gate. Stryker
+  repeats the shape (`mutate: src/lib/**` only).
+- **F74 + F79 (medium) — two built capabilities left dormant.** No workflow runs
+  Playwright, so `tests/e2e/**` never executes; and
+  `scripts/verify-notify-hardening.js` — a complete harness driving the
+  **production build with the real service worker** through five pass/fail legs,
+  exiting 1 on failure — is invoked by no script and no workflow.
+- **F78 (medium) — and the suite that exists cannot see the service worker.**
+  Playwright starts `pnpm dev`; `VitePWA` has no `devOptions`, so no SW is
+  registered. F65 and F66 are invisible to every automated test by construction.
+- **F70 + F72 + F81 (medium) — the icon set was never made.** The manifest names
+  two PNGs that do not exist; there is no `apple-touch-icon`; `favicon.svg` is a
+  purple/blue glyph unrelated to the app's black-and-green palette; and
+  `icons.svg` is a **bluesky/discord/github/x** social sprite from a scaffold,
+  shipping to production referenced by nothing. These are one asset task, not
+  three fixes, which is why none is done.
+- **F73 (medium, supply chain)** — `pnpm dlx wrangler` is unpinned and absent from
+  the lockfile, run with `CLOUDFLARE_API_TOKEN` in env, past `--frozen-lockfile`,
+  `pnpm audit signatures`, the pinned `packageManager` and dependabot.
+- **F71 + F77 — whole directories are checked by nothing.** `tsc` never compiles
+  `tests/e2e/**`, and ESLint resolves **0 rules** for any `.js`/`.mjs`, so 413
+  lines of Playwright-driving Node in `scripts/` have no linter and no type
+  checker.
+- **F75, F76, F80, F82, F83, F84 (low)** — CI is `pull_request`-only; `CLAUDE.md`
+  understates the deploy gate; `debug-browser.js`'s "clears DB" wipes IndexedDB
+  the app does not use; `demo-seed.json` is 44.8 KB of real training history that
+  no code reads and every deploy publishes; `.gitignore` hides `.claude/` while
+  `CLAUDE.md` points at three tracked files inside it; and
+  `migrate-history.py`'s hardcoded tables have already drifted from `seed.ts`.
 
-Also opened: **F67** (medium — `firePage`'s unguarded `new Notification(...)`,
-platform impact flagged for a device check rather than asserted) and **F68** (low
-— the timer worker posts nothing on `resume`, so a backgrounded tab shows a stale
-countdown for up to a second before it jumps; the existing veil is scoped to
-bfcache and does not cover it).
+**The single highest-leverage fix in the repo right now** is wiring
+`verify-notify-hardening.js` into CI and adding a 503 leg to it. That one change
+turns **F65** — the highest-severity open finding in the tracker — from a
+documented bug into a guarded regression, using a harness that already exists and
+already asserts the healthy version of the same behaviour (leg A).
 
-**Next area: B10 — build, deploy, config, scripts and public assets.** 25 rows,
-the largest remaining block, previously under-counted as 1. Start with the files
-B09 just made load-bearing: `vite.config.ts`'s PWA block feeds
-`__WB_MANIFEST` / `globPatterns` straight into F65's and F66's cache paths, and
-`.github/workflows/deploy.yml` is path-filtered and runs **no lint and no tests**
-(`CLAUDE.md`), so it is the only thing standing between a bad commit and
-production. **B11** (11 rows: E2E, test infrastructure, domain types, remaining
-stores) and **B12** (17 rows: documentation relevance and final reconciliation)
-follow.
+**Next area: B11 — E2E, test infrastructure, domain types and remaining stores
+(11 rows).** Start with `tests/e2e/**`, which B10 just characterised from the
+outside: F71 says it is never type-checked, F74 says it is never run, and F78 says
+it runs against an environment with no service worker. Reviewing the specs
+themselves is what turns those three into a concrete statement about what
+integration coverage the project actually has. `src/test-setup.ts` belongs in the
+same slice — B09c recorded that its `MockWorker` re-implements
+`timer.worker.ts`'s protocol with nothing to catch drift. **B12** (17 rows:
+documentation relevance and the final reconciliation) closes the review, and
+already carries F76 and F82.
 
-**Six patterns now account for most of what this review has found.** B08's five —
-missing single-flight guards, single-slot state standing in for per-item state,
-state seeded once and never re-synced, cleanup bound to something that can stop
-existing, uneven keyboard/screen-reader access — plus the one B09 added:
-**unvalidated external data written to durable storage or trusted as control
-flow.** A response *status* (F65, F66), a restored settings envelope (F03, F08 —
-and the reason F24's fix needs bounds), and an engine capability assumed rather
-than tested (F67) are all the same mistake in different clothes.
+Latest run: **B10d complete** — `scripts/migrate-history.py` (396),
+`public/demo-seed.json` (2,596), `public/favicon.svg`, `public/icons.svg`,
+`src/index.css` (58), `.gitignore` (40) and `.claudeignore` (33) reviewed in full.
+Seven files marked deep; **151 files deep in total.** `pnpm lint` and `tsc -b`
+clean (exit 0). Four new findings (F81–F84). `src/index.css` and `.claudeignore`
+are clean. Only this tracker changed; the tree is clean. This card authorizes
+commit, push and PR; operator acceptance remains a separate native Kanban review
+step.
 
-Latest run: **B09c complete** — `src/lib/rest-timer-worker.ts` (13),
-`src/workers/timer.worker.ts` (33), `src/lib/audio-cues.ts` (64),
-`rest-timer-worker.test.ts` (47) and `audio-cues.test.ts` (197) reviewed in full.
-Five files marked deep; **126 files deep in total.** All 15 existing tests passed
-(`pnpm exec vitest run src/lib/rest-timer-worker.test.ts src/lib/audio-cues.test.ts`);
-`pnpm lint` and `tsc -b` clean (exit 0). One new finding (F68). `audio-cues.ts`
-and `rest-timer-worker.ts` are clean, and the worker's start/pause/resume/stop
-protocol was probed and is correct apart from F68. Only this tracker changed;
-probes were created inside `src/`, run, and deleted, leaving the tree clean. This
-card authorizes commit, push and PR; operator acceptance remains a separate native
-Kanban review step.
-
-**Remaining work — 53 of 179 ledger rows are not yet `deep`** (126 are). Recounted
+**Remaining work — 28 of 179 ledger rows are not yet `deep`** (151 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -81,7 +90,7 @@ correct; only the remaining-work totals were not.
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
-| B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
+| B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
@@ -202,6 +211,22 @@ claimed here.
 | F66 | Medium; B09a probe (P24) | `src/service-worker.ts:75-84` | Same missing `ok` check on the precache branch, and here the policy is **cache-first**, so a bad response is not merely stored — it is never re-fetched. Probe: request a precached asset while the server answers `502` → the 502 is returned *and* written to the cache; second request with the server healthy again → `status=502`, `"502 BAD GATEWAY"`, `fetchCalled=0`. The network is never consulted again for that URL. **Narrower than F65:** `install` uses `cache.addAll`, which rejects atomically on any non-ok response, so a successfully activated SW normally has every precache path already stored and this branch is not reached. It becomes reachable when the browser evicts Cache API entries under storage pressure, or for a path in `PRECACHE_PATHS` that install did not store. | Add the same `response.ok` gate before `cache.put`, and return the network response without caching it when it is not ok. |
 | F67 | Medium (platform impact needs device verification); B09b probe (P27) + source inspection | `src/lib/notifications.ts:96-99`, `114-124` | `firePage` calls `new Notification(title, …)` behind a permission check only — **no `try`/`catch` and no fallback to `ServiceWorkerRegistration.showNotification`**. Probe P27 shows what an engine that rejects the constructor produces: the `TypeError` escapes the timer tick uncaught (`"TypeError: Failed to construct 'Notification': Illegal constructor."`), no notification appears, and nothing in the module reports it. The registry itself stays consistent — `pending()` correctly holds only the remaining target and the second bell still fires — so the failure is silent rather than cascading. **Why it matters:** this module designates the page path as the *reliable* one and the service-worker path as explicitly best-effort (`:1-13`), so if the page constructor is unavailable the reliability story inverts on exactly the platform this PWA targets. The `Notification` constructor is not the supported page-context path on Android Chrome or in iOS PWAs, but that claim is **not verified here** — per this project's standing rule about mobile behaviour, it needs a device check before the severity is settled. | Wrap the call and fall back: `try { new Notification(...) } catch { void registration?.showNotification(...) }`, or prefer `showNotification` whenever a registration exists. Settle the platform question on a real device (installed PWA, permission granted, tab hidden, one rest bell) and record the result. `notifications.test.ts` stubs `Notification` as a spy that always succeeds, so no existing case can observe a throwing constructor. |
 | F68 | Low; B09c probe (P28) | `src/workers/timer.worker.ts:26-31`, `5-12`; `src/components/workout/RestTimer.tsx:101-105`; `src/App.tsx:47-58` | `resume` clears the `paused` flag but posts nothing, and the 1 Hz interval keeps its original phase, so the first `elapsed` after the tab becomes visible arrives up to **a full second late**. Probe: 0 posts immediately on resume, 0 posts at 999 ms, first post at 1000 ms. Meanwhile `RestTimer`'s `elapsed` signal still holds the value from **before** the tab was hidden — the worker posts nothing while paused — so returning mid-rest after a five-minute background shows the five-minute-old countdown for about a second and then jumps (`"2:30 LEFT"` → `"OVER +4:12"`). This is **not** covered by the existing resume veil: `App.tsx:47-53` is deliberately scoped to bfcache restores (`pageshow.persisted`) and its own comment excludes `visibilitychange` as "ordinary app-switches where there's no repaint to mask" — which is exactly this case — and the veil lasts two animation frames, not a second. | Post one immediate tick on `resume` before letting the interval carry on: `case 'resume': paused = false; if (restStartedAt != null) self.postMessage({ elapsed: Math.floor((Date.now() - restStartedAt) / 1000) }); break`. Restarting the interval there would also reset its phase. `src/workers/timer.worker.ts` has **no test file**; add one for the start/pause/resume/stop protocol. |
+| F69 | Medium; B10a coverage run | `vite.config.ts:21-27` | The coverage gate measures the wrong half of the codebase. `include` is `['src/lib/**/*.ts', 'src/screens/**/*.tsx', 'src/store/**/*.ts']`, so **`src/components/**`, `src/db/**`, `src/hooks/**`, `src/service-worker.ts` and `src/workers/**` are not measured at all** — a coverage run reports only `lib`, `screens` and `store` sections and a denominator of 3,945 statements, with no `components` section present. The 80 % statements/branches/functions/lines thresholds therefore gate a subset chosen before the components tree existed at its current size. The cost is measurable against this review: of the 23 findings opened in B08 and B09 (F46–F68), **22 live in files the gate cannot see** — every one of F46–F64 (`src/components`, `src/hooks`), F65–F66 (`src/service-worker.ts`) and F68 (`src/workers`); only F67 (`src/lib/notifications.ts`) is inside the measured set. Eleven reviewed component files have no test file at all and none of them costs the gate a single point. | Widen `include` to `src/**/*.{ts,tsx}` with the existing `exclude` for tests, then re-baseline the thresholds to whatever the true number is and ratchet up — a gate that measures everything at 60 % is worth more than one that measures a third at 80 %. Excluding `src/main.tsx` and `src/test-setup.ts` is reasonable; excluding the entire component tree is not. |
+| F70 | Medium (installability impact worth a Lighthouse check); B10a build-output inspection | `vite.config.ts:63-73`; `dist/manifest.webmanifest`; `public/`; `index.html:14` | The web app manifest declares two icons — `icon-192.png` and `icon-512.png` — and **neither file exists**. `public/` contains only `_headers`, `demo-seed.json`, `favicon.svg` and `icons.svg`, and the built `dist/` carries the same four plus `manifest.webmanifest`, which ships the two names verbatim: `"icons":[{"src":"icon-192.png",…},{"src":"icon-512.png",…}]`. No icon generator is configured (no `pwa-assets`, no `@vite-pwa/assets-generator` in `package.json`), so nothing produces them at build time. `index.html` also has **no `<link rel="apple-touch-icon">`**, so the iOS home-screen path has no icon either. Chrome's installability criteria require a manifest icon of at least 144×144 that actually loads; both of these 404. For an app whose stated distribution is an installed offline-first PWA (`display: 'standalone'`, `apple-mobile-web-app-capable`), that is the delivery mechanism failing silently — the build succeeds, CI passes, and the install prompt simply never appears. | Generate the two PNGs from `favicon.svg` (or add `@vite-pwa/assets-generator`), add an `apple-touch-icon` link, and assert in CI that every `manifest.icons[].src` resolves to a file in `dist/`. Run Lighthouse's installability audit against a preview build to confirm what the missing icons currently cost. |
+| F71 | Medium; B10a config inspection | `tsconfig.json:1-11`; `tsconfig.e2e.json`; `tsconfig.node.json:24`; `package.json:8`, `10`, `18` | `tsconfig.e2e.json` is referenced by no **compiler** entry point — not by `tsconfig.json`'s `references` (which lists only app and node), not by any `package.json` script, not by the CI workflow, not by `playwright.config.ts`. **Amended in B10c:** `eslint.config.js:34` *does* point at it, for type-aware linting of `tests/e2e/**` (`no-floating-promises`). That makes the file used but not built: ESLint loads the project for type information and reports rule violations, while `tsc` never compiles the specs, so type errors themselves are still reported by nothing. `typecheck` and `build` are both `tsc -b` against the solution file, and `test:e2e` is `playwright test`, which transpiles specs without type-checking. So **`tests/e2e/**` is never type-checked by any command in the repo** — four files including an 11 KB `workout.spec.ts`, the app's only integration coverage. The irony is that `tsconfig.e2e.json` is the one config that declares `"strict": true` explicitly. The same gap covers the toolchain: `tsconfig.node.json` includes only `vite.config.ts`, so `playwright.config.ts` (a `.ts` file), `stryker.config.mjs`, `eslint.config.js` and `scripts/*` belong to no project and are type-checked by nothing. A renamed helper or a changed fixture shape in the E2E suite surfaces as a runtime failure, or not at all. | Add `{ "path": "./tsconfig.e2e.json" }` to `tsconfig.json`'s references so `tsc -b` builds it, and widen `tsconfig.node.json`'s `include` to cover the root config files and `scripts/`. |
+| F72 | Low; B10a config and asset inspection | `vite.config.ts:58`; `index.html:14`; `public/icons.svg` | Two small asset problems in the same place. (a) `globPatterns: ['**/*.{html,js,css,ico,png,wasm}']` omits **`svg`**, and `favicon.svg` — the only icon that actually exists — is therefore not precached; the SW's fetch handler passes it through (it is not in `PRECACHE_PATHS`), so offline it simply fails to load. (b) `public/icons.svg` (4.9 KB) is referenced by **nothing** — no `src/` file, no `index.html`, no stylesheet — yet it ships to production in `dist/`. | Add `svg` to `globPatterns`; delete `icons.svg` or wire it up. Both are a line each, and (a) becomes moot for the PNGs once F70 is fixed, which is a reason to fix them together. |
+| F73 | Medium (supply chain); B10b workflow inspection | `.github/workflows/deploy.yml:42`; `package.json`; `pnpm-lock.yaml` | The deploy step is `pnpm dlx --allow-build=esbuild --allow-build=workerd wrangler pages deploy dist`. `wrangler` appears **0 times** in `package.json` and **0 times** in `pnpm-lock.yaml`, so it is fetched fresh from the registry at every deploy, unpinned and unlocked — and it runs with `CLOUDFLARE_API_TOKEN` in its environment, with lifecycle scripts explicitly permitted for `esbuild` and `workerd`. Whatever those three publish is executed with a production deploy credential. This is the **one unpinned link in an otherwise carefully locked chain**: the same workflow already runs `pnpm install --frozen-lockfile` and `pnpm audit signatures`, `packageManager` pins `pnpm@12.3.4`, dependabot watches both ecosystems weekly, and `pnpm-workspace.yaml` carries a security floor override. Every one of those controls is bypassed by the deploy line itself. | Add `wrangler` to `devDependencies` so it is lockfile-pinned and signature-audited with everything else, then invoke it as `pnpm exec wrangler …`. If `dlx` must stay, pin an exact version (`pnpm dlx wrangler@x.y.z`). Consider whether `--allow-build` is needed at all once the package is installed normally. |
+| F74 | Medium; B10b workflow inspection (with F71) | `.github/workflows/ci.yml:30`; `.github/workflows/deploy.yml:39`; `package.json:17-18`; `tests/e2e/` | **The end-to-end suite is dormant.** `check:ci` is `pnpm lint && pnpm test:coverage && pnpm build` — it does not include `test:e2e` — and a grep for `playwright` or `test:e2e` across `.github/` returns nothing, so **no workflow ever runs it**. Combined with F71, `tests/e2e/**` is neither type-checked nor executed by any automation: four files including an 11 KB `workout.spec.ts`, the app's only integration coverage, which exercise the real browser paths that unit tests cannot (OPFS persistence, the service worker, navigation). They run only if a person remembers to type `pnpm test:e2e`. A spec that no longer compiles or no longer passes can sit green in the repo indefinitely. | Add a Playwright job to `ci.yml` (it needs its own browser install step and a longer timeout, so a separate job rather than a line in `check:ci`), and wire `tsconfig.e2e.json` into the solution file per F71 so the specs are type-checked too. If the suite is too slow for every PR, run it on a schedule or on `main` pushes — dormant is the worst of the options. |
+| F75 | Low; B10b workflow inspection | `.github/workflows/ci.yml:3-4`; `.github/workflows/deploy.yml:5-15` | CI triggers on `pull_request` **only** — there is no `push` trigger — and the deploy workflow is path-filtered. A commit pushed straight to `main` therefore runs checks only if it touches a deploy path (`src/**` minus tests, `public/**`, `index.html`, `package.json`, `pnpm-lock.yaml`, `vite.config.*`, `tsconfig*`). Anything else gets **no workflow at all**: `eslint.config.js`, `stryker.config.mjs`, `playwright.config.ts`, `scripts/**`, `tests/e2e/**`, `.github/**`. The sharpest case is the deploy filter's own `'!src/**/*.test.*'` exclusion — a broken test committed directly to `main` triggers nothing, and then surfaces later by failing `check:ci` inside an unrelated deploy, blocking that deploy for a reason that has nothing to do with it. Committing on `main` is an accepted workflow in this repo, which is what makes the gap reachable rather than theoretical. | Add `push: branches: [main]` to `ci.yml`; the existing `concurrency` group keys on `github.event.pull_request.number`, so give it a fallback such as `ci-${{ github.event.pull_request.number || github.sha }}`. |
+| F76 | Low (documentation); B10b cross-check, reconcile in B12 | `CLAUDE.md:17-19`; `.github/workflows/deploy.yml:39`; `package.json:17` | `CLAUDE.md` states: "The workflow is path-filtered and runs **no lint and no tests** — `pnpm build && pnpm lint && pnpm test` locally is the only regression gate." The path-filtering half is correct; the rest is not. `deploy.yml:39` runs `pnpm run check:ci`, which is `pnpm lint && pnpm test:coverage && pnpm build`, and it runs **before** the deploy step, so a failure blocks the deploy. The deploy path is in fact the stricter gate of the two — it is the only place `test:coverage` and its 80 % thresholds run. The doc understates the automation, which misdirects effort rather than creating risk, but it is the sentence a contributor (or an agent) reads to decide what CI will catch. | Correct the sentence to describe what the workflow does today, and note that `test:coverage` (not plain `test`) is what gates deploys — which is also why F69's `include` gap matters at the gate rather than only locally. Fold into B12's documentation reconciliation. |
+| F77 | Low; B10c `eslint --print-config` | `eslint.config.js:9`, `19`, `31`; `scripts/*.js`; `stryker.config.mjs` | Every config block in `eslint.config.js` is scoped to `**/*.{ts,tsx}` or narrower, so **no rule applies to a `.js` or `.mjs` file anywhere in the repo**. Verified: `eslint --print-config scripts/debug-browser.js` resolves **0 rules**, against **92** for `src/lib/calc.ts`. `pnpm lint` therefore walks `scripts/debug-browser.js` (157 lines), `scripts/verify-notify-hardening.js` (256), `stryker.config.mjs` and `eslint.config.js` itself and checks nothing in them. With F71 — no tsconfig project covers `scripts/**` either — those 413 lines of Playwright-driving Node are checked by no tool at all. | Add a config block for `['**/*.{js,mjs}']` extending `js.configs.recommended` with `globals.node`, and widen `tsconfig.node.json` per F71 so the same files get type-checked in JSDoc-less mode or are explicitly excluded on purpose. |
+| F78 | Medium; B10c config cross-check | `playwright.config.ts:38-42`; `vite.config.ts:43-62`; `tests/e2e/` | The Playwright suite starts `pnpm dev` and points at `http://localhost:5173`, so the E2E tests run against the **development server**. `VitePWA` is configured with no `devOptions`, which means the service worker is **not registered in dev at all** — and the dev server serves unbundled modules with none of `public/_headers` applied. So the app's only automated integration suite exercises neither the service worker, nor the production bundle, nor the production CSP and security headers. That is exactly the surface F65 and F66 live on: a cache-poisoning bug in the navigation handler is invisible to every automated test the repo has, by construction rather than by omission. | Point the E2E `webServer` at `vite preview` (port 5175, which `verify-notify-hardening.js` already uses) after a build, so the specs run against the real artifact — or add `devOptions: { enabled: true }` to `VitePWA` if a dev-server suite is wanted as well. Fixing this is a precondition for the F65 regression test, which cannot be written against the current setup. |
+| F79 | Medium; B10c script inspection | `scripts/verify-notify-hardening.js:1-256`; `package.json:6-20`; `.github/workflows/`; `docs/verification/2026-08-09-swe-hardening.md:49`, `68` | A complete, **CI-ready** service-worker verification harness exists and is invoked by nothing. `verify-notify-hardening.js` spawns `vite preview` against the **production build**, drives the real app in headless Chromium with the **real service worker**, runs five independent legs in fresh browser contexts (A: offline hard reload at `/` and `/workout` renders the shell; B/C/D/E: the page-vs-SW notification matrix), stubs `registration.showNotification` to count fires, prints PASS/FAIL per leg and **exits 1 on failure**. It has no `package.json` script entry and appears in no workflow — it is reachable only by typing `node scripts/verify-notify-hardening.js`, as its own documentation says. Leg A is one 503 away from being F65's regression test. Same family as F74: the capability was built, then left dormant. | Add a `verify:sw` script and a CI job (it needs `pnpm build` first and a Chromium install, so a separate job like the Playwright one F74 asks for). Extend leg A with a poisoned-shell case — serve a 503 navigation, then go offline and assert the shell still renders — which converts F65 from a finding into a guarded regression. |
+| F80 | Low; B10c script inspection | `scripts/debug-browser.js:7`, `96-102` | The debug script's headline feature does nothing. It prints `'[debug] wiping IndexedDB (TrainingLog)...'` and calls `indexedDB.deleteDatabase('TrainingLog')`, but **the app uses no IndexedDB** — `grep -rn indexedDB src/` returns nothing outside tests; persistence is OPFS via SQLite WASM (the SAH pool VFS) plus `localStorage` for the workout store and the session-gap log. Deleting a database that never existed resolves successfully and silently, so the default `node scripts/debug-browser.js` — documented as "fresh run (clears DB)" and "a true first-run experience" — leaves every byte of real state in place, and the script then tries to walk the setup wizard that a returning user never sees. The name `TrainingLog` suggests this was correct before the storage layer moved. | Wipe what the app actually uses: `navigator.storage.getDirectory()` + remove the OPFS entries, and `localStorage.clear()`. Until then the `--no-wipe` flag and the default behave identically, so the flag should either work or go. |
+| F81 | Medium; B10d asset inspection | `public/favicon.svg`; `public/icons.svg`; `index.html:14`; `src/index.css:3-18` | **The app's icon set is scaffold leftovers from another project.** `public/icons.svg` is a social-link sprite — its symbols are `bluesky-icon`, `discord-icon`, `documentation-icon`, `github-icon`, `social-icon` and `x-icon` — for links this app does not have. `public/favicon.svg` (9.3 KB) is drawn entirely in purple and blue (`#863bff`, `#7e14ff`, `#47bfff`, `#ede6ff`), which is unrelated to the app's own design tokens: `--color-accent: #4ade80` on `--color-bg: #000000`. It is the icon a user sees in the browser tab and, per `index.html:14`, the only icon reference the document makes. Read with **F70** (the manifest names `icon-192.png` and `icon-512.png`, neither of which exists) and **F72** (`icons.svg` is referenced by nothing; `svg` is not precached), the whole icon story is: no PWA icons, no `apple-touch-icon`, a foreign favicon, and an orphaned template sprite shipping to production. | Draw an icon set for the app and wire it up once: an SVG favicon in the app's own palette, `icon-192.png`/`icon-512.png` for the manifest, and an `apple-touch-icon` link. Delete `icons.svg`. This is the change F70 and F72 are both waiting on — they are not three separate fixes but one asset task, which is why none of them has been done. |
+| F82 | Low; B10d asset inspection | `public/demo-seed.json` | A 44.8 KB export-format JSON that **no code reads** — `grep -rn 'demo-seed' src/ tests/ scripts/` returns nothing — and that `public/` therefore ships verbatim to `dist/`, publicly fetchable at `/demo-seed.json`. It is not a fixture: it carries the full import envelope (`exportedAt: 2026-05-08T18:04:36.896Z`, `version: 1`) and real training history — 4 lifts (OHP/Deadlift/Bench/Squat), 18 training maxes, 2 cycles, 23 sessions, **184 sets**, 18 exercises, 25 accessory sets and a settings row. Whatever it was staged for (a demo mode, a seeding path) was never wired up, so the cost today is a published copy of the author's training log and 45 KB of dead weight in every deploy. | Decide which it is: wire it to an actual demo/seed path, move it out of `public/` into a fixture directory if it is test data, or delete it. Note that the tracker scoped this file in deliberately ("Tracked `public/demo-seed.json` is in scope"), so the decision belongs in B12's reconciliation if it is not made sooner. |
+| F83 | Low; B10d `git check-ignore` | `.gitignore:28`; `CLAUDE.md:32-34`, `41-42` | `.gitignore` ignores `.claude/`, yet **five files under it are tracked** — `ARCHITECTURE_MAP.md`, `COMMON_MISTAKES.md`, `QUICK_START.md`, `completions/README.md`, `sessions/README.md` — and `CLAUDE.md` names the first three as the project's key documents. Already-tracked files are unaffected by a later ignore rule, so the current five are safe; anything **new** added there is silently invisible. `git check-ignore -v .claude/NEW_DOC.md` → `.gitignore:28:.claude/`. A contributor or agent writing a fourth key document in the directory the project points at gets no warning from `git status` and the file never reaches the repo. | Narrow the rule to the local-only subtrees and let the documentation through: replace `.claude/` with `.claude/settings.local.json` and `.claude/agents/` (which is what the ignore is actually for — see the ignored entries listed by `git status --ignored`). |
+| F84 | Low; B10d cross-check | `scripts/migrate-history.py:23-51`; `src/db/seed.ts:5-31` | The migration script hardcodes its own copies of the lift and exercise tables with fixed ids, under a comment stating they "must match seed.ts order so IDs are 1–4", and **they have already drifted**. The lifts still match. The exercises do not: id 3 is `"Curls"` in the script and `'Bicep Curls'` in `seed.ts`, and `seed.ts` has since grown to **20** exercises (`Reverse Nordic`, `Pull Through`) against the script's 18. A migration run today emits `{"id": 3, "name": "Curls"}` into an import envelope that `importJson` validates weakly (**F08**), landing a second exercise alongside the seeded `Bicep Curls` — and **F41** records that once two exercises share a name the repair path is closed, because `renameExercise` rejects on the twin. A one-shot tool, but its one shot is a user's entire history. | Have the script read the tables from a single source rather than restating them — generate them from `seed.ts`, or emit exercises by name without ids and let the importer resolve them. At minimum, re-sync the two tables and add a test that fails when they diverge. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -261,7 +286,7 @@ area membership is not permission to review the entire area in one session.
 | B07 | Calculation, progression, composition and other libraries/tests | **Closed** (B07a–B07g). Numeric boundaries and domain invariants; F24–F45 opened |
 | B08 | Components, hooks, related tests | **Closed** (B08a–B08h). Reported coverage recovered through bounded verification; F46–F64 opened |
 | B09 | Service worker, timers, notifications and tests | **Closed** (B09a–B09c). L04 resolved into F65; F65–F68 opened |
-| B10 | Build/deploy/config/scripts/public assets | Deployment assumptions and operational failures |
+| B10 | Build/deploy/config/scripts/public assets | **Closed** (B10a–B10d). F69–F84 opened |
 | B11 | E2E, test infrastructure, domain types and remaining stores | Integration gaps and shared contracts |
 | B12 | Documentation/data relevance and final reconciliation | Scope accounting and cross-file closure |
 
@@ -280,11 +305,11 @@ column as work is completed.
 | `.claude/QUICK_START.md` | B12 | pending | — |
 | `.claude/completions/README.md` | B12 | pending | — |
 | `.claude/sessions/README.md` | B12 | pending | — |
-| `.claudeignore` | B10 | pending | — |
-| `.github/dependabot.yml` | B10 | pending | — |
-| `.github/workflows/ci.yml` | B10 | pending | — |
-| `.github/workflows/deploy.yml` | B10 | pending | — |
-| `.gitignore` | B10 | pending | — |
+| `.claudeignore` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (clean) |
+| `.github/dependabot.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (clean) |
+| `.github/workflows/ci.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F74, F75) |
+| `.github/workflows/deploy.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F73, F74, F75, F76) |
+| `.gitignore` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F83) |
 | `AMRAP_TARGET_REPS_ANALYSIS.md` | B12 | pending | — |
 | `CLAUDE.md` | B12 | pending | — |
 | `ENGINEERING_PASSES.md` | B12 | pending | — |
@@ -297,19 +322,19 @@ column as work is completed.
 | `docs/verification/2026-06-27-deload-toggle.md` | B12 | pending | — |
 | `docs/verification/2026-08-09-rest-timer-notifications.md` | B12 | pending | — |
 | `docs/verification/2026-08-09-swe-hardening.md` | B12 | pending | — |
-| `eslint.config.js` | B10 | pending | — |
-| `index.html` | B10 | pending | — |
-| `package.json` | B10 | pending | — |
-| `playwright.config.ts` | B10 | pending | — |
-| `pnpm-lock.yaml` | B10 | pending | — |
-| `pnpm-workspace.yaml` | B10 | pending | — |
-| `public/_headers` | B10 | pending | — |
-| `public/demo-seed.json` | B10 | pending | — |
-| `public/favicon.svg` | B10 | pending | — |
-| `public/icons.svg` | B10 | pending | — |
-| `scripts/debug-browser.js` | B10 | pending | — |
-| `scripts/migrate-history.py` | B10 | pending | — |
-| `scripts/verify-notify-hardening.js` | B10 | pending | — |
+| `eslint.config.js` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (F77; amends F71) |
+| `index.html` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F70 apple-touch-icon; CSP meta checked) |
+| `package.json` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (check:ci composition; no wrangler dep) |
+| `playwright.config.ts` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (F78) |
+| `pnpm-lock.yaml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (integrity artifact; v9.0, frozen in both workflows) |
+| `pnpm-workspace.yaml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (clean; override verified live in the lock) |
+| `public/_headers` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (clean; CSP matches the other two copies) |
+| `public/demo-seed.json` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F82) |
+| `public/favicon.svg` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F81) |
+| `public/icons.svg` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F81, F72) |
+| `scripts/debug-browser.js` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (F80) |
+| `scripts/migrate-history.py` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F84) |
+| `scripts/verify-notify-hardening.js` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (F79 — CI-ready, invoked by nothing) |
 | `src/App.tsx` | B01 | deep | B01b — app shell and training-max helpers (1/5); evidence below |
 | `src/components/forms/DurationInput.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (fieldLabel never exercised) |
 | `src/components/forms/DurationInput.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (F59) |
@@ -374,7 +399,7 @@ column as work is completed.
 | `src/db/sqlite-test-client.ts` | B02 | deep | B02b — table layer and test client (3/5); evidence below |
 | `src/db/sqlite.worker.ts` | B01 | deep | B01a; full file; findings/evidence below |
 | `src/hooks/use-confirmation.ts` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F48; no test file) |
-| `src/index.css` | B10 | pending | — |
+| `src/index.css` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (clean) |
 | `src/lib/accessory-tm.test.ts` | B07 | deep | B07e — all 96 lines; 9 tests passed; test gaps below |
 | `src/lib/accessory-tm.ts` | B07 | deep | B07e — all 78 lines; no findings; slate guard probed across six shapes |
 | `src/lib/assistance.test.ts` | B07 | deep | B07f — all 274 lines; 28 tests passed; test gaps below |
@@ -444,16 +469,16 @@ column as work is completed.
 | `src/types/domain.ts` | B11 | pending | — |
 | `src/vite-env.d.ts` | B11 | pending | — |
 | `src/workers/timer.worker.ts` | B09 | deep | B09c — timer worker and audio cues (3/3); evidence below (F68; no test file) |
-| `stryker.config.mjs` | B10 | pending | — |
+| `stryker.config.mjs` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (clean; mutate scoped to src/lib — F69 theme) |
 | `tests/e2e/app.spec.ts` | B11 | pending | — |
 | `tests/e2e/fixtures.ts` | B11 | pending | — |
 | `tests/e2e/helpers.ts` | B11 | pending | — |
 | `tests/e2e/workout.spec.ts` | B11 | pending | — |
-| `tsconfig.app.json` | B10 | pending | — |
-| `tsconfig.e2e.json` | B10 | pending | — |
-| `tsconfig.json` | B10 | pending | — |
-| `tsconfig.node.json` | B10 | pending | — |
-| `vite.config.ts` | B10 | pending | — |
+| `tsconfig.app.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (strict verified on via TS 6 default) |
+| `tsconfig.e2e.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F71 — referenced by nothing) |
+| `tsconfig.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F71 — e2e project unreferenced) |
+| `tsconfig.node.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F71 — covers only vite.config.ts) |
+| `vite.config.ts` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F69, F70, F72) |
 
 ## Scope exclusions
 
@@ -3466,3 +3491,431 @@ build, deploy, config, scripts and public assets (25 rows)**, starting with
 `vite.config.ts`'s PWA block, which feeds `__WB_MANIFEST` and `globPatterns`
 directly into F65's and F66's cache paths, and `.github/workflows/deploy.yml`,
 which runs no lint and no tests.
+
+### 2026-09-15 — B10a: build, PWA and type configuration
+
+**Revision:** `e2162e7` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; seven configuration files deeply
+reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `vite.config.ts` | 1–77 | `566161e0805a4a4e693db468e57dc9563d4c8292` |
+| `index.html` | 1–26 | `7a5a629504e1f2ddaf9685e2e17fccbd3f840269` |
+| `public/_headers` | 1–7 | `ecf9e9dd08bac167d1d432825cd369338c3e6559` |
+| `tsconfig.json` | 1–11 | `ea9d0cd8255683d84f125948115daf1de0f06b1f` |
+| `tsconfig.app.json` | 1–26 | `1a7726c19b244501f088f2955f029f2224b213fd` |
+| `tsconfig.node.json` | 1–24 | `d3c52ea64c6cd6bad118474410f5322f48e257a6` |
+| `tsconfig.e2e.json` | 1–19 | `bb685a825f3f1fd580deb75265ce38a03553c3c4` |
+
+**Behavior and invariants traced:**
+
+- `vite.config.ts`: the vitest block (jsdom, setup file, the `/sqlite-client$/ →
+  /sqlite-test-client` alias that swaps the worker-backed client for an in-process
+  one, the exclude list) and the coverage block (F69); `optimizeDeps` excluding
+  `@sqlite.org/sqlite-wasm`; the preview server's CSP and security headers; and the
+  `VitePWA` `injectManifest` configuration — `srcDir`/`filename` pointing at the
+  audited custom SW, `registerType: 'prompt'` matching that SW's deliberate absence
+  of `skipWaiting`, `globPatterns` (F72) and `manifest.icons` (F70).
+- `index.html`: the meta CSP and its stated threat model, the viewport with
+  `viewport-fit=cover`, the Apple standalone meta tags, and the inline LOADING
+  shell.
+- `public/_headers`: the Cloudflare Pages header block — CSP, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`.
+- The tsconfig graph: solution file → app (`src`, 133 files) + node
+  (`vite.config.ts` only), with e2e orphaned (F71).
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Coverage evidence for F69: `pnpm exec vitest run --coverage src/lib/format.test.ts`
+  reports only `lib`, `screens` and `store` sections with a denominator of **3,945
+  statements** and **no `components` section present**, then fails all four
+  thresholds as expected for a single-suite run.
+- Probe (type strictness): a temporary `src/` file containing `const x: string =
+  null`, an implicit-`any` parameter, a `string | null` dereference and `const n:
+  number = undefined` was compiled with `tsc -b`. **All four errored** — TS2322,
+  TS7006, TS18047, TS2322 — so the application source *is* strictly checked. See
+  the negative conclusions for where that strictness comes from.
+- Build-output inspection for F70: `dist/manifest.webmanifest` ships
+  `"icons":[{"src":"icon-192.png"…},{"src":"icon-512.png"…}]`; `ls public/` and
+  `ls dist/` show neither file exists.
+- Reference check for F71: `tsc -p tsconfig.app.json --showConfig` resolves 133
+  files, all under `./src`; `tsconfig.node.json` resolves exactly
+  `['./vite.config.ts']`; `grep` for `tsconfig.e2e` across `package.json`,
+  `tsconfig.json`, `.github/workflows/` and `playwright.config.ts` returns nothing.
+- Not run: Lighthouse, any real-browser install check, the full test suite.
+
+**Findings:** F69 (medium), F70 (medium), F71 (medium), F72 (low).
+
+**Substantive negative conclusions:**
+
+- **Type strictness is real but undeclared.** No tsconfig in the repo sets
+  `strict`, yet the probe shows strict errors firing. The reason is the compiler
+  major: `package.json` pins `typescript: ~6.0.2`, and TypeScript 6 defaults
+  `strict` to `true` — `--showConfig` confirms the flag is simply absent rather
+  than set. The checking is therefore inherited from a default, not stated, while
+  `tsconfig.e2e.json` — the one config nothing builds (F71) — declares it
+  explicitly. **Recorded rather than opened:** the current behaviour is correct and
+  verified. It is worth an explicit `"strict": true` in `tsconfig.app.json` so a
+  downgrade or a different toolchain cannot silently remove it.
+- **The missing `Cross-Origin-Embedder-Policy` does not explain F02.**
+  `public/_headers` sets `Cross-Origin-Opener-Policy: same-origin` with no COEP, so
+  the origin is not cross-origin isolated and `SharedArrayBuffer` is unavailable —
+  which would break the SAB-based `opfs` VFS and looked like a strong candidate
+  root cause for F02 (persistence silently falling back to in-memory). Checked and
+  **ruled out**: `sqlite.worker.ts:40` names the **OPFS SAH pool** VFS
+  (`opfs-sahpool`), which uses synchronous access handles and requires no
+  cross-origin isolation. F02's cause remains open and is not a headers problem.
+  Recorded because it is an attractive wrong answer that would otherwise be
+  re-derived.
+- **The three CSP copies are byte-identical.** `index.html:13`, `vite.config.ts:35`
+  and `public/_headers:6` carry the same policy string, so the mirroring discipline
+  the `index.html` comment asks for is currently being kept.
+- `frame-ancestors` is ignored when delivered in a `<meta>` CSP, so
+  `index.html`'s copy of it is inert. Not a finding: production serves the same
+  directive as a real header from `_headers` *and* `X-Frame-Options: DENY`, and the
+  preview server sets it as a header too. Only `vite dev` relies on the meta tag,
+  where there is nothing to protect.
+- The preview and production header sets diverge — preview uses `Referrer-Policy:
+  no-referrer` (stricter) while production uses `strict-origin-when-cross-origin`,
+  and preview omits `X-Frame-Options`, `Permissions-Policy` and COOP. Left as an
+  observation: preview is a local development server, and the divergence makes it
+  stricter in the one place they differ on the same header.
+- `vite.config.ts:48` claims `cleanupOutdatedCaches()` is called on activate in the
+  SW. B09a's review shows the SW hand-rolls the equivalent instead — a
+  `caches.keys()` filter on the `precache-` prefix — because it deliberately
+  imports no workbox runtime. The behaviour matches the claim; only the function
+  name is wrong. Documentation drift, recorded not opened.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- F69 **is** the coverage-gap finding for this batch: the gate's `include` is the
+  gap, not any individual file's tests.
+- No check asserts that the files named in `manifest.icons` exist in the build
+  output (F70), and nothing type-checks the E2E suite (F71). Both are the kind of
+  thing a CI step would catch in one line; B10b reviews whether CI could.
+
+**Open questions / remaining ranges:** two carried to B10b — whether
+`.github/workflows/ci.yml` runs `test:coverage` (which would make F69's blind spot
+a CI-gating question) and what the deploy workflow's path filter actually admits,
+since `CLAUDE.md` states it runs no lint and no tests.
+
+**Ledger rows updated:** seven B10 rows moved `pending` → `deep`; B10 now has 18
+rows left. **Next action: B10b — `.github/workflows/ci.yml`,
+`.github/workflows/deploy.yml`, `.github/dependabot.yml`, `package.json`,
+`pnpm-workspace.yaml` and `pnpm-lock.yaml`.**
+
+### 2026-09-15 — B10b: CI/CD and supply chain
+
+**Revision:** `85cf632` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; no probe files were created — this
+batch is configuration inspection and cross-checking. Single agent; six files
+deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `.github/workflows/ci.yml` | 1–30 | `1a3501bcbc0a75d0c4458b316086bdb6c8bf08da` |
+| `.github/workflows/deploy.yml` | 1–45 | `e618220ebaa927ff91a90ad98fd76c98d11d4129` |
+| `.github/dependabot.yml` | 1–21 | `312681d1affda3acb38896d53d03ca58bc05a7af` |
+| `package.json` | 1–52 | `79e71ed8350bc08585b8084190e321d9c6884659` |
+| `pnpm-workspace.yaml` | 1–2 | `38bfbf783e2f2236f3e1024f1241012d7d2a1fa8` |
+| `pnpm-lock.yaml` | integrity artifact, not line-reviewed | `4a45c57a1b1fd96c7a8b0ca4613233f9500d6f88` |
+
+**Behavior and invariants traced:**
+
+- `ci.yml`: the `pull_request`-only trigger (F75), `permissions: contents: read`,
+  the `concurrency` group keyed on the PR number with `cancel-in-progress`,
+  `timeout-minutes: 10`, `persist-credentials: false` on checkout, and
+  `pnpm install --frozen-lockfile` before `check:ci`.
+- `deploy.yml`: the `workflow_dispatch` + path-filtered `push: [main]` trigger and
+  exactly which paths it admits (F75, F76); the same least-privilege token and
+  credential-free checkout; `pnpm audit signatures` as a supply-chain step; the
+  ordering that puts `check:ci` **before** the deploy step so a failing check
+  blocks the deploy; and the `pnpm dlx wrangler` invocation (F73).
+- `package.json`: the script graph — `check:ci` = `lint && test:coverage && build`,
+  `check` = `build && test`, `check:local` = cached eslint + `tsc -b` — and the
+  dependency set (5 runtime, 20 dev), `packageManager: pnpm@12.3.4`.
+- `dependabot.yml`: weekly npm and github-actions updates, minor/patch grouped into
+  one PR with security advisories still opening their own, PR limits 5 and 3.
+- `pnpm-lock.yaml`: reviewed as an integrity artifact — `lockfileVersion: '9.0'`
+  matching pnpm 12, enforced by `--frozen-lockfile` in **both** workflows and
+  signature-checked by `pnpm audit signatures` in the deploy path.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Evidence for F73: `grep -c wrangler package.json pnpm-lock.yaml` → **0 and 0**.
+  The deploy executable is outside the lockfile entirely.
+- Evidence for F74: `grep -rn 'playwright\|test:e2e' .github/` returns nothing, and
+  `check:ci` does not include `test:e2e`.
+- Evidence for F76: `deploy.yml:39` is `pnpm run check:ci`; `package.json:17`
+  defines that as `pnpm lint && pnpm test:coverage && pnpm build`; `CLAUDE.md:17-19`
+  states the workflow "runs **no lint and no tests**".
+- Verification for `pnpm-workspace.yaml`: the `serialize-javascript: '>=7.0.5'`
+  override is live — the lockfile resolves `serialize-javascript@7.1.1`, which
+  satisfies the floor.
+- Not run: any workflow; no CI was triggered as part of this review.
+
+**Findings:** F73 (medium, supply chain), F74 (medium), F75 (low), F76 (low,
+documentation — reconcile in B12).
+
+**Substantive negative conclusions:**
+
+- **The deploy pipeline's ordering is correct.** `check:ci` runs before the
+  `wrangler` step and steps are fail-fast, so lint, coverage-gated tests and the
+  build all have to pass before anything reaches Cloudflare. This is the opposite
+  of what `CLAUDE.md` describes (F76) and is worth stating plainly: the automation
+  is stronger than the documentation claims, and F69's `include` gap is the thing
+  that limits it, not the workflow's structure.
+- **`dependabot.yml` is clean and well-reasoned.** Grouping minor/patch into one PR
+  while leaving security advisories to open individually is the right trade, and
+  covering `github-actions` as its own ecosystem is what keeps the action majors
+  current — visible in the repo's history.
+- **`pnpm-workspace.yaml` is clean.** A `>=` floor rather than an exact pin is
+  correct for a security override: it raises the minimum without freezing the
+  package at a version that will itself age.
+- Both workflows use `persist-credentials: false` and `permissions: contents:
+  read`, which is the right posture for a deploy that needs no repository writes.
+- The actions are pinned by major tag (`actions/checkout@v7`,
+  `actions/setup-node@v7`, `pnpm/action-setup@v6`) rather than by commit SHA.
+  Recorded as an observation rather than opened: SHA-pinning is the stricter
+  hardening, but it defeats the dependabot `github-actions` ecosystem this repo
+  deliberately enables, and the trade is a reasonable one to have made.
+- `CLOUDFLARE_ACCOUNT_ID` is committed in plaintext at `deploy.yml:45`. Not opened:
+  Cloudflare account IDs are identifiers rather than credentials, appear in
+  dashboard URLs, and are useless without the API token, which is correctly a
+  secret.
+- `deploy.yml` has **no `concurrency` group and no `timeout-minutes`**, unlike
+  `ci.yml`. Two pushes to `main` in quick succession can therefore run two deploys
+  concurrently, and a hung job runs to the six-hour default. Recorded as an
+  observation: Cloudflare Pages serialises deployments per project, so the
+  practical risk is a confusing ordering rather than a corrupt deploy — but adding
+  both would cost two lines and match the sibling workflow.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- F74 is this batch's coverage gap and the largest one found so far in absolute
+  terms: an entire integration suite that neither compiles-checks nor runs.
+- Nothing asserts that `check:ci` still contains what the documentation claims
+  (F76), and nothing asserts the deploy path filter matches the set of files that
+  actually affect the build — both are the kind of drift a single CI assertion
+  would pin.
+
+**Open questions / remaining ranges:** B10a's two carried questions are both
+answered here — `ci.yml` runs `check:ci` and therefore `test:coverage` (so F69
+gates production), and the deploy filter's exact path set is recorded above with
+its consequences (F75). Nothing new carried.
+
+**Ledger rows updated:** six B10 rows moved `pending` → `deep`; B10 now has 12
+rows left. **Next action: B10c — `scripts/verify-notify-hardening.js`,
+`scripts/debug-browser.js`, `eslint.config.js`, `stryker.config.mjs` and
+`playwright.config.ts`.**
+
+### 2026-09-15 — B10c: scripts and tooling configuration
+
+**Revision:** `6a135f9` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; no probe files were created — the
+evidence here is `eslint --print-config` output and config cross-checks. Single
+agent; five files deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `scripts/verify-notify-hardening.js` | 1–256 | `05b1739e931633ed87c19c37192dabf14ef86156` |
+| `scripts/debug-browser.js` | 1–157 | `b8f3916de49d389535ee32fb5740b59c6e7a7515` |
+| `eslint.config.js` | 1–42 | `51b5f2a6ffc40a100f090cab9293bbbf9abfd16d` |
+| `stryker.config.mjs` | 1–19 | `1d6084ae72f0f24e9cf0f2d650a56fa0c54803e8` |
+| `playwright.config.ts` | 1–43 | `fdcc6c98d03bd8804183941c499900584f5d93d6` |
+
+**Behavior and invariants traced:**
+
+- `eslint.config.js`: the flat-config array — global ignores, the base
+  `**/*.{ts,tsx}` block extending `js` and `typescript-eslint` recommended, and the
+  two type-aware blocks that attach `project: tsconfig.app.json` to `src/**` and
+  `project: tsconfig.e2e.json` to `tests/e2e/**`, each enabling
+  `@typescript-eslint/no-floating-promises`. The e2e block is what amends F71.
+- `stryker.config.mjs`: the explicitly named plugins and the recorded reason (under
+  pnpm's isolated `node_modules`, Stryker's default `@stryker-mutator/*` discovery
+  cannot see the runner and checker), the vitest runner pointed at the shared vite
+  config, `mutate` scoped to `src/lib/**`, thresholds `high 80 / low 60 / break 40`,
+  `coverageAnalysis: 'perTest'` and `disableTypeChecks: false`.
+- `playwright.config.ts`: `findChrome()`'s search across
+  `PLAYWRIGHT_BROWSERS_PATH`, `/tmp/pw-browsers` and the default cache, with the
+  discovered path applied only if found; the CI-aware retries/workers; the trace,
+  screenshot and video capture settings; and the `webServer` block (F78).
+- `verify-notify-hardening.js`: the full five-leg harness — a spawned `vite
+  preview` on 5175, a fresh browser context per leg (fresh OPFS, storage and SW, so
+  no production reset hook is needed), the setup-wizard walkthrough, rest state
+  injected through `localStorage` before a reload, `registration.showNotification`
+  stubbed inside the SW to count fires, and per-leg PASS/FAIL with
+  `process.exit(1)` on any failure.
+- `debug-browser.js`: Chromium resolution with a fallback search, error and
+  `console.error` capture, the wizard walkthrough, page-text dump and screenshot —
+  and the wipe step (F80).
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Evidence for F77: `eslint --print-config scripts/debug-browser.js` resolves **0
+  rules**; the same command for `src/lib/calc.ts` resolves **92**.
+- Evidence for F78: `grep -n devOptions vite.config.ts` returns nothing, so
+  `VitePWA` registers no service worker under `vite dev` — which is what
+  `playwright.config.ts:39` starts.
+- Evidence for F79: `verify-notify-hardening.js` has no entry in `package.json`'s
+  scripts and no occurrence in `.github/`; it is named only in
+  `docs/verification/2026-08-09-swe-hardening.md`.
+- Evidence for F80: `grep -rn indexedDB src/` returns nothing outside tests, while
+  the script deletes `indexedDB.deleteDatabase('TrainingLog')`.
+- Not run: neither script was executed (both drive a browser and one spawns a
+  preview server); no mutation run.
+
+**Findings:** F77 (low), F78 (medium), F79 (medium), F80 (low). **F71 amended** —
+see below.
+
+**Substantive negative conclusions:**
+
+- **F71 needed correcting and has been amended in place.** B10a stated that
+  `tsconfig.e2e.json` is "referenced by nothing"; `eslint.config.js:34` does point
+  at it, for type-aware linting of the E2E specs. The finding stands with a narrower
+  claim — the file is *used but never built*: ESLint loads the project to power
+  `no-floating-promises`, while `tsc` never compiles the specs, so type errors as
+  such are still reported by nothing. Recorded here rather than silently edited
+  because the original wording was wrong.
+- **`stryker.config.mjs` is clean**, and its comment about pnpm's isolated
+  `node_modules` defeating Stryker's plugin discovery is the kind of hard-won note
+  worth keeping. Its `mutate: ['src/lib/**/*.ts']` scope repeats F69's shape — the
+  same three-directory view of the codebase — but mutation testing is a deliberately
+  targeted tool and is not gated in CI, so it is recorded as an instance of the
+  theme rather than opened separately.
+- **`verify-notify-hardening.js` is well built.** Fresh context per leg, a stubbed
+  `showNotification` rather than a real permission prompt, past-due rest state
+  injected through `localStorage` so no clock manipulation is needed, and a
+  deliberate 1.5-second margin in legs B and D to win the race against the fire.
+  Nothing in the script needs fixing; F79 is entirely about it not being run.
+- Legs B and D assert that the **page** notification fires, which is F67's
+  `new Notification(...)` path. They pass under desktop headless Chromium, where
+  that constructor works — so they neither confirm nor refute F67, whose question is
+  specifically about Android Chrome and iOS PWAs. Consistent with F67 being flagged
+  for a device check.
+- `playwright.config.ts:14-17` interpolates an environment variable into an
+  `execSync` shell string. The value is quoted and comes from the developer's own
+  `PLAYWRIGHT_BROWSERS_PATH`, so there is no attack surface — a local config
+  choosing a local browser. Not opened.
+- `eslint.config.js` applies `globals.browser` to every `.ts`/`.tsx` file including
+  `vite.config.ts`, `playwright.config.ts` and the worker sources. Harmless:
+  `typescript-eslint`'s recommended set disables `no-undef` for TypeScript, which is
+  the only rule that would care.
+- **No `eslint-plugin-solid`.** Recorded as an observation: `solid/reactivity` is
+  the rule family that flags props destructured out of reactive scope and values
+  read outside tracking, which is adjacent to F52's identity problem and F49/F56's
+  seed-once-never-resync shape. Whether it would have caught any of them is
+  unverified, so this is a suggestion rather than a finding.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- F77, F78 and F79 are this batch's coverage story, and together they explain why
+  F65 survived: the service worker can only be exercised by a harness nothing runs,
+  and the suite that does exist runs in an environment where the service worker does
+  not exist.
+- `scripts/` has no tests, which is reasonable for dev tooling — but with F77 and
+  F71 it means 413 lines are checked by no linter, no type checker and no test.
+
+**Open questions / remaining ranges:** none carried. F78's fix is a precondition
+for the F65 regression test noted under F79, and both are recorded there rather
+than left open here.
+
+**Ledger rows updated:** five B10 rows moved `pending` → `deep`; B10 now has 7 rows
+left. **Next action: B10d — `scripts/migrate-history.py`, `public/demo-seed.json`,
+`public/favicon.svg`, `public/icons.svg`, `src/index.css`, `.gitignore` and
+`.claudeignore`**, which closes area B10.
+
+### 2026-09-15 — B10d: data, assets, css and ignore files (closes area B10)
+
+**Revision:** `1c99c45` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; no probe files were created — the
+evidence here is asset inspection, `git check-ignore`, and a cross-check against
+`seed.ts`. Single agent; seven files deeply reviewed; no application edits.
+**This closes area B10.**
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `scripts/migrate-history.py` | 1–396 | `d3f64e6d1ed4d167fb6ddde6a0cabbedcb4c44ec` |
+| `public/demo-seed.json` | 1–2596 (structure reviewed, not line by line) | `d6caa4ed41bd930773613740e05ed12dc80d914d` |
+| `public/favicon.svg` | asset, reviewed by content | `6893eb13237060adc0c968a690149a49faa2d7d3` |
+| `public/icons.svg` | asset, reviewed by content | `e9522193d9f796a9748e9ad8c952a5df73c87db9` |
+| `src/index.css` | 1–58 | `58cd9bfcc5a9feff9602f1bca0e627017b7dd835` |
+| `.gitignore` | 1–40 | `c03a5b4b216cd71c4e03b2a62665e9ebba7abd1f` |
+| `.claudeignore` | 1–33 | `79ee67ab74451b3854ca90d9ac3b6c35410ce309` |
+
+**Behavior and invariants traced:**
+
+- `migrate-history.py`: the CSV → import-JSON pipeline — `determine_week` and
+  `calc_tm` inferring cycle position from main and FSL set shapes, `assign_cycles`,
+  `build_json` emitting the full export envelope, and the `--ohp/--dl/--bench/--squat`
+  TM overrides. Its hardcoded `LIFTS`/`EXERCISES` tables and their stated coupling
+  to `seed.ts` are F84.
+- `public/demo-seed.json`: the envelope shape and record counts (F82).
+- `src/index.css`: the `@theme` token set, `--nav-h` with `env(safe-area-inset-bottom)`,
+  the narrowed `user-select`/`-webkit-touch-callout` rule and the reasoning behind
+  it, and the app-wide `prefers-reduced-motion` collapse.
+- `.gitignore` and `.claudeignore`: what each actually excludes, including the
+  `training-log-*.json` rule that covers the local export files in the working tree.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Evidence for F81: `grep -oE '<symbol id="[^"]+"' public/icons.svg` →
+  `bluesky-icon`, `discord-icon`, `documentation-icon`, `github-icon`,
+  `social-icon`, `x-icon`; `grep -oE 'fill="#[0-9a-fA-F]{6}"' public/favicon.svg` →
+  `#47bfff`, `#7e14ff`, `#863bff`, `#ede6ff`, against `--color-accent: #4ade80` and
+  `--color-bg: #000000` in `src/index.css`.
+- Evidence for F82: `grep -rn 'demo-seed' src/ tests/ scripts/` returns nothing;
+  parsing the file gives `exportedAt: 2026-05-08T18:04:36.896Z`, `version: 1`, and
+  counts of 4 lifts / 18 trainingMaxes / 2 cycles / 23 sessions / 184 sets / 18
+  exercises / 25 accessorySets / 1 settings row.
+- Evidence for F83: `git ls-files .claude/` lists five tracked files;
+  `git check-ignore -v .claude/NEW_DOC.md` → `.gitignore:28:.claude/`.
+- Evidence for F84: `seed.ts:14` has `Bicep Curls` where the script's id 3 is
+  `Curls`, and `seed.ts` lists 20 exercises (`Reverse Nordic`, `Pull Through`
+  added) against the script's 18.
+- Not run: the migration script (it needs a user CSV), and no full suite.
+
+**Findings:** F81 (medium), F82 (low), F83 (low), F84 (low).
+
+**Substantive negative conclusions:**
+
+- **`src/index.css` is clean**, and the comment at `:24-35` explaining why
+  `user-select: none` was pulled off the app root and scoped to controls is exactly
+  the kind of reasoning worth keeping — it names the regression it fixed (notes,
+  training maxes and exercise names becoming unselectable). One cross-reference
+  rather than a new finding: the selector list is
+  `button, nav, label, [role="button"]`, and **F61**'s `SetReadout` tap target is a
+  bare `div` with no role, so a long-press on a logged set still raises the iOS
+  callout. That is a second small consequence of F61, not a defect in this file.
+- **`.claudeignore` is clean** and consistent with `CLAUDE.md`'s "never auto-load"
+  list.
+- The `training-log-*.json` rule at `.gitignore:32` correctly covers the local
+  export files sitting in the working tree, so they are untracked by intent rather
+  than by accident.
+- `migrate-history.py` is otherwise sound for a one-shot tool: argparse with
+  documented overrides, stdout output meant for redirection, and week/TM inference
+  that is explicit about being a guess the user should verify. Being Python, it is
+  outside ESLint and `tsc` by nature rather than by the oversight F77 describes.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- Nothing asserts that `migrate-history.py`'s tables still match `seed.ts` (F84),
+  that the manifest's icons exist (F70/F81), or that files in `public/` are
+  referenced by something (F72/F82). All three are single-assertion CI checks
+  against drift that has already happened.
+
+**Open questions / remaining ranges:** none carried. F82's "wire it up or delete
+it" decision is flagged for B12 if it is not made sooner, since the tracker scoped
+that file in deliberately.
+
+**Area B10 closure:** all 25 ledger rows `deep` with per-file evidence. Sixteen
+findings opened (F69–F84) and F71 amended in place after B10c found that
+`eslint.config.js` does reference `tsconfig.e2e.json`. **Next action: B11 — E2E,
+test infrastructure, domain types and remaining stores (11 rows)**, starting with
+`tests/e2e/**`, which B10 characterised from the outside through F71, F74 and F78.
