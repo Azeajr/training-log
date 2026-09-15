@@ -8,42 +8,68 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Area B07 is CLOSED.** Every `src/lib/**` row queued to B07 is now `deep` at a
-recorded blob, across seven batches (B07a–B07g). No B07 file remains `pending`,
-`partial` or `stale`. Twenty-two findings were opened from this area
-(F24–F45, less the ones opened elsewhere), and leads **L05 is resolved** while
-**L07** gained two further call sites. Nothing in B07 is blocked.
+**Areas B07 and B08 are both CLOSED.** Every `src/components/**` row and
+`src/hooks/use-confirmation.ts` is now `deep` at a recorded blob, across eight
+batches (B08a–B08h). No B08 file remains `pending`, `partial` or `reported`: the
+area-level claim that hid 52 unverified rows has been replaced with per-file
+evidence for all 54. Nineteen findings were opened from this area (**F46–F64**),
+and F33, F34, F40 and F52 gained new triggers or symptoms. Nothing in B08 is
+blocked.
 
-**Next batch: B08a — the start of the components area.** B08 is the largest
-remaining block and the one the `pending` column hides: 52 of its rows are
-`reported`, a prior area-level claim with no recoverable per-file evidence, so each
-still needs bounded verification. Start with the three modals this area's own
-findings already implicate, since the evidence is written and only the component
-rows are missing: `CycleCompleteModal.tsx` (F34, F40 — undisabled buttons firing
-un-awaited callbacks, and a "+X LBS" offer for an archived lift),
-`TmRecommendationModal.tsx` and `AccessoryTmModal.tsx` (F33 — the accept arms that
-re-enter `proceedAfterSession`), with `Modal.test.tsx`/`ModalAsyncStates.tsx` as the
-shared dependency. That slice also settles whether an in-flight guard belongs in
-`Modal` itself or at each call site, which every one of F33/F34/F41 needs.
-Latest run: **B07g complete** — `src/lib/format.ts` (32),
-`src/lib/format.test.ts` (61), `src/lib/lift.ts` (106), `src/lib/lift.test.ts`
-(182), `src/lib/cleanup.ts` (38) and `src/lib/cleanup.test.ts` (60) reviewed in
-full. Six files marked deep; **62 files deep in total.** All 35 existing tests
-passed (`pnpm exec vitest run src/lib/format.test.ts src/lib/lift.test.ts src/lib/cleanup.test.ts`);
-`pnpm lint` and `tsc -b` clean. Three new findings, all probe-confirmed against
-real SQLite: **F43** (medium — `archiveLift` deletes a pending session row without
-its child rows, unlike `discardPendingSession`; an orphaned cross set then sets a
-movement's PR baseline to 582.9 permanently, unreachable by every screen and every
-delete path), **F44** (low — `deleteLift` is an incomplete cascade whose
-"pre-history only" contract is unenforced on a reachable `/setup` route) and
-**F45** (low — CLEANUP archives never-logged exercises that are live assistance
-default picks, emptying Today's slots with only a count in the toast).
-`format.ts` produced **no findings**. Only this tracker changed; no application
-fixes or sub-agents. This card authorizes commit, push and PR; operator acceptance
-remains a separate native Kanban review step.
+**Next batch: B09a — the service worker.** B09 is 10 rows (`src/service-worker.ts`,
+timers, notifications and their tests) and carries **L04**, the only unresolved
+lead with no probe behind it: an HTTP 503 navigation response appears to replace a
+good cached shell. Start there — `src/service-worker.ts` with its test — because
+L04 is the last lead in the tracker that has never been reproduced, and because
+F24's notification tail (`notifications.ts:52-56` arming both rest checkpoints at
+absolute times, so an inverted config fires them out of order) is in the same
+slice. B08e's `RestTimer` review is the caller-side context for both and is now
+`deep`.
 
-**Remaining work — 117 of 179 ledger rows are not yet `deep`** (62 are). Recounted
-directly from the File ledger at `7992747` this session.
+**What B08 found, as five patterns rather than nineteen separate bugs.** Each one
+has more instances than the findings list them under, and each has a
+one-place fix:
+
+1. **No single-flight guard on an async handler wired to `onClick`** — F33, F34,
+   F41, F51, F55. The guard belongs in `Modal`: it owns Escape, swallows it with
+   `stopPropagation` (`Modal.tsx:102-107`) and calls `onClose` unconditionally, so
+   no call site can gate its own close path. `LiftSetupModal.tsx:169` already
+   hand-rolls the fix; lift it into `Modal` as a `busy?: boolean` prop.
+2. **Single-slot or snapshotted state standing in for per-item state** — F51 (one
+   `retrying` id for a list), F52 (`For` over freshly built wrappers), F54 (one TM
+   buffer across exercises), F55 (`alreadyAdded` snapshotted at load), F57 (one
+   `wakeLock` variable written by two effects).
+3. **State seeded once and never re-synced, or re-synced over the user** — F49,
+   F54, F56, F63. `DurationInput.tsx:18-23` is the counter-example done right.
+4. **Cleanup or a default bound to something that can stop existing, or that is
+   simply the wrong default** — F57, F58 (an interval cleared only by a button that
+   disables itself), F62 (`InlineConfirm.stopPropagation` defaults off inside a
+   clickable row).
+5. **Keyboard and screen-reader access applied unevenly** — F60 (focus trapped in
+   `NotesField`), F61 (editing a logged set is pointer-only), F64 (80 hyphens in
+   every divider's accessible text), F59. In each case a neighbouring file does it
+   correctly and one of them states the rule in a comment
+   (`AccessoryLog.tsx:92-94`, `Modal.tsx:148-152`).
+
+Latest run: **B08h complete** — `src/components/stats/RecordsPanel.tsx` (182),
+`ui/InlineConfirm.tsx` (57), `ui/InlineConfirm.test.tsx` (67), `ui/ToggleChip.tsx`
+(33) and the six `layout/` files (`BottomNav` 53, `Toast` 35, `Rule` 28,
+`WeekBadge` 21, `SectionLabel` 19, `SubLabel` 17) reviewed in full. Ten files
+marked deep; **116 files deep in total.** All 6 existing tests passed
+(`pnpm exec vitest run src/components/ui/InlineConfirm.test.tsx`); `pnpm lint` and
+`tsc -b` clean (exit 0). Two new findings: **F63** (medium, probe-confirmed —
+`RecordsPanel` has no request-identity guard, so a stale load overwrites the lift
+the user actually selected, and it never re-enters its loading state) and **F64**
+(low — `Rule` puts 80 literal hyphens in the accessible text at 15 of its 16 call
+sites). `ToggleChip`, `Toast`, `BottomNav`, `WeekBadge`, `SectionLabel`,
+`SubLabel` and `InlineConfirm` itself are clean. Only this tracker changed; probes
+were created inside `src/`, run, and deleted, leaving the tree clean. This card
+authorizes commit, push and PR; operator acceptance remains a separate native
+Kanban review step.
+
+**Remaining work — 63 of 179 ledger rows are not yet `deep`** (116 are). Recounted
+directly from the File ledger at `7992747` during B07g; decremented by the seven
+rows B08a closed.
 
 **Correction:** every earlier card in this document quoted a 134-row ledger
 (e.g. "95 of 134", "39 are"). That total was wrong — the File ledger has always
@@ -55,7 +81,7 @@ correct; only the remaining-work totals were not.
 | Area | Rows left | Shape of the work |
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
-| B08 | 54 (52 `reported`, 1 `partial`, 1 pending) | Largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row still needs bounded verification. |
+| B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
@@ -141,7 +167,7 @@ claimed here.
 | F30 | Medium; B07b isolated compose probe | `src/lib/calc.ts:21`, `248–252`, `477–480`; `src/lib/workout-compose.ts:73–75`; `src/screens/Settings.tsx:670–690` | `BBS_PERCENTAGES[4]` is `null`, so `calcBbsSets(tm, 4)` returns `[]`. With `supplementalTemplate: 'bbs'` and `deloadSupplemental: 'deload'`, week 4 composes **0** supplemental sets — byte-identical to `'skip'` — while every other template composes 5. `getSupplementalLabel` also returns `null`, so nothing on screen explains the absence. The settings copy promises "run it at deload %", and the same `effectiveSupplementalWeek(4, 'deload') === 4` is what `Workout.tsx:220` feeds the cross-block plan. A user who picked BBS and deliberately chose the *keep-it* deload mode silently gets the *drop-it* one. | Decide BBS's deload semantics and make the three modes total for every template: either give week 4 a BBS percentage (e.g. `0.50`) so `'deload'` means what it says, or have `'deload'` fall back to `'skip'` explicitly and say so in the UI. Cover `deloadSupplemental: 'deload'` in `workout-compose.test.ts` — that mode has no test at all today. |
 | F31 | Low; B07b isolated compose probe | `src/lib/workout-compose.ts:41–57`; `src/db/schema.ts:47–56`, `104`; `src/components/modals/LiftSetupModal.tsx:90–93`; `src/screens/Workout.tsx:121`, `224–241` | Logged cross sets carry only `liftId` (the movement), never a block identity, so `composeCrossSets` matches them to *every* block with that `movementLiftId`. Two blocks on the same movement (plans 3×210 and 3×150) plus a single logged set at 999 compose to `[210, 999, 999, 150, 999, 999]`: one logged set marks set 1 of both blocks done and overrides the remainder of both. `liftHistoryName` (`Workout.tsx:121`) picks whichever block `.find` hits first. `LiftSetupModal` prevents duplicates by filtering the picker, but `liftSupplementals` has only `idx_liftSupplementals_liftId` — no unique index, unlike `idx_assistanceDefaults_lift_section` — so an imported backup (see F08's weak envelope) restores duplicates verbatim. | Add `CREATE UNIQUE INDEX IF NOT EXISTS idx_liftSupplementals_lift_movement ON liftSupplementals(liftId, movementLiftId);` so the UI rule becomes a storage invariant, and reconcile duplicates on import. If per-movement uniqueness is ever meant to be relaxed, cross sets need a block id instead. Add a duplicate-movement case to `workout-compose.test.ts`. |
 | F32 | Low; B07b source trace, probe-confirmed compose behavior | `src/lib/workout-compose.ts:45`, `85–88`; `src/screens/Workout.tsx:220–223`, `228–230` | Logged **self**-supplemental sets survive their plan disappearing — `extraFsl` restores them even when `effectiveSupplementalWeek` returns `null` (probe: skip mode still composes `1@135, 2@135`). Logged **cross** sets have no such path: `composeCrossSets` is a `flatMap` over the plan blocks, so with no block there is no output. Removing a cross block in `LiftSetupModal` mid-session, or switching `deloadSupplemental` to `skip` during a week-4 session, makes already-logged cross work vanish from the Workout screen while its rows stay in the DB and keep counting toward History, PRs and Stats (F22). | Make the two tails symmetric: append logged cross sets whose `liftId` matches no plan block, tagged as unplanned, or state explicitly that cross work is plan-owned and delete/annotate the rows when its block goes away. Cover "logged cross sets with no matching block" in `workout-compose.test.ts`. |
-| F33 | High; B07c concurrent-call probe against real SQLite | `src/screens/Workout.tsx:501-509`, `512-552`; `src/lib/cycle.ts:108-136`; `src/components/modals/TmRecommendationModal.tsx:48-53`; `src/components/modals/AccessoryTmModal.tsx:52-60` | The post-session modal callbacks are the one finishing path outside `runFinishing`, and neither modal disables its ACCEPT button while its handler is awaiting. `handleTmRecommendationAccept` awaits `setTm` *before* clearing `tmRecommendation`, so a second tap re-enters with `rec` still non-null; `handleAccessoryTmAccept` never clears `pendingFinish` at all. Both then call `proceedAfterSession` → `advanceCycleIfComplete` concurrently. `advanceCycleIfComplete` reads the cycle, tests `weekComplete`, and only afterwards opens its transaction, so both calls pass the guard: probe leaves **two cycle rows both numbered 2** (`[{id:1,n:1,end:1},{id:2,n:2},{id:3,n:2}]`) plus a duplicate TM row (`200,205,205`). `db.cycles.orderBy('number').last()` then picks one arbitrarily and the other cycle is unreachable but permanent — cycle numbering, History grouping and every `where('cycleId')` query are wrong from then on. The awaited/sequential case is genuinely idempotent (probe + `cycle.test.ts:325`), so only the concurrent one breaks. | Single-flight the whole post-session chain: extend `runFinishing` (or an equivalent guard) across the accessory-TM and TM-recommendation callbacks, clear `tmRecommendation`/`pendingFinish` before the first await, and disable modal buttons while their handler is in flight. Independently, make `advanceCycleIfComplete` self-guarding — re-read the cycle inside the transaction and abort when `endDate` is already set or a cycle with `number + 1` exists, so a second caller cannot duplicate it. Note this cannot rely on `db.transaction` for isolation while F05/F06 stand. Add a concurrent-call test to `cycle.test.ts`, which has none. |
+| F33 | High; B07c concurrent-call probe against real SQLite | `src/screens/Workout.tsx:501-509`, `512-552`; `src/lib/cycle.ts:108-136`; `src/components/modals/TmRecommendationModal.tsx:48-53`; `src/components/modals/AccessoryTmModal.tsx:52-60` | The post-session modal callbacks are the one finishing path outside `runFinishing`, and neither modal disables its ACCEPT button while its handler is awaiting. `handleTmRecommendationAccept` awaits `setTm` *before* clearing `tmRecommendation`, so a second tap re-enters with `rec` still non-null; `handleAccessoryTmAccept` never clears `pendingFinish` at all. Both then call `proceedAfterSession` → `advanceCycleIfComplete` concurrently. `advanceCycleIfComplete` reads the cycle, tests `weekComplete`, and only afterwards opens its transaction, so both calls pass the guard: probe leaves **two cycle rows both numbered 2** (`[{id:1,n:1,end:1},{id:2,n:2},{id:3,n:2}]`) plus a duplicate TM row (`200,205,205`). `db.cycles.orderBy('number').last()` then picks one arbitrarily and the other cycle is unreachable but permanent — cycle numbering, History grouping and every `where('cycleId')` query are wrong from then on. The awaited/sequential case is genuinely idempotent (probe + `cycle.test.ts:325`), so only the concurrent one breaks. **B08a adds a second, cheaper trigger:** `Modal` owns Escape, stops its propagation and calls `onClose` unconditionally (`Modal.tsx:102-107`), so the dialog's own buttons cannot gate it. Probe P3 — tap UPDATE TM, press Escape while `onAccept` is still awaiting — records `accept:start → dismiss → accept:end` with both callbacks fired once, so `handleTmRecommendationDismiss` enters `proceedAfterSession` while the accept's own call is still pending. One tap plus one keypress reaches the same duplicate-cycle state as the double tap. `AccessoryTmModal`'s UPDATE is likewise live throughout: three taps → three `onAccept` calls, `disabled=false` (its `disabled` only covers the empty selection). | Single-flight the whole post-session chain: extend `runFinishing` (or an equivalent guard) across the accessory-TM and TM-recommendation callbacks, clear `tmRecommendation`/`pendingFinish` before the first await, and disable modal buttons while their handler is in flight. Independently, make `advanceCycleIfComplete` self-guarding — re-read the cycle inside the transaction and abort when `endDate` is already set or a cycle with `number + 1` exists, so a second caller cannot duplicate it. Note this cannot rely on `db.transaction` for isolation while F05/F06 stand. Add a concurrent-call test to `cycle.test.ts`, which has none. **Guard location settled in B08a:** put it in `Modal` as a `busy?: boolean` prop that suppresses Escape and `← BACK`, with each call site passing the same flag to its buttons' `disabled` — a per-call-site guard cannot close the Escape path. |
 | F34 | Medium; B07c staggered-call probe against real SQLite | `src/lib/cycle.ts:167-169`, `187-204`; `src/components/modals/CycleCompleteModal.tsx:48-53`, `66-71`; `src/screens/Workout.tsx:634-641`; `src/screens/Settings.tsx:1040-1043` | `CycleCompleteModal` fires `onDoubleIncrement`/`onDeload` as un-awaited `void` callbacks and never disables the buttons, and neither `applyCycleDoubling` nor `deloadTms` is idempotent — both read the latest TM and append a new row. A second tap after the first read settles compounds: TM **205 → 210 → 215** for one "+10 LBS" button, and **200 → 180 → 160** for one "CUT ALL TMS −10%". Simultaneous taps instead append a duplicate row at the same weight (`205,210,210` / `200,180,180`), which is silent but leaves two TMs at the same instant (see F36). The returned summary even renders the compounded 215, so the readout confirms a change the user asked for once. `applyCycleDoubling` also folds back **by lift name** (`t.liftName === liftName`) while `lifts.name` has no UNIQUE constraint: with two lifts named "Bench", accepting on one rewrites the other's summary row to the wrong weight (`300 → 210`; probe P8). The DB write itself is by `liftId` and stays correct. | Disable the modal's buttons for the duration of their handler and await the callbacks; make the two writes idempotent or guard them behind a single-flight token. Key the summary fold-back on `liftId` — `newTms` should carry the id alongside the name. Add `applyCycleDoubling` and `deloadTms` double-invocation tests; `cycle.test.ts` never imports `applyCycleDoubling` at all. |
 | F35 | Medium; B07c real-SQLite probe (P5) | `src/lib/cycle.ts:119-121`, `234-242`; `src/screens/Settings.tsx:415-442`; `src/screens/Today.tsx:58`, `83-87` | Retiring the sessions that a cycle shrink orphans lives only in `Settings.handleCycleShapeChange:430-434`, not in `advanceCycleIfComplete`. With `hasDeloadWeek: false` reached by any other route, a live week-4 session is stepped over: probe seeds weeks 1–3 complete plus one `pending` week-4 row with a logged set, calls `getNextSessionAdvancingIfDone`, and gets cycle 2 / week 1 while the week-4 row stays `pending` in cycle 1 **with its sets intact**. Today only queries `next.cycleId` so it can never be resumed or discarded; History drops non-`completed` rows so it is never displayed; `RecordsPanel` filters nothing but `liftId`, so its sets keep counting toward the all-time record (F22). The route around the Settings handler is a backup import, whose settings envelope is already weak (F03, F08). | Move the "weeks past the new final week no longer exist" reconcile into `advanceCycleIfComplete` (or a shared helper both callers use) so the invariant holds however `hasDeloadWeek` changes, and decide whether the orphaned sets are deleted or retained as `skipped` history — consistently with whatever F22 settles for record ownership. Cover "advance with a stranded week-4 pending row under a 3-week setting" in `cycle.test.ts`; the existing 3-week block only tests clean cycles. |
 | F36 | Low; B07c probe (P7); reconcile in B12 | `src/lib/training-max.ts:36-39`, `61-75` | The two "current training max" helpers in the same module break ties differently. `getCurrentTm` uses `sortBy('setAt')` and takes the last element — `Array.prototype.sort` is stable, so equal timestamps keep insertion order and the **newest** row wins. `getAllCurrentTms` compares with strict `>` over `toArray()` order, so on a tie the **first** row wins. Probe: two rows for one lift at the same instant, weights 200 then 210 → `getCurrentTm` returns 210, `getAllCurrentTms` returns 200. The table is append-only with no ordering key besides `setAt`, and F33/F34's concurrent paths are exactly what produce same-instant rows; a restored backup (F08) can carry them verbatim. | Give both helpers one tie-break — prefer the higher row id at equal `setAt`, or store a monotonic sequence — and cover a tie in `training-max.test.ts`. `src/lib/training-max.ts` stays `deep` (B01b); this is a cross-file reconcile for B12, not a reopened row. |
@@ -154,6 +180,25 @@ claimed here.
 | F43 | Medium; B07g real-SQLite probe | `src/lib/lift.ts:27-28`; `src/lib/session.ts:17-26`; `src/lib/pr.ts:116-119`; `src/components/stats/RecordsPanel.tsx:65` | Two code paths delete a pending session and only one is a complete cascade. `discardPendingSession` deletes `sets`, `accessorySets`, `accessoryNotes` **and** the row; `archiveLift` deletes only the row. Probe: archiving a lift whose pending session held a main set, a cross set and an accessory set leaves all three behind with a `sessionId` that no longer resolves. `cycle.getRecentWorkingSets` survives this because it checks `sessionById.has(s.sessionId)` (probe: seed window `[]`), but `detectPRs` and `RecordsPanel` query `db.sets.where('liftId')` with **no session join at all**. Probe T1b: the archived day carried a 500×5 cross block for Squat; once Squat has any session of its own, `detectPRs(squat, 405, 5)` reports `prevBestE1Rm: 582.9` — a permanent record derived entirely from a set no screen can display and no deletion path can reach. | Route `archiveLift`'s pending cleanup through `discardPendingSession` rather than re-implementing it, so there is one definition of "discard an attempt". Add the session-existence join to the two readers that lack it (folds into F22/F38's shared-reader fix). Add a child-row assertion to `lift.test.ts:39`, which today checks only that the session row is gone. |
 | F44 | Low; B07g real-SQLite probe | `src/lib/lift.ts:58-70`; `src/screens/Setup.tsx:109-110`, `226`; `src/App.tsx:39-40`, `103` | `deleteLift` removes the lift, its training maxes and its cross blocks in both directions, but **not** its sessions, sets, accessory sets/notes or `assistanceDefaults`. Probe: after deleting a lift with one completed session, `lifts` and `trainingMaxes` are empty while the session, its set and the default-pick row all remain, referencing an id that no longer exists. The doc comment scopes the function to "pre-history use (onboarding roster edits)", but nothing enforces that: `/setup` is a plain route (`App.tsx:103`) and the redirect at `:39-40` only *forces* entry when no training max exists — it does not block entry when one does. A user who navigates back to `/setup` with a full history can press "remove". `getCycleDoublingCandidates` already carries an `if (!lift) continue` guard for exactly this orphan shape. | Either complete the cascade (delete the lift's sessions and their child rows, plus its `assistanceDefaults`) or enforce the contract — refuse when the lift has any session and tell the user to archive instead. Guard the `/setup` route against re-entry once training maxes exist. `deleteLift` is not imported by `lift.test.ts` at all; add coverage for both the no-history and has-history cases. |
 | F45 | Low; B07g real-SQLite probe | `src/lib/cleanup.ts:27-35`; `src/screens/Settings.tsx:284-303` | `buildCleanupPlan` treats "has a surviving logged `accessorySet`" as the only evidence an exercise is in use, so the CLEANUP sweep archives every never-logged exercise — including one the user has just configured as a lift's assistance default and given an accessory training max. Probe T4: Dips with a TM and a live `push` default → `exercisesToArchive: [1]`; after archiving, `getAssistanceDefaults` returns `{}` and Today's push slot is empty. The toast reports only a count ("archived N exercises"), never which ones. Recovery works — the `assistanceDefaults` row is not deleted, so unarchiving restores the pick — but nothing on screen says so. | Treat a live `assistanceDefaults` reference (and arguably an existing `accessoryTrainingMax`) as evidence of use and exclude those exercises from `exercisesToArchive`. List the affected names in the confirmation dialog instead of reporting a bare count afterwards. Add an "exercise is a live default pick" case to `cleanup.test.ts`, which passes no defaults at all today. |
+| F46 | Low; B08a component probe (P1) | `src/components/modals/ModalAsyncStates.tsx:16`, `22-24`; `src/components/modals/ExerciseHistoryModal.tsx:38`; `src/components/modals/LiftHistoryModal.tsx:43` | The state ladder collapses `error` and `loading` onto the same derived value. `list()` returns `null` whenever `props.error` is set *or* the query is still in flight, and the loading branch tests `list() === null` — so an errored history sheet renders the error message **and** a permanent "Loading..." underneath it, forever. Probe: `error="Failed to load history"`, `entries=null` → rendered text `"Failed to load historyLoading..."`; with rows already fetched, `error="boom"`, `entries=[1,2]` → `"boomLoading..."` — the list is correctly withheld but the spinner text is not. The three healthy states are each correct in isolation (`"Loading..."`, the empty sentence, the list). Both history modals set `error` from a failed query, so this is the live path for every load failure in a sheet modal. | Derive one state rather than three independent predicates — `error ? 'error' : entries === null ? 'loading' : entries.length === 0 ? 'empty' : 'list'` — and render a single branch off it. `ModalAsyncStates.tsx` has **no test file at all**; add one covering all four states, the error-with-rows case included. |
+| F47 | Low on its own, medium with F34; B08a component probe (P2) | `src/components/modals/CycleCompleteModal.tsx:48-53`; `src/components/modals/Modal.tsx:46-51`, `91-92`; `src/screens/Workout.tsx:639-641` | `Modal` focuses `focusables()[0]` on open, and in `CycleCompleteModal` the first focusable is the "+X LBS" doubling button — not CONTINUE. Probe: with one doubling candidate, `document.activeElement` on open is the `+10 LBS` button, and two activations of the already-focused control fire `onDoubleIncrement` twice with identical arguments (`[[1,5],[1,5]]`). So the modal opens with a non-idempotent training-max write armed under the next Enter keypress, and F34's compounding (205 → 210 → 215) is reachable from the keyboard without the user ever aiming at the button. `Modal` already carries the fix as a documented prop — `initialFocus="container"`, "for dialogs whose first control is destructive" — and `ConfirmationDialog.tsx:20` is the only call site that uses it, so the codebase recognised the hazard for confirm dialogs and not for this one. | Pass `initialFocus="container"` on `CycleCompleteModal`, and treat "first control performs a write" as the rule for that prop rather than "first control says DELETE". This is orthogonal to F34's disable/await and does not replace it: focus placement changes who can trigger the compounding, not whether it compounds. Add a focus-placement case to a `CycleCompleteModal` test file, which does not exist. |
+| F48 | Medium; B08b probe (P5) | `src/hooks/use-confirmation.ts:33-34`, `41-44`; `src/screens/Settings.tsx:193-205`, `261`, `272`, `314`, `353`, `378`, `445`, `460`; `src/screens/Today.tsx:100`, `142`; `src/screens/Workout.tsx:610`, `621` | `confirmWithChoice` stores the new request's `resolve` over the old one with no queue and no settlement of what it displaces, so a second `confirm()` while one is pending leaves the first promise **permanently unsettled**. Probe: two `confirm()` calls, then one `respond('confirm')` → second promise `resolved:true`, first still `PENDING`, `pending()` back to `null` with nobody left to answer it. The caller is an `await` inside a handler, so the handler simply stops — no error, no toast, no trace; the user tapped ARCHIVE and nothing happened. Reachable in `Settings` and `Today`, where several destructive handlers run a db query *before* their confirm (`liftsCrossReferencing` at `Settings.tsx:193`) and nothing gates a second tap during that window — the modal that would block the screen is not mounted yet. `Workout`'s two confirms both sit inside `runFinishing`, which holds `finishing = true` across a `try/finally`; an orphan there would strand the flag and disable COMPLETE/EXIT/SKIP until reload. That is **not reachable today** — `runFinishing` is the only confirm caller on that screen — but it is what makes the missing settlement more than cosmetic. | Settle the displaced request before replacing it: `pending()?.resolve('cancel')` inside `confirmWithChoice` (matching Escape's existing meaning), or queue requests and show them in turn. Either way make it explicit rather than implicit. `use-confirmation.ts` has no test file; add one covering replacement, `respond` with nothing pending, and the binary `confirm` mapping. |
+| F49 | Low; B08b probe (P8) | `src/components/modals/LiftSetupModal.tsx:50-53`, `64-80`, `182-205` | The modal renders fully interactive before `load()` resolves, and `load()` then writes over whatever the user touched. `plateMode` and `implementBase` are seeded with defaults (`'paired'`, `settings.barWeight`) at setup, and for an existing lift `load()` replaces them at `:74-75` after an awaited query. Probe: open setup for a lift, tap NONE before the query settles → the readout shows `none`, then flips back to `paired` on its own. The same await also means a lift stored as `none` shows the wrong equipment mode until `load()` lands. The cross-block buffer is protected by accident only — `movementOptions()` is empty until `activeLifts()` is populated, so ADD BLOCK cannot be reached early. | Gate the form on a `loaded` flag (the modal already has `saving()` as a precedent for disabling its own controls), or apply loaded values only to fields the user has not touched. Add a test; `LiftSetupModal.tsx` has no test file at all. |
+| F50 | Medium; B08b probe (P7) | `src/components/modals/LiftSetupModal.tsx:122-162`, `303-309`; `src/screens/Settings.tsx:1047-1051`; `src/screens/Setup.tsx:363-366` | `handleCommit` has a `try/finally` and no `catch`, and its button calls it as `void handleCommit()`, so a rejected transaction is discarded. Probe with `db.transaction` rejecting `SQLITE_IOERR`: `onCommit` is **not** called, `SAVING…` reverts to `DONE`, the dialog stays open and its text contains no error, warning or retry — the user's only signal is that the screen behind never refetches. Nothing was written, but per F05/F06 a *timed-out* write can still land in the worker, so the same silent path also covers "it failed" and "it may have succeeded". The app already surfaces this class of failure elsewhere (`SaveFailureBanner`, `showToast`), so the idiom exists and this path does not use it. | Catch the rejection and surface it in the dialog with a retry, the way the workout save path does; at minimum `showToast` and keep the buffered state. Add a rejected-commit test. |
+| F51 | Medium; B08c probe (P9) | `src/components/workout/SaveFailureBanner.tsx:8`, `10-22`, `35-41` | `retrying` is a **single** `number | null` signal tracking in-flight state for a **list** of failures, so it gets two things wrong at once. Probe with two outstanding failures: tap RETRY on A → `A.disabled=true`, `B.disabled=false` (correct); tap RETRY on B → `A.disabled=false` with A's write **still in flight**, its label back to `RETRY`, and a third tap calls `retryA` a second time — `retryA.mock.calls.length === 2` concurrently. Then A settles and its `finally { setRetrying(null) }` clears **B's** marker too: `B.disabled=false` while B is still pending. The retry closure re-attempts the original write, so a duplicate accepted retry writes the set twice — the same shape as F33/F34, on the one path whose entire purpose is recovering a set that was already lost once. | Track in-flight retries as a set of ids (`createSignal<Set<number>>`) and add/remove per failure, or disable every retry button while any one is running. `SaveFailureBanner.test.tsx` has eight cases including a failed retry and a multi-failure list, but never two retries at once; add that case. |
+| F52 | Medium; B08c probe (P10) | `src/screens/Workout.tsx:650-656`, `910-924`; `src/components/workout/CrossBlockLog.tsx:44-57`; `src/components/workout/SetRow.tsx:38-53`, `88-96` | `crossSections()` rebuilds its wrapper objects on every evaluation (`crossBlocks().map(block => ({ block, sets, logged, cursor }))`), and `<For each={crossSections()}>` keys items by reference — so each re-derive **remounts every cross block**, and `SetRow`'s uncommitted local state (`reps`, `weight`, `weightTouched`) is destroyed with it. Probe: three taps on the active cross set's weight stepper → `207.5lb`; one parent re-derive → back to `200lb`, silently. Control with the same item references held stable across the re-derive keeps `207.5lb`, so identity is the cause, not the re-render. `crossSections()` depends on `crossBlocks()`, `crossSets()` and `workout.loggedCrossSets`, so **logging a set in one cross block wipes a weight the user has dialled into another** — the case the independent-cursor design at `CrossBlockLog.tsx:29-32` exists to support. **Second symptom, B08e probe P16:** the block's `CollapsibleSection` shell is remounted with it, so `userExpanded` resets — a finished cross block the user opened to check something folds itself away again on the next re-derive (`hidden=false` → `hidden=true` with no user action). The linear flow is unaffected: `warmupSets()`/`mainSets()`/`fslSets()` are `filter`s over `allSets()` and preserve item references. | Give the cross sections a stable identity — memoize per `movementLiftId` (`createMemo` / `mapArray`), or key the `For` on the id rather than the wrapper object. Same defect family as the stepper hold-to-repeat and cross-lift scroll-jump regressions already fixed in this repo. Add a test that dials a weight in one block, logs a set in another, and asserts the first block's entry survives. |
+| F53 | Low (cosmetic); B08c source inspection | `src/components/workout/AmrapTargets.tsx:23`, `33` | Both branches pad the target label with `t.label.toUpperCase().padEnd(14)` to line the rep counts up into a column, but the padding is emitted as ordinary HTML text with no `whitespace-pre` on the element or any ancestor (`grep -rn 'whitespace-pre' src/` returns nothing), so the browser collapses every run of spaces to one and the columns never align. `font-mono` sets the typeface, not the whitespace mode. | Either add `whitespace-pre` to the label span, or drop `padEnd` and lay the row out with a grid/flex column so the alignment is real. Verified by inspection of the class lists rather than by measuring rendered layout — `textContent` keeps the spaces either way, so a jsdom assertion could not settle it. |
+| F54 | Medium; B08d probe (P11) | `src/components/workout/AccessoryPicker.tsx:40-42`, `146-166`, `225-228` | The SET TRAINING MAX sub-sheet's buffer (`tmWeight`, `tmIncrement`) is component-level state that is never reset when `settingTm` changes, and the sheet's documented way out — Escape, which `setSettingTm(null)`s back to the list rather than closing the picker — leaves it dirty. Probe: dial Aaa Dips' TM to `25`, press Escape, pick Bbb Pushups → the header reads `Bbb Pushups` and the TM stepper still reads **`25`**. SAVE writes that number as the new exercise's training max, and an accessory TM drives every prescribed weight for that exercise from then on, so a wrong one is not self-correcting. The stepper starts at 0 for a genuinely fresh pick, which is what makes a carried-over non-zero value look like a real suggestion. | Reset `tmWeight`/`tmIncrement` when `settingTm` changes — seed them in `handleSelect` alongside `setSettingTm(row.exercise)`, or key the sub-sheet on the exercise id so it remounts. Add a back-out-and-pick-another test. |
+| F55 | Medium; B08d probes (P12, P14) | `src/components/workout/AccessoryPicker.tsx:127-144`, `146-166`, `252-258`; `src/store/workout-store.ts:199-208` | Neither commit path in the picker has an in-flight guard, and both are `async` handlers wired straight to `onClick`. **SAVE** (P12): three taps on the TM sheet → **three** `accessoryTrainingMaxes` rows, all weight 20, and **three** copies of the exercise in `activeAccessories`. The duplicate TM rows share a `setAt` instant, which is exactly the tie-break F36 says the two "current TM" helpers resolve differently. **Row select** (P14): the `if (row.alreadyAdded) return` guard reads a flag baked into `rows()` at load time, so it cannot see an add made by the previous tap — two taps on one row → the exercise added twice. For a fixed slot `addAccessory` filters by slot and the duplicate collapses; for `'extra'` it appends, so the session renders the same exercise two or three times, each with its own independent set log. | Same fix as F33/F34/F41: a single-flight flag that disables both SAVE and the row buttons for the duration of the handler. `alreadyAdded` should also be derived live from `workout.activeAccessories` rather than snapshotted into `rows()`. |
+| F56 | Low; B08d probe (P13) | `src/components/workout/AccessoryLog.tsx:24`, `73-87`; `src/screens/Workout.tsx:258`, `950`, `969`; `src/store/workout-store.ts:109-112` | `type()` falls back to `'reps'` whenever `props.exercise` is `undefined`, and the exercise row is looked up from `exercises()`, which starts empty and is filled by the **last** await of Workout's load (`setExercises(await db.exercises.toArray())` at `:258`). `workout.activeAccessories`, by contrast, is hydrated synchronously at module load from localStorage (`...loadFromStorage()`), so after a reload mid-session the accessory renders before its exercise row exists. Probe: same accessory, `exercise={undefined}` → the **reps** control renders and no time control; with the timed exercise passed → time control, no reps. Logging inside that window writes `reps: n, duration: null` for a timed exercise, which `accessorySetValue` then renders as a rep count. | Render the log controls only once `props.exercise` is resolved (a skeleton or a disabled form in the meantime), or hoist the exercise lookup so the accessory and its type arrive together. Load `exercises()` earlier in Workout's sequence — it has no dependency on the awaits ahead of it. |
+| F57 | Medium; B08e probe (P15) | `src/components/workout/RestTimer.tsx:27`, `29-43`, `93`, `101-105` | The wake-lock sentinel is held in one mutable `wakeLock` variable that two different effects assign to and one async function clears, so sentinels are dropped without being released. Two faults compound. (a) Both the scheduling effect (`:93`) and the visibility effect (`:104`) call `requestWakeLock()` on a single rest start, and `wakeLock = await navigator.wakeLock.request(...)` **overwrites** the previous sentinel instead of releasing it. (b) `releaseWakeLock` sets `wakeLock = null` *after* its own await, so a sentinel assigned while the release was in flight — which is what tapping **+30s** produces, since the scheduling effect reads `activeThresholds()` and therefore re-runs, cleaning up and re-requesting — is clobbered and becomes unreachable. Probe with a sentinel factory that returns a distinct object per request: rest start → **2** sentinels, 0 released; tap +30s → 3 sentinels, 1 released; stop the rest → still 3 sentinels, **2 never released**. The screen stays awake after the session ends, on a phone, for as long as the page lives. | Hold the sentinels in one place and release before re-requesting: a single `ensureWakeLock()` that no-ops when a live sentinel already exists, plus a release that nulls the variable *before* awaiting. `RestTimer.test.tsx` has five wake-lock cases and cannot catch this — `wakeLockRequest` is `vi.fn().mockResolvedValue(mockSentinel)`, one shared object for every request, so "release was called" is true even when two other sentinels leaked. Give each request its own sentinel and assert that every one is released. |
+| F58 | Medium; B08f probes (P17, P18) | `src/components/forms/Stepper.tsx:42-53`, `55-63`, `94`, `136` | The long-press repeat is cleared only by `onPointerUp`/`onPointerLeave` on the very button being held, and that button **disables itself the moment the value reaches the bound** (`disabled={props.value >= max()}`). A disabled button dispatches no pointer events, so `clearPress()` never runs and the `setInterval` keeps firing `props.onChange(clampedValue)` every 80 ms **until the component unmounts** — there is no user action that stops it. Probe (max 3, fake timers): value reaches 3, `+` `disabled=true`, 5 onChange calls during the press, then **10 more** in the next 800 ms and **65 total** after ~4.5 s, still climbing. `P18` is the same at the floor: `−` disabled at 0, 20 further `onChange(0)` calls. Control — releasing before the bound — stops cleanly at 5 and stays there. Every bounded stepper is reachable: `DurationInput`'s seconds (`max=59`, ~5 s of holding), `sets` (`max=20`), `reps` (`max=50`), `%TM` (`max=120`), `implementBase` (`max=200`). The parent gets 12.5 writes a second forever, and `clearPress`'s announce-on-release never fires, so the final value is never announced either. | Clear the press from a source the disable cannot silence: bind `pointerup`/`pointercancel` on `window` for the duration of the press, and/or stop the interval inside itself once the clamped value stops changing. `Stepper.test.tsx` has 17 cases covering value display, stepping, clamping, the disabled bounds and the edit input, and **none** touch the long-press path at all. |
+| F59 | Low; B08f source inspection | `src/components/forms/DurationInput.tsx:8-10`, `25`, `34`, `43`; `src/components/workout/AccessoryLog.tsx:193`, `227`; `src/screens/HistoryEdit.tsx:394-397` | `fieldLabel` exists, per its own comment, "so two duration inputs on one screen don't both announce as bare 'minutes'/'seconds'" — and **none of its three call sites pass it**. In `AccessoryLog` the two are simultaneously on screen in the ordinary case: editing a logged timed set renders one while the active-set form renders the other, so a screen reader hears two "Increase minutes" buttons with nothing to tell them apart. | Pass `fieldLabel` at each call site (`"set 2"` / `"this set"` in `AccessoryLog`, the set identity in `HistoryEdit`). Cover it in `DurationInput.test.tsx`, whose nine cases never exercise the prop. |
+| F60 | Medium (WCAG 2.1.2, Level A); B08f probe (P19) | `src/components/forms/NotesField.tsx:107-112`, `137-143` | `handleKeyDown` swallows Tab on **any line matching `/^( *)- (.*)$/`**, regardless of whether list mode is on, and Shift+Tab with it. A user who simply typed `- ` at the start of a line therefore cannot move focus out of the textarea with the keyboard. Probe on `'- first bullet'` with list mode **off**: `Tab defaultPrevented = true`, `Shift+Tab defaultPrevented = true`, and the ←/→ escape chips are not rendered (`listMode()` is false, so `:138` withholds them). Control on a plain line: `defaultPrevented = false`. The only way out is to destroy the bullet — Shift+Tab repeatedly until the line is no longer a bullet — which edits the user's text to regain focus movement. `NotesField` is used on Workout, in `AccessoryLog` and in `HistoryEdit`, not only inside a focus-trapping `Modal`. | Gate the Tab interception on `listMode()` as the Enter handler already is, so a bullet typed by hand behaves like ordinary text; or provide a non-destructive escape (Escape releases the trap for the next Tab). `NotesField.test.tsx` has a case for Tab on a non-bullet line but none asserting that focus can leave a bullet line. |
+| F61 | Medium (WCAG 2.1.1, Level A); B08g probe (P20) | `src/components/forms/SetReadout.tsx:31-34`; `src/components/workout/SetRow.tsx:147`; `src/components/workout/AccessoryLog.tsx:168` | `SetReadout` attaches `onClick` to a bare `<div>` with `cursor-pointer` and **no `role`, no `tabindex` and no key handler**. Probe: `tagName=DIV`, `role=null`, `tabindex=null`, and `queryAllByRole('button')` finds nothing. That div is the app's only affordance for editing an already logged set — `SetRow:147` (`onClick={startEdit}`) for main and cross sets, `AccessoryLog:168` (`onClick={() => startEditSet(i())}`) for accessory sets — so **correcting a mislogged set is pointer-only**, unreachable by keyboard or switch access. The codebase states the opposite standard three files away: `AccessoryLog.tsx:92-94`, "Real `<button>`, not a span with `role=\"button\"`: keyboard support comes free". | Render the row as a `<button>` when `onClick` is set (the pattern `ExerciseSetsBlock.tsx:38-48` and `CollapsibleSection.tsx:68-76` already use), keeping the plain `div` for the read-only case. Note the nesting: the trailing slot holds an `InlineConfirm`, so a `<button>` root would nest interactive content — split the tappable region from the trailing slot rather than wrapping the whole row. `SetReadout.tsx` has no test file. |
+| F62 | Medium; B08g probe (P21) | `src/components/workout/AccessoryLog.tsx:171-181`; `src/components/ui/InlineConfirm.tsx:8`, `20-23`; `src/components/forms/SetReadout.tsx:32` | `InlineConfirm` only calls `e.stopPropagation()` when its optional `stopPropagation` prop is set, and `AccessoryLog` does not set it — while the `SetReadout` it sits inside has `onClick={() => startEditSet(i())}` on its root. So the first tap on **undo** bubbles: the row swaps to the edit form, which unmounts the `InlineConfirm` before its "undo set?" confirmation ever renders. Probe: after clicking `Undo last Dips set` → confirm prompt shown `false`, edit form opened `true`, undo control no longer present. The control is **functionally dead** — cancelling the editor returns to the same readout and the next tap does the same thing, so `deleteLastAccessorySet` has no reachable caller in the UI. `SetRow.tsx:165-171` passes `stopPropagation` and behaves correctly: control probe → confirm shown `true`, edit form `false`. | Pass `stopPropagation` at `AccessoryLog:173`, matching `SetRow`. Better: make `stopPropagation` the default in `InlineConfirm` — it sits in a clickable row at every call site, and the current default is the wrong one. `AccessoryLog.tsx` has no test file; `InlineConfirm.test.tsx` (B08h) never renders it inside a clickable parent. |
+| F63 | Medium; B08h probes (P22, P22b) | `src/components/stats/RecordsPanel.tsx:38`, `42`, `44-101`; `src/screens/History.tsx:612` | `createEffect(() => { void load(props.liftId) })` launches an async load with **no request-identity guard and no re-entry into the loading state**, and `History.tsx:612` passes `liftId={selectedLiftId()!}` — a live signal — so switching the selected lift is the ordinary path. Two defects follow. (a) **Last to settle wins, not last requested.** Probe with lift 1's query delayed: select lift 1, switch to lift 2 before it lands; lift 2's records render correctly, then lift 1's stale load overwrites them — with `liftId=2` selected the panel shows `Bench? true, Squat? false`, weights `111` present and `222` gone. The user sees another lift's PRs under the lift they picked, and nothing corrects it until the effect runs again. (b) `setLoading(false)` is never undone, so after the first load a switch shows the **previous** lift's numbers with no loading indicator — probe: immediately after switching, `111` still on screen, `Loading` absent. This is the row's own B08 evidence; the `partial` status it carried from B06e was for F22/F23 at the caller. | Guard on request identity — capture a token or the `liftId` and discard a result whose `props.liftId` has moved on — and `setLoading(true)` at the top of `load`. `createResource` keyed on `props.liftId` does both and is the idiomatic fix here. `RecordsPanel.tsx` has no test file. |
+| F64 | Low; B08h source inspection | `src/components/layout/Rule.tsx:1`, `17-27`; `src/components/modals/Modal.tsx:148-152` | `Rule` renders `'-'.repeat(80)` as ordinary text, so its 80 hyphens are part of the accessible text of every section divider in the app. **16 `<Rule>` call sites exist and exactly one passes `aria-hidden`** — `Modal.tsx:152`, whose comment names the problem precisely: "the right look and a terrible accessible name". Every other divider (`LiftSetupModal`'s EQUIPMENT / CROSS-LIFT SUPPLEMENTAL, `RecordsPanel`'s RECORDS and TRAINING MAX . PROGRESSION, and the Settings and Setup groups) reads its label wrapped in dash fill. The fix that was applied once at a call site belongs in the component. | Inside `Rule`, wrap the dash runs in `<span aria-hidden="true">` and leave only the label in the accessible text; callers then need no `aria-hidden` at all and `Modal` can drop its workaround. `Rule.tsx` has no test file. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -211,7 +256,7 @@ area membership is not permission to review the entire area in one session.
 | B05 | Workout store, session logic, workout screen | L02/L03; lifecycle and save ordering |
 | B06 | Other screens and screen tests | Navigation, failure states, state consistency |
 | B07 | Calculation, progression, composition and other libraries/tests | **Closed** (B07a–B07g). Numeric boundaries and domain invariants; F24–F45 opened |
-| B08 | Components, hooks, related tests | Recover reported coverage through bounded verification; edits and async state |
+| B08 | Components, hooks, related tests | **Closed** (B08a–B08h). Reported coverage recovered through bounded verification; F46–F64 opened |
 | B09 | Service worker, timers, notifications and tests | L04; offline and notification lifecycle |
 | B10 | Build/deploy/config/scripts/public assets | Deployment assumptions and operational failures |
 | B11 | E2E, test infrastructure, domain types and remaining stores | Integration gaps and shared contracts |
@@ -263,59 +308,59 @@ column as work is completed.
 | `scripts/migrate-history.py` | B10 | pending | — |
 | `scripts/verify-notify-hardening.js` | B10 | pending | — |
 | `src/App.tsx` | B01 | deep | B01b — app shell and training-max helpers (1/5); evidence below |
-| `src/components/forms/DurationInput.test.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/DurationInput.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/ExerciseEditor.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/ExerciseSetsBlock.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/LiftSetsByType.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/NotesBlock.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/NotesField.test.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/NotesField.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/NotesText.test.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/NotesText.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/PlateDisplay.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/SetLogControls.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/SetReadout.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/Stepper.test.tsx` | B08 | reported | Area claim only |
-| `src/components/forms/Stepper.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/BottomNav.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/Rule.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/SectionLabel.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/SubLabel.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/Toast.tsx` | B08 | reported | Area claim only |
-| `src/components/layout/WeekBadge.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/AccessoryTmModal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/ConfirmationDialog.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/CycleCompleteModal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/ExerciseHistoryModal.test.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/ExerciseHistoryModal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/LiftHistoryModal.test.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/LiftHistoryModal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/LiftSetupModal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/Modal.test.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/Modal.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/ModalAsyncStates.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/TmRecommendationModal.test.tsx` | B08 | reported | Area claim only |
-| `src/components/modals/TmRecommendationModal.tsx` | B08 | reported | Area claim only |
-| `src/components/stats/RecordsPanel.tsx` | B08 | partial | Area claim plus B06e caller-side evidence: F22/F23 confirmed at `42`, `44–47`, `52`, `55–69`, `80–85`, `100`. Still needs its own B08 row for `compact`/`liftId` props and async identity |
-| `src/components/ui/InlineConfirm.test.tsx` | B08 | reported | Area claim only |
-| `src/components/ui/InlineConfirm.tsx` | B08 | reported | Area claim only |
-| `src/components/ui/ToggleChip.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/AccessoryLog.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/AccessoryPicker.test.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/AccessoryPicker.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/AmrapTargets.test.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/AmrapTargets.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/CollapsibleSection.test.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/CollapsibleSection.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/CrossBlockLog.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/RestTimer.test.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/RestTimer.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/SaveFailureBanner.test.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/SaveFailureBanner.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/SessionBar.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/SetRow.test.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/SetRow.tsx` | B08 | reported | Area claim only |
+| `src/components/forms/DurationInput.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (fieldLabel never exercised) |
+| `src/components/forms/DurationInput.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (F59) |
+| `src/components/forms/ExerciseEditor.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean; no test file) |
+| `src/components/forms/ExerciseSetsBlock.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean; correct button idiom) |
+| `src/components/forms/LiftSetsByType.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean) |
+| `src/components/forms/NotesBlock.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean) |
+| `src/components/forms/NotesField.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (11 cases; no focus-escape case) |
+| `src/components/forms/NotesField.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (F60) |
+| `src/components/forms/NotesText.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (6 cases, good coverage) |
+| `src/components/forms/NotesText.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (clean) |
+| `src/components/forms/PlateDisplay.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (clean) |
+| `src/components/forms/SetLogControls.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (LOG has no in-flight guard; upstream) |
+| `src/components/forms/SetReadout.tsx` | B08 | deep | B08g — form display and exercise editing (7/8); evidence below (F61, F62) |
+| `src/components/forms/Stepper.test.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (17 cases; long-press path untested) |
+| `src/components/forms/Stepper.tsx` | B08 | deep | B08f — form input primitives (6/8); evidence below (F58) |
+| `src/components/layout/BottomNav.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean; active-session dot has no text) |
+| `src/components/layout/Rule.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (F64) |
+| `src/components/layout/SectionLabel.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean) |
+| `src/components/layout/SubLabel.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean) |
+| `src/components/layout/Toast.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean; always-mounted live region) |
+| `src/components/layout/WeekBadge.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean; week-4 literal checked against cycleFinalWeek) |
+| `src/components/modals/AccessoryTmModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F33 accessory arm) |
+| `src/components/modals/ConfirmationDialog.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (clean; busy-gating not needed) |
+| `src/components/modals/CycleCompleteModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F34, F40, F47) |
+| `src/components/modals/ExerciseHistoryModal.test.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (no error-path test) |
+| `src/components/modals/ExerciseHistoryModal.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F46 call site) |
+| `src/components/modals/LiftHistoryModal.test.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (no error-path test) |
+| `src/components/modals/LiftHistoryModal.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F46 confirmed end to end) |
+| `src/components/modals/LiftSetupModal.tsx` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F49, F50; no test file) |
+| `src/components/modals/Modal.test.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (coverage gaps listed) |
+| `src/components/modals/Modal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (Escape path, F33 guard location) |
+| `src/components/modals/ModalAsyncStates.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F46; no test file) |
+| `src/components/modals/TmRecommendationModal.test.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (coverage gaps listed) |
+| `src/components/modals/TmRecommendationModal.tsx` | B08 | deep | B08a — modal shell and post-session dialogs (1/8); evidence below (F33 main-lift arm) |
+| `src/components/stats/RecordsPanel.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (F63; supersedes the `partial` note — F22/F23 stay open at the caller) |
+| `src/components/ui/InlineConfirm.test.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (6 cases; no default-off-in-clickable-parent case) |
+| `src/components/ui/InlineConfirm.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (F62 default; clean otherwise) |
+| `src/components/ui/ToggleChip.tsx` | B08 | deep | B08h — stats, ui and layout (8/8); evidence below (clean; real button, aria-pressed) |
+| `src/components/workout/AccessoryLog.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (F56; no test file) |
+| `src/components/workout/AccessoryPicker.test.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (recency window only) |
+| `src/components/workout/AccessoryPicker.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (F54, F55) |
+| `src/components/workout/AmrapTargets.test.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (no onPick coverage) |
+| `src/components/workout/AmrapTargets.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (F53) |
+| `src/components/workout/CollapsibleSection.test.tsx` | B08 | deep | B08e — rest timer and collapsible section (5/8); evidence below (8 cases, good coverage) |
+| `src/components/workout/CollapsibleSection.tsx` | B08 | deep | B08e — rest timer and collapsible section (5/8); evidence below (clean; F52 second symptom) |
+| `src/components/workout/CrossBlockLog.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (F52) |
+| `src/components/workout/RestTimer.test.tsx` | B08 | deep | B08e — rest timer and collapsible section (5/8); evidence below (thorough; shared-sentinel blind spot) |
+| `src/components/workout/RestTimer.tsx` | B08 | deep | B08e — rest timer and collapsible section (5/8); evidence below (F57; F24 reconfirmed downstream) |
+| `src/components/workout/SaveFailureBanner.test.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (no concurrent-retry case) |
+| `src/components/workout/SaveFailureBanner.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (F51) |
+| `src/components/workout/SessionBar.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (clean; no test file) |
+| `src/components/workout/SetRow.test.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (undo only; logging/edit untested) |
+| `src/components/workout/SetRow.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (F52 victim; weight-sync effect traced) |
 | `src/db/index.ts` | B02 | deep | B02a — schema, seed, and DB mappings (2/5); evidence below |
 | `src/db/schema.ts` | B02 | deep | B02a — schema, seed, and DB mappings (2/5); evidence below |
 | `src/db/seed.test.ts` | B02 | deep | B02a — schema, seed, and DB mappings (2/5); evidence below |
@@ -325,7 +370,7 @@ column as work is completed.
 | `src/db/sqlite-table.ts` | B02 | deep | B02b — table layer and test client (3/5); evidence below |
 | `src/db/sqlite-test-client.ts` | B02 | deep | B02b — table layer and test client (3/5); evidence below |
 | `src/db/sqlite.worker.ts` | B01 | deep | B01a; full file; findings/evidence below |
-| `src/hooks/use-confirmation.ts` | B08 | pending | — |
+| `src/hooks/use-confirmation.ts` | B08 | deep | B08b — remaining modals and the confirmation hook (2/8); evidence below (F48; no test file) |
 | `src/index.css` | B10 | pending | — |
 | `src/lib/accessory-tm.test.ts` | B07 | deep | B07e — all 96 lines; 9 tests passed; test gaps below |
 | `src/lib/accessory-tm.ts` | B07 | deep | B07e — all 78 lines; no findings; slate guard probed across six shapes |
@@ -2273,3 +2318,847 @@ changed; the probes were deleted. Next: **B08a — `CycleCompleteModal.tsx`,
 `TmRecommendationModal.tsx` and `AccessoryTmModal.tsx` with `Modal.tsx` /
 `Modal.test.tsx` / `ModalAsyncStates.tsx` as the shared dependency**, starting from
 F33/F34/F40 and settling where the in-flight guard belongs.
+
+### 2026-09-15 — B08a: modal shell and the three post-session dialogs
+
+**Revision:** `7c6721d8a6e8896ae73b1a7daa239340ee88c289`. Application files were
+unchanged at batch start and end; the two probe files were created inside `src/`
+(vitest resolves only under the project root), run, and deleted, leaving the tree
+clean. Single agent; five implementation files and two test files deeply reviewed;
+no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/modals/Modal.tsx` | 1–196 | `86a2cd195c0cc42bc5b2b4a273fea73c6cd576b4` |
+| `src/components/modals/ModalAsyncStates.tsx` | 1–33 | `1cd97cca0ebdaa1c5bda6b5932f4e7aaf5aff14e` |
+| `src/components/modals/CycleCompleteModal.tsx` | 1–77 | `0acf448e7cdaa55684f6e5e40e2916003313610d` |
+| `src/components/modals/TmRecommendationModal.tsx` | 1–63 | `5677140e3e14bcc9aba29b17054a8f1b521d590c` |
+| `src/components/modals/AccessoryTmModal.tsx` | 1–70 | `f13d408c611b3656e97f88b2f9c8c5c86853facd` |
+| `src/components/modals/Modal.test.tsx` | 1–180 | `153785ba7b5891cf3c63c5b424834974e4fea4ee` |
+| `src/components/modals/TmRecommendationModal.test.tsx` | 1–106 | `7abe82a51e8b7f5b8016cbb5e020e823073dabff` |
+
+**Behavior and invariants traced:**
+
+- `Modal`: the two variants and where each applies, focus capture and restore
+  across mount/unmount, the `FOCUSABLE` selector and its deliberate avoidance of
+  layout-based visibility checks, Tab/Shift+Tab wrapping, the empty-dialog Tab
+  branch, Escape handling, the `labelledBy → label → title` name precedence, the
+  per-instance `titleId` counter, and the sheet header's `← BACK` control. The
+  accessible-name precedence holds at every call site: all eleven `<Modal>` usages
+  in the tree pass a `title`, and `ConfirmationDialog` supplies `label="Confirm"`
+  when its title is absent, so no dialog can render unnamed. No positive `tabindex`
+  exists anywhere in `src/`, so wrapping by DOM order equals wrapping by tab order.
+- `ModalAsyncStates`: the error → loading → empty → list ladder and its single
+  derived `list()` accessor. F46 opened — the loading branch and the error branch
+  are not mutually exclusive.
+- `CycleCompleteModal`: the `newTms` summary, the conditional STRONG CYCLE block,
+  and the three callbacks. Confirmed at the component what F34 and F40 describe at
+  the library: `onDoubleIncrement` and `onDeload` are typed as synchronous `void`
+  callbacks while both handlers in `Workout` are `async`, no button carries a
+  pending or disabled state, and the doubling button only disappears once
+  `applyCycleDoubling` has resolved and `setCycleCompleteData` has replaced the
+  summary (`cycle.ts:203` filters the accepted candidate out) — so the re-entry
+  window is exactly the await. F40's archived lift renders here as a STRONG CYCLE
+  row with no matching entry in the list above it, because `applyCycleDoubling`
+  folds back by `liftName` against `newTms`, which the archived lift never joins.
+  F47 opened on initial focus.
+- `TmRecommendationModal`: the local stepper signal, its `Math.max(45, …)` floor,
+  `aria-live` on the readout, and both action arms. `onAccept` is typed
+  `(newTm: number) => void` while `handleTmRecommendationAccept` is `async`, so the
+  component cannot await it even if it wanted to — the F33 guard cannot be built
+  from inside this component without a prop change or a `Modal`-level flag.
+- `AccessoryTmModal`: per-row opt-in state, the `disabled` on an empty selection,
+  and the filtered `onAccept` payload. The existing `disabled` covers only the
+  empty-selection case, not the in-flight case.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/modals/Modal.test.tsx src/components/modals/TmRecommendationModal.test.tsx` — 2 files, **34 tests passed**.
+- Fresh pass: `pnpm lint` (ESLint: no issues) and `pnpm exec tsc -b` (exit 0).
+- Probe P1 (`ModalAsyncStates`, jsdom render): `error="Failed to load history"`,
+  `entries=null` → rendered text `"Failed to load historyLoading..."`;
+  `error="boom"`, `entries=[1,2]` → `"boomLoading..."`. Controls: `"Loading..."`,
+  `"No sessions yet."` and `"list"` each render alone in the healthy states.
+- Probe P2 (`CycleCompleteModal` with one doubling candidate): `document.activeElement`
+  on open is the `+10 LBS` button; two activations → `onDoubleIncrement` called
+  twice with `[[1,5],[1,5]]`.
+- Probe P3 (`TmRecommendationModal`, accept gated on a manual promise): UPDATE TM
+  then Escape → `["accept:start","dismiss","accept:end"]`, `accept=1`, `dismiss=1`.
+  `AccessoryTmModal`: three taps on UPDATE → three `onAccept` calls, `disabled=false`.
+- Probe P4 (modal-to-modal focus handoff, both a batched swap and a swap across
+  separate microtasks): focus lands inside the newly opened dialog in both
+  orderings, and only one dialog is mounted after the swap. **Negative result — no
+  finding**; the unmounting modal's focus-restore does not steal focus from its
+  successor, which is the ordering the finishing sequence actually produces.
+- Not run: the full suite, and any real-SQLite check — this batch is component-level
+  and its database consequences are already recorded under F33/F34/F40.
+
+**Findings:** F46 (low, confirmed), F47 (low alone / medium with F34, confirmed).
+F33 amended with the Escape trigger and with the settled guard location; F34 and
+F40 reconfirmed at their component call sites without change to their severity.
+
+**Substantive negative conclusions:**
+
+- Both `TmRecommendationModal` and `AccessoryTmModal` seed local signals from props
+  at setup (`createSignal(props.suggestedTm)`, `createSignal(recommendations.map(…))`)
+  and are rendered under a non-keyed `<Show>`, so a *replacement* recommendation
+  arriving while the dialog is open would leave stale local state. This is currently
+  unreachable: `setTmRecommendation` is only called from the `rec` branch of
+  `afterAccessoryStep` after the previous value has been cleared, and `setAccessoryTms`
+  only fires from `completeSession`, which cannot run while a dialog blocks the
+  finishing path. Recorded as a latent hazard that any new caller would trip, not as
+  a finding.
+- `Modal`'s Escape handler calls `stopPropagation` but not `preventDefault`. The
+  comment at `Modal.tsx:99-101` justifies keydown over keyup; the missing
+  `preventDefault` does not matter, because the only native Escape default in play
+  (a number input's revert) is invisible once the dialog unmounts.
+- `AccessoryTmModal` uses a scrolling card (`max-h-[90vh] overflow-y-auto`) where
+  `Modal.tsx:19-21` argues for a sheet. Considered and rejected as a finding: the
+  card's scroll container is the only scrollable region — the dialog root is
+  `fixed inset-0` with no overflow — so the "two nested scroll regions" the comment
+  warns about does not occur.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- `ModalAsyncStates.tsx` has no test file at all; `CycleCompleteModal.tsx` and
+  `AccessoryTmModal.tsx` have none either.
+- `Modal.test.tsx` covers naming, focus placement, Tab wrapping, the empty-dialog
+  branch, focus restore and both variants, but has no case for Escape while a
+  handler is in flight, none for the trap re-querying after the focusable set
+  changes, and none for a dialog rendered with no name at all.
+- `TmRecommendationModal.test.tsx` covers the stepper and both action arms but
+  never asserts that repeated activation of UPDATE TM produces exactly one accept.
+
+**Open questions / remaining ranges:** none carried from this batch. The `busy`
+prop described in the resume card is a recommendation, not a change; F33/F34/F41
+remain open bugs.
+
+**Ledger rows updated:** seven `src/components/modals/**` rows moved
+`reported` → `deep`. B08 now has 47 rows left. **Next action: B08b —
+`LiftSetupModal.tsx`, `ConfirmationDialog.tsx`, `ExerciseHistoryModal.tsx`,
+`LiftHistoryModal.tsx`, `src/hooks/use-confirmation.ts`, with
+`ExerciseHistoryModal.test.tsx` and `LiftHistoryModal.test.tsx`** — confirming F46
+end to end through a history modal's own error path.
+
+### 2026-09-15 — B08b: remaining modals and the confirmation hook
+
+**Revision:** `21001c04` (tracker-only commit on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; four implementation components, one hook
+and two test files deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/modals/LiftSetupModal.tsx` | 1–321 | `a1be863e40ea6d513dc76ded940584a81b59a0f0` |
+| `src/components/modals/ConfirmationDialog.tsx` | 1–56 | `88d95cd5b3a1a64adfc7bd73acebc49bc25b1632` |
+| `src/components/modals/ExerciseHistoryModal.tsx` | 1–55 | `aafe8e6cb56d15ce2a1eb5c2bb39f46e0425d3d1` |
+| `src/components/modals/LiftHistoryModal.tsx` | 1–71 | `ffb72b3ed9eb620657e02684685211c606d0a98d` |
+| `src/hooks/use-confirmation.ts` | 1–55 | `1b59b47491de6aae9003d719544841f85bffe519` |
+| `src/components/modals/ExerciseHistoryModal.test.tsx` | 1–174 | `6826d52731d41879df6080a38cecf1dbab9420aa` |
+| `src/components/modals/LiftHistoryModal.test.tsx` | 1–156 | `4f26c9a98ed8f52fc4f199bb15e18676559ff04a` |
+
+**Behavior and invariants traced:**
+
+- `use-confirmation`: the tri-state `ConfirmResult`, the binary `confirm` wrapper
+  and its `'confirm' → true` mapping, the promise-per-request model, `respond`'s
+  resolve-then-clear ordering, and the context guard. The API is app-wide — one
+  `createConfirmation()` in `App.tsx:91` feeding a single `<ConfirmationDialog />`
+  — so `pending` is global state shared by all thirteen call sites and survives
+  navigation. F48 opened on request replacement.
+- `ConfirmationDialog`: label/title precedence including the `'Confirm'` fallback
+  when `opts.title` is absent, `initialFocus="container"` and the reasoning behind
+  it, the destructive styling switch, the optional third button, and Escape mapping
+  to `'cancel'`. **No in-flight hazard here**: `respond` resolves and clears
+  `pending` synchronously, so the dialog unmounts in the same tick as the first
+  activation and cannot be double-fired — the F33/F34 shape does not apply.
+- `LiftSetupModal`: the buffered-draft model (nothing touches the db until DONE),
+  the `liftId` vs `draftLift` split, `load()`'s plate-mode and cross-block hydration,
+  buffer mutations, and the commit reconcile — delete-removed, add-new, update-kept,
+  all inside one `db.transaction`, with `order` rewritten from the buffer index.
+  This is the one modal in the tree that already gates its own close path on an
+  in-flight flag (`:169`), which is the precedent the B08a `busy` recommendation
+  should follow. F49 and F50 opened.
+- Both history modals: `onMount` → `load()` → `getLiftHistory` / `getExerciseHistory`,
+  the error/entries signal pair, and the sheet-variant presentation. Neither resets
+  `entries` on error, which is precisely what F46 turns into a permanent
+  "Loading..." underneath the error message.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/modals/LiftHistoryModal.test.tsx src/components/modals/ExerciseHistoryModal.test.tsx` — 2 files, **19 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P5 (`createConfirmation`, no DOM): two `confirm()` calls then one
+  `respond('confirm')` → `pending()` showed the **second** message after the second
+  call; second promise `resolved:true`; first promise still `PENDING` after the
+  respond; `pending()` then `null`. F48.
+- Probe P6 (`LiftHistoryModal` with `getLiftHistory` rejecting `worker timeout`):
+  dialog text `"← BACKHISTORY — Bench--- HISTORY — Bench ---worker timeoutLoading..."`,
+  `Loading...` still present. F46 confirmed at a live call site, not just at the
+  `ModalAsyncStates` unit.
+- Probe P7 (`LiftSetupModal`, `db.transaction` rejecting `SQLITE_IOERR`): `onCommit`
+  called 0 times, button label back to `DONE`, dialog text matched no
+  error/failure/retry wording. No `unhandledrejection` event was observed under
+  jsdom — recorded as observed, not as a claim about the browser; the user-visible
+  result is the finding either way. F50.
+- Probe P8 (`LiftSetupModal` with `liftId`, existing lift stored `plateMode: 'paired'`):
+  the equipment chips are live before `load()` resolves; tapping NONE showed
+  `no plate readout`, and after `load()` settled the readout was back to `paired`. F49.
+- Not run: the full suite. `LiftSetupModal`, `ConfirmationDialog` and
+  `use-confirmation` have no test files, so there was no existing coverage to run
+  for three of the five implementation files in this batch.
+
+**Findings:** F48 (medium, confirmed), F49 (low, confirmed), F50 (medium,
+confirmed). F46 upgraded from a unit-level probe to an end-to-end confirmation
+through `LiftHistoryModal`.
+
+**Substantive negative conclusions:**
+
+- `LiftSetupModal`'s `liftLabel()` resolves against `activeLifts()`, which excludes
+  archived lifts, so editing an archived lift would title the dialog `LIFT · SETUP`
+  — while cross-block movement names deliberately resolve against `allLifts()` for
+  exactly this reason. **Unreachable:** the only two `setSetupLiftId` call sites
+  (`Settings.tsx:519`, `Setup.tsx:224`) sit inside the active-lift lists; the
+  archived list at `Settings.tsx:588-590` offers no setup control. Noted as an
+  inconsistency a future archived-lift editor would trip, not as a finding.
+- `createLift` performs no uniqueness check, so duplicate lift names are not a
+  commit-failure trigger for F50 the way `assertUniqueExerciseName` is for F41.
+  F50's reachable triggers are worker/storage failures (F02) and timeouts (F05/F06).
+- `LiftSetupModal` and `AccessoryTmModal` both use a scrolling card where
+  `Modal.tsx:19-21` argues for a sheet. Considered and rejected again: the dialog
+  root is `fixed inset-0` with no overflow, so the card's scroller is the only
+  scroll region and the nested-scroll problem the comment describes does not occur.
+- Both history modals read `props.liftId` / `props.exerciseId` once inside `load()`
+  and never re-run on a prop change. Not a finding: both are rendered under a
+  `<Show>` keyed on the id being non-null, so a change of subject unmounts and
+  remounts the component.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- No test file exists for `LiftSetupModal.tsx`, `ConfirmationDialog.tsx` or
+  `src/hooks/use-confirmation.ts` — three of this batch's five implementation files.
+  `use-confirmation` is the one with app-wide reach and an unsettled-promise bug.
+- Both history modal test files cover loading, empty, list, a11y and Escape, and
+  **neither has an error-path case** — the exact state F46 breaks.
+
+**Open questions / remaining ranges:** none carried from this batch.
+
+**Ledger rows updated:** six `src/components/modals/**` rows moved `reported` →
+`deep` and `src/hooks/use-confirmation.ts` moved `pending` → `deep`; B08 now has
+40 rows left and the modals directory is fully closed. **Next action: B08c —
+`SetRow.tsx`, `CrossBlockLog.tsx`, `SessionBar.tsx`, `SaveFailureBanner.tsx` and
+`AmrapTargets.tsx` with their three test files**, carrying F13/F14/F15 and L02.
+
+### 2026-09-15 — B08c: workout logging components
+
+**Revision:** `1955afc` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; five implementation components and three
+test files deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/workout/SetRow.tsx` | 1–179 | `7c8aa8de0e1308714c7b1c869814d832f0f75224` |
+| `src/components/workout/CrossBlockLog.tsx` | 1–61 | `45fb24fce0504428168bb029fd3056c2cdbbdaaf` |
+| `src/components/workout/SessionBar.tsx` | 1–93 | `30542556366085f297fb46be868fbb22dafbaab2` |
+| `src/components/workout/SaveFailureBanner.tsx` | 1–57 | `394d28ba2f4bc87932346a9c4ad9a58f15cf329d` |
+| `src/components/workout/AmrapTargets.tsx` | 1–43 | `f6b47bbf26fd8a35d39f57eaf96956938ff8f01c` |
+| `src/components/workout/SetRow.test.tsx` | 1–59 | `303c5bde630d6ad205b4db801d7073e1808350af` |
+| `src/components/workout/SaveFailureBanner.test.tsx` | 1–90 | `dc71ddb12033b6752091afb048a6a5a33d93fbcb` |
+| `src/components/workout/AmrapTargets.test.tsx` | 1–43 | `9a30afc84c07d5bd122e0978ff902bf39dbd7391` |
+
+**Behavior and invariants traced:**
+
+- `SetRow`: the four-way `Switch` (active / upcoming / editing / completed), the
+  local `reps`/`weight` signals and the `weightTouched` latch that stops the
+  cascading prescription from clobbering a dialled weight, the `createEffect` that
+  re-syncs weight only while `!isCompleted && !weightTouched`, the post-log reset
+  (`setReps(props.set.reps); setWeightTouched(false)`), the separate edit buffer
+  seeded from `loggedReps`/`loggedWeight`, and the opt-in `activeRef` that keeps
+  scroll-to-active a page concern. F52's victim: all of that local state is what a
+  remount throws away.
+- `CrossBlockLog`: the per-block cursor as the completion authority, index-aligned
+  `logged` lookup, and `onDelete` offered only on the last logged set
+  (`i() === cursor - 1`), so undo cannot punch a hole in the middle of a block.
+- `SessionBar`: `isOutstanding`, the `allDone()` guard requiring at least one
+  segment with `total > 0`, the two-state footer, `disabled` wired through to both
+  finish affordances, and `scrollToSection`'s reduced-motion branch.
+- `SaveFailureBanner`: the persistent half of failed-save reporting, its `role="alert"`
+  region, the retry closure, the deliberate silent `catch` on a repeat failure, and
+  dismissal. F51 opened on the single-slot `retrying` signal.
+- `AmrapTargets`: the picker vs read-only branch and the per-target `aria-label`.
+  F53 opened on the dead `padEnd` alignment.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/workout/SetRow.test.tsx src/components/workout/SaveFailureBanner.test.tsx src/components/workout/AmrapTargets.test.tsx` — 3 files, **18 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P9 (`SaveFailureBanner`, two failures, both retries gated on manual
+  promises): after RETRY A → `A.disabled=true B.disabled=false`; after RETRY B →
+  `A.disabled=false B.disabled=true` with A still in flight and its label back to
+  `RETRY`; a further tap on A → `retryA` called **twice** concurrently; once A
+  settled → `B.disabled=false` while B was still pending. F51.
+- Probe P10 (`CrossBlockLog` under a `For` that rebuilds its wrapper object, as
+  `crossSections()` does): three weight taps → `"207.5lb"`; one parent re-derive →
+  `"200lb"`. **Control** with item references held stable across the same re-derive:
+  `"207.5lb"` before and after. F52, with the cause isolated to item identity.
+- Verified by inspection, not by rendering: `grep -rn 'whitespace-pre' src/` returns
+  nothing, so `AmrapTargets`' `padEnd(14)` cannot survive HTML whitespace collapse
+  (F53). A `textContent` assertion would have passed either way and could not
+  settle it.
+- Not run: the full suite.
+
+**Findings:** F51 (medium, confirmed), F52 (medium, confirmed with a control),
+F53 (low, source inspection).
+
+**Substantive negative conclusions:**
+
+- `scrollToSection` interpolates a segment id straight into a CSS attribute
+  selector (`[data-section="${id}"]`), which would throw on an id containing a
+  quote. **Not reachable:** every id in `Workout.segments()` is either a literal
+  (`warmup`, `main`, `joker`, `supplemental`) or a literal prefixed to a numeric
+  database id (`cross-${movementLiftId}`, `assist-${section}`,
+  `assist-extra-${exerciseId}`). No user-supplied text reaches the selector. Worth
+  re-checking if a future segment is ever keyed by an exercise name.
+- The linear set flow does **not** share F52's defect. `warmupSets()`, `mainSets()`,
+  `jokerSetsRendered()` and `fslSets()` are `filter`s over the `allSets()` signal, so
+  their items keep their references across a re-derive and `For` reuses the rows.
+  This is exactly why the bug is cross-block-only and why it would be easy to miss.
+- `SetRow` syncs `weight` to a changing prescription but never re-syncs `reps`,
+  which is seeded once at setup. Not currently a defect: the cascade
+  (`onWeightChange`) only rewrites weights, and the upcoming-row branch reads
+  `props.set.reps` directly rather than the signal. A future feature that varies
+  prescribed reps mid-session would need the same `touched` treatment weight has.
+- `SetRow` keeps `editing()` true if a completed row is undone while its edit form
+  is open — the `!props.isCompleted` Match wins first, so nothing is visible, but
+  re-completing the set would reopen the editor unbidden. Left as a note: the undo
+  control is only offered on the last logged set and unmounts the row's trailing
+  slot, so no sequence in the current UI reaches it.
+- `SaveFailureBanner`'s empty `catch` on a repeat failure is deliberate and
+  documented; the banner remaining up is the record. Not a finding.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- `SetRow.test.tsx` has five cases and **all five are about the undo `InlineConfirm`**.
+  For a 179-line component, nothing covers logging, the edit buffer, the weight-sync
+  effect and its `weightTouched` latch, or the four-way `Switch` — which is why F52
+  could sit in the local state unnoticed.
+- `AmrapTargets.test.tsx` covers only the read-only branch; the `onPick` button
+  variant — the interactive half the component was rewritten for — has no test.
+- `SessionBar.tsx` and `CrossBlockLog.tsx` have no test files at all.
+- `SaveFailureBanner.test.tsx` is the strongest of the three (eight cases, including
+  a failed retry and a multi-failure list) and still has no concurrent-retry case.
+
+**Open questions / remaining ranges:** none carried from this batch. F52's fix
+belongs in `Workout.tsx`, which is already `deep` from B05/B06 — it is a new
+finding against a reviewed file, not a reopened row.
+
+**Ledger rows updated:** eight `src/components/workout/**` rows moved `reported` →
+`deep`; B08 now has 32 rows left. **Next action: B08d — `AccessoryLog.tsx` and
+`AccessoryPicker.tsx` with `AccessoryPicker.test.tsx`**, carrying L02's accessory
+tail and F41's ADD-button double-tap.
+
+### 2026-09-15 — B08d: accessory logging and picking
+
+**Revision:** `3aacf3c` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; two implementation components (511 lines,
+the two largest left in the area) and one test file deeply reviewed; no
+application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/workout/AccessoryLog.tsx` | 1–248 | `c36366762a17902e55b005211af99f3153f388cd` |
+| `src/components/workout/AccessoryPicker.tsx` | 1–263 | `edec8ad1c4df015ca8168cf7ea104fb7683db0f2` |
+| `src/components/workout/AccessoryPicker.test.tsx` | 1–88 | `60ac24ebbf952fde781431ad296f71567af338bd` |
+
+**Behavior and invariants traced:**
+
+- `AccessoryLog`: the three exercise types (`reps` / `timed` / `distance`) and how
+  each selects its control and its persisted field, `nextSet`/`done` memos and the
+  `addingExtra` escape hatch past `ACCESSORY_SETS`, the weight carried from the last
+  logged set (`initWeight`), the separate per-set edit buffer, notes editing through
+  the store, `startRest` keyed on `restTypeAfterSet`, and the documented decision
+  that logging changes no program state (the TM question is asked once at session
+  end). F56 opened on the `type()` fallback.
+- `AccessoryPicker`: both modes (`'session'` vs `'default'`), the recency ranking
+  that floats previously used accessories above the alphabetical rest, the
+  `groupByAssistanceSection` layout for the `'extra'` library view, the
+  best-effort `persistDefault` that must never block a pick, the TM sub-sheet for
+  an exercise with no training max, and Escape backing out to the list rather than
+  out of the picker. F54 and F55 opened.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/workout/AccessoryPicker.test.tsx` — **2 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P11 (`AccessoryPicker`, two push exercises, neither with a TM): dialled
+  Aaa Dips to `25`, Escape back to the list, picked Bbb Pushups → header
+  `"Bbb Pushups"`, TM stepper still `"25"`. F54.
+- Probe P12 (`AccessoryPicker` `'extra'`, three taps on SAVE at TM 20):
+  `accessoryTrainingMaxes` → **3 rows** `[20,20,20]`; `activeAccessories` → **3
+  entries** `[1,1,1]`; SAVE never disabled. F55.
+- Probe P14 (`AccessoryPicker` `'extra'`, exercise already has a TM, two taps on
+  the row): row not disabled, `activeAccessories` → `[1,1]`. F55's second trigger.
+- Probe P13 (`AccessoryLog`, same accessory rendered twice): with
+  `exercise={undefined}` a reps control renders and no time control; with the timed
+  exercise passed, a time control renders and no reps control. F56.
+- Reachability for F56 traced in source rather than probed end to end:
+  `workout.activeAccessories` is hydrated synchronously at module scope
+  (`workout-store.ts:109-112`, `...loadFromStorage()`), while `exercises()` is
+  filled by the last await of Workout's load (`Workout.tsx:258`).
+- Not run: the full suite.
+
+**Findings:** F54 (medium, confirmed), F55 (medium, confirmed on two independent
+triggers), F56 (low, confirmed).
+
+**Substantive negative conclusions:**
+
+- The accessory lists do **not** share F52's remount defect. `extraAccessories()`
+  (`Workout.tsx:133`) is a `filter` over `workout.activeAccessories`, so item
+  references survive a re-derive, and the fixed slots render through a `<Show>`
+  rather than a `For`. `AccessoryLog`'s own `<For each={props.accessory.loggedSets}>`
+  iterates store rows directly. Checked deliberately because F52 came out of the
+  neighbouring component.
+- `Workout.tsx:261-262` documents that the linear lists use `<Index>` so that a
+  fresh-ref rebuild updates in place without remounting. Recorded here because it
+  confirms F52 is a gap in an understood mitigation, not an unknown hazard.
+- `AccessoryPicker`'s `grouped()`, `slotRows()`, `usedSlotRows()` and
+  `restSlotRows()` all build new arrays per evaluation, but every row is a
+  stateless `<button>`, so a remount costs nothing. Not a finding.
+- `persistDefault` swallows its error into `console.warn` by design — the comment
+  at `:112-117` states that persisting a default must never block the pick. The
+  user gets no signal that the default did not update; left as documented
+  behaviour rather than reopened as a finding.
+- `saveEditSet` writes `weight` for every exercise type, including `timed` and
+  `distance` sets where the buffer seeds to `s.weight ?? 0`. Consistent with
+  `handleLog`, which also always writes `weight`, and harmless for bodyweight work.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- `AccessoryPicker.test.tsx` has **two** cases and both are about the recency
+  window. For a 263-line component with two modes, three list layouts, a TM
+  sub-sheet and two commit paths, nothing else is covered — F54 and F55 both sit in
+  untested code.
+- `AccessoryLog.tsx` has no test file at all: 248 lines covering three exercise
+  types, an edit buffer, notes and the extra-set path.
+
+**Open questions / remaining ranges:** none carried from this batch. F56's fix
+touches `Workout.tsx` (already `deep` from B05/B06) as well as the component.
+
+**Ledger rows updated:** three `src/components/workout/**` rows moved `reported` →
+`deep`; B08 now has 29 rows left. **Next action: B08e — `RestTimer.tsx` and
+`CollapsibleSection.tsx` with `RestTimer.test.tsx` and
+`CollapsibleSection.test.tsx`**, carrying F24's bell-ordering tail.
+
+### 2026-09-15 — B08e: rest timer and collapsible section
+
+**Revision:** `603c08f` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; two implementation components and two test
+files (767 lines total, the most test-heavy slice in the area) deeply reviewed; no
+application edits. This closes `src/components/workout/**`.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/workout/RestTimer.tsx` | 1–197 | `de844b814c7afca49638bd86abc8e0a503e3f203` |
+| `src/components/workout/CollapsibleSection.tsx` | 1–140 | `0b68f79ea5de6e5aa8f2700aba2db30e1d4a6a65` |
+| `src/components/workout/RestTimer.test.tsx` | 1–322 | `20c1758f0a452f2faa150f9dc57f9e26b61c891c` |
+| `src/components/workout/CollapsibleSection.test.tsx` | 1–108 | `aa3191f4bfc5cfa9eb1462a636ce6e0cf34e8e27` |
+
+**Behavior and invariants traced:**
+
+- `RestTimer`: `activeThresholds()` as the single source the countdown, the audio
+  cue phases and the scheduled notifications all read, the `bonus` reset keyed on
+  `restStartedAt` alone so it cannot fight the scheduling effect, the worker
+  start/stop lifecycle and its pause/resume on visibility, the stalled-session
+  schedule, the `prevElapsed` edge detector that fires one cue per phase
+  transition, wake-lock acquisition and release, and the overrun display. F57
+  opened on the wake lock.
+- The cue edge detector was checked specifically against the extend button:
+  tapping +30s re-runs the cue effect with `elapsed` unchanged, and because
+  `prevElapsed` was already set to that value on the previous run, `prevPhase` and
+  `currPhase` are computed from the same elapsed under the same new thresholds and
+  compare equal — **no spurious bell on extend**, and the bell re-arms correctly
+  once time crosses the shifted boundary. Not a finding; recorded because it is the
+  non-obvious half of the `bonus` design.
+- `CollapsibleSection`: the fold-only-when-complete safety condition, `userExpanded`
+  and the deferred re-fold on a fresh completion, the split between the history
+  label button and the fold toggle (so finishing a block cannot remove its history
+  entry point), `aria-expanded`/`aria-controls` wiring, and the deliberate use of
+  the `hidden` attribute so collapsing never unmounts positional rows.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/workout/RestTimer.test.tsx src/components/workout/CollapsibleSection.test.tsx` — 2 files, **28 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P15 (`RestTimer` with a wake-lock stub returning a **distinct** sentinel per
+  request, release resolving a turn later): rest start → 2 sentinels, none
+  released; tap +30s → 3 sentinels, 1 released; stop rest → 3 sentinels, **2 never
+  released**. F57.
+- Probe P16 (`CollapsibleSection` under a `For` that rebuilds its item, as
+  `crossSections()` does): panel `hidden=true` when complete, `hidden=false` after
+  the user expands, `hidden=true` again after one parent re-derive. F52's second
+  symptom.
+- Not run: the full suite.
+
+**Findings:** F57 (medium, confirmed). F52 extended with a second user-visible
+symptom. F24 reconfirmed downstream (see below) without change to its severity.
+
+**Substantive negative conclusions:**
+
+- `RestTimer` is a faithful consumer of F24's defect, not a second instance of it.
+  `activeThresholds()` shifts `firstBell`, `secondBell` and `failedBell` by the same
+  bonus, so an inverted configuration (`restTimer1 > restTimer2`) stays inverted and
+  the component reproduces F24's behaviour exactly. The fix belongs at
+  `restThresholds`, as F24 already says; nothing in the component should be changed
+  for it.
+- `CollapsibleSection` is clean. The module-level `seq` gives each panel a unique
+  id that `aria-controls` matches, the `hidden` attribute keeps content mounted as
+  documented, and the deferred re-fold effect behaves as its comment claims. Its
+  only problem comes from outside it (F52).
+- `getTimerWorker()` is a singleton and `worker.onmessage` is assigned rather than
+  added, so re-running the scheduling effect cannot accumulate handlers. The
+  cleanup posts `stop` but leaves `onmessage` set; harmless, since the closure stays
+  valid and a stopped worker sends nothing.
+- The countdown and `status().message` carry no `aria-live`, so neither the ticking
+  time nor "SECOND BELL — GO IF READY" is announced. Judged deliberate rather than a
+  defect: a per-second live region would be unusable, and the audio cue is the
+  intended non-visual channel. Worth revisiting only if cues are ever muted.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- `RestTimer.test.tsx` is the most thorough test file in the area — 20 cases across
+  wake lock, cues and notification scheduling — and still misses F57, because its
+  `wakeLockRequest` resolves to **one shared `mockSentinel`** for every call. With a
+  single object, "release was called" cannot distinguish one released sentinel from
+  one released and two leaked. The fix to the test is a per-request sentinel.
+- Nothing covers the +30s extend button in either file: not its effect on the
+  countdown, not the re-scheduled notifications, and not the wake-lock churn it
+  causes.
+- `CollapsibleSection.test.tsx` (8 cases) covers the fold lifecycle well, including
+  the keep-mounted guarantee and the re-fold on fresh completion.
+
+**Open questions / remaining ranges:** none carried from this batch. F57's fix is
+contained in `RestTimer.tsx`.
+
+**Ledger rows updated:** four `src/components/workout/**` rows moved `reported` →
+`deep`, closing that directory; B08 now has 25 rows left, all in `forms/`, `stats/`,
+`ui/` and `layout/`. **Next action: B08f — `Stepper.tsx`, `NotesField.tsx`,
+`NotesText.tsx` and `DurationInput.tsx` with their four test files.**
+
+### 2026-09-15 — B08f: form input primitives
+
+**Revision:** `4244b5b` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; two probe files were created inside
+`src/`, run, and deleted. Single agent; four implementation components and four
+test files deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/forms/Stepper.tsx` | 1–145 | `7e9065b053159dcbbe2426a7b56e6f6036105d52` |
+| `src/components/forms/NotesField.tsx` | 1–156 | `31b6573e920eb1e2a74acc9aced1470d42a718ca` |
+| `src/components/forms/NotesText.tsx` | 1–77 | `7da5434a0ee63d8660631098b1aedfa51211a8cc` |
+| `src/components/forms/DurationInput.tsx` | 1–47 | `c9d408cabd93f8ec48e0616b6bf7d0bd9d2abb09` |
+| `src/components/forms/Stepper.test.tsx` | 1–135 | `34226af01cc3702b6b3f854a11b36d013eaffede` |
+| `src/components/forms/NotesField.test.tsx` | 1–118 | `2c62873186d2ddf4cdef48f46ef5e34ba6d4b792` |
+| `src/components/forms/NotesText.test.tsx` | 1–53 | `27720781c1c399990c17ea9d592351365d7abe9c` |
+| `src/components/forms/DurationInput.test.tsx` | 1–66 | `6acf9fa5247d1f5760f96d7dc7b3c013c6b826d7` |
+
+**Behavior and invariants traced:**
+
+- `Stepper`: clamping on both the step path and the typed-commit path, `safeAdd`'s
+  one-decimal rounding for 2.5-steps, the disabled bounds, the tap-to-edit numeric
+  input and its Enter/blur commit, the deliberate push-based `aria-live`
+  announcement (rather than mirroring `props.value`, which a repeating press would
+  flood), and the long-press machinery — `LONG_PRESS_MS` arming a `REPEAT_MS`
+  interval, `wasLongPress()` suppressing the trailing click, and `clearPress`
+  announcing once on release. F58 opened on the clear path.
+- `DurationInput`: mm/ss decomposition, the `max=59` seconds bound, and the
+  deferred `on(() => props.value, …)` effect that re-syncs from the parent without
+  clobbering local edits — the correct version of the pattern F49 and F56 get
+  wrong. F59 opened on the unused `fieldLabel`.
+- `NotesField`: the bullet grammar (`/^( *)- (.*)$/`, two spaces per level), list
+  mode, Enter continuing/outdenting/exiting, Tab and Shift+Tab retabbing, the ←/→
+  chips that mirror them for touch keyboards, and the documented contract that the
+  parent must echo `onInput` back synchronously and unmodified or the caret math
+  desyncs. F60 opened on Tab capture.
+- `NotesText`: `toBlocks` grouping consecutive bullets and keeping text and list
+  blocks in source order, `buildTree` turning depth-tagged lines into real nested
+  `<ul>`s, and the nbsp that stops a blank line collapsing to zero height.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/forms/Stepper.test.tsx src/components/forms/NotesField.test.tsx src/components/forms/NotesText.test.tsx src/components/forms/DurationInput.test.tsx` — 4 files, **42 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P17 (`Stepper` `max=3`, fake timers, pointerdown never released): value 3,
+  `+ disabled=true`, 5 onChange calls during the press, **10 more** in the next
+  800 ms, **65 total** after ~4.5 s. Control — `pointerUp` before the bound — 5
+  calls, then 5 after twenty further ticks. F58.
+- Probe P18 (`Stepper` `min=0` from 3): `− disabled=true` at 0, **20 further
+  `onChange(0)` calls**. F58's floor variant.
+- Probe P19 (`NotesField` on `'- first bullet'`, list mode off): Tab
+  `defaultPrevented=true`, Shift+Tab `defaultPrevented=true`, indent chips absent.
+  Control on `'plain line'`: `defaultPrevented=false`. F60.
+- Verified by grep rather than by probe: no call site of `DurationInput` passes
+  `fieldLabel` (`AccessoryLog.tsx:193`, `:227`; `HistoryEdit.tsx:394`). F59.
+- Not run: the full suite.
+
+**Findings:** F58 (medium, confirmed at both bounds with a control), F59 (low,
+source inspection), F60 (medium, confirmed with a control).
+
+**Substantive negative conclusions:**
+
+- `NotesText` is clean. Its per-evaluation `toBlocks()`/`buildTree()` arrays would
+  trip F52's identity problem if the rows held state, but every node renders as
+  plain text in a `<li>` or `<div>` with no local signals, so a remount costs
+  nothing. Interpolated text is escaped by Solid, so note content cannot inject
+  markup.
+- `Stepper`'s `wasLongPress()` correctly swallows the click that follows a long
+  press, and `pressStart` is reset by that same swallowed `applyStep`, so the next
+  genuine tap is not eaten. Keyboard activation (Space/Enter) never sets
+  `pressStart`, so it is unaffected by the long-press path entirely.
+- `Stepper`'s announcement is pushed rather than derived precisely so a repeating
+  press does not flood the live region — checked because it looks like a missing
+  binding at first read. Working as documented.
+- `DurationInput`'s effect is `{ defer: true }` and compares before setting, so a
+  parent echo cannot fight the local steppers. This is the shape F49 should adopt.
+- `NotesField`'s `apply()` writes `ref.value` directly before calling
+  `props.onInput`, which looks like it fights Solid's own `value` binding. It does
+  not: the binding writes the same string, so the caret set by `setSelectionRange`
+  survives. This only holds while the parent echoes unmodified, which the contract
+  comment states.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- `Stepper.test.tsx` (17 cases) covers display, stepping, clamping, disabled bounds
+  and the edit input, and **nothing at all** about the long-press repeat — not
+  `LONG_PRESS_MS`, not `REPEAT_MS`, not the announce-on-release, not the suppressed
+  trailing click. F58 lives entirely in that untested half of the component.
+- `NotesField.test.tsx` (11 cases) covers the bullet grammar thoroughly, including
+  "Tab on a non-bullet line is left to the browser" — but asserts *no text change*
+  rather than `defaultPrevented`, and has no case for focus escaping a bullet line.
+- `DurationInput.test.tsx` (9 cases) never passes `fieldLabel`.
+- `NotesText.test.tsx` (6 cases) is proportionate to the component.
+
+**Open questions / remaining ranges:** one carried to B08g — `SetReadout` takes an
+`onClick` used by `SetRow:147` and `AccessoryLog:168` to open their edit forms;
+whether that is a real control or a clickable `div` decides a keyboard-access
+question raised in B08c and is settled by reading `SetReadout.tsx`.
+
+**Ledger rows updated:** eight `src/components/forms/**` rows moved `reported` →
+`deep`; B08 now has 17 rows left. **Next action: B08g — `ExerciseEditor.tsx`,
+`ExerciseSetsBlock.tsx`, `LiftSetsByType.tsx`, `SetLogControls.tsx`,
+`SetReadout.tsx`, `PlateDisplay.tsx` and `NotesBlock.tsx`**, none of which has a
+test file.
+
+### 2026-09-15 — B08g: form display and exercise editing
+
+**Revision:** `5b752ac` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; seven implementation components deeply
+reviewed; no application edits. This closes `src/components/forms/**`.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/forms/ExerciseEditor.tsx` | 1–86 | `f622759c42e435221824c3b7e44684e527d4f495` |
+| `src/components/forms/ExerciseSetsBlock.tsx` | 1–67 | `87bac747511745bf331cc13b78ae163ae398c993` |
+| `src/components/forms/LiftSetsByType.tsx` | 1–50 | `2a24e1b88473cc448188d6865154ebd9e48b5e46` |
+| `src/components/forms/SetLogControls.tsx` | 1–52 | `f3772b26420b4fddea2a2df2f7d520439d2b0afb` |
+| `src/components/forms/SetReadout.tsx` | 1–51 | `96a55bb49525aadcf2fd543f916d925e06405337` |
+| `src/components/forms/PlateDisplay.tsx` | 1–40 | `bcf3fcaba1db73c1aca61f26453ac81ba8dbed56` |
+| `src/components/forms/NotesBlock.tsx` | 1–18 | `e2d6df8a067889b6e4754439e75b1fd14780850a` |
+
+**Behavior and invariants traced:**
+
+- `SetReadout`: the single `<weight>lb × <value>` format shared by every logger in
+  every state, the `lg`/`sm` sizes, the four content slots, `alignWeight`'s fixed
+  column, and the documented reason weight and "lb" stay adjacent in the text (so
+  `"135lb"` substring assertions keep working). F61 and F62 both land here.
+- `SetLogControls` / `FieldRow`: the unified active-set cluster — always-visible
+  weight stepper at 2.5 default step, caller-supplied value rows, LOG button.
+- `PlateDisplay`: `calcPlates` memoised over weight, base, mode and the user's
+  plate inventory; the `result() !== null` gate; per-mode labels
+  (`each side`/`plates`, `bar only`/`no plates`). `items()!` is only dereferenced
+  inside the `Show` that proves `result()` non-null.
+- `ExerciseEditor`: the name field's Enter-saves / Escape-cancels pair, the
+  optional category, plate-mode and implement-base sections each gated on their own
+  callback being supplied, and the increment stepper gated on a non-null increment.
+- `ExerciseSetsBlock` and `LiftSetsByType`: the two history renderers that share
+  `SetReadout`; type grouping in `SET_TYPE_DISPLAY_ORDER`, the AMRAP badge and the
+  e1RM trailed on the AMRAP row only, and the optional name button that opens the
+  exercise's history.
+- `NotesBlock`: rule + "Notes" eyebrow + `NotesText`, the shared divider idiom.
+
+**Checks and outcomes:**
+
+- None of these seven files has a test file. The check was the four existing suites
+  that render them transitively — `SetRow.test.tsx` (`SetReadout`),
+  `LiftHistoryModal.test.tsx` (`LiftSetsByType`, `NotesBlock`),
+  `ExerciseHistoryModal.test.tsx` (`ExerciseSetsBlock`) and `NotesText.test.tsx`:
+  4 files, **30 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P20 (`SetReadout` with `onClick`): `tagName=DIV`, `role=null`,
+  `tabindex=null`, `queryAllByRole('button')` → 0. F61.
+- Probe P21 (`AccessoryLog` with one logged set, clicking `Undo last Dips set`):
+  confirm prompt shown `false`, edit form opened `true`, undo control gone.
+  **Control** (`SetRow` completed row, which passes `stopPropagation`): confirm
+  shown `true`, edit form `false`. F62, with the difference isolated to the prop.
+- Not run: the full suite.
+
+**Findings:** F61 (medium, WCAG 2.1.1, confirmed), F62 (medium, confirmed with a
+control).
+
+**Substantive negative conclusions:**
+
+- `ExerciseEditor`, `ExerciseSetsBlock`, `LiftSetsByType`, `PlateDisplay` and
+  `NotesBlock` are clean. `ExerciseSetsBlock.tsx:38-48` in particular is the
+  correct form of what F61 gets wrong — a real `<button>` with an `aria-label` and
+  a `focus-visible` ring — and it sits in the same directory.
+- `SetLogControls`' LOG button carries no disabled or in-flight state, which is
+  pattern 1's shape. **Not opened as a new finding:** the component receives
+  `onLog: () => void` and cannot observe the async work behind it, and the
+  duplicate-save consequences on that path are already F14/F15. The fix belongs
+  with those, by passing a busy flag down rather than by changing this component
+  alone.
+- `ExerciseEditor` relies on `autofocus` on a dynamically inserted `<input>`, which
+  browsers honour inconsistently outside initial page load. Left as an observation:
+  every call site renders it in response to a user action that already moved focus
+  nearby, and no reachable failure was identified.
+- `PlateDisplay`'s two `createMemo`s recompute on `settings.plates` changes as well
+  as weight, which is correct — changing the plate inventory in Settings must
+  update live readouts.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- **All seven files lack a test file.** `SetReadout` is the most consequential: it
+  is rendered by every logger and every history view, it owns the app's set format,
+  and it is where both of this batch's findings live.
+- `ExerciseEditor`'s Enter/Escape key handling and its four optional sections have
+  no direct coverage; `PlateDisplay`'s empty-state labels (`bar only` / `no plates`)
+  are never asserted.
+
+**Open questions / remaining ranges:** B08f's carried question is now answered —
+`SetReadout`'s tap target is a bare `div` (F61). One new question for B08h: F62's
+recommended fix is to invert `InlineConfirm`'s `stopPropagation` default, which
+requires checking its other call sites when that file is reviewed.
+
+**Ledger rows updated:** seven `src/components/forms/**` rows moved `reported` →
+`deep`, closing that directory; B08 now has 10 rows left, all in `stats/`, `ui/`
+and `layout/`. **Next action: B08h — `RecordsPanel.tsx` (the area's only `partial`
+row), `InlineConfirm.tsx` + its test, `ToggleChip.tsx`, and the six `layout/`
+files**, which closes area B08.
+
+### 2026-09-15 — B08h: stats, ui and layout (closes area B08)
+
+**Revision:** `1e35eb4` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; nine implementation components and one
+test file deeply reviewed; no application edits. **This closes area B08.**
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/stats/RecordsPanel.tsx` | 1–182 | `6e8a187e49067431504e60813f40742699abe0b1` |
+| `src/components/ui/InlineConfirm.tsx` | 1–57 | `2578bbf2c9242fbad4c82e3c87803379f26bf4ed` |
+| `src/components/ui/InlineConfirm.test.tsx` | 1–67 | `63a5e341e103fdb6b1f93c25a464e9c22a1ca623` |
+| `src/components/ui/ToggleChip.tsx` | 1–33 | `005531e959a96844d0d6a795e25ad97cc1ba5dd0` |
+| `src/components/layout/BottomNav.tsx` | 1–53 | `45fb514f7ac38d263c1c1ee0f8095b9f8458632a` |
+| `src/components/layout/Toast.tsx` | 1–35 | `00624e0a0dc6f314a95c7638964cc8c5c5831616` |
+| `src/components/layout/Rule.tsx` | 1–28 | `bd2d0759154a6a114df8d65b86b179d32a8b5213` |
+| `src/components/layout/WeekBadge.tsx` | 1–21 | `259e83b807d2536ad642c993426db47c1f909a5b` |
+| `src/components/layout/SectionLabel.tsx` | 1–19 | `0b7449e33f677aba153d24b3817935951d993b49` |
+| `src/components/layout/SubLabel.tsx` | 1–17 | `50ed11a97227b2a106584a58d3c02ba25ef4a42e` |
+
+**Behavior and invariants traced:**
+
+- `RecordsPanel`: both summaries and the `compact`/`liftId` prop pair that its
+  `partial` status asked about — `compact` drops the section rules and the TM
+  block for embedding above History's chart, `liftId` narrows the roster to one
+  lift. The performance attribution rule was traced in full: a lift's own
+  non-warmup, non-cross sets **plus** cross sets tagged with that lift's `liftId`
+  from other lifts' sessions, filtered by `isWorkingPerformance`, with `maxWeight`
+  measured and `e1rm` estimated over the same set, ties on weight broken by reps.
+  The TM sequence collapses runs of equal weights so the arrow chain shows only
+  real changes. F63 opened on the async identity question.
+- `InlineConfirm`: the two-step trigger → "yes/no" swap, the `ariaLabel`
+  derivations for both buttons, and the optional `stopPropagation`. The component
+  is correct in itself; F62 is about its **default** and the one call site that
+  relies on it.
+- `ToggleChip`: a real `<button>` with `aria-pressed` and an optional `ariaLabel`
+  for glyph-only chips.
+- `BottomNav`: four router `<A>`s with active/inactive classes, the safe-area
+  padding, the active-session dot, and the documented reason there is no STATS tab.
+- `Toast`: the always-mounted `role="status"` live region with `aria-live` and
+  `aria-atomic` stated together, and the bottom offset that steps up over whichever
+  of `RestTimer`/`SessionBar` owns the strip.
+- `Rule`, `WeekBadge`, `SectionLabel`, `SubLabel`: the divider and eyebrow idioms.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/ui/InlineConfirm.test.tsx` — **6 tests passed**. Eight of this batch's ten files have no test file.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P22 (`RecordsPanel` with `db.lifts.orderBy().toArray()` delayed 60 ms on
+  the first call only; two lifts, Bench@111 and Squat@222): rendered with
+  `liftId=1`, switched to `2` before the first load settled. Lift 2's records
+  rendered correctly first, then the stale load landed — final state with
+  `liftId=2` selected: `Bench? true, Squat? false`, `111` on screen, `222` gone.
+- Probe P22b (same panel, no delay): after the first load, switching `liftId`
+  leaves `111` on screen with `Loading` absent until the new load lands. F63(b).
+- Verified by grep rather than probe: 16 `<Rule>` call sites in `src/`, exactly one
+  passing `aria-hidden` (F64).
+- Not run: the full suite.
+
+**Findings:** F63 (medium, confirmed on both halves), F64 (low, source inspection).
+
+**Substantive negative conclusions:**
+
+- `RecordsPanel` reads `settings.highRepDiscount` **after** an await inside
+  `load()`, so that read is outside Solid's tracking and changing the discount does
+  not refresh the panel. **Not opened as a finding:** `RecordsPanel` only appears
+  on `/stats` and `/history`, and the discount is only changeable on `/settings`, so
+  every path that changes it remounts the panel before it is next seen. Recorded
+  because the same shape in `PlateDisplay` *is* tracked (`createMemo` reading
+  `settings.plates` synchronously), and a future screen showing both would diverge.
+- `RecordsPanel`'s session query carries no status filter (`:52`), so `pending` and
+  `skipped` sessions contribute records. That is F22/F38, already open and owned by
+  the shared-query fix those findings describe; confirmed here at the component and
+  not reopened.
+- `InlineConfirm`, `ToggleChip`, `Toast`, `BottomNav`, `WeekBadge`, `SectionLabel`
+  and `SubLabel` are clean. `Toast` in particular documents and implements the
+  correct live-region pattern — container always mounted, text mutated — which is
+  the opposite of the mistake F46 makes with its loading text.
+- `WeekBadge` tests `props.week === 4` for the DELOAD marker, which reads like the
+  hardcoded week 4 that `CLAUDE.md` warns against. Checked and **correct**: week 4
+  only exists when `hasDeloadWeek` is on (`cycleFinalWeek`), so under a 3-week
+  setting the branch is unreachable, and a historical week-4 session recorded
+  before the setting changed *should* still show DELOAD. No change wanted.
+- `BottomNav`'s active-session dot is a bare styled `<span>` with no text or label,
+  so a screen reader hears "WORKOUT" identically whether or not a session is live.
+  Left as an observation rather than a finding — the Today screen states session
+  status in text, so the information is not only in the dot.
+- `N+1` query shape in `RecordsPanel.load` (three to four awaited queries per lift,
+  serially) is a performance observation, not a correctness finding; it is bounded
+  by the active roster size.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- Eight of this batch's ten files have no test file, including `RecordsPanel.tsx`
+  (182 lines, two summaries, the whole cross-set attribution rule, and F63).
+- `InlineConfirm.test.tsx` (6 cases) covers `stopPropagation` **when the prop is
+  set**, on both the trigger and the yes/no pair — and has no case for the default
+  (unset) behaviour inside a clickable parent, which is exactly F62's shape.
+- `Rule.tsx`, `ToggleChip.tsx`, `Toast.tsx` and `BottomNav.tsx` have no tests;
+  `Toast`'s live-region contract is stated only in a comment.
+
+**Open questions / remaining ranges:** B08g's carried question is answered —
+`InlineConfirm`'s other call sites (`SetRow.tsx:165`, `AccessoryLog.tsx:119` and
+`:173`) were checked while reviewing this file, and inverting the
+`stopPropagation` default would be safe for all of them: two already pass it and
+the third (`AccessoryLog:119`, the ✕ remove control in the header row) sits in a
+non-clickable parent where stopping propagation changes nothing. F62's stronger
+fix is therefore viable. Nothing else carried.
+
+**Area B08 closure:** all 54 ledger rows `deep` with per-file evidence; the
+`reported` status no longer appears anywhere in the ledger. Nineteen findings
+opened (F46–F64); F33, F34, F40 and F52 extended. **Next action: B09a —
+`src/service-worker.ts` and its test**, carrying L04 (the 503 navigation response
+replacing a good cached shell, still never reproduced) and F24's notification tail.
