@@ -8,66 +8,47 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07 and B08 are both CLOSED.** Every `src/components/**` row and
-`src/hooks/use-confirmation.ts` is now `deep` at a recorded blob, across eight
-batches (B08a–B08h). No B08 file remains `pending`, `partial` or `reported`: the
-area-level claim that hid 52 unverified rows has been replaced with per-file
-evidence for all 54. Nineteen findings were opened from this area (**F46–F64**),
-and F33, F34, F40 and F52 gained new triggers or symptoms. Nothing in B08 is
-blocked.
+**Areas B07 and B08 are CLOSED; B09 is open and B09a is done.** Every
+`src/components/**` row and `src/hooks/use-confirmation.ts` is `deep` across
+B08a–B08h, and `src/service-worker.ts` is now `deep` too.
 
-**Next batch: B09a — the service worker.** B09 is 10 rows (`src/service-worker.ts`,
-timers, notifications and their tests) and carries **L04**, the only unresolved
-lead with no probe behind it: an HTTP 503 navigation response appears to replace a
-good cached shell. Start there — `src/service-worker.ts` with its test — because
-L04 is the last lead in the tracker that has never been reproduced, and because
-F24's notification tail (`notifications.ts:52-56` arming both rest checkpoints at
-absolute times, so an inverted config fires them out of order) is in the same
-slice. B08e's `RestTimer` review is the caller-side context for both and is now
-`deep`.
+**L04 is resolved.** It was the last lead in this tracker never reproduced — "an
+HTTP 503 navigation response appears to replace a good cached shell". B09a probe
+P23 reproduces it end to end and locates the cause: the network-first navigation
+handler writes **every** resolved response over `/index.html` with no
+`response.ok` check (`service-worker.ts:66-69`). One 503 while online, then an
+offline cold launch, and the app serves `503 SERVICE UNAVAILABLE` instead of
+itself — permanently, until another successful online navigation. Opened as
+**F65 (high)**: for an offline-first training log this defeats the core promise.
+**F66 (medium)** is the same missing check on the precache branch, where the
+cache-first policy means a bad response is never re-fetched at all.
 
-**What B08 found, as five patterns rather than nineteen separate bugs.** Each one
-has more instances than the findings list them under, and each has a
-one-place fix:
+**Next batch: B09b — the notification schedulers.** `src/lib/notifications.ts`
+(163) and `src/lib/notify-timers.ts` (115) with `notifications.test.ts` (246) and
+`notify-timers.test.ts` (121). This is where **F24's notification tail** lives:
+`notifications.ts:52-56` arms both rest checkpoints at absolute times, so an
+inverted `restTimer1 > restTimer2` config fires them out of order. `notify-timers`
+is shared by the page and the service worker (`service-worker.ts:94-100`), so its
+contract has two consumers and only one of them is testable in-process.
 
-1. **No single-flight guard on an async handler wired to `onClick`** — F33, F34,
-   F41, F51, F55. The guard belongs in `Modal`: it owns Escape, swallows it with
-   `stopPropagation` (`Modal.tsx:102-107`) and calls `onClose` unconditionally, so
-   no call site can gate its own close path. `LiftSetupModal.tsx:169` already
-   hand-rolls the fix; lift it into `Modal` as a `busy?: boolean` prop.
-2. **Single-slot or snapshotted state standing in for per-item state** — F51 (one
-   `retrying` id for a list), F52 (`For` over freshly built wrappers), F54 (one TM
-   buffer across exercises), F55 (`alreadyAdded` snapshotted at load), F57 (one
-   `wakeLock` variable written by two effects).
-3. **State seeded once and never re-synced, or re-synced over the user** — F49,
-   F54, F56, F63. `DurationInput.tsx:18-23` is the counter-example done right.
-4. **Cleanup or a default bound to something that can stop existing, or that is
-   simply the wrong default** — F57, F58 (an interval cleared only by a button that
-   disables itself), F62 (`InlineConfirm.stopPropagation` defaults off inside a
-   clickable row).
-5. **Keyboard and screen-reader access applied unevenly** — F60 (focus trapped in
-   `NotesField`), F61 (editing a logged set is pointer-only), F64 (80 hyphens in
-   every divider's accessible text), F59. In each case a neighbouring file does it
-   correctly and one of them states the rule in a comment
-   (`AccessoryLog.tsx:92-94`, `Modal.tsx:148-152`).
+**Then B09c** — `rest-timer-worker.ts` (13), `workers/timer.worker.ts` (33) and
+`audio-cues.ts` (64) with `rest-timer-worker.test.ts` (47) and
+`audio-cues.test.ts` (197). That closes B09.
 
-Latest run: **B08h complete** — `src/components/stats/RecordsPanel.tsx` (182),
-`ui/InlineConfirm.tsx` (57), `ui/InlineConfirm.test.tsx` (67), `ui/ToggleChip.tsx`
-(33) and the six `layout/` files (`BottomNav` 53, `Toast` 35, `Rule` 28,
-`WeekBadge` 21, `SectionLabel` 19, `SubLabel` 17) reviewed in full. Ten files
-marked deep; **116 files deep in total.** All 6 existing tests passed
-(`pnpm exec vitest run src/components/ui/InlineConfirm.test.tsx`); `pnpm lint` and
-`tsc -b` clean (exit 0). Two new findings: **F63** (medium, probe-confirmed —
-`RecordsPanel` has no request-identity guard, so a stale load overwrites the lift
-the user actually selected, and it never re-enters its loading state) and **F64**
-(low — `Rule` puts 80 literal hyphens in the accessible text at 15 of its 16 call
-sites). `ToggleChip`, `Toast`, `BottomNav`, `WeekBadge`, `SectionLabel`,
-`SubLabel` and `InlineConfirm` itself are clean. Only this tracker changed; probes
-were created inside `src/`, run, and deleted, leaving the tree clean. This card
-authorizes commit, push and PR; operator acceptance remains a separate native
-Kanban review step.
+**The five patterns B08 surfaced still apply, and F65/F66 add a sixth:
+unvalidated data written to durable storage.** A response's *status* is data; so
+is a restored backup (F08) and an imported CSV (F09). The service worker trusts
+`fetch` to have failed on anything bad, the way `importJson` trusts its envelope.
 
-**Remaining work — 63 of 179 ledger rows are not yet `deep`** (116 are). Recounted
+Latest run: **B09a complete** — `src/service-worker.ts` (135) reviewed in full.
+One file marked deep; **117 files deep in total.** No tests exist for this file, so
+there was no suite to run; `pnpm lint` and `tsc -b` clean (exit 0). Two new
+findings, both probe-confirmed against a Cache API harness: **F65** (high, resolves
+L04) and **F66** (medium). Only this tracker changed; the probe was created inside
+`src/`, run, and deleted, leaving the tree clean. This card authorizes commit, push
+and PR; operator acceptance remains a separate native Kanban review step.
+
+**Remaining work — 62 of 179 ledger rows are not yet `deep`** (117 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -85,7 +66,7 @@ correct; only the remaining-work totals were not.
 | B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
-| B09 | 10 (9 pending, 1 `partial`) | Service worker, timers, notifications. Carries L04 and the F24 notification tail. |
+| B09 | 9 pending | **Open (B09a done).** Timers, notifications and their tests. L04 is resolved into F65; the F24 notification tail is still owed. Planned slices: B09b `notifications.ts` + `notify-timers.ts` with both tests, B09c `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
 B01–B07 are closed. Per-area scope and starting concerns are in the Queue table
 below; per-file status is in the File ledger.
@@ -199,10 +180,12 @@ claimed here.
 | F62 | Medium; B08g probe (P21) | `src/components/workout/AccessoryLog.tsx:171-181`; `src/components/ui/InlineConfirm.tsx:8`, `20-23`; `src/components/forms/SetReadout.tsx:32` | `InlineConfirm` only calls `e.stopPropagation()` when its optional `stopPropagation` prop is set, and `AccessoryLog` does not set it — while the `SetReadout` it sits inside has `onClick={() => startEditSet(i())}` on its root. So the first tap on **undo** bubbles: the row swaps to the edit form, which unmounts the `InlineConfirm` before its "undo set?" confirmation ever renders. Probe: after clicking `Undo last Dips set` → confirm prompt shown `false`, edit form opened `true`, undo control no longer present. The control is **functionally dead** — cancelling the editor returns to the same readout and the next tap does the same thing, so `deleteLastAccessorySet` has no reachable caller in the UI. `SetRow.tsx:165-171` passes `stopPropagation` and behaves correctly: control probe → confirm shown `true`, edit form `false`. | Pass `stopPropagation` at `AccessoryLog:173`, matching `SetRow`. Better: make `stopPropagation` the default in `InlineConfirm` — it sits in a clickable row at every call site, and the current default is the wrong one. `AccessoryLog.tsx` has no test file; `InlineConfirm.test.tsx` (B08h) never renders it inside a clickable parent. |
 | F63 | Medium; B08h probes (P22, P22b) | `src/components/stats/RecordsPanel.tsx:38`, `42`, `44-101`; `src/screens/History.tsx:612` | `createEffect(() => { void load(props.liftId) })` launches an async load with **no request-identity guard and no re-entry into the loading state**, and `History.tsx:612` passes `liftId={selectedLiftId()!}` — a live signal — so switching the selected lift is the ordinary path. Two defects follow. (a) **Last to settle wins, not last requested.** Probe with lift 1's query delayed: select lift 1, switch to lift 2 before it lands; lift 2's records render correctly, then lift 1's stale load overwrites them — with `liftId=2` selected the panel shows `Bench? true, Squat? false`, weights `111` present and `222` gone. The user sees another lift's PRs under the lift they picked, and nothing corrects it until the effect runs again. (b) `setLoading(false)` is never undone, so after the first load a switch shows the **previous** lift's numbers with no loading indicator — probe: immediately after switching, `111` still on screen, `Loading` absent. This is the row's own B08 evidence; the `partial` status it carried from B06e was for F22/F23 at the caller. | Guard on request identity — capture a token or the `liftId` and discard a result whose `props.liftId` has moved on — and `setLoading(true)` at the top of `load`. `createResource` keyed on `props.liftId` does both and is the idiomatic fix here. `RecordsPanel.tsx` has no test file. |
 | F64 | Low; B08h source inspection | `src/components/layout/Rule.tsx:1`, `17-27`; `src/components/modals/Modal.tsx:148-152` | `Rule` renders `'-'.repeat(80)` as ordinary text, so its 80 hyphens are part of the accessible text of every section divider in the app. **16 `<Rule>` call sites exist and exactly one passes `aria-hidden`** — `Modal.tsx:152`, whose comment names the problem precisely: "the right look and a terrible accessible name". Every other divider (`LiftSetupModal`'s EQUIPMENT / CROSS-LIFT SUPPLEMENTAL, `RecordsPanel`'s RECORDS and TRAINING MAX . PROGRESSION, and the Settings and Setup groups) reads its label wrapped in dash fill. The fix that was applied once at a call site belongs in the component. | Inside `Rule`, wrap the dash runs in `<span aria-hidden="true">` and leave only the label in the accessible text; callers then need no `aria-hidden` at all and `Modal` can drop its workaround. `Rule.tsx` has no test file. |
+| F65 | **High**; B09a probe (P23), resolves L04 | `src/service-worker.ts:63-73` | The navigation handler is network-first and writes **every** resolved response over the cached shell with no `response.ok` check: `fetch(req).then(response => { void caches.open(CACHE_NAME).then(cache => cache.put('/index.html', response.clone())); return response })`. `fetch` only rejects on a *network* failure, so a 503, 502, 500, 404 or a host's maintenance page all resolve and all get cached. The offline fallback at `:70` then serves that entry. Probe: cached shell `"SHELL OK"` → one online navigation answered `503 Service Unavailable` → cached shell becomes `status=503`, `"SERVICE UNAVAILABLE"` → next **offline** cold launch returns `status=503 "SERVICE UNAVAILABLE"` instead of the app. Control: a 200 correctly refreshes the shell to `"SHELL v2"`. The break is **persistent** — nothing re-validates the entry until another *successful* online navigation happens, so a user who hits one transient deploy blip and then goes offline has no app at all. For an offline-first training log this defeats the product's core promise. This is **L04**, previously only a lead with an un-root-caused prior observation (`OFFLINE after HTTP503: 503 SERVER ERROR`); it is now reproduced and located. | Gate the cache write on `response.ok` (and on `response.type === 'basic'`), returning the response either way: only a good shell may replace a good shell. Consider also refusing to *serve* a cached non-ok entry in the `.catch` branch, so an already-poisoned cache self-heals. `src/service-worker.ts` has **no test file at all**; add one covering 503-then-offline, the 200 refresh, and the offline fallback. |
+| F66 | Medium; B09a probe (P24) | `src/service-worker.ts:75-84` | Same missing `ok` check on the precache branch, and here the policy is **cache-first**, so a bad response is not merely stored — it is never re-fetched. Probe: request a precached asset while the server answers `502` → the 502 is returned *and* written to the cache; second request with the server healthy again → `status=502`, `"502 BAD GATEWAY"`, `fetchCalled=0`. The network is never consulted again for that URL. **Narrower than F65:** `install` uses `cache.addAll`, which rejects atomically on any non-ok response, so a successfully activated SW normally has every precache path already stored and this branch is not reached. It becomes reachable when the browser evicts Cache API entries under storage pressure, or for a path in `PRECACHE_PATHS` that install did not store. | Add the same `response.ok` gate before `cache.put`, and return the network response without caching it when it is not ok. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
-| L04 | Lead with prior isolated probe | `src/service-worker.ts`; exact line pending | HTTP 503 navigation response appears to replace a good cached shell; later offline navigation returns the cached error. | Check response validation and cache writes; reproduce in browser where practical before final severity. |
+| L04 | **Resolved into confirmed F65** (B09a probe P23) | `src/service-worker.ts:63-73` | HTTP 503 navigation response replaces a good cached shell; later offline navigation returns the cached error. Root cause located: the network-first navigation handler caches every resolved response with no `response.ok` check, so any server error status is written over `/index.html`. Reproduced end to end — see F65. | Closed as a lead; the fix and test guidance live on F65. |
 | L05 | Resolved into confirmed F33/F34 (B07c probes) | `src/screens/Workout.tsx:501–552`, `634–641`; `src/lib/cycle.ts:108–136`, `167–204`; TM/cycle modal callbacks | Post-session accept/dismiss callbacks are outside runFinishing; modal controls do not await/disable competing callbacks. Concurrent progression does use the same pre-transaction cycle snapshot — both callers pass the `weekComplete` guard and duplicate the cycle. | Use F33 for the double-advance and F34 for the compounding TM writes. The dismiss arms clear their signal before awaiting and are safe; modal *error* recovery (a rejected `setTm`/`applyAccessoryTm` inside these handlers) is still unprobed and belongs to B08's modal rows. |
 | L06 | Lead; B06a source inspection only, no injected failure | `src/screens/Today.tsx:43–71`, `113–122`, `135–148`, `174–192`; `src/components/workout/AccessoryPicker.tsx:118–143` | Today fires load/start without a catch or local error state; defaults load after startSession, and selection/cross-preview failures have no local recovery UI. The default-mode picker also swallows persistence failure before reporting a successful pick, while launch rereads the DB. Exact user-visible failure and retry outcomes remain unprobed. | In a separately authorized follow-up, inject failures at initial load, abandon/delete, session insert, default seeding, cross-preview, and default-picker persistence. Check partial state, promise ownership, recoverability and late settlement after navigation; keep B08 component review separate. |
 | L07 | Lead; B06e source inspection, re-verified against the tree at `9cfe025` during B07a salvage; no probe | `src/components/stats/RecordsPanel.tsx:42`, `65`, `74`, `76`; `src/db/schema.ts:97–104` | Two defects in `RecordsPanel` that F22/F23 do not cover. (1) **Stale discount:** `createEffect(() => { void load(props.liftId) })` tracks only `props.liftId`; `settings.highRepDiscount` is read at lines 74 and 76 inside `load`, after two awaits and therefore outside the tracking scope, so changing the high-rep discount never refreshes the records panel — the user sees e1RM figures computed under the previous setting until the lift is re-selected. (2) **Unindexed scan:** `db.sets.where('liftId')` at line 65 has no supporting index; `schema.ts` declares `idx_sets_sessionId` but no `idx_sets_liftId`, so every cross-set lookup is a full scan of the largest table. Both confirmed by source inspection, neither reproduced under load or timed. | Track the discount explicitly (read `settings.highRepDiscount` in the effect body, or pass it as a `load` argument) and cover a discount change with a Stats test. Add `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId);` alongside the existing indexes, then measure the cross-set path with a realistic set count before and after. Two further observations from the same run need no separate ID: orphaned cross-set attribution is already inside F22's recommended fix, and the fallback to 0 for lifts with no training max is cosmetic. |
@@ -428,7 +411,7 @@ column as work is completed.
 | `src/screens/Today.tsx` | B06 | deep | B06a — all 377 lines; F13 entry confirmed, F16–F18 confirmed, L06 recorded |
 | `src/screens/Workout.test.tsx` | B05 | deep | B05b — all 1755 lines; 94 existing tests passed; evidence below |
 | `src/screens/Workout.tsx` | B05 | deep | B05b — full file; F13 expanded, F14/F15 confirmed; evidence below |
-| `src/service-worker.ts` | B09 | partial | L04 probe |
+| `src/service-worker.ts` | B09 | deep | B09a — service worker and offline shell (1/3); evidence below (F65 resolves L04, F66; no test file) |
 | `src/store/save-failure-store.test.ts` | B11 | pending | — |
 | `src/store/save-failure-store.ts` | B11 | pending | — |
 | `src/store/settings-store.test.ts` | B04 | deep | B04b — settings and import integration (1/3); evidence below |
@@ -3162,3 +3145,104 @@ fix is therefore viable. Nothing else carried.
 opened (F46–F64); F33, F34, F40 and F52 extended. **Next action: B09a —
 `src/service-worker.ts` and its test**, carrying L04 (the 503 navigation response
 replacing a good cached shell, still never reproduced) and F24's notification tail.
+
+### 2026-09-15 — B09a: service worker and the offline shell (resolves L04)
+
+**Revision:** `787d77b` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; one implementation file deeply reviewed;
+no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/service-worker.ts` | 1–135 | `bc9bbf5bd786cf21f4ae3cb3166499e3452ce3f3` |
+
+**Behavior and invariants traced:**
+
+- The `injectManifest` contract: `__WB_MANIFEST` rewritten by vite-plugin-pwa into
+  `PRECACHE_URLS`, normalized to pathnames for fetch matching, precached inline via
+  the native Cache API with no workbox runtime.
+- The stated security posture, each item checked against the code: no
+  `clients.claim()` (a stale SW never hijacks a live tab) — absent, correct; no
+  `skipWaiting()` (refresh stays behind the `registerSW` prompt) — absent, correct;
+  `activate` evicting only `precache-`-prefixed caches other than `CACHE_NAME`, so a
+  future feature cache is never wiped — correct.
+- The two fetch policies: navigations network-first with the precached shell as
+  offline fallback, precache paths cache-first, everything else passed through
+  (non-GET returns early, unlisted paths return early). F65 and F66 are both in the
+  cache-write half of these.
+- The notification mirror: `createNotifyTimers` with a `fire` that calls
+  `registration.showNotification`, the `message` handler's type validation for
+  `schedule`/`cancel`, and the documented best-effort posture (COMMON_MISTAKES #11 —
+  a SW's own `setTimeout` does not keep the worker alive, so the page owns the
+  reliable timers). The tag semantics are stated here and are B09b's to verify
+  against `notify-timers.ts`: `cancel(tag)` drops every pending timer for that tag,
+  and a new `schedule` does **not** evict same-tag timers, because a completed-set
+  rest carries both bells under one tag.
+- `notificationclick` closing the notification, then focusing the first window
+  client or opening `/`.
+
+**Checks and outcomes:**
+
+- `src/service-worker.ts` has **no test file**, so there was no existing suite to
+  run for this batch.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P23 (Cache API + FetchEvent harness; the SW's listeners captured at import
+  and invoked directly): shell cached as `"SHELL OK"`; one navigation answered
+  `503` → cached shell becomes `status=503 "SERVICE UNAVAILABLE"`; a subsequent
+  **offline** navigation (fetch rejecting) returns `status=503 "SERVICE
+  UNAVAILABLE"`. **Control:** the same flow with a `200` correctly refreshes the
+  shell to `"SHELL v2"`. F65, and L04 reproduced.
+- Probe P24 (precache branch, entry absent from the cache): a `502` is returned and
+  stored; the second request with the server healthy returns `status=502` from
+  cache with `fetchCalled=0`. F66.
+- Not run: any real-browser check. Both probes are in-process against a fake Cache
+  API, so they establish the code path and the caching decision, not the exact
+  behaviour of a specific browser's cache eviction.
+
+**Findings:** F65 (high, confirmed with a control — resolves L04), F66 (medium,
+confirmed).
+
+**Substantive negative conclusions:**
+
+- The fire-and-forget `void caches.open(...).then(...)` at `:67` has **no
+  `.catch`**, so a rejected `cache.put` — the spec rejects `opaqueredirect`
+  responses, and a quota-exceeded write also rejects — would be an unhandled
+  rejection in the SW and the cache write would be silently lost. **Recorded as an
+  observation, not a finding: not reproducible here.** The probe attempted it
+  (P25) but `response.clone()` discards a synthetically defined `type`, so the fake
+  cache never saw an `opaqueredirect`; no rejection was observed and none should be
+  claimed from that run. Worth settling in a real browser, and the `.catch` is
+  cheap insurance regardless.
+- The install/activate pair is correct as documented. `cache.addAll` rejecting
+  atomically on any non-ok response is what keeps F66 narrow, and is the behaviour
+  F65's navigation path should have been written to match.
+- `notificationclick` focuses the first available window client without navigating
+  it, so tapping a rest-bell notification while the app sits on `/settings` brings
+  up `/settings`. Judged acceptable rather than opened: the notification is a
+  prompt to return to the workout, the session is still live, and `BottomNav`
+  carries the active-session dot. Worth revisiting only if notifications ever carry
+  a deep link.
+- The `message` handler validates `type` plus every field it reads before arming a
+  timer, and ignores anything else. No origin check is performed, but only
+  same-origin clients can post to a service worker, so nothing further is needed.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- **`src/service-worker.ts` has no test file** — 135 lines carrying the entire
+  offline story, both cache-write paths (F65, F66), the activate-time eviction
+  filter and the notification bridge. It is the only file in the app whose failure
+  mode is "the app does not load at all", and nothing guards it.
+- The `vite.config.ts` PWA configuration that feeds it (`globPatterns`,
+  `injectManifest`) is a B10 row and is not covered either.
+
+**Open questions / remaining ranges:** one carried to B09b — the tag semantics
+`service-worker.ts:88-92` documents (cancel drops every timer for a tag; a new
+schedule does not evict same-tag timers) are a claim about `notify-timers.ts` and
+should be verified there, for both consumers.
+
+**Ledger rows updated:** `src/service-worker.ts` moved `partial` → `deep`; **L04
+moved to resolved**, into confirmed F65. B09 now has 9 rows left. **Next action:
+B09b — `src/lib/notifications.ts` and `src/lib/notify-timers.ts` with
+`notifications.test.ts` and `notify-timers.test.ts`**, carrying F24's notification
+tail.
