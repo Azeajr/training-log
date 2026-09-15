@@ -8,64 +8,62 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07 through B11 are CLOSED; B12 is open and B12a is done.** 168 of 179
-ledger rows are `deep`. Eleven rows remain, all documentation, then the final
+**Areas B07 through B11 are CLOSED; B12 is open with B12a and B12b done.**
+173 of 179 ledger rows are `deep`. Six rows remain (B12c), then the final
 reconciliation closes the review.
 
-**B12a's result is not the one the earlier areas would predict: the docs are
-mostly right, and several of this review's findings were already written down.**
+**B12 is finding a different failure mode from the earlier areas: the
+documentation is largely accurate, and where it is wrong it is wrong because a
+change was made and its description was not updated.** Three of this review's
+findings turned out to be already documented (F82, F80, F69's scope), and are
+amended rather than left implying nobody knew.
 
-- `.claude/COMMON_MISTAKES.md` **#6** states F52's rule exactly — "`<For>` over a
-  rebuilt array remounts every row", with `<Index>` prescribed for positional
-  lists. The documentation is correct; `crossSections()` is the instance that
-  escaped it. F52 now cites it.
-- **#7** documents F82's state precisely — `demo-seed.json` is bundled, nothing
-  reads it, import it by hand. **F82 is amended**: not an oversight, a recorded
-  decision.
-- `QUICK_START.md:36-38` documents F80's no-op wipe in plain terms. **F80 is
-  amended**: a known wart, not an unnoticed bug — what remains is that
-  `debug-browser.js`'s own header still claims the opposite.
-- `QUICK_START.md:22` and `ARCHITECTURE_MAP.md` both state F69's coverage scope
-  honestly — "`components/`, `db/`, and `hooks/` sit outside the gate".
+- **F89 (medium)** — `ARCHITECTURE_MAP.md` has drifted from the tree: 11 of 38
+  components absent (including `Modal`), 5 of 21 `lib/` modules absent
+  (`workout-compose`, `performance`, …), `RestThresholds` described with a shape
+  and a `FAIL_NUDGE_RATIO` that do not exist, and `icon-192.png`/`icon-512.png`
+  documented in `public/` when they never existed (F70).
+- **F90 (medium)** — PR detection was widened from AMRAP-only to every working
+  set, and **four descriptions still say otherwise**: `README.md`,
+  `RecordsPanel.tsx:71-73`'s comment, and the stale `detectAmrapPRs` name in two
+  docs (F89). The one inside the code is the one most likely to mislead.
+- **F91 (medium)** — `ROADMAP.md`'s **Security** and **Tech Debt** sections both
+  say **"No open items."** True when written, materially false now: 89 findings,
+  several of them squarely in those categories. Two mitigation bullets also
+  overstate — the *Supply chain* bullet credits `--frozen-lockfile` and
+  `pnpm audit signatures` that **F73 shows the deploy step bypasses**, and the
+  *PWA cache* bullet claims `cleanupOutdatedCaches` when the SW hand-rolls its own
+  eviction (third site of that same wrong claim).
+- **F92 (low)** — `docs/INDEX.md` says "Ten recurring failure modes"; there are
+  eleven. Its own stamp predates files it indexes.
+- **F76 widened** to `QUICK_START.md`, and **F70 widened** to `README.md`'s
+  "installable" promise.
 
-**Where the docs are wrong, they are wrong in one specific way — written from
-intent rather than from the tree.** Opened as **F89 (medium)** against
-`ARCHITECTURE_MAP.md`, one of the three documents `CLAUDE.md` tells an agent to
-read at session start:
+**Worth noting for the reconciliation: `README.md`'s deployment section is
+correct** — "the deployment is path-filtered … and runs the same checks before
+publishing" — so the user-facing document describes CI accurately while both
+agent-facing documents (F76) do not.
 
-- **11 of 38 components absent**, including `Modal` — the shared dialog shell
-  every other modal is built on and the subject of a whole review batch.
-- **5 of 21 `lib/` modules absent**, including `workout-compose` and `performance`.
-- `pr.ts` documented as **`detectAmrapPRs`**; the export is `detectPRs` and the old
-  name occurs nowhere in the repo (`QUICK_START.md:62` repeats it).
-- The **Rest** pattern describes `{ normal, transition, failNudge, failMax }` via a
-  `FAIL_NUDGE_RATIO`; the real shape is `{ firstBell, secondBell, failedBell }` and
-  that constant does not exist — it describes a replaced model.
-- `public/` documents `icon-192.png / icon-512.png`, **which have never existed**
-  (F70) — the clearest evidence the section was written from intent.
+**Next batch: B12c — design, analysis and verification records** (6 rows):
+`AMRAP_TARGET_REPS_ANALYSIS.md`, `docs/design/plate-loading-model.md`,
+`docs/ui-consistency-review.md`, and the three `docs/verification/` logs. The
+verification records are the interesting ones: `docs/INDEX.md` describes two of
+them as "Automated evidence; runtime pass pending" and "browser legs TODO", while
+B10c found `scripts/verify-notify-hardening.js` is a complete five-leg harness
+that runs against the production build — so either the records or the index is
+behind. Then **B12d** — the final reconciliation under batch rule 8: every
+in-scope row `deep`, cross-file questions resolved or explicitly blocked, findings
+reconciled, and the deferred F36 tie-break and F82 decision.
 
-**F76 widened**: the false "CI never runs lint or tests" claim appears in
-**both** `CLAUDE.md:17-19` and `QUICK_START.md:81-82`.
-
-**Next batch: B12b — project documentation.** `README.md`, `ROADMAP.md`,
-`ENGINEERING_PASSES.md`, `docs/INDEX.md` and `docs/archive/README.md` (5 rows).
-Then **B12c** — `AMRAP_TARGET_REPS_ANALYSIS.md`, `docs/design/plate-loading-model.md`,
-`docs/ui-consistency-review.md` and the three verification docs (6 rows); the
-verification docs are worth reading against what B09 and B10c found, since
-`2026-08-09-swe-hardening.md` is the document `verify-notify-hardening.js` serves
-(F79). Then **B12d** — the final reconciliation under batch rule 8: every in-scope
-row `deep`, cross-file questions resolved or explicitly blocked, findings
-reconciled, and the F36 tie-break and F82 decisions that were deferred here.
-
-Latest run: **B12a complete** — `CLAUDE.md` (47), `.claude/ARCHITECTURE_MAP.md`
-(217), `.claude/COMMON_MISTAKES.md` (149), `.claude/QUICK_START.md` (86) and the
-two `.claude/` READMEs reviewed in full. Six files marked deep; **168 files deep in
-total.** `pnpm lint` and `tsc -b` clean (exit 0). One new finding (F89); F76
-widened; **F52, F80 and F82 amended** against what the docs already record. Only
+Latest run: **B12b complete** — `README.md` (105), `ROADMAP.md` (815),
+`ENGINEERING_PASSES.md` (366), `docs/INDEX.md` (55) and `docs/archive/README.md`
+(11) reviewed in full. Five files marked deep; **173 files deep in total.**
+`pnpm lint` and `tsc -b` clean (exit 0). Three new findings (F90, F91, F92); F70
+widened. `ENGINEERING_PASSES.md` and `docs/archive/README.md` are accurate. Only
 this tracker changed; the tree is clean. This card authorizes commit, push and PR;
 operator acceptance remains a separate native Kanban review step.
 
-**Remaining work — 11 of 179 ledger rows are not yet `deep`** (168 are). Recounted
+**Remaining work — 6 of 179 ledger rows are not yet `deep`** (173 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -81,7 +79,7 @@ correct; only the remaining-work totals were not.
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
-| B12 | 11 pending | **Open (B12a done).** Tracked documentation relevance plus the final reconciliation. Remaining slices: B12b project docs, B12c design/analysis/verification docs, B12d the final reconciliation. |
+| B12 | 6 pending | **Open (B12a, B12b done).** Remaining slices: B12c design/analysis/verification docs (6 rows), B12d the final reconciliation. |
 | B11 | **0 — closed** | All 11 rows `deep` across B11a–B11c. F85–F88 opened; F78 amended. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
@@ -202,7 +200,7 @@ claimed here.
 | F67 | Medium (platform impact needs device verification); B09b probe (P27) + source inspection | `src/lib/notifications.ts:96-99`, `114-124` | `firePage` calls `new Notification(title, …)` behind a permission check only — **no `try`/`catch` and no fallback to `ServiceWorkerRegistration.showNotification`**. Probe P27 shows what an engine that rejects the constructor produces: the `TypeError` escapes the timer tick uncaught (`"TypeError: Failed to construct 'Notification': Illegal constructor."`), no notification appears, and nothing in the module reports it. The registry itself stays consistent — `pending()` correctly holds only the remaining target and the second bell still fires — so the failure is silent rather than cascading. **Why it matters:** this module designates the page path as the *reliable* one and the service-worker path as explicitly best-effort (`:1-13`), so if the page constructor is unavailable the reliability story inverts on exactly the platform this PWA targets. The `Notification` constructor is not the supported page-context path on Android Chrome or in iOS PWAs, but that claim is **not verified here** — per this project's standing rule about mobile behaviour, it needs a device check before the severity is settled. | Wrap the call and fall back: `try { new Notification(...) } catch { void registration?.showNotification(...) }`, or prefer `showNotification` whenever a registration exists. Settle the platform question on a real device (installed PWA, permission granted, tab hidden, one rest bell) and record the result. `notifications.test.ts` stubs `Notification` as a spy that always succeeds, so no existing case can observe a throwing constructor. |
 | F68 | Low; B09c probe (P28) | `src/workers/timer.worker.ts:26-31`, `5-12`; `src/components/workout/RestTimer.tsx:101-105`; `src/App.tsx:47-58` | `resume` clears the `paused` flag but posts nothing, and the 1 Hz interval keeps its original phase, so the first `elapsed` after the tab becomes visible arrives up to **a full second late**. Probe: 0 posts immediately on resume, 0 posts at 999 ms, first post at 1000 ms. Meanwhile `RestTimer`'s `elapsed` signal still holds the value from **before** the tab was hidden — the worker posts nothing while paused — so returning mid-rest after a five-minute background shows the five-minute-old countdown for about a second and then jumps (`"2:30 LEFT"` → `"OVER +4:12"`). This is **not** covered by the existing resume veil: `App.tsx:47-53` is deliberately scoped to bfcache restores (`pageshow.persisted`) and its own comment excludes `visibilitychange` as "ordinary app-switches where there's no repaint to mask" — which is exactly this case — and the veil lasts two animation frames, not a second. | Post one immediate tick on `resume` before letting the interval carry on: `case 'resume': paused = false; if (restStartedAt != null) self.postMessage({ elapsed: Math.floor((Date.now() - restStartedAt) / 1000) }); break`. Restarting the interval there would also reset its phase. `src/workers/timer.worker.ts` has **no test file**; add one for the start/pause/resume/stop protocol. |
 | F69 | Medium; B10a coverage run | `vite.config.ts:21-27` | The coverage gate measures the wrong half of the codebase. `include` is `['src/lib/**/*.ts', 'src/screens/**/*.tsx', 'src/store/**/*.ts']`, so **`src/components/**`, `src/db/**`, `src/hooks/**`, `src/service-worker.ts` and `src/workers/**` are not measured at all** — a coverage run reports only `lib`, `screens` and `store` sections and a denominator of 3,945 statements, with no `components` section present. The 80 % statements/branches/functions/lines thresholds therefore gate a subset chosen before the components tree existed at its current size. The cost is measurable against this review: of the 23 findings opened in B08 and B09 (F46–F68), **22 live in files the gate cannot see** — every one of F46–F64 (`src/components`, `src/hooks`), F65–F66 (`src/service-worker.ts`) and F68 (`src/workers`); only F67 (`src/lib/notifications.ts`) is inside the measured set. Eleven reviewed component files have no test file at all and none of them costs the gate a single point. | Widen `include` to `src/**/*.{ts,tsx}` with the existing `exclude` for tests, then re-baseline the thresholds to whatever the true number is and ratchet up — a gate that measures everything at 60 % is worth more than one that measures a third at 80 %. Excluding `src/main.tsx` and `src/test-setup.ts` is reasonable; excluding the entire component tree is not. |
-| F70 | Medium (installability impact worth a Lighthouse check); B10a build-output inspection | `vite.config.ts:63-73`; `dist/manifest.webmanifest`; `public/`; `index.html:14` | The web app manifest declares two icons — `icon-192.png` and `icon-512.png` — and **neither file exists**. `public/` contains only `_headers`, `demo-seed.json`, `favicon.svg` and `icons.svg`, and the built `dist/` carries the same four plus `manifest.webmanifest`, which ships the two names verbatim: `"icons":[{"src":"icon-192.png",…},{"src":"icon-512.png",…}]`. No icon generator is configured (no `pwa-assets`, no `@vite-pwa/assets-generator` in `package.json`), so nothing produces them at build time. `index.html` also has **no `<link rel="apple-touch-icon">`**, so the iOS home-screen path has no icon either. Chrome's installability criteria require a manifest icon of at least 144×144 that actually loads; both of these 404. For an app whose stated distribution is an installed offline-first PWA (`display: 'standalone'`, `apple-mobile-web-app-capable`), that is the delivery mechanism failing silently — the build succeeds, CI passes, and the install prompt simply never appears. | Generate the two PNGs from `favicon.svg` (or add `@vite-pwa/assets-generator`), add an `apple-touch-icon` link, and assert in CI that every `manifest.icons[].src` resolves to a file in `dist/`. Run Lighthouse's installability audit against a preview build to confirm what the missing icons currently cost. |
+| F70 | Medium (installability impact worth a Lighthouse check); B10a build-output inspection | `vite.config.ts:63-73`; `dist/manifest.webmanifest`; `public/`; `index.html:14` | The web app manifest declares two icons — `icon-192.png` and `icon-512.png` — and **neither file exists**. `public/` contains only `_headers`, `demo-seed.json`, `favicon.svg` and `icons.svg`, and the built `dist/` carries the same four plus `manifest.webmanifest`, which ships the two names verbatim: `"icons":[{"src":"icon-192.png",…},{"src":"icon-512.png",…}]`. No icon generator is configured (no `pwa-assets`, no `@vite-pwa/assets-generator` in `package.json`), so nothing produces them at build time. `index.html` also has **no `<link rel="apple-touch-icon">`**, so the iOS home-screen path has no icon either. Chrome's installability criteria require a manifest icon of at least 144×144 that actually loads; both of these 404. For an app whose stated distribution is an installed offline-first PWA (`display: 'standalone'`, `apple-mobile-web-app-capable`), that is the delivery mechanism failing silently — the build succeeds, CI passes, and the install prompt simply never appears. **B12b adds a fourth affected site:** `README.md`'s feature list promises "**PWA** — installable, works offline" to users, which is the claim the missing icons contradict. | Generate the two PNGs from `favicon.svg` (or add `@vite-pwa/assets-generator`), add an `apple-touch-icon` link, and assert in CI that every `manifest.icons[].src` resolves to a file in `dist/`. Run Lighthouse's installability audit against a preview build to confirm what the missing icons currently cost. |
 | F71 | Medium; B10a config inspection | `tsconfig.json:1-11`; `tsconfig.e2e.json`; `tsconfig.node.json:24`; `package.json:8`, `10`, `18` | `tsconfig.e2e.json` is referenced by no **compiler** entry point — not by `tsconfig.json`'s `references` (which lists only app and node), not by any `package.json` script, not by the CI workflow, not by `playwright.config.ts`. **Amended in B10c:** `eslint.config.js:34` *does* point at it, for type-aware linting of `tests/e2e/**` (`no-floating-promises`). That makes the file used but not built: ESLint loads the project for type information and reports rule violations, while `tsc` never compiles the specs, so type errors themselves are still reported by nothing. `typecheck` and `build` are both `tsc -b` against the solution file, and `test:e2e` is `playwright test`, which transpiles specs without type-checking. So **`tests/e2e/**` is never type-checked by any command in the repo** — four files including an 11 KB `workout.spec.ts`, the app's only integration coverage. The irony is that `tsconfig.e2e.json` is the one config that declares `"strict": true` explicitly. The same gap covers the toolchain: `tsconfig.node.json` includes only `vite.config.ts`, so `playwright.config.ts` (a `.ts` file), `stryker.config.mjs`, `eslint.config.js` and `scripts/*` belong to no project and are type-checked by nothing. A renamed helper or a changed fixture shape in the E2E suite surfaces as a runtime failure, or not at all. | Add `{ "path": "./tsconfig.e2e.json" }` to `tsconfig.json`'s references so `tsc -b` builds it, and widen `tsconfig.node.json`'s `include` to cover the root config files and `scripts/`. |
 | F72 | Low; B10a config and asset inspection | `vite.config.ts:58`; `index.html:14`; `public/icons.svg` | Two small asset problems in the same place. (a) `globPatterns: ['**/*.{html,js,css,ico,png,wasm}']` omits **`svg`**, and `favicon.svg` — the only icon that actually exists — is therefore not precached; the SW's fetch handler passes it through (it is not in `PRECACHE_PATHS`), so offline it simply fails to load. (b) `public/icons.svg` (4.9 KB) is referenced by **nothing** — no `src/` file, no `index.html`, no stylesheet — yet it ships to production in `dist/`. | Add `svg` to `globPatterns`; delete `icons.svg` or wire it up. Both are a line each, and (a) becomes moot for the PNGs once F70 is fixed, which is a reason to fix them together. |
 | F73 | Medium (supply chain); B10b workflow inspection | `.github/workflows/deploy.yml:42`; `package.json`; `pnpm-lock.yaml` | The deploy step is `pnpm dlx --allow-build=esbuild --allow-build=workerd wrangler pages deploy dist`. `wrangler` appears **0 times** in `package.json` and **0 times** in `pnpm-lock.yaml`, so it is fetched fresh from the registry at every deploy, unpinned and unlocked — and it runs with `CLOUDFLARE_API_TOKEN` in its environment, with lifecycle scripts explicitly permitted for `esbuild` and `workerd`. Whatever those three publish is executed with a production deploy credential. This is the **one unpinned link in an otherwise carefully locked chain**: the same workflow already runs `pnpm install --frozen-lockfile` and `pnpm audit signatures`, `packageManager` pins `pnpm@12.3.4`, dependabot watches both ecosystems weekly, and `pnpm-workspace.yaml` carries a security floor override. Every one of those controls is bypassed by the deploy line itself. | Add `wrangler` to `devDependencies` so it is lockfile-pinned and signature-audited with everything else, then invoke it as `pnpm exec wrangler …`. If `dlx` must stay, pin an exact version (`pnpm dlx wrangler@x.y.z`). Consider whether `--allow-build` is needed at all once the package is installed normally. |
@@ -222,6 +220,9 @@ claimed here.
 | F87 | Medium; B11b probe (P29) | `src/test-setup.ts:8-51`; `src/workers/timer.worker.ts:1-33` | `test-setup.ts`'s `MockWorker` re-implements the rest-timer protocol, and it is the **only** implementation any test exercises — `timer.worker.ts` has no test file (B09c), so neither is ever checked against the other. Three divergences, measured side by side: **(a) `pause`** — the stub clears its interval (`vi.getTimerCount()` → 0); the real worker keeps the interval running and gates posting on a `paused` flag (→ 1). **(b) `start` without `restStartedAt`** — the stub falls back to `Date.now()` and posts `[1,2]`; the real worker leaves `restStartedAt` undefined, so its `!= null` guard blocks **every** post (`[]`). Opposite behaviour from the same message. **(c) delivery** — the stub calls `onmessage` synchronously inside the timer tick, so a test can assert immediately after `advanceTimersByTime`; a real `Worker` delivers asynchronously through the message port. The sharpest consequence is for **F68**. Resume timing matches today (first post at 1000 ms) but for unrelated reasons — the stub starts a fresh interval, the real worker keeps the old phase — so the stub reproduces F68's symptom by coincidence, not fidelity. Fix F68 by posting immediately on `resume`, and the stub still will not: **a test written against the fix fails under the stub**, which is the stub blocking its own fix. | Delete the re-implementation and drive the real module: `timer.worker.ts` is 33 lines with no `Worker`-only APIs, so a stub can import it and forward `postMessage` into its `self.onmessage`, giving one implementation for tests and production. Failing that, give `timer.worker.ts` the test file B09c asks for and assert the same protocol table against both. |
 | F88 | Low; B11c call-graph check | `src/store/save-failure-store.ts:109`; `src/store/save-failure-store.test.ts:55`; `src/screens/History.tsx:261` | `sessionIdsWithGaps` is exported with the doc comment "Sessions with at least one unresolved gap, for History's flag" — and **nothing calls it**. `grep -rn sessionIdsWithGaps src/ tests/` outside the store's own file and test returns nothing; History flags gaps per row through `gapsForSession(sid())` instead. The export is dead, and its comment names a consumer that does not exist. Its test — "dedupes session ids for the History flag" — passes, so the dedupe logic is covered while the thing it claims to serve is imaginary: coverage that reads as confidence about an integration there is none of. | Delete the function and its test, or wire History's per-row flag to it if a whole-list query is wanted later. Either way the comment should stop asserting a caller. |
 | F89 | Medium; B12a doc-vs-code diff | `.claude/ARCHITECTURE_MAP.md` (directory tree, `lib/` list, `public/` list, Key Patterns → Rest); `.claude/QUICK_START.md:62` | `ARCHITECTURE_MAP.md` is one of the three documents `CLAUDE.md` tells an agent to read, and it has drifted materially from the tree it describes. Measured against the actual directories: **11 of 38 components are absent** — `modals/` omits `Modal` and `ModalAsyncStates` (the shared dialog shell every other modal is built on, and the subject of an entire review batch) plus both history modals; `forms/` omits `ExerciseSetsBlock`, `LiftSetsByType`, `NotesBlock`; `workout/` omits `CollapsibleSection` and `SaveFailureBanner`; `layout/` omits `SubLabel` and `WeekBadge`. **5 of 21 `lib/` modules are absent** — `workout-compose`, `performance`, `exercise-history`, `notifications`, `notify-timers`. Two API descriptions name things that do not exist: `pr.ts` is documented as **`detectAmrapPRs`** when the export is `detectPRs` (the same stale name also appears at `QUICK_START.md:62`; `detectAmrapPRs` occurs nowhere in the repo), and the **Rest** pattern describes `restThresholds` returning `{ normal, transition, failNudge, failMax }` derived through a `FAIL_NUDGE_RATIO` — the real shape is `{ firstBell, secondBell, failedBell }` and `FAIL_NUDGE_RATIO` does not exist, so the doc describes a rest model that has been replaced. Finally the `public/` listing documents `icon-192.png / icon-512.png  # PWA icons`, **which have never existed** (F70) — good evidence that section was written from intent rather than from the directory. An agent trusting this map would not know `Modal`, `workout-compose`, `performance` or the notification modules exist, and would go looking for `failNudge`. | Regenerate the inventories from the tree rather than editing them by hand — the component and `lib/` lists are `ls` output with a comment column, and a CI check could diff them. Fix the two API descriptions against `pr.ts` and `calc.ts`, and drop the icon lines until F70/F81 actually produce the files. |
+| F90 | Medium; B12b code-vs-doc diff | `README.md` (Features → AMRAP tracking); `src/components/stats/RecordsPanel.tsx:71-73`; `src/lib/pr.ts:113-133` | **PR detection was widened from AMRAP-only to every working set, and four descriptions still say otherwise.** `detectPRs` builds its baseline from the lift's own non-cross sets **plus** cross sets attributed to it, each filtered by `isWorkingPerformance` — a hard main, joker or supplemental set all count. But `README.md` tells users an e1RM PR is "higher Wathan estimated 1RM than any prior **AMRAP**", and `RecordsPanel.tsx:71-73` carries the comment "This is intentionally broader than the **AMRAP-only PR toast**" — describing a distinction between the panel and the toast that no longer exists, since both now compute over the same working-set population. F89 records the other half of the same drift: the function is still called `detectAmrapPRs` in `ARCHITECTURE_MAP.md` and `QUICK_START.md:62`. One widening, four stale descriptions, and the one inside the code is the one most likely to mislead the next person editing `RecordsPanel`. | Correct all four against `pr.ts`. Note that F38 is the substantive version of this question — three readers of "what counts as a record" applying three different filters — so the doc fix and F38's shared-query fix should land together, or the docs will describe the pre-F38 behaviour again. |
+| F91 | Medium; B12b relevance check | `ROADMAP.md:728-762` (Security), `:765-767` (Tech Debt) | Both sections declare **"No open items."** That was true when written and is now materially false: this review has opened **89 findings**, of which several sit squarely in those two categories — F65 (high: one 503 poisons the offline shell permanently), F73 (supply chain), F41 and F08 (missing storage invariants, weak import envelope) for Security; F69, F71, F74, F77, F79, F85 and F87 (a blind coverage gate, directories no tool checks, two dormant suites, a failing E2E suite, a stub that diverges from the code it stands in for) for Tech Debt. Two specific mitigation claims also **overstate what is in place**: the *Supply chain* bullet credits least-privilege, `--frozen-lockfile` and `pnpm audit signatures` — and **F73 shows the deploy step's `pnpm dlx wrangler` bypasses all three**, running an unpinned executable with a production token; and the *PWA cache* bullet claims `cleanupOutdatedCaches: true` when the service worker imports no workbox runtime and hand-rolls its own `precache-`-prefixed eviction instead (the same wrong claim appears at `vite.config.ts:48` and in `ARCHITECTURE_MAP.md`'s PWA pattern — three sites, one origin). | Feed this review's findings back into both sections as part of B12d rather than leaving "No open items" standing, and correct the two mitigation bullets to describe what the code does. The CSP bullet, the `assertIdent` guard, the persisted-store allowlist and the `__e2eResetDb` DEV gate were all checked and are accurate — the section is well-written, just out of date. |
+| F92 | Low; B12b count check | `docs/INDEX.md:12`, `:55` | `docs/INDEX.md` describes `.claude/COMMON_MISTAKES.md` as **"Ten recurring failure modes"**; there are **eleven** (#11, the service-worker `setTimeout` entry, was added without updating the index). Its own footer reads `**Last Updated**: 2026-07-29` while the file indexes two verification documents dated 2026-08-09 and describes `ui-consistency-review.md` as resolved on 2026-08-08 — so the index was edited after its own stamp. Both are small, but this is the file whose entire job is to describe the other files accurately. | Correct the count, refresh the stamp, and consider dropping the count from the description so it cannot drift again. Checked and correct in the same file: the "Seven self-contained agent prompts" for `ENGINEERING_PASSES.md` (passes 1–7), and the ROADMAP description ("changelog, planned features, security posture, tech debt") which matches its four sections. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -307,11 +308,11 @@ column as work is completed.
 | `.gitignore` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F83) |
 | `AMRAP_TARGET_REPS_ANALYSIS.md` | B12 | pending | — |
 | `CLAUDE.md` | B12 | deep | B12a — agent-facing documentation (1/4); evidence below (F76; stale Last Updated) |
-| `ENGINEERING_PASSES.md` | B12 | pending | — |
-| `README.md` | B12 | pending | — |
-| `ROADMAP.md` | B12 | pending | — |
-| `docs/INDEX.md` | B12 | pending | — |
-| `docs/archive/README.md` | B12 | pending | — |
+| `ENGINEERING_PASSES.md` | B12 | deep | B12b — project documentation (2/4); evidence below (current; lib listing illustrative not exhaustive) |
+| `README.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F90; deploy section correct where F76 docs are wrong) |
+| `ROADMAP.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F91) |
+| `docs/INDEX.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F92) |
+| `docs/archive/README.md` | B12 | deep | B12b — project documentation (2/4); evidence below (accurate — archive is empty) |
 | `docs/design/plate-loading-model.md` | B12 | pending | — |
 | `docs/ui-consistency-review.md` | B12 | pending | — |
 | `docs/verification/2026-06-27-deload-toggle.md` | B12 | pending | — |
@@ -4291,3 +4292,96 @@ the F82 decision and the completion claim all belong to B12d and are listed ther
 **Ledger rows updated:** six B12 rows moved `pending` → `deep`; B12 now has 11 rows
 left. **Next action: B12b — `README.md`, `ROADMAP.md`, `ENGINEERING_PASSES.md`,
 `docs/INDEX.md` and `docs/archive/README.md`.**
+
+### 2026-09-15 — B12b: project documentation
+
+**Revision:** `3575545` (B12a). No application files were touched; no probes — the
+method is diffing documented claims against the code the earlier areas
+established. Single agent; five documents deeply reviewed.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `README.md` | 1–105 | `69b81c94945e9243e6f83b37e8dc9a178ac028ed` |
+| `ROADMAP.md` | 1–815 | `a6e858f9de678d31576f19209bbcf338455b66c9` |
+| `ENGINEERING_PASSES.md` | 1–366 | `b3550d17c1c79516283d82126f97760e8a3c5596` |
+| `docs/INDEX.md` | 1–55 | `5c9d4cd9babfa7cf77c68c875772e8a59a19b1e9` |
+| `docs/archive/README.md` | 1–11 | `be2133ae6d7fef7ab86b5a2fdc4872de0c813d6b` |
+
+**Claims verified against the code:**
+
+| Claim | Where | Verdict |
+|---|---|---|
+| Deploy is path-filtered and runs the same checks before publishing | `README.md` Deployment | **correct** — and it is the doc F76's two get wrong |
+| 11 themes / 14 CSS-variable tokens | `README.md` Features | **correct** |
+| Stack versions: Solid 1.9, TS 6, Tailwind 4, router 0.16, Vite 8, Vitest 4, Playwright 1, Stryker 9 | `README.md` Stack | **correct** against `package.json` |
+| Coverage ≥80% over `src/lib`, `src/screens`, `src/store` | `README.md` | **correct** — states F69's scope |
+| Mutation over `src/lib`, fails below 40%, target 80% | `README.md` | **correct** against `stryker.config.mjs` |
+| Warmups 40/50/60% TM × 5/5/3, dropped at/above first working weight | `README.md` | **correct** |
+| Deload week on by default | `README.md` | **correct** — `hasDeloadWeek: true` |
+| e1RM PR is "vs any prior **AMRAP**" | `README.md` Features | **wrong** — F90 |
+| "**PWA** — installable, works offline" | `README.md` Features | **wrong** — F70's icons never existed |
+| ROADMAP has changelog / planned / security / tech debt | `docs/INDEX.md` | **correct** — all four sections present |
+| `ENGINEERING_PASSES.md` has seven agent prompts | `docs/INDEX.md` | **correct** — passes 1–7 |
+| `COMMON_MISTAKES.md` has "Ten" failure modes | `docs/INDEX.md` | **wrong** — eleven — F92 |
+| CSP identical in three places; other headers deliberately differ | `ROADMAP.md` Security | **correct** (B10a) |
+| `assertIdent`, `MAX_IMPORT_BYTES`, `PERSISTED_KEYS`/validators, route-slug coercion | `ROADMAP.md` Security | **correct** |
+| `window.__e2eResetDb` behind `import.meta.env.DEV` | `ROADMAP.md` Security | **correct** (B11a) |
+| Supply chain covered by least-privilege + frozen-lockfile + audit signatures | `ROADMAP.md` Security | **overstated** — F73 bypasses all three — F91 |
+| PWA cache uses `cleanupOutdatedCaches: true` | `ROADMAP.md` Security | **wrong** — SW hand-rolls eviction — F91 |
+| Security: "No open items" / Tech Debt: "No open items" | `ROADMAP.md` | **stale** — F91 |
+| Archive is empty | `docs/archive/README.md` | **correct** |
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Count checks: `grep -c '^### [0-9]' .claude/COMMON_MISTAKES.md` → **11** against
+  the index's "Ten"; `ENGINEERING_PASSES.md` numbered passes → **7**, matching;
+  `grep -n '^## ' ROADMAP.md` → Done / Planned / Security / Tech Debt, matching.
+- Behaviour checks: `settings-store.ts:251` `hasDeloadWeek: true`; `pr.ts:113-133`
+  builds its PR baseline from own non-cross sets plus attributed cross sets under
+  `isWorkingPerformance`, with no AMRAP filter anywhere.
+- Not run: the test suites — this batch changes no code.
+
+**Findings:** F90 (medium), F91 (medium), F92 (low). **F70 widened** to
+`README.md`'s installability promise.
+
+**Substantive negative conclusions:**
+
+- **`ENGINEERING_PASSES.md` is current.** Its Repository-model section matches the
+  stack exactly, and every command it names (`pnpm check`, `test:coverage`,
+  `test:mutation`, `debug:browser:nowipe`, …) exists in `package.json`. Its `lib/`
+  listing omits the same modules `ARCHITECTURE_MAP.md` does, but the framing there
+  is illustrative ("the highest-value test surface", with examples) rather than an
+  inventory, so it is not the same defect as F89 and is not opened as one.
+- **`README.md` is the most accurate document in the repo on the subject F76 gets
+  wrong.** Its Deployment section describes the workflow correctly. The two
+  documents an agent is told to read at session start are the ones that are wrong,
+  which is the worst possible distribution of that particular error.
+- `ROADMAP.md`'s Security section is well-constructed — the threat model is stated,
+  every mitigation names its mechanism, and five of the seven bullets check out
+  exactly. Its problem is age, not quality.
+- `docs/archive/README.md` is accurate, including "None yet"; `docs/archive/`
+  contains nothing but that README.
+- The **Future considerations** entry under Security correctly marks the
+  `npm ci` item moot after the pnpm migration, and the SRI item is honestly scoped
+  ("all assets are self-hosted today so impact is low"). Both still hold — B10's
+  review found no external `<script>`, and the CSP forbids one.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- Nothing checks documented counts or inventories against the tree (F89, F92), and
+  nothing checks that a renamed export is renamed in prose too (F90). All three are
+  the same class: a CI check that greps the docs for symbols that no longer resolve
+  would have caught `detectAmrapPRs` and `FAIL_NUDGE_RATIO` the day they were
+  renamed.
+
+**Open questions / remaining ranges:** one carried to B12c — `docs/INDEX.md`
+describes two verification records as "runtime pass pending" and "browser legs
+TODO", while B10c found `verify-notify-hardening.js` to be a complete five-leg
+harness against the production build. Reading the records themselves settles which
+is behind.
+
+**Ledger rows updated:** five B12 rows moved `pending` → `deep`; B12 now has 6 rows
+left. **Next action: B12c — `AMRAP_TARGET_REPS_ANALYSIS.md`,
+`docs/design/plate-loading-model.md`, `docs/ui-consistency-review.md` and the three
+`docs/verification/` records.**
