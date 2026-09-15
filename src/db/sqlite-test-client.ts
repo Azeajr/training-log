@@ -3,6 +3,7 @@
 // `./sqlite-client` import to this module under test.
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm'
 import { SCHEMA, ADDITIVE_MIGRATIONS, ALL_TABLES } from './schema'
+import { createTransactionRunner, type TransactionRunner } from './transaction'
 
 type RunResult = { lastInsertRowid: number; changes: number }
 
@@ -21,11 +22,18 @@ async function init(): Promise<{ persistent: boolean }> {
 }
 
 class TestSqliteClient {
-  private txDepth = 0
+  private runTransaction: TransactionRunner
   readonly ready: Promise<{ persistent: boolean }>
 
   constructor() {
     this.ready = init()
+    // Same runner as production, so the double cannot drift from it. The ops
+    // are synchronous here (no worker), which is the only difference.
+    this.runTransaction = createTransactionRunner({
+      begin: async () => { db.exec('BEGIN') },
+      commit: async () => { db.exec('COMMIT') },
+      rollback: async () => { db.exec('ROLLBACK') },
+    })
   }
 
   async query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
@@ -45,22 +53,7 @@ class TestSqliteClient {
 
   async transaction(fn: () => Promise<void>): Promise<void> {
     await this.ready
-    if (this.txDepth > 0) {
-      this.txDepth++
-      try { await fn() } finally { this.txDepth-- }
-      return
-    }
-    this.txDepth++
-    db.exec('BEGIN')
-    try {
-      await fn()
-      db.exec('COMMIT')
-    } catch (err) {
-      db.exec('ROLLBACK')
-      throw err
-    } finally {
-      this.txDepth--
-    }
+    return this.runTransaction(fn)
   }
 
   terminate() {

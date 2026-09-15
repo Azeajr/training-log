@@ -81,3 +81,40 @@ describe('Query edge cases', () => {
     expect(row?.order).toBe(2)
   })
 })
+
+// The invariant that makes serialized transactions safe (see db/transaction.ts):
+// `transaction()` is the only thing that opens a transaction. bulkAdd used to
+// open one of its own, which is why nesting existed at all. If it ever starts
+// again, a bulkAdd called from inside a caller's transaction waits on the lock
+// that caller holds, and these tests hang instead of passing.
+describe('bulkAdd inside a caller transaction', () => {
+  it('completes rather than deadlocking on the caller transaction', async () => {
+    await db.transaction(async () => {
+      await db.lifts.bulkAdd([
+        { name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' },
+        { name: 'Bench', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+      ])
+    })
+    expect(await db.lifts.count()).toBe(2)
+  })
+
+  it('is rolled back with the caller transaction it runs inside', async () => {
+    await expect(
+      db.transaction(async () => {
+        await db.lifts.bulkAdd([
+          { name: 'OHP', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' },
+        ])
+        throw new Error('caller failed')
+      }),
+    ).rejects.toThrow('caller failed')
+    // The rows belong to the caller's transaction, so its ROLLBACK takes them.
+    expect(await db.lifts.count()).toBe(0)
+  })
+
+  it('still writes when called with no transaction around it', async () => {
+    await db.lifts.bulkAdd([
+      { name: 'Squat', order: 1, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' },
+    ])
+    expect(await db.lifts.count()).toBe(1)
+  })
+})
