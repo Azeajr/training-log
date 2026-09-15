@@ -8,74 +8,63 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07, B08, B09 and B10 are all CLOSED.** All 25 B10 rows are `deep`
-across four batches (B10a–B10d). **151 of 179 ledger rows are now `deep`**, and
-`reported` no longer appears anywhere in the ledger. **Two areas remain: B11
-(11 rows) and B12 (17 rows).**
+**Areas B07–B10 are CLOSED; B11 is open and B11a is done.** 155 of 179 ledger
+rows are `deep`. Seven B11 rows remain, then B12 (17) closes the review.
 
-**B10's theme, in one sentence: the checks this repo has are good, and they are
-aimed away from the risk — or at nothing at all.**
+**B11a ran the end-to-end suite, apparently for the first time — and it does not
+pass.** F74 established that no workflow executes it; this batch executed it:
+**6 of 32 tests fail** (`app.spec.ts` 1/4, `workout.spec.ts` 5/28). Every failure
+is spec drift, not a product bug — the app is correct in all six. Opened as
+**F85 (medium)**, with three independent causes, each an app improvement whose
+specs were never updated:
 
-- **F69 (medium) — the coverage gate measures the wrong half.** `include` is
-  `lib` + `screens` + `store`, so of the 23 findings opened in B08 and B09, **22
-  live in files the 80 % gate cannot see** — and `test:coverage` is what
-  `deploy.yml` runs, so the blind spot sits at the production gate. Stryker
-  repeats the shape (`mutate: src/lib/**` only).
-- **F74 + F79 (medium) — two built capabilities left dormant.** No workflow runs
-  Playwright, so `tests/e2e/**` never executes; and
-  `scripts/verify-notify-hardening.js` — a complete harness driving the
-  **production build with the real service worker** through five pass/fail legs,
-  exiting 1 on failure — is invoked by no script and no workflow.
-- **F78 (medium) — and the suite that exists cannot see the service worker.**
-  Playwright starts `pnpm dev`; `VitePWA` has no `devOptions`, so no SW is
-  registered. F65 and F66 are invisible to every automated test by construction.
-- **F70 + F72 + F81 (medium) — the icon set was never made.** The manifest names
-  two PNGs that do not exist; there is no `apple-touch-icon`; `favicon.svg` is a
-  purple/blue glyph unrelated to the app's black-and-green palette; and
-  `icons.svg` is a **bluesky/discord/github/x** social sprite from a scaffold,
-  shipping to production referenced by nothing. These are one asset task, not
-  three fixes, which is why none is done.
-- **F73 (medium, supply chain)** — `pnpm dlx wrangler` is unpinned and absent from
-  the lockfile, run with `CLOUDFLARE_API_TOKEN` in env, past `--frozen-lockfile`,
-  `pnpm audit signatures`, the pinned `packageManager` and dependabot.
-- **F71 + F77 — whole directories are checked by nothing.** `tsc` never compiles
-  `tests/e2e/**`, and ESLint resolves **0 rules** for any `.js`/`.mjs`, so 413
-  lines of Playwright-driving Node in `scripts/` have no linter and no type
-  checker.
-- **F75, F76, F80, F82, F83, F84 (low)** — CI is `pull_request`-only; `CLAUDE.md`
-  understates the deploy gate; `debug-browser.js`'s "clears DB" wipes IndexedDB
-  the app does not use; `demo-seed.json` is 44.8 KB of real training history that
-  no code reads and every deploy publishes; `.gitignore` hides `.claude/` while
-  `CLAUDE.md` points at three tracked files inside it; and
-  `migrate-history.py`'s hardcoded tables have already drifted from `seed.ts`.
+1. the setup wizard went from three steps to two, but `app.spec.ts:13` still
+   clicks a second NEXT and waits for `STEP 3`;
+2. `SessionBar` split the finish control, so the button reads `FINISH` while work
+   is outstanding — four tests assert `COMPLETE SESSION` and fail;
+3. `Stepper` gained `fieldLabel`, so the increment button's accessible name is
+   `Increase reps`, not its visible `+`.
 
-**The single highest-leverage fix in the repo right now** is wiring
-`verify-notify-hardening.js` into CI and adding a 503 leg to it. That one change
-turns **F65** — the highest-severity open finding in the tracker — from a
-documented bug into a guarded regression, using a harness that already exists and
-already asserts the healthy version of the same behaviour (leg A).
+**In all three the helper was updated and the specs were not** — `startWorkout`
+already accepts either button, `completeSetupWizard` comments that step 3 is
+gone, `fillStepper` uses test ids. Helpers are shared, so whoever changed the app
+noticed them; the specs are executed by nothing, so they rotted. That is F74's
+cost, made concrete.
 
-**Next area: B11 — E2E, test infrastructure, domain types and remaining stores
-(11 rows).** Start with `tests/e2e/**`, which B10 just characterised from the
-outside: F71 says it is never type-checked, F74 says it is never run, and F78 says
-it runs against an environment with no service worker. Reviewing the specs
-themselves is what turns those three into a concrete statement about what
-integration coverage the project actually has. `src/test-setup.ts` belongs in the
-same slice — B09c recorded that its `MockWorker` re-implements
-`timer.worker.ts`'s protocol with nothing to catch drift. **B12** (17 rows:
-documentation relevance and the final reconciliation) closes the review, and
-already carries F76 and F82.
+**B11a also sharpened F78.** Pointing the suite at a production build is not a
+one-line `webServer` change: every test goes through `helpers.freshStart`, which
+`waitForFunction`s on `window.__e2eResetDb`, and `sqlite-client.ts:93` defines
+that hook inside `if (import.meta.env.DEV)`. Against a production build it never
+appears and every test hangs. The suite is **structurally bound to the dev server
+by its reset strategy** — which is exactly why `verify-notify-hardening.js` resets
+with a fresh browser context per leg and says so in its own header. The two
+browser suites made opposite choices about DB reset, and that choice is what
+decides which build each one can test.
 
-Latest run: **B10d complete** — `scripts/migrate-history.py` (396),
-`public/demo-seed.json` (2,596), `public/favicon.svg`, `public/icons.svg`,
-`src/index.css` (58), `.gitignore` (40) and `.claudeignore` (33) reviewed in full.
-Seven files marked deep; **151 files deep in total.** `pnpm lint` and `tsc -b`
-clean (exit 0). Four new findings (F81–F84). `src/index.css` and `.claudeignore`
-are clean. Only this tracker changed; the tree is clean. This card authorizes
-commit, push and PR; operator acceptance remains a separate native Kanban review
-step.
+Also opened: **F86 (low)** — `test-results/` is neither Playwright's configured
+`outputDir` nor gitignored, and `test-results/.last-run.json` is **tracked**,
+carrying a stale `{"status": "passed"}` receipt for a suite that currently fails.
 
-**Remaining work — 28 of 179 ledger rows are not yet `deep`** (151 are). Recounted
+**Next batch: B11b — test infrastructure and shared types.** `src/test-setup.ts`
+(80), `src/types/domain.ts` (184) and `src/vite-env.d.ts` (1). B09c recorded that
+`test-setup.ts`'s `MockWorker` re-implements `timer.worker.ts`'s start/pause/
+resume/stop protocol with nothing to catch drift — and **F68** lives in exactly
+that protocol, so the stub and the real worker want diffing directly.
+`types/domain.ts` is the shared contract every area has been reading through.
+Then **B11c** — `save-failure-store.ts` (**F51**'s other half; B08c reviewed only
+the banner) and `toast-store.ts`, with their tests — closes B11.
+
+Latest run: **B11a complete** — `tests/e2e/workout.spec.ts` (275),
+`app.spec.ts` (35), `helpers.ts` (77) and `fixtures.ts` (21) reviewed in full.
+Four files marked deep; **155 files deep in total.** `pnpm lint` and `tsc -b`
+clean (exit 0); the E2E suite was executed and its results are the batch's
+evidence. Two new findings (F85, F86); F78 sharpened. `fixtures.ts` is clean and
+`helpers.ts` is current. Only this tracker changed — run artifacts were removed
+and the tracked `.last-run.json` restored, leaving the tree clean. This card
+authorizes commit, push and PR; operator acceptance remains a separate native
+Kanban review step.
+
+**Remaining work — 24 of 179 ledger rows are not yet `deep`** (155 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -92,7 +81,7 @@ correct; only the remaining-work totals were not.
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
-| B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
+| B11 | 7 pending | **Open (B11a done).** Test infrastructure, domain types, remaining stores. Remaining slices: B11b `test-setup.ts` / `types/domain.ts` / `vite-env.d.ts`, B11c the two remaining stores and their tests. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
 B01–B07 are closed. Per-area scope and starting concerns are in the Queue table
@@ -220,13 +209,15 @@ claimed here.
 | F75 | Low; B10b workflow inspection | `.github/workflows/ci.yml:3-4`; `.github/workflows/deploy.yml:5-15` | CI triggers on `pull_request` **only** — there is no `push` trigger — and the deploy workflow is path-filtered. A commit pushed straight to `main` therefore runs checks only if it touches a deploy path (`src/**` minus tests, `public/**`, `index.html`, `package.json`, `pnpm-lock.yaml`, `vite.config.*`, `tsconfig*`). Anything else gets **no workflow at all**: `eslint.config.js`, `stryker.config.mjs`, `playwright.config.ts`, `scripts/**`, `tests/e2e/**`, `.github/**`. The sharpest case is the deploy filter's own `'!src/**/*.test.*'` exclusion — a broken test committed directly to `main` triggers nothing, and then surfaces later by failing `check:ci` inside an unrelated deploy, blocking that deploy for a reason that has nothing to do with it. Committing on `main` is an accepted workflow in this repo, which is what makes the gap reachable rather than theoretical. | Add `push: branches: [main]` to `ci.yml`; the existing `concurrency` group keys on `github.event.pull_request.number`, so give it a fallback such as `ci-${{ github.event.pull_request.number || github.sha }}`. |
 | F76 | Low (documentation); B10b cross-check, reconcile in B12 | `CLAUDE.md:17-19`; `.github/workflows/deploy.yml:39`; `package.json:17` | `CLAUDE.md` states: "The workflow is path-filtered and runs **no lint and no tests** — `pnpm build && pnpm lint && pnpm test` locally is the only regression gate." The path-filtering half is correct; the rest is not. `deploy.yml:39` runs `pnpm run check:ci`, which is `pnpm lint && pnpm test:coverage && pnpm build`, and it runs **before** the deploy step, so a failure blocks the deploy. The deploy path is in fact the stricter gate of the two — it is the only place `test:coverage` and its 80 % thresholds run. The doc understates the automation, which misdirects effort rather than creating risk, but it is the sentence a contributor (or an agent) reads to decide what CI will catch. | Correct the sentence to describe what the workflow does today, and note that `test:coverage` (not plain `test`) is what gates deploys — which is also why F69's `include` gap matters at the gate rather than only locally. Fold into B12's documentation reconciliation. |
 | F77 | Low; B10c `eslint --print-config` | `eslint.config.js:9`, `19`, `31`; `scripts/*.js`; `stryker.config.mjs` | Every config block in `eslint.config.js` is scoped to `**/*.{ts,tsx}` or narrower, so **no rule applies to a `.js` or `.mjs` file anywhere in the repo**. Verified: `eslint --print-config scripts/debug-browser.js` resolves **0 rules**, against **92** for `src/lib/calc.ts`. `pnpm lint` therefore walks `scripts/debug-browser.js` (157 lines), `scripts/verify-notify-hardening.js` (256), `stryker.config.mjs` and `eslint.config.js` itself and checks nothing in them. With F71 — no tsconfig project covers `scripts/**` either — those 413 lines of Playwright-driving Node are checked by no tool at all. | Add a config block for `['**/*.{js,mjs}']` extending `js.configs.recommended` with `globals.node`, and widen `tsconfig.node.json` per F71 so the same files get type-checked in JSDoc-less mode or are explicitly excluded on purpose. |
-| F78 | Medium; B10c config cross-check | `playwright.config.ts:38-42`; `vite.config.ts:43-62`; `tests/e2e/` | The Playwright suite starts `pnpm dev` and points at `http://localhost:5173`, so the E2E tests run against the **development server**. `VitePWA` is configured with no `devOptions`, which means the service worker is **not registered in dev at all** — and the dev server serves unbundled modules with none of `public/_headers` applied. So the app's only automated integration suite exercises neither the service worker, nor the production bundle, nor the production CSP and security headers. That is exactly the surface F65 and F66 live on: a cache-poisoning bug in the navigation handler is invisible to every automated test the repo has, by construction rather than by omission. | Point the E2E `webServer` at `vite preview` (port 5175, which `verify-notify-hardening.js` already uses) after a build, so the specs run against the real artifact — or add `devOptions: { enabled: true }` to `VitePWA` if a dev-server suite is wanted as well. Fixing this is a precondition for the F65 regression test, which cannot be written against the current setup. |
+| F78 | Medium; B10c config cross-check | `playwright.config.ts:38-42`; `vite.config.ts:43-62`; `tests/e2e/` | The Playwright suite starts `pnpm dev` and points at `http://localhost:5173`, so the E2E tests run against the **development server**. `VitePWA` is configured with no `devOptions`, which means the service worker is **not registered in dev at all** — and the dev server serves unbundled modules with none of `public/_headers` applied. So the app's only automated integration suite exercises neither the service worker, nor the production bundle, nor the production CSP and security headers. That is exactly the surface F65 and F66 live on: a cache-poisoning bug in the navigation handler is invisible to every automated test the repo has, by construction rather than by omission. | Point the E2E `webServer` at `vite preview` (port 5175, which `verify-notify-hardening.js` already uses) after a build, so the specs run against the real artifact — or add `devOptions: { enabled: true }` to `VitePWA` if a dev-server suite is wanted as well. Fixing this is a precondition for the F65 regression test, which cannot be written against the current setup. **B11a sharpens the cost:** the switch is not a one-line `webServer` change. Every test depends on `helpers.freshStart`, which `waitForFunction`s on `window.__e2eResetDb` — and `sqlite-client.ts:93` defines that hook inside `if (import.meta.env.DEV)`. Against a production build it never appears and every test hangs. The suite is structurally bound to the dev server by its reset strategy, which is exactly why `verify-notify-hardening.js` resets with a fresh browser context per leg instead and says so in its own header. Either give the E2E suite the same context-per-test reset, or expose a reset path that survives a production build. |
 | F79 | Medium; B10c script inspection | `scripts/verify-notify-hardening.js:1-256`; `package.json:6-20`; `.github/workflows/`; `docs/verification/2026-08-09-swe-hardening.md:49`, `68` | A complete, **CI-ready** service-worker verification harness exists and is invoked by nothing. `verify-notify-hardening.js` spawns `vite preview` against the **production build**, drives the real app in headless Chromium with the **real service worker**, runs five independent legs in fresh browser contexts (A: offline hard reload at `/` and `/workout` renders the shell; B/C/D/E: the page-vs-SW notification matrix), stubs `registration.showNotification` to count fires, prints PASS/FAIL per leg and **exits 1 on failure**. It has no `package.json` script entry and appears in no workflow — it is reachable only by typing `node scripts/verify-notify-hardening.js`, as its own documentation says. Leg A is one 503 away from being F65's regression test. Same family as F74: the capability was built, then left dormant. | Add a `verify:sw` script and a CI job (it needs `pnpm build` first and a Chromium install, so a separate job like the Playwright one F74 asks for). Extend leg A with a poisoned-shell case — serve a 503 navigation, then go offline and assert the shell still renders — which converts F65 from a finding into a guarded regression. |
 | F80 | Low; B10c script inspection | `scripts/debug-browser.js:7`, `96-102` | The debug script's headline feature does nothing. It prints `'[debug] wiping IndexedDB (TrainingLog)...'` and calls `indexedDB.deleteDatabase('TrainingLog')`, but **the app uses no IndexedDB** — `grep -rn indexedDB src/` returns nothing outside tests; persistence is OPFS via SQLite WASM (the SAH pool VFS) plus `localStorage` for the workout store and the session-gap log. Deleting a database that never existed resolves successfully and silently, so the default `node scripts/debug-browser.js` — documented as "fresh run (clears DB)" and "a true first-run experience" — leaves every byte of real state in place, and the script then tries to walk the setup wizard that a returning user never sees. The name `TrainingLog` suggests this was correct before the storage layer moved. | Wipe what the app actually uses: `navigator.storage.getDirectory()` + remove the OPFS entries, and `localStorage.clear()`. Until then the `--no-wipe` flag and the default behave identically, so the flag should either work or go. |
 | F81 | Medium; B10d asset inspection | `public/favicon.svg`; `public/icons.svg`; `index.html:14`; `src/index.css:3-18` | **The app's icon set is scaffold leftovers from another project.** `public/icons.svg` is a social-link sprite — its symbols are `bluesky-icon`, `discord-icon`, `documentation-icon`, `github-icon`, `social-icon` and `x-icon` — for links this app does not have. `public/favicon.svg` (9.3 KB) is drawn entirely in purple and blue (`#863bff`, `#7e14ff`, `#47bfff`, `#ede6ff`), which is unrelated to the app's own design tokens: `--color-accent: #4ade80` on `--color-bg: #000000`. It is the icon a user sees in the browser tab and, per `index.html:14`, the only icon reference the document makes. Read with **F70** (the manifest names `icon-192.png` and `icon-512.png`, neither of which exists) and **F72** (`icons.svg` is referenced by nothing; `svg` is not precached), the whole icon story is: no PWA icons, no `apple-touch-icon`, a foreign favicon, and an orphaned template sprite shipping to production. | Draw an icon set for the app and wire it up once: an SVG favicon in the app's own palette, `icon-192.png`/`icon-512.png` for the manifest, and an `apple-touch-icon` link. Delete `icons.svg`. This is the change F70 and F72 are both waiting on — they are not three separate fixes but one asset task, which is why none of them has been done. |
 | F82 | Low; B10d asset inspection | `public/demo-seed.json` | A 44.8 KB export-format JSON that **no code reads** — `grep -rn 'demo-seed' src/ tests/ scripts/` returns nothing — and that `public/` therefore ships verbatim to `dist/`, publicly fetchable at `/demo-seed.json`. It is not a fixture: it carries the full import envelope (`exportedAt: 2026-05-08T18:04:36.896Z`, `version: 1`) and real training history — 4 lifts (OHP/Deadlift/Bench/Squat), 18 training maxes, 2 cycles, 23 sessions, **184 sets**, 18 exercises, 25 accessory sets and a settings row. Whatever it was staged for (a demo mode, a seeding path) was never wired up, so the cost today is a published copy of the author's training log and 45 KB of dead weight in every deploy. | Decide which it is: wire it to an actual demo/seed path, move it out of `public/` into a fixture directory if it is test data, or delete it. Note that the tracker scoped this file in deliberately ("Tracked `public/demo-seed.json` is in scope"), so the decision belongs in B12's reconciliation if it is not made sooner. |
 | F83 | Low; B10d `git check-ignore` | `.gitignore:28`; `CLAUDE.md:32-34`, `41-42` | `.gitignore` ignores `.claude/`, yet **five files under it are tracked** — `ARCHITECTURE_MAP.md`, `COMMON_MISTAKES.md`, `QUICK_START.md`, `completions/README.md`, `sessions/README.md` — and `CLAUDE.md` names the first three as the project's key documents. Already-tracked files are unaffected by a later ignore rule, so the current five are safe; anything **new** added there is silently invisible. `git check-ignore -v .claude/NEW_DOC.md` → `.gitignore:28:.claude/`. A contributor or agent writing a fourth key document in the directory the project points at gets no warning from `git status` and the file never reaches the repo. | Narrow the rule to the local-only subtrees and let the documentation through: replace `.claude/` with `.claude/settings.local.json` and `.claude/agents/` (which is what the ignore is actually for — see the ignored entries listed by `git status --ignored`). |
 | F84 | Low; B10d cross-check | `scripts/migrate-history.py:23-51`; `src/db/seed.ts:5-31` | The migration script hardcodes its own copies of the lift and exercise tables with fixed ids, under a comment stating they "must match seed.ts order so IDs are 1–4", and **they have already drifted**. The lifts still match. The exercises do not: id 3 is `"Curls"` in the script and `'Bicep Curls'` in `seed.ts`, and `seed.ts` has since grown to **20** exercises (`Reverse Nordic`, `Pull Through`) against the script's 18. A migration run today emits `{"id": 3, "name": "Curls"}` into an import envelope that `importJson` validates weakly (**F08**), landing a second exercise alongside the seeded `Bicep Curls` — and **F41** records that once two exercises share a name the repair path is closed, because `renameExercise` rejects on the twin. A one-shot tool, but its one shot is a user's entire history. | Have the script read the tables from a single source rather than restating them — generate them from `seed.ts`, or emit exercises by name without ids and let the importer resolve them. At minimum, re-sync the two tables and add a test that fails when they diverge. |
+| F85 | Medium; B11a — first recorded execution of the suite | `tests/e2e/app.spec.ts:13-20`; `tests/e2e/workout.spec.ts:14`, `19-25`, `53`, `119`, `152` | **The E2E suite does not pass.** Nothing runs it (F74), so this batch ran it — apparently for the first time — and **6 of 32 tests fail**: `app.spec.ts` 1 failed / 3 passed, `workout.spec.ts` 5 failed / 23 passed. Every failure is spec drift, not a product bug; the app is right in all six cases. Three independent causes, each an app improvement whose specs were never updated: **(a)** the setup wizard went from three steps to two (`Setup.tsx:17` is `createSignal<1 | 2>(1)`, titles read "STEP 1 OF 2"), but `app.spec.ts:13` still clicks a second NEXT and waits for a `STEP 3` heading — it times out at `:17`. **(b)** `SessionBar` split the finish control: `allDone()` gates `COMPLETE SESSION` and everything else renders `FINISH`, so at the start of a session the button reads FINISH — four tests assert `COMPLETE SESSION` with work outstanding and all four fail. **(c)** `Stepper` gained `fieldLabel`, so the increment button's accessible name became `Increase reps` rather than its visible `+` — `workout.spec.ts:23`'s `getByRole('button', { name: '+' })` finds nothing. In all three the **helper was updated and the specs were not**: `startWorkout` already accepts `/^(FINISH|COMPLETE SESSION)$/`, `completeSetupWizard` carries the comment "onboarding no longer has a read-only step 3", and `fillStepper` uses test ids rather than button names. Helpers are shared, so whoever changed the app noticed them; the specs are executed by nothing, so they rotted. | Fix the six assertions, then fix the reason they rotted — F74's CI job — in the same change, or they will rot again. The 26 passing tests are worth keeping: they cover reload persistence, rest-timer hydration from the worker, resume/abandon, and the joker-set ladder, none of which the unit suite can reach. |
+| F86 | Low; B11a run artifacts | `test-results/.last-run.json`; `.gitignore`; `playwright.config.ts` | `test-results/` is neither configured as Playwright's `outputDir` nor listed in `.gitignore`, and **`test-results/.last-run.json` is tracked**. Running the suite therefore dirties the working tree with untracked per-failure directories (screenshots, videos, error context) and modifies a tracked file. The committed copy reads `{"status": "passed", "failedTests": []}` — a stale receipt asserting the suite is green, in a repo where it is not (F85) and where nothing has run it (F74). Anyone reading it gets the wrong answer. | Add `test-results/` (and `playwright-report/`) to `.gitignore` and `git rm --cached test-results/.last-run.json`. Worth doing before F74's CI job lands, or every run will leave a diff. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -470,10 +461,10 @@ column as work is completed.
 | `src/vite-env.d.ts` | B11 | pending | — |
 | `src/workers/timer.worker.ts` | B09 | deep | B09c — timer worker and audio cues (3/3); evidence below (F68; no test file) |
 | `stryker.config.mjs` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (clean; mutate scoped to src/lib — F69 theme) |
-| `tests/e2e/app.spec.ts` | B11 | pending | — |
-| `tests/e2e/fixtures.ts` | B11 | pending | — |
-| `tests/e2e/helpers.ts` | B11 | pending | — |
-| `tests/e2e/workout.spec.ts` | B11 | pending | — |
+| `tests/e2e/app.spec.ts` | B11 | deep | B11a — end-to-end specs (1/3); evidence below (F85: 1 of 4 fails) |
+| `tests/e2e/fixtures.ts` | B11 | deep | B11a — end-to-end specs (1/3); evidence below (clean) |
+| `tests/e2e/helpers.ts` | B11 | deep | B11a — end-to-end specs (1/3); evidence below (current; sharpens F78 — DEV-only reset hook) |
+| `tests/e2e/workout.spec.ts` | B11 | deep | B11a — end-to-end specs (1/3); evidence below (F85: 5 of 28 fail) |
 | `tsconfig.app.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (strict verified on via TS 6 default) |
 | `tsconfig.e2e.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F71 — referenced by nothing) |
 | `tsconfig.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F71 — e2e project unreferenced) |
@@ -3919,3 +3910,101 @@ findings opened (F69–F84) and F71 amended in place after B10c found that
 `eslint.config.js` does reference `tsconfig.e2e.json`. **Next action: B11 — E2E,
 test infrastructure, domain types and remaining stores (11 rows)**, starting with
 `tests/e2e/**`, which B10 characterised from the outside through F71, F74 and F78.
+
+### 2026-09-15 — B11a: end-to-end specs
+
+**Revision:** `04c83ae` (main, after #88–#90 merged). Application files were
+unchanged at batch start and end; the Playwright suite was executed and its
+output directories removed afterwards, with the tracked
+`test-results/.last-run.json` restored via `git checkout --`. Single agent; four
+files deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `tests/e2e/workout.spec.ts` | 1–275 | `a668c2f5a3e8c86eeddddf475670a59ed071d9f3` |
+| `tests/e2e/app.spec.ts` | 1–35 | `021c3723e7806c028c5854556883161c28e119a1` |
+| `tests/e2e/helpers.ts` | 1–77 | `62011cc2d1a7c5e95440297e50d0aee20e69b517` |
+| `tests/e2e/fixtures.ts` | 1–21 | `46669ad2414661c4161f02abef88dd04eddce8b4` |
+
+**Behavior and invariants traced:**
+
+- `fixtures.ts`: the two `auto: true` fixtures — `_noPageErrors` collecting
+  `pageerror` and failing the test if any fired, and `_freshDb` calling
+  `freshStart` before every test.
+- `helpers.ts`: `freshStart`'s reset-then-reload cycle through `__e2eResetDb`
+  plus `localStorage.clear()`; `completeSetupWizard`'s two-step walk and its
+  default TMs (95/95/135/135); `fillStepper` driving the stepper through its test
+  ids rather than button names; `startWorkout`; `logSet`; `getWorkoutState`
+  reading the persisted store straight out of `localStorage`; and the
+  `advanceThroughWarmups` / `advanceToAmrap` ladders, whose comment records the
+  concrete weights for TM 95 OHP week 1 (warmups 45/50/55, main 60/70/80 AMRAP).
+- `app.spec.ts`: first-run wizard coverage.
+- `workout.spec.ts`: six describes — workout flow, session persistence across
+  reload, rest-timer persistence across reload, resume banner and abandon dialog,
+  the joker-set ladder (appearance at minimum reps, escalating weight 85 → 90,
+  suppression below minimum), and rest-type wiring on log. The header comment
+  explaining the split with the unit suite — threshold timing lives in
+  `calc.test.ts`, these verify only that the screen sets the right `restType` — is
+  an accurate description of what the file does.
+
+**Checks and outcomes:**
+
+- **The suite was executed** — `pnpm exec playwright test tests/e2e/app.spec.ts`
+  and `… tests/e2e/workout.spec.ts`, both against the dev server Playwright
+  starts. Results: **1 failed / 3 passed** and **5 failed / 23 passed** — 6 of 32
+  overall. Each failure's locator and line are recorded in F85.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0). Note that
+  `tsc -b` does **not** cover these files (F71); the suite compiles only under
+  Playwright's own transpile.
+- Cause confirmation for each failure class: `Setup.tsx:17`
+  (`createSignal<1 | 2>(1)`, titles "STEP 1 OF 2" / "STEP 2 OF 2");
+  `SessionBar.tsx:37`, `:73`, `:85` (`allDone()` gating COMPLETE SESSION, FINISH
+  otherwise); `Stepper.tsx:137` (`aria-label` derived from `fieldLabel`).
+- Confirmation for the F78 sharpening: `sqlite-client.ts:93-94` defines
+  `window.__e2eResetDb` inside `if (import.meta.env.DEV)`.
+- Not run: the unit suite, and no attempt to run the E2E suite against a
+  production build (it would hang in `freshStart`, which is the point).
+
+**Findings:** F85 (medium, executed), F86 (low). **F78 amended** with the
+DEV-only reset-hook constraint.
+
+**Substantive negative conclusions:**
+
+- **The app is correct in all six failures.** This batch found no product defect
+  in the E2E area — every failure is the spec describing an older UI. Worth
+  stating plainly, because a suite that fails is usually read the other way round.
+- **`fixtures.ts` is clean**, and `_noPageErrors` is a good design: an uncaught
+  page error fails whatever test was running rather than passing silently. It is
+  also why the six failures are trustworthy as drift — none of them tripped that
+  fixture, so nothing was throwing.
+- **`helpers.ts` is current**, not stale. Its `completeSetupWizard` matches the
+  two-step wizard and its comment records the change; `startWorkout` already
+  accommodates both finish-button labels. The drift is entirely in the specs.
+- The 26 passing tests cover ground the unit suite structurally cannot: state
+  surviving a real reload through OPFS and `localStorage`, the rest timer
+  rehydrating from the worker with its original `restStartedAt`, the resume/abandon
+  flow across two screens, and the full joker-set ladder. Whatever is done about
+  F85, these are worth keeping rather than rewriting.
+- `workout.spec.ts:90` waits on `not.toHaveText('0:00')` rather than sleeping, and
+  `:100` uses `expect.poll` — the file avoids arbitrary waits throughout. No
+  flakiness was observed across the runs performed here, though two runs are not
+  evidence of stability.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- The suite covers the workout screen thoroughly and **nothing else**: there are
+  no E2E specs for History, Settings, Setup beyond the wizard, accessory logging,
+  cross-lift blocks, or the cycle roll-over — the paths where B07 and B08 opened
+  their heaviest findings (F33/F34 cycle advance, F52 cross blocks, F55 accessory
+  picking).
+- Nothing exercises the service worker or offline behaviour, and by F78 nothing
+  in this suite can.
+
+**Open questions / remaining ranges:** none carried. F85's fix and F74's CI job
+are recorded together deliberately — fixing the assertions without running them
+anywhere returns the suite to exactly the state that produced this finding.
+
+**Ledger rows updated:** four `tests/e2e/**` rows moved `pending` → `deep`; B11
+now has 7 rows left. **Next action: B11b — `src/test-setup.ts`,
+`src/types/domain.ts` and `src/vite-env.d.ts`**, starting by diffing
+`MockWorker` against `timer.worker.ts`, where F68 lives.
