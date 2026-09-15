@@ -28,3 +28,24 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check:ci
+
+  # Separate job: this one needs a Chromium download and drives a real browser
+  # against `vite preview`, so it is too slow to belong inside check:ci.
+  verify-sw:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run verify:sw

@@ -16,6 +16,7 @@
     "check:local": "eslint . --cache --cache-location node_modules/.cache/eslint && tsc -b",
     "check:ci": "pnpm lint && pnpm test:coverage && pnpm build",
     "test:e2e": "playwright test",
+    "verify:sw": "pnpm build && node scripts/verify-notify-hardening.js",
     "debug:browser": "node scripts/debug-browser.js",
     "debug:browser:nowipe": "node scripts/debug-browser.js --no-wipe"
   },
@@ -46,7 +47,8 @@
     "vite": "^8.1.0",
     "vite-plugin-pwa": "^1.3.0",
     "vite-plugin-solid": "^2.11.12",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "wrangler": "^4.131.2"
   },
   "packageManager": "pnpm@12.3.4"
 }

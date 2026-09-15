@@ -9,15 +9,15 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | | Count |
 |---|---|
-| Findings | **94** (F01–F94) |
-| `open` | **94** |
+| Findings | **97** (F01–F97; F95–F97 opened during fix work) |
+| `open` | **90** |
 | `wip` | 0 |
-| `fixed` | 0 |
+| `fixed` | **7** — F65, F66, F73, F79, F95, F96, F97 |
 | `fixed-by` | 0 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
 
-**By severity: 13 High / 49 Medium / 32 Low.**
+**By severity: 14 High / 51 Medium / 32 Low.**
 
 > **Count correction.** `deep-code-review.md:34` says "12 high". Counted directly
 > from its own findings table, **13** rows carry High: F01, F02, F04, F05, F07,
@@ -40,7 +40,11 @@ Writing fix state into it would corrupt that claim. This document is the state.
 ## Rules
 
 1. **`fixed` requires a test that fails against the old code.** Same evidence bar
-   the review held itself to. No such test → the state stays `wip`.
+   the review held itself to. No such test → the state stays `wip`. **(b)** A
+   config, workflow or tooling change that cannot carry a test records the
+   verification command that was actually run in its place, and says so. This is
+   a narrow exception for things with no runtime to assert against — never a
+   way around (a) for application code.
 2. **One fix row per cluster owner.** Where several findings share one root cause,
    the owner carries the fix and the rest become `fixed-by` pointing at it.
    Otherwise the rows drift apart. C1 and the F65/F66 pair have designated owners;
@@ -149,21 +153,21 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F62 | Medium | B08 | C4 | `src/components/workout/AccessoryLog.tsx` | `open` | — | — |
 | F63 | Medium | B08 | C2,C3 | `src/components/stats/RecordsPanel.tsx` | `open` | — | — |
 | F64 | Low | B08 | C5 | `src/components/layout/Rule.tsx` | `open` | — | — |
-| F65 | **High** | B09 | C6 | `src/service-worker.ts` | `open` | — | **C6 owner (SW half).** Fix with F79; F78 is precondition. Same `response.ok` gate as F66. |
-| F66 | Medium | B09 | C6 | `src/service-worker.ts` | `open` | — | Same one-line gate as F65 — fix together. |
+| F65 | **High** | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg F | **Amended — the stated impact never reproduced.** The missing `ok` check was real but masked by **F95**: the cache write never ran, so no 503 could poison anything. Repairing F95 alone would have activated this for real, so both landed in one change. Leg F asserts both halves. |
+| F66 | Medium | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg G | **The live half of the pair.** Reproduced exactly as written: a 502 enters the cache-first precache and is served from it thereafter. Cache-first, so it is never re-fetched. |
 | F67 | Medium <br><sub>needs device</sub> | B09 | C6 | `src/lib/notifications.ts` | `open` | — | Platform impact **needs a real iOS device**. Per project rule, do not claim verified without one. |
 | F68 | Low | B09 | — | `src/workers/timer.worker.ts` | `open` | — | — |
 | F69 | Medium | B10 | — | `vite.config.ts` | `open` | — | B12: scope is documented at `.claude/QUICK_START.md:22`. Known state — decide fix vs wontfix. |
 | F70 | Medium <br><sub>needs Lighthouse</sub> | B10 | — | `vite.config.ts` | `open` | — | Conditional severity; installability impact worth a Lighthouse check. |
 | F71 | Medium | B10 | — | `tsconfig.json` | `open` | — | — |
 | F72 | Low | B10 | — | `vite.config.ts` | `open` | — | — |
-| F73 | Medium <br><sub>supply chain</sub> | B10 | — | `.github/workflows/deploy.yml` | `open` | — | `pnpm dlx wrangler` unpinned with a production token. |
+| F73 | Medium <br><sub>supply chain</sub> | B10 | — | `.github/workflows/deploy.yml` | `fixed` | `9daa584` · rule 1(b) | `wrangler` is now a lockfile-pinned devDependency (4.131.2) invoked via `pnpm exec`. `allowBuilds` for `esbuild`/`workerd` set to **false** — verified unnecessary, so this removes two lifecycle-script executions the old `--allow-build` flags permitted. |
 | F74 | Medium | B10 | — | `.github/workflows/ci.yml` | `open` | — | Fix with F85 — assertions without CI wiring returns to the state that produced the finding. |
 | F75 | Low | B10 | — | `.github/workflows/ci.yml` | `open` | — | — |
 | F76 | Low <br><sub>docs</sub> | B10 | C7 | `CLAUDE.md` | `open` | — | — |
 | F77 | Low | B10 | — | `eslint.config.js` | `open` | — | — |
 | F78 | Medium | B10 | — | `playwright.config.ts` | `open` | — | Precondition for F79/F65. |
-| F79 | Medium | B10 | — | `scripts/verify-notify-hardening.js` | `open` | — | Wire `scripts/verify-notify-hardening.js` into CI, add a 503 leg. Harness already exists and passes. |
+| F79 | Medium | B10 | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · rule 1(b) | `verify:sw` script added; new `verify-sw` CI job on every PR. Two harness defects had to be fixed first — **F96** and **F97**. |
 | F80 | Low | B10 | — | `scripts/debug-browser.js` | `open` | — | B12: documented at `.claude/QUICK_START.md:36-38`. Known state — decide fix vs wontfix. |
 | F81 | Medium | B10 | — | `public/favicon.svg` | `open` | — | — |
 | F82 | Low | B10 | — | `public/demo-seed.json` | `open` | — | Decided in B12d; documented as `.claude/COMMON_MISTAKES.md` #7. Known state — decide fix vs wontfix. |
@@ -179,6 +183,9 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F92 | Low | B12 | C7 | `docs/INDEX.md` | `open` | — | — |
 | F93 | Low | B12 | C7 | `docs/INDEX.md` | `open` | — | — |
 | F94 | Medium | B12 | — | `src/db/schema.ts` | `open` | — | Missing index on the table the mid-set PR check scans. Resolves L07(2). |
+| F95 | **High** | — | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg F | **Opened during fix work, not by the review.** The navigation handler's shell refresh never executed: `response.clone()` ran inside the `caches.open(...).then()` callback, after `return response` handed the body to the navigation, so it threw "body is already used" and `void` swallowed it. The cached shell was frozen at whatever `install` precached; network-first refresh had never run once. Masked F65 and would have activated it if repaired alone. |
+| F96 | Medium | — | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · all 7 legs | **Opened during fix work.** The harness the review called "already exists, already passes" failed **all six legs**: `completeSetupWizard` drove a three-step wizard with `data-testid` selectors, and the wizard is now two steps with no testids in a production build. F79's own thesis, demonstrated — a dormant capability decays. |
+| F97 | Medium | — | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · exit 0 in 22s | **Opened during fix work.** The 200s watchdog `setTimeout` was never cleared or unref'd, so a fully passing run sat for 200s and then `process.exit(3)`. Wiring the harness into CI without this would have failed every build. |
 
 ## Open leads
 

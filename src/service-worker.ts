@@ -64,7 +64,22 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
     event.respondWith(
       fetch(req)
         .then((response) => {
-          void caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', response.clone()))
+          // Clone SYNCHRONOUSLY. `return response` below hands this body to the
+          // navigation, and a clone taken after that throws "body is already
+          // used" — which is what made the previous `caches.open(...).then(c =>
+          // c.put(..., response.clone()))` a silent no-op: the clone ran inside
+          // the async callback, always too late, and `void` discarded the
+          // rejection. The shell was therefore frozen at whatever `install`
+          // precached and this refresh never ran once.
+          //
+          // Only a good shell may replace a good shell. `fetch` rejects only on
+          // a NETWORK failure, so a 503/502/500/404 or a host's maintenance page
+          // all resolve here; caching one would poison the offline fallback
+          // below until the next successful navigation.
+          if (response.ok && response.type === 'basic') {
+            const copy = response.clone()
+            event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy)))
+          }
           return response
         })
         .catch(() => caches.match('/index.html').then((hit) => hit ?? Response.error())),
@@ -78,7 +93,9 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
       const cached = await cache.match(event.request)
       if (cached) return cached
       const response = await fetch(event.request)
-      await cache.put(event.request, response.clone())
+      // Same gate, and it matters more here: this branch is cache-first, so a
+      // bad response is not merely stored, it is never re-fetched.
+      if (response.ok && response.type === 'basic') await cache.put(event.request, response.clone())
       return response
     }),
   )

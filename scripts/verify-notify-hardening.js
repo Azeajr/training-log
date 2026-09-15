@@ -45,20 +45,16 @@ async function spawnPreview() {
 
 // ─── app flow helpers ────────────────────────────────────────────────────────
 
-async function fillStepper(page, testId, value) {
-  await page.getByTestId(testId).click()
-  const input = page.getByTestId('stepper-input')
-  await input.fill(String(value))
-  await input.press('Enter')
-}
-
+/**
+ * Setup is two steps: the lift roster, then the training maxes, which carries
+ * START TRAINING itself. No leg depends on the TM values, so the defaults
+ * (95/135/95/135) are accepted rather than dialled in — the steppers expose no
+ * data-testid in a production build, and driving them by their `-`/`+` labels
+ * would couple every leg to the wizard's layout for no gain.
+ */
 async function completeSetupWizard(page) {
-  const names = ['ohp', 'deadlift', 'bench', 'squat']
-  const tms = [95, 95, 135, 135]
-  await page.getByRole('button', { name: 'NEXT' }).click() // step 1
-  for (let i = 0; i < names.length; i++) await fillStepper(page, `stepper-tm-${names[i]}`, tms[i])
-  await page.getByRole('button', { name: 'NEXT' }).click() // step 2
-  await page.getByRole('button', { name: 'START TRAINING' }).click() // step 3
+  await page.getByRole('button', { name: 'NEXT' }).click() // roster -> training maxes
+  await page.getByRole('button', { name: 'START TRAINING' }).click()
 }
 
 async function enableRestNotifications(page) {
@@ -178,8 +174,10 @@ async function leg(name, fn) {
 }
 
 async function main() {
-  // Hard cap so a broken leg can never hang the harness.
-  setTimeout(() => { console.error('watchdog: 200s cap hit, forcing exit'); process.exit(3) }, 200_000)
+  // Hard cap so a broken leg can never hang the harness. `unref` so the timer
+  // does not itself keep the process alive once the legs are done — without it
+  // a fully passing run still sat here for 200s and then exited 3.
+  setTimeout(() => { console.error('watchdog: 200s cap hit, forcing exit'); process.exit(3) }, 200_000).unref()
   const browser = await chromium.launch()
   const preview = await spawnPreview()
   try {
@@ -191,6 +189,110 @@ async function main() {
       await page.reload()
       await page.getByText('HISTORY').first().waitFor({ timeout: 10_000 })
       await context.setOffline(false)
+    })
+
+    await leg('F: shell refreshes on 200, and a 503 never replaces it', async () => {
+      const { context, page } = await freshContext(browser)
+
+      // Read the cached shell directly. Asserting only that the app still
+      // renders offline is too weak: it passes while the navigation handler's
+      // cache write is dead, because `install` already precached a good shell
+      // and nothing can overwrite it. Both halves below must hold.
+      const shellStatus = () =>
+        page.evaluate(async () => {
+          const name = (await caches.keys()).find((k) => k.startsWith('precache-'))
+          const hit = name ? await (await caches.open(name)).match('/index.html') : null
+          return hit ? hit.status : null
+        })
+      const dropShell = () =>
+        page.evaluate(async () => {
+          const name = (await caches.keys()).find((k) => k.startsWith('precache-'))
+          if (name) await (await caches.open(name)).delete('/index.html')
+        })
+
+      // 1. Network-first means a healthy navigation REFRESHES the shell. If the
+      //    clone is taken after the body is handed to the navigation it throws
+      //    and the write silently never happens.
+      await dropShell()
+      if ((await shellStatus()) !== null) throw new Error('setup: shell was not dropped')
+      await page.goto(`${BASE}/`)
+      await page.waitForTimeout(1_000)
+      if ((await shellStatus()) !== 200) {
+        throw new Error('a healthy navigation did not refresh the cached shell')
+      }
+
+      // 2. One transient 503 while ONLINE. `fetch` only rejects on a network
+      //    failure, so this resolves and the handler must refuse to cache it.
+      //    Match on the path, not resourceType: the SW's own `fetch(req)` for a
+      //    navigation reaches Playwright as `fetch`, not `document`.
+      const poison = async (route, request) => {
+        if (new URL(request.url()).pathname === '/') {
+          await route.fulfill({
+            status: 503,
+            contentType: 'text/html',
+            body: '<html><body>SERVICE UNAVAILABLE</body></html>',
+          })
+        } else {
+          await route.continue()
+        }
+      }
+      await context.route('**/*', poison)
+      const res = await page.goto(`${BASE}/`)
+      if (res?.status() !== 503) throw new Error(`setup: expected a 503, got ${res?.status()}`)
+      await page.waitForTimeout(1_000)
+      const after = await shellStatus()
+      if (after !== 200) throw new Error(`503 replaced the cached shell (now ${after})`)
+      await context.unroute('**/*', poison)
+
+      // 3. And the end-to-end consequence: offline still renders the app.
+      await context.setOffline(true)
+      await page.goto(`${BASE}/`)
+      await page.getByText('HISTORY').first().waitFor({ timeout: 10_000 })
+      await context.setOffline(false)
+    })
+
+    await leg('G: a 502 must not enter the cache-first precache', async () => {
+      const { context, page } = await freshContext(browser)
+      // `/manifest.webmanifest` is precached and carries no content hash, so it
+      // is stable across builds. The precache branch is cache-first, so a bad
+      // response stored here is never re-fetched — worse than the navigation
+      // branch, where the next good navigation would heal it.
+      const PATH = '/manifest.webmanifest'
+      const cached = (p) =>
+        page.evaluate(async (p) => {
+          const name = (await caches.keys()).find((k) => k.startsWith('precache-'))
+          const hit = name ? await (await caches.open(name)).match(p) : null
+          return hit ? hit.status : null
+        }, p)
+      const evict = (p) =>
+        page.evaluate(async (p) => {
+          const name = (await caches.keys()).find((k) => k.startsWith('precache-'))
+          if (name) await (await caches.open(name)).delete(p)
+        }, p)
+
+      await evict(PATH)
+      if ((await cached(PATH)) !== null) throw new Error('setup: entry was not evicted')
+
+      const bad = async (route, request) => {
+        if (new URL(request.url()).pathname === PATH) {
+          await route.fulfill({ status: 502, contentType: 'text/plain', body: 'BAD GATEWAY' })
+        } else {
+          await route.continue()
+        }
+      }
+      await context.route('**/*', bad)
+      const status = await page.evaluate(async (p) => (await fetch(p)).status, PATH)
+      if (status !== 502) throw new Error(`setup: expected a 502, got ${status}`)
+      await page.waitForTimeout(500)
+      const poisoned = await cached(PATH)
+      if (poisoned !== null) throw new Error(`502 was written to the precache (status ${poisoned})`)
+      await context.unroute('**/*', bad)
+
+      // Healthy again: the entry must now cache normally.
+      const ok = await page.evaluate(async (p) => (await fetch(p)).status, PATH)
+      if (ok !== 200) throw new Error(`recovery: expected a 200, got ${ok}`)
+      await page.waitForTimeout(500)
+      if ((await cached(PATH)) !== 200) throw new Error('a good response was not precached')
     })
 
     await leg('C: visible tab - page silent, SW fires once', async () => {
