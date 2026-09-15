@@ -104,3 +104,46 @@ describe('TmRecommendationModal — actions', () => {
     expect(onAccept).not.toHaveBeenCalled()
   })
 })
+
+// ── F33 ─────────────────────────────────────────────────────────────────────
+// Probe P3: tap UPDATE TM, then press Escape while onAccept is still awaiting.
+// Modal owns Escape, stops its propagation and called onClose unconditionally,
+// so both callbacks fired and the dismiss path entered proceedAfterSession
+// alongside the accept's own still-pending call — one tap and one keypress away
+// from the duplicate-cycle state.
+describe('TmRecommendationModal — single flight', () => {
+  function deferred() {
+    let release!: () => void
+    const parked = new Promise<void>(r => { release = r })
+    return { fn: vi.fn(() => parked), release: () => release() }
+  }
+
+  it('does not dismiss on Escape while accept is in flight', async () => {
+    const accept = deferred()
+    const onDismiss = vi.fn()
+    const { getAllByRole, getByRole } = render(() => (
+      <TmRecommendationModal {...baseProps} onAccept={accept.fn} onDismiss={onDismiss} />
+    ))
+    fireEvent.click(getAllByRole('button')[2]) // UPDATE TM
+    await Promise.resolve()
+
+    fireEvent.keyDown(getByRole('dialog'), { key: 'Escape' })
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect(accept.fn).toHaveBeenCalledTimes(1)
+    accept.release()
+  })
+
+  it('accepts only once for repeated taps', async () => {
+    const accept = deferred()
+    const { getAllByRole } = render(() => (
+      <TmRecommendationModal {...baseProps} onAccept={accept.fn} />
+    ))
+    const btn = getAllByRole('button')[2]
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+    await Promise.resolve()
+    expect(accept.fn).toHaveBeenCalledTimes(1)
+    accept.release()
+  })
+})

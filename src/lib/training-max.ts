@@ -1,5 +1,6 @@
 import { createSignal } from 'solid-js'
 import type { TrainingDB } from '../db/index'
+import type { TrainingMax } from '../types/domain'
 
 // "Does this install have any training maxes at all?" — the one fact the
 // onboarding redirect in AppShell needs. It used to re-derive this with a
@@ -33,9 +34,23 @@ export function resetTrainingMaxPresence(): void {
   setHasTrainingMaxes(null)
 }
 
+// `trainingMaxes` is append-only with no ordering key but `setAt`, and the
+// concurrent post-session paths write rows at the same instant. The tie-break is
+// the row id: it is INTEGER PRIMARY KEY AUTOINCREMENT, so it is monotonic and
+// never reused, which makes the highest id at a given instant the newest insert.
+// This is the one definition — `getAllCurrentTms` used to disagree with it,
+// resolving the same tie to the opposite row (F36).
+const isNewer = (a: TrainingMax, b: TrainingMax): boolean => {
+  const at = new Date(a.setAt).getTime()
+  const bt = new Date(b.setAt).getTime()
+  return at !== bt ? at > bt : (a.id ?? 0) > (b.id ?? 0)
+}
+
 export async function getCurrentTm(db: TrainingDB, liftId: number): Promise<number> {
-  const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
-  return tms[tms.length - 1]?.weight ?? 0
+  const tms = await db.trainingMaxes.where('liftId').equals(liftId).toArray()
+  let best: TrainingMax | undefined
+  for (const tm of tms) if (!best || isNewer(tm, best)) best = tm
+  return best?.weight ?? 0
 }
 
 export async function setTm(db: TrainingDB, liftId: number, weight: number): Promise<number> {
@@ -62,14 +77,15 @@ export async function getAllCurrentTms(
   db: TrainingDB
 ): Promise<Record<number, number>> {
   const tms = await db.trainingMaxes.toArray()
-  const result: Record<number, number> = {}
-  const latestAt: Record<number, number> = {}
+  const best = new Map<number, TrainingMax>()
   for (const tm of tms) {
-    const ts = new Date(tm.setAt).getTime()
-    if (latestAt[tm.liftId] === undefined || ts > latestAt[tm.liftId]) {
-      latestAt[tm.liftId] = ts
-      result[tm.liftId] = tm.weight
-    }
+    const held = best.get(tm.liftId)
+    // Same rule as getCurrentTm. This used to compare with a strict `>` on the
+    // timestamp alone over table order, so at an equal instant the FIRST row
+    // won here and the LAST row won there (F36).
+    if (!held || isNewer(tm, held)) best.set(tm.liftId, tm)
   }
+  const result: Record<number, number> = {}
+  for (const [liftId, tm] of best) result[liftId] = tm.weight
   return result
 }

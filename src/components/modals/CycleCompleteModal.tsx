@@ -1,5 +1,6 @@
 import { Show, For } from 'solid-js'
 import Modal from './Modal'
+import { useSingleFlight } from '../../hooks/use-single-flight'
 
 // Defined in lib/cycle.ts alongside the logic that builds and updates it;
 // re-exported here so the modal's existing importers keep working.
@@ -8,12 +9,17 @@ import type { CycleCompleteData } from '../../lib/cycle'
 
 interface Props {
   data: CycleCompleteData | null
-  onDismiss: () => void
-  onDeload: () => void
-  onDoubleIncrement: (liftId: number, progressionIncrement: number) => void
+  onDismiss: () => void | Promise<void>
+  onDeload: () => void | Promise<void>
+  onDoubleIncrement: (liftId: number, progressionIncrement: number) => void | Promise<void>
 }
 
 export default function CycleCompleteModal(props: Props) {
+  // Every control here writes training maxes. The callbacks are awaited, and
+  // while one is in flight every button is disabled and Modal's own close paths
+  // (Escape, "← BACK") are suppressed.
+  const { busy, guard } = useSingleFlight()
+
   return (
     <Show when={props.data}>
       {data => (
@@ -21,7 +27,13 @@ export default function CycleCompleteModal(props: Props) {
         // arm, and "CUT ALL TMS −10%" is not something a stray keypress does.
         <Modal
           title="CYCLE COMPLETE"
-          onClose={props.onDismiss}
+          onClose={() => { void guard(props.onDismiss)() }}
+          busy={busy()}
+          // The first focusable is a "+X LBS" button, which WRITES a training
+          // max — landing focus there arms a non-idempotent write under the next
+          // Enter keypress. The rule for this prop is "first control performs a
+          // write", not "first control says DELETE" (F47).
+          initialFocus="container"
           class="bg-surface border border-accent p-6 font-mono max-w-sm w-full"
         >
           <div>
@@ -46,8 +58,11 @@ export default function CycleCompleteModal(props: Props) {
                       <div class="flex items-center justify-between text-sm">
                         <span class="text-text uppercase tracking-widest">{c.liftName}</span>
                         <button
-                          onClick={() => props.onDoubleIncrement(c.liftId, c.progressionIncrement)}
-                          class="border border-accent text-accent px-3 py-1 text-xs tracking-widest hover:bg-accent/10"
+                          onClick={() => {
+                            void guard(() => props.onDoubleIncrement(c.liftId, c.progressionIncrement))()
+                          }}
+                          disabled={busy()}
+                          class="border border-accent text-accent px-3 py-1 text-xs tracking-widest hover:bg-accent/10 disabled:opacity-40"
                         >
                           +{c.progressionIncrement * 2} LBS
                         </button>
@@ -58,14 +73,16 @@ export default function CycleCompleteModal(props: Props) {
               </div>
             </Show>
             <button
-              onClick={props.onDismiss}
-              class="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono mb-2"
+              onClick={() => { void guard(props.onDismiss)() }}
+              disabled={busy()}
+              class="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono mb-2 disabled:opacity-40"
             >
               CONTINUE
             </button>
             <button
-              onClick={props.onDeload}
-              class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-danger hover:text-danger"
+              onClick={() => { void guard(props.onDeload)() }}
+              disabled={busy()}
+              class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-danger hover:text-danger disabled:opacity-40"
             >
               CUT ALL TMS INSTEAD  −10%
             </button>

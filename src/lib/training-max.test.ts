@@ -142,3 +142,34 @@ describe('training-max presence signal', () => {
     expect(await refreshTrainingMaxPresence(db)).toBe(false)
   })
 })
+
+// ── F36 ─────────────────────────────────────────────────────────────────────
+// The two "current training max" helpers broke ties differently: getCurrentTm
+// sorts by setAt and takes the last (stable sort keeps insertion order, so the
+// newest row wins), while getAllCurrentTms compared with strict > over table
+// order, so the FIRST row won. Same table, same instant, two answers.
+//
+// Decided in B12d: highest id wins at equal setAt. trainingMaxes.id is INTEGER
+// PRIMARY KEY AUTOINCREMENT, so it is monotonic and never reused — the highest
+// id at a given instant IS the newest insert. That needs no new column and
+// keeps getCurrentTm's existing behaviour.
+describe('current training max tie-break', () => {
+  it('agrees between the two helpers when two rows share an instant (F36)', async () => {
+    const setAt = new Date('2026-03-01T10:00:00')
+    await db.trainingMaxes.add({ liftId: 1, weight: 200, setAt })
+    await db.trainingMaxes.add({ liftId: 1, weight: 210, setAt })
+
+    const single = await getCurrentTm(db, 1)
+    const all = await getAllCurrentTms(db)
+    expect(single).toBe(210)
+    expect(all[1]).toBe(210)
+    expect(all[1]).toBe(single)
+  })
+
+  it('still prefers the later timestamp over a higher id (F36)', async () => {
+    await db.trainingMaxes.add({ liftId: 1, weight: 300, setAt: new Date('2026-03-02T10:00:00') })
+    await db.trainingMaxes.add({ liftId: 1, weight: 100, setAt: new Date('2026-03-01T10:00:00') })
+    expect(await getCurrentTm(db, 1)).toBe(300)
+    expect((await getAllCurrentTms(db))[1]).toBe(300)
+  })
+})
