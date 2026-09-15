@@ -8,60 +8,65 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07 and B08 are CLOSED; B09 is open with B09a and B09b done.** Five
-rows remain in B09, all in the timer/audio slice.
+**Areas B07, B08 and B09 are all CLOSED.** All 10 B09 rows are `deep` across
+three batches (B09a–B09c). **126 of 179 ledger rows are now `deep`**, and the
+`reported` status is gone from the tracker entirely.
 
-**L04 is resolved and F24's notification tail is confirmed** — the two things this
-area was opened to settle.
+**B09 was opened to settle two things, and both are settled.**
 
-- **L04 → F65 (high).** The network-first navigation handler writes every resolved
-  response over the cached shell with no `response.ok` check
-  (`service-worker.ts:66-69`). One 503 while online, then an offline cold launch,
-  and the app serves `503 SERVICE UNAVAILABLE` instead of itself — permanently.
-  **F66 (medium)** is the same missing check on the cache-first precache branch,
-  where a bad response is never re-fetched.
-- **F24's tail, probe P26.** With `restTimer1=240`/`restTimer2=60`, the tray shows
-  *"Second bell"* at 60 s and *"First bell"* at 240 s — and because both carry
-  `tag: 'rest-timer'`, the later one **replaces** the earlier, leaving the user
-  with the notification for the checkpoint that already passed. F24 is amended
-  with this; it stays one finding, and its fix now wants an upper clamp too
-  (`Settings.tsx:475` bounds only the floor).
+- **L04 is resolved** — it was the last lead in this tracker never reproduced.
+  B09a probe P23 reproduces it and locates the cause: the network-first
+  navigation handler writes **every** resolved response over the cached shell
+  with no `response.ok` check (`service-worker.ts:66-69`). One 503 while online,
+  then an offline cold launch, and the app serves `503 SERVICE UNAVAILABLE`
+  instead of itself — permanently, until another successful online navigation.
+  Opened as **F65 (high)**; **F66 (medium)** is the same missing check on the
+  cache-first precache branch, where a bad response is never re-fetched at all.
+- **F24's notification tail is confirmed** (B09b probe P26). With
+  `restTimer1=240`/`restTimer2=60` the tray shows *"Second bell"* at 60 s and
+  *"First bell"* at 240 s, and because both carry `tag: 'rest-timer'` the later
+  one **replaces** the earlier — the surviving notification is for the checkpoint
+  that already passed. F24 is amended rather than duplicated, and its fix now
+  wants an upper clamp too (`Settings.tsx:475` bounds only the floor).
 
-**New this batch: F67 (medium, platform impact unverified).** `firePage` calls
-`new Notification(...)` with no `try`/`catch` and no `showNotification` fallback;
-P27 shows a throwing constructor escapes the timer tick silently. This module
-designates the page path as the *reliable* one, so if the constructor is
-unavailable on mobile the reliability story inverts on the target platform —
-flagged for a device check rather than asserted.
+Also opened: **F67** (medium — `firePage`'s unguarded `new Notification(...)`,
+platform impact flagged for a device check rather than asserted) and **F68** (low
+— the timer worker posts nothing on `resume`, so a backgrounded tab shows a stale
+countdown for up to a second before it jumps; the existing veil is scoped to
+bfcache and does not cover it).
 
-**Next batch: B09c — the timer worker and audio cues, which closes B09.**
-`src/lib/rest-timer-worker.ts` (13), `src/workers/timer.worker.ts` (33) and
-`src/lib/audio-cues.ts` (64) with `rest-timer-worker.test.ts` (47) and
-`audio-cues.test.ts` (197). `RestTimer.tsx` (B08e, `deep`) is the caller-side
-context: it assigns `worker.onmessage` on a singleton and posts
-`start`/`stop`/`pause`/`resume`, and F57's wake-lock churn runs in the same
-effect. `audio-cues` carries the `unlockAudio`/`ensureAudioCtx` pair that
-`RestTimer` wires to a `touchstart` listener.
+**Next area: B10 — build, deploy, config, scripts and public assets.** 25 rows,
+the largest remaining block, previously under-counted as 1. Start with the files
+B09 just made load-bearing: `vite.config.ts`'s PWA block feeds
+`__WB_MANIFEST` / `globPatterns` straight into F65's and F66's cache paths, and
+`.github/workflows/deploy.yml` is path-filtered and runs **no lint and no tests**
+(`CLAUDE.md`), so it is the only thing standing between a bad commit and
+production. **B11** (11 rows: E2E, test infrastructure, domain types, remaining
+stores) and **B12** (17 rows: documentation relevance and final reconciliation)
+follow.
 
-**Patterns to keep checking.** B08's five still hold; B09a/B09b add a sixth —
+**Six patterns now account for most of what this review has found.** B08's five —
+missing single-flight guards, single-slot state standing in for per-item state,
+state seeded once and never re-synced, cleanup bound to something that can stop
+existing, uneven keyboard/screen-reader access — plus the one B09 added:
 **unvalidated external data written to durable storage or trusted as control
-flow**: a response *status* (F65, F66), a restored settings envelope (F03, F08 —
-and the reason the missing upper clamp in F24's fix matters), and an engine
-capability assumed rather than tested (F67).
+flow.** A response *status* (F65, F66), a restored settings envelope (F03, F08 —
+and the reason F24's fix needs bounds), and an engine capability assumed rather
+than tested (F67) are all the same mistake in different clothes.
 
-Latest run: **B09b complete** — `src/lib/notifications.ts` (163),
-`notify-timers.ts` (115), `notifications.test.ts` (246) and
-`notify-timers.test.ts` (121) reviewed in full. Four files marked deep; **121
-files deep in total.** All 30 existing tests passed
-(`pnpm exec vitest run src/lib/notifications.test.ts src/lib/notify-timers.test.ts`);
-`pnpm lint` and `tsc -b` clean (exit 0). One new finding (F67); F24 extended.
-`notify-timers.ts` is clean, and the tag contract `service-worker.ts:88-92`
-claims was verified against it. Only this tracker changed; the probe was created
-inside `src/`, run, and deleted, leaving the tree clean. This card authorizes
-commit, push and PR; operator acceptance remains a separate native Kanban review
-step.
+Latest run: **B09c complete** — `src/lib/rest-timer-worker.ts` (13),
+`src/workers/timer.worker.ts` (33), `src/lib/audio-cues.ts` (64),
+`rest-timer-worker.test.ts` (47) and `audio-cues.test.ts` (197) reviewed in full.
+Five files marked deep; **126 files deep in total.** All 15 existing tests passed
+(`pnpm exec vitest run src/lib/rest-timer-worker.test.ts src/lib/audio-cues.test.ts`);
+`pnpm lint` and `tsc -b` clean (exit 0). One new finding (F68). `audio-cues.ts`
+and `rest-timer-worker.ts` are clean, and the worker's start/pause/resume/stop
+protocol was probed and is correct apart from F68. Only this tracker changed;
+probes were created inside `src/`, run, and deleted, leaving the tree clean. This
+card authorizes commit, push and PR; operator acceptance remains a separate native
+Kanban review step.
 
-**Remaining work — 58 of 179 ledger rows are not yet `deep`** (121 are). Recounted
+**Remaining work — 53 of 179 ledger rows are not yet `deep`** (126 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -79,7 +84,7 @@ correct; only the remaining-work totals were not.
 | B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
-| B09 | 5 pending | **Open (B09a, B09b done).** Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
+| B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
 B01–B07 are closed. Per-area scope and starting concerns are in the Queue table
 below; per-file status is in the File ledger.
@@ -196,6 +201,7 @@ claimed here.
 | F65 | **High**; B09a probe (P23), resolves L04 | `src/service-worker.ts:63-73` | The navigation handler is network-first and writes **every** resolved response over the cached shell with no `response.ok` check: `fetch(req).then(response => { void caches.open(CACHE_NAME).then(cache => cache.put('/index.html', response.clone())); return response })`. `fetch` only rejects on a *network* failure, so a 503, 502, 500, 404 or a host's maintenance page all resolve and all get cached. The offline fallback at `:70` then serves that entry. Probe: cached shell `"SHELL OK"` → one online navigation answered `503 Service Unavailable` → cached shell becomes `status=503`, `"SERVICE UNAVAILABLE"` → next **offline** cold launch returns `status=503 "SERVICE UNAVAILABLE"` instead of the app. Control: a 200 correctly refreshes the shell to `"SHELL v2"`. The break is **persistent** — nothing re-validates the entry until another *successful* online navigation happens, so a user who hits one transient deploy blip and then goes offline has no app at all. For an offline-first training log this defeats the product's core promise. This is **L04**, previously only a lead with an un-root-caused prior observation (`OFFLINE after HTTP503: 503 SERVER ERROR`); it is now reproduced and located. | Gate the cache write on `response.ok` (and on `response.type === 'basic'`), returning the response either way: only a good shell may replace a good shell. Consider also refusing to *serve* a cached non-ok entry in the `.catch` branch, so an already-poisoned cache self-heals. `src/service-worker.ts` has **no test file at all**; add one covering 503-then-offline, the 200 refresh, and the offline fallback. |
 | F66 | Medium; B09a probe (P24) | `src/service-worker.ts:75-84` | Same missing `ok` check on the precache branch, and here the policy is **cache-first**, so a bad response is not merely stored — it is never re-fetched. Probe: request a precached asset while the server answers `502` → the 502 is returned *and* written to the cache; second request with the server healthy again → `status=502`, `"502 BAD GATEWAY"`, `fetchCalled=0`. The network is never consulted again for that URL. **Narrower than F65:** `install` uses `cache.addAll`, which rejects atomically on any non-ok response, so a successfully activated SW normally has every precache path already stored and this branch is not reached. It becomes reachable when the browser evicts Cache API entries under storage pressure, or for a path in `PRECACHE_PATHS` that install did not store. | Add the same `response.ok` gate before `cache.put`, and return the network response without caching it when it is not ok. |
 | F67 | Medium (platform impact needs device verification); B09b probe (P27) + source inspection | `src/lib/notifications.ts:96-99`, `114-124` | `firePage` calls `new Notification(title, …)` behind a permission check only — **no `try`/`catch` and no fallback to `ServiceWorkerRegistration.showNotification`**. Probe P27 shows what an engine that rejects the constructor produces: the `TypeError` escapes the timer tick uncaught (`"TypeError: Failed to construct 'Notification': Illegal constructor."`), no notification appears, and nothing in the module reports it. The registry itself stays consistent — `pending()` correctly holds only the remaining target and the second bell still fires — so the failure is silent rather than cascading. **Why it matters:** this module designates the page path as the *reliable* one and the service-worker path as explicitly best-effort (`:1-13`), so if the page constructor is unavailable the reliability story inverts on exactly the platform this PWA targets. The `Notification` constructor is not the supported page-context path on Android Chrome or in iOS PWAs, but that claim is **not verified here** — per this project's standing rule about mobile behaviour, it needs a device check before the severity is settled. | Wrap the call and fall back: `try { new Notification(...) } catch { void registration?.showNotification(...) }`, or prefer `showNotification` whenever a registration exists. Settle the platform question on a real device (installed PWA, permission granted, tab hidden, one rest bell) and record the result. `notifications.test.ts` stubs `Notification` as a spy that always succeeds, so no existing case can observe a throwing constructor. |
+| F68 | Low; B09c probe (P28) | `src/workers/timer.worker.ts:26-31`, `5-12`; `src/components/workout/RestTimer.tsx:101-105`; `src/App.tsx:47-58` | `resume` clears the `paused` flag but posts nothing, and the 1 Hz interval keeps its original phase, so the first `elapsed` after the tab becomes visible arrives up to **a full second late**. Probe: 0 posts immediately on resume, 0 posts at 999 ms, first post at 1000 ms. Meanwhile `RestTimer`'s `elapsed` signal still holds the value from **before** the tab was hidden — the worker posts nothing while paused — so returning mid-rest after a five-minute background shows the five-minute-old countdown for about a second and then jumps (`"2:30 LEFT"` → `"OVER +4:12"`). This is **not** covered by the existing resume veil: `App.tsx:47-53` is deliberately scoped to bfcache restores (`pageshow.persisted`) and its own comment excludes `visibilitychange` as "ordinary app-switches where there's no repaint to mask" — which is exactly this case — and the veil lasts two animation frames, not a second. | Post one immediate tick on `resume` before letting the interval carry on: `case 'resume': paused = false; if (restStartedAt != null) self.postMessage({ elapsed: Math.floor((Date.now() - restStartedAt) / 1000) }); break`. Restarting the interval there would also reset its phase. `src/workers/timer.worker.ts` has **no test file**; add one for the start/pause/resume/stop protocol. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -254,7 +260,7 @@ area membership is not permission to review the entire area in one session.
 | B06 | Other screens and screen tests | Navigation, failure states, state consistency |
 | B07 | Calculation, progression, composition and other libraries/tests | **Closed** (B07a–B07g). Numeric boundaries and domain invariants; F24–F45 opened |
 | B08 | Components, hooks, related tests | **Closed** (B08a–B08h). Reported coverage recovered through bounded verification; F46–F64 opened |
-| B09 | Service worker, timers, notifications and tests | L04; offline and notification lifecycle |
+| B09 | Service worker, timers, notifications and tests | **Closed** (B09a–B09c). L04 resolved into F65; F65–F68 opened |
 | B10 | Build/deploy/config/scripts/public assets | Deployment assumptions and operational failures |
 | B11 | E2E, test infrastructure, domain types and remaining stores | Integration gaps and shared contracts |
 | B12 | Documentation/data relevance and final reconciliation | Scope accounting and cross-file closure |
@@ -373,8 +379,8 @@ column as work is completed.
 | `src/lib/accessory-tm.ts` | B07 | deep | B07e — all 78 lines; no findings; slate guard probed across six shapes |
 | `src/lib/assistance.test.ts` | B07 | deep | B07f — all 274 lines; 28 tests passed; test gaps below |
 | `src/lib/assistance.ts` | B07 | deep | B07f — all 182 lines; no findings; re-tag cascade and pick ordering probed |
-| `src/lib/audio-cues.test.ts` | B09 | pending | — |
-| `src/lib/audio-cues.ts` | B09 | pending | — |
+| `src/lib/audio-cues.test.ts` | B09 | deep | B09c — timer worker and audio cues (3/3); evidence below (14 cases, thorough) |
+| `src/lib/audio-cues.ts` | B09 | deep | B09c — timer worker and audio cues (3/3); evidence below (clean) |
 | `src/lib/calc.test.ts` | B07 | deep | B07a — all 1,127 lines; 187 tests passed; F29 and test gaps below |
 | `src/lib/calc.ts` | B07 | deep | B07a — all 576 lines; F24–F28 confirmed, F10 reconfirmed at 34-35 |
 | `src/lib/cleanup.test.ts` | B07 | deep | B07g — all 60 lines; 9 tests passed; no default-pick case |
@@ -400,8 +406,8 @@ column as work is completed.
 | `src/lib/plate-loading.ts` | B07 | deep | B07d — all 44 lines; no findings; resolve/fallback matrix probed by the existing suite |
 | `src/lib/pr.test.ts` | B07 | deep | B07d — all 302 lines; 33 tests passed; test gaps below |
 | `src/lib/pr.ts` | B07 | deep | B07d — all 138 lines; F37–F38 confirmed |
-| `src/lib/rest-timer-worker.test.ts` | B09 | pending | — |
-| `src/lib/rest-timer-worker.ts` | B09 | pending | — |
+| `src/lib/rest-timer-worker.test.ts` | B09 | deep | B09c — timer worker and audio cues (3/3); evidence below (2 cases, proportionate) |
+| `src/lib/rest-timer-worker.ts` | B09 | deep | B09c — timer worker and audio cues (3/3); evidence below (clean) |
 | `src/lib/session.test.ts` | B05 | deep | B05b — full file; helper status/rollback evidence below |
 | `src/lib/session.ts` | B05 | deep | B05b — full file; helper status/rollback evidence below |
 | `src/lib/tm-recommendations.test.ts` | B07 | deep | B07e — all 598 lines; 33 tests passed; test gaps below |
@@ -437,7 +443,7 @@ column as work is completed.
 | `src/test-setup.ts` | B11 | pending | — |
 | `src/types/domain.ts` | B11 | pending | — |
 | `src/vite-env.d.ts` | B11 | pending | — |
-| `src/workers/timer.worker.ts` | B09 | pending | — |
+| `src/workers/timer.worker.ts` | B09 | deep | B09c — timer worker and audio cues (3/3); evidence below (F68; no test file) |
 | `stryker.config.mjs` | B10 | pending | — |
 | `tests/e2e/app.spec.ts` | B11 | pending | — |
 | `tests/e2e/fixtures.ts` | B11 | pending | — |
@@ -3363,3 +3369,100 @@ B09a's carried question is answered above.
 has 5 rows left. **Next action: B09c — `src/lib/rest-timer-worker.ts`,
 `src/workers/timer.worker.ts` and `src/lib/audio-cues.ts` with
 `rest-timer-worker.test.ts` and `audio-cues.test.ts`**, which closes area B09.
+
+### 2026-09-15 — B09c: timer worker and audio cues (closes area B09)
+
+**Revision:** `240a977` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; three implementation files and two test
+files deeply reviewed; no application edits. **This closes area B09.**
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/lib/rest-timer-worker.ts` | 1–13 | `ce55a8dcbcfe0e82a22dcf1ba7b36f6c9e5dae70` |
+| `src/workers/timer.worker.ts` | 1–33 | `b39ce5e056cef9218080f8cee70980e844c88636` |
+| `src/lib/audio-cues.ts` | 1–64 | `e40c528748a01774042690572604660ea223e392` |
+| `src/lib/rest-timer-worker.test.ts` | 1–47 | `9e534bd94061d1ac4021146f89bf8da0ddd6603e` |
+| `src/lib/audio-cues.test.ts` | 1–197 | `9be82247cb4d8613c7c21a6373d8a9e5de1f4ab1` |
+
+**Behavior and invariants traced:**
+
+- `timer.worker`: the four-message protocol and what each does to `intervalId`,
+  `restStartedAt` and `paused`; `startTicking` clearing before re-arming;
+  `elapsed` derived from wall clock rather than accumulated ticks. F68 opened on
+  `resume`.
+- `rest-timer-worker`: the module-scoped singleton, deliberately never terminated
+  so remounting `RestTimer` costs nothing.
+- `audio-cues`: the single module-scoped `AudioContext` (iOS requires one instance
+  unlocked by a gesture), recreation only when the previous context is `closed`,
+  `playTone`'s oscillator + gain envelope with `startDelay` for multi-tone cues,
+  the three cue shapes, the `'vibrate' in navigator` guard, and the
+  `unlockAudio` / `ensureAudioCtx` pair that `RestTimer` binds to `touchstart`.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/lib/rest-timer-worker.test.ts src/lib/audio-cues.test.ts` — 2 files, **15 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P28 (the worker imported with `self.postMessage` stubbed and fake timers;
+  its `onmessage` invoked directly): `start` → 1 interval, posts `[1,2,3]` over
+  3 s; `pause` → 0 posts, **interval still alive**; `resume` → 0 posts
+  immediately, 0 at 999 ms, first post at **1000 ms** with the correct wall-clock
+  value; `stop` → 0 posts, 0 timers alive. F68.
+- Probe P28b: after a 60 s hidden gap, the first post reads `61s` — `elapsed` is
+  wall-clock, so a pause correctly does **not** pause the rest.
+- Probe P28c: a second `start` re-bases without stacking — 1 interval before and
+  after, 1 post per tick.
+- Not run: the full suite; any device check of audio unlock or vibration.
+
+**Findings:** F68 (low, confirmed).
+
+**Substantive negative conclusions:**
+
+- `audio-cues.ts` is **clean**, and its test file is the most thorough in this
+  area (14 cases covering tone parameters, context reuse and recreation, resume of
+  a suspended context, `unlockAudio`'s three states, and the vibration guard).
+  `playTone` swallows its own errors by design ("audio not available"), which is
+  right for a cue.
+- `rest-timer-worker.ts` is clean. Its two tests (construction and singleton) are
+  proportionate to 13 lines.
+- `pause` leaves the 1 Hz interval running and only suppresses posting. Checked and
+  **not opened**: browsers throttle timers in hidden tabs heavily, so the cost is
+  negligible, and the design is deliberate — `elapsed` must stay wall-clock because
+  a rest period continues in real time whether or not anyone is watching (P28b).
+- Crossing a bell threshold while hidden fires exactly **one** cue on return, not
+  one per missed threshold: `RestTimer`'s edge detector compares the phase at the
+  last-seen `elapsed` with the phase at the new one, so several crossed checkpoints
+  collapse into a single transition. Traced deliberately because it looks like a
+  missed-cue bug and is not one.
+- `playCue`'s multi-tone cues schedule each tone in its own `playTone` call, each
+  reading `ctx.currentTime` after its own `await ctx.resume()`. On the first cue
+  after a suspend the two reads can land a few milliseconds apart, so the 0.25 s /
+  0.3 s offsets are relative to slightly different origins. Left as an
+  observation: the drift is inaudible and only occurs on the first cue after the
+  context was suspended.
+- `getTimerWorker()` throwing (module workers unsupported, or blocked by CSP) would
+  take down `RestTimer`'s whole scheduling effect — notifications, wake lock and
+  `ensureAudioCtx` with it — since the call sits inside that effect with no guard.
+  Not opened: module workers are broadly supported on the platforms this PWA
+  targets, and no reachable failure was identified. Worth a `try`/`catch` if the
+  support floor ever widens.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- **`src/workers/timer.worker.ts` has no test file** — 33 lines that are the
+  heartbeat of the rest timer, and where F68 lives. The protocol is entirely
+  uncovered; `src/test-setup.ts`'s `MockWorker` re-implements it for component
+  tests, so the stub and the real worker can drift with nothing to catch it.
+- `audio-cues.test.ts` asserts tone parameters but never that two concurrent
+  `playTone` calls in one cue land at the intended relative offsets.
+
+**Open questions / remaining ranges:** none carried. F67's device check remains
+open from B09b and is the only outstanding verification in this area.
+
+**Area B09 closure:** all 10 ledger rows `deep` with per-file evidence. **L04
+resolved** into confirmed F65 — the last unreproduced lead in the tracker is now
+closed. Four findings opened (F65–F68); F24 extended. **Next action: B10 —
+build, deploy, config, scripts and public assets (25 rows)**, starting with
+`vite.config.ts`'s PWA block, which feeds `__WB_MANIFEST` and `globPatterns`
+directly into F65's and F66's cache paths, and `.github/workflows/deploy.yml`,
+which runs no lint and no tests.
