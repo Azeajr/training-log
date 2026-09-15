@@ -1,10 +1,12 @@
+import { createTransactionRunner, type TransactionRunner } from './transaction'
+
 type RunResult = { lastInsertRowid: number; changes: number }
 
 class SqliteClient {
   private worker: Worker
   private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>()
   private nextId = 0
-  private txDepth = 0
+  private runTransaction: TransactionRunner
   readonly ready: Promise<{ persistent: boolean }>
 
 
@@ -19,6 +21,11 @@ class SqliteClient {
       else p.resolve(result)
     }
     this.ready = this.send<{ persistent: boolean }>('init', undefined, [])
+    this.runTransaction = createTransactionRunner({
+      begin: async () => { await this.send('begin', undefined, []) },
+      commit: async () => { await this.send('commit', undefined, []) },
+      rollback: async () => { await this.send('rollback', undefined, []) },
+    })
   }
 
   private send<T>(type: string, sql: string | undefined, params: unknown[]): Promise<T> {
@@ -45,25 +52,8 @@ class SqliteClient {
     return this.send<RunResult>('run', sql, params)
   }
 
-  async transaction(fn: () => Promise<void>): Promise<void> {
-    // Reentrant: nested transactions just run inline. SQLite doesn't allow
-    // nested BEGINs and the outer transaction's atomicity covers the inner.
-    if (this.txDepth > 0) {
-      this.txDepth++
-      try { await fn() } finally { this.txDepth-- }
-      return
-    }
-    this.txDepth++
-    await this.send('begin', undefined, [])
-    try {
-      await fn()
-      await this.send('commit', undefined, [])
-    } catch (err) {
-      await this.send('rollback', undefined, [])
-      throw err
-    } finally {
-      this.txDepth--
-    }
+  transaction(fn: () => Promise<void>): Promise<void> {
+    return this.runTransaction(fn)
   }
 
   resetDb(): Promise<void> {

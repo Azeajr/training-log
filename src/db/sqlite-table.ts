@@ -275,24 +275,29 @@ export class SQLiteTable<T> {
       else groups.set(key, { cols, rows: [row] })
     }
 
-    await this.transaction(async () => {
-      for (const { cols, rows } of groups.values()) {
-        const colSql = cols.map((c) => `"${c}"`).join(',')
-        const tuple = `(${cols.map(() => '?').join(',')})`
-        // SQLITE_MAX_VARIABLE_NUMBER is 32766 in modern builds; chunk well under
-        // it so a wide table with many rows can't overflow the bind limit.
-        const perChunk = Math.max(1, Math.floor(20000 / Math.max(1, cols.length)))
-        for (let i = 0; i < rows.length; i += perChunk) {
-          const chunk = rows.slice(i, i + perChunk)
-          const values: unknown[] = []
-          for (const row of chunk) for (const c of cols) values.push(row[c])
-          await sqliteClient.run(
-            `INSERT INTO "${this.tableName}" (${colSql}) VALUES ${chunk.map(() => tuple).join(',')}`,
-            values,
-          )
-        }
+    // No transaction of its own. Transactions are serialized (see
+    // db/transaction.ts), which is only safe while `transaction()` is the one
+    // thing that opens one — a bulkAdd called from inside a caller's
+    // transaction would otherwise wait on a lock that caller is holding.
+    // Atomicity across a group of writes belongs to whoever knows what the
+    // group means, so callers that need it wrap the call themselves; the three
+    // that nest already do (export-import, Workout finish, HistoryEdit save).
+    for (const { cols, rows } of groups.values()) {
+      const colSql = cols.map((c) => `"${c}"`).join(',')
+      const tuple = `(${cols.map(() => '?').join(',')})`
+      // SQLITE_MAX_VARIABLE_NUMBER is 32766 in modern builds; chunk well under
+      // it so a wide table with many rows can't overflow the bind limit.
+      const perChunk = Math.max(1, Math.floor(20000 / Math.max(1, cols.length)))
+      for (let i = 0; i < rows.length; i += perChunk) {
+        const chunk = rows.slice(i, i + perChunk)
+        const values: unknown[] = []
+        for (const row of chunk) for (const c of cols) values.push(row[c])
+        await sqliteClient.run(
+          `INSERT INTO "${this.tableName}" (${colSql}) VALUES ${chunk.map(() => tuple).join(',')}`,
+          values,
+        )
       }
-    })
+    }
   }
 
   async clear(): Promise<void> {

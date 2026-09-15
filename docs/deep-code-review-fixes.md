@@ -9,15 +9,15 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | | Count |
 |---|---|
-| Findings | **97** (F01–F97; F95–F97 opened during fix work) |
-| `open` | **90** |
+| Findings | **98** (F01–F98; F95–F98 opened during fix work) |
+| `open` | **89** |
 | `wip` | 0 |
-| `fixed` | **7** — F65, F66, F73, F79, F95, F96, F97 |
+| `fixed` | **9** — F05, F06, F65, F66, F73, F79, F95, F96, F97 |
 | `fixed-by` | 0 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
 
-**By severity: 14 High / 51 Medium / 32 Low.**
+**By severity: 14 High / 51 Medium / 33 Low.**
 
 > **Count correction.** `deep-code-review.md:34` says "12 high". Counted directly
 > from its own findings table, **13** rows carry High: F01, F02, F04, F05, F07,
@@ -93,8 +93,8 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F02 | **High** | B01 | — | `src/db/sqlite.worker.ts` | `open` | — | — |
 | F03 | Medium | B04 | C6 | `src/lib/export-import.ts` | `open` | — | Settings allowlist drops `hasDeloadWeek: false`; pairs with F08. |
 | F04 | **High** | B01 | — | `src/db/sqlite-client.ts` | `open` | — | — |
-| F05 | **High** | B01 | — | `src/db/sqlite-client.ts` | `open` | — | — |
-| F06 | Medium | B01 | — | `src/db/sqlite-client.ts` | `open` | — | — |
+| F05 | **High** | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `<pending>` · `transaction.test.ts` ×3 | **Root cause was the inference, not the arithmetic.** A depth counter cannot tell a nested call from an unrelated concurrent one once the outer body has awaited. Fixed by removing the question: `transaction()` now serializes, and `bulkAdd` no longer opens one of its own, so nothing nests. `txDepth` deleted. |
+| F06 | Medium | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `<pending>` · `transaction.test.ts` ×2 | Deleted with the counter it corrupted — there is no depth to get stuck above zero. BEGIN now runs inside the queued turn, and the queue is handed on in a `finally` even when a caller never got a turn. |
 | F07 | **High** | B02 | — | `src/db/seed.ts` | `open` | — | — |
 | F08 | **High** | B04 | C6 | `src/lib/export-import.ts` | `open` | — | Envelope validation; precondition for F03/F28/F31/F41 import-restore paths. |
 | F09 | Medium | B04 | — | `src/lib/export-import.ts` | `open` | — | — |
@@ -186,6 +186,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F95 | **High** | — | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg F | **Opened during fix work, not by the review.** The navigation handler's shell refresh never executed: `response.clone()` ran inside the `caches.open(...).then()` callback, after `return response` handed the body to the navigation, so it threw "body is already used" and `void` swallowed it. The cached shell was frozen at whatever `install` precached; network-first refresh had never run once. Masked F65 and would have activated it if repaired alone. |
 | F96 | Medium | — | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · all 7 legs | **Opened during fix work.** The harness the review called "already exists, already passes" failed **all six legs**: `completeSetupWizard` drove a three-step wizard with `data-testid` selectors, and the wizard is now two steps with no testids in a production build. F79's own thesis, demonstrated — a dormant capability decays. |
 | F97 | Medium | — | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · exit 0 in 22s | **Opened during fix work.** The 200s watchdog `setTimeout` was never cleared or unref'd, so a fully passing run sat for 200s and then `process.exit(3)`. Wiring the harness into CI without this would have failed every build. |
+| F98 | Low | — | — | `src/db/seed.ts` | `open` | — | **Opened during fix work.** `_seedDatabase` does `db.lifts.clear()` then `db.lifts.bulkAdd(LIFTS)` as two statements. bulkAdd's own transaction never covered the `clear`, so this pair has never been atomic: a failure between them leaves the roster empty. Pre-existing and unchanged by the F05 work — noted rather than folded in, since it is a different defect from the one being fixed. Wrap the pair in `db.transaction`. |
 
 ## Open leads
 
