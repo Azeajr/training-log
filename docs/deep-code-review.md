@@ -8,51 +8,53 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Area B07 is closed; B08 is open.** B08a–B08c are complete — the whole
+**Area B07 is closed; B08 is open.** B08a–B08d are complete — the whole
 `src/components/modals/**` directory, `src/hooks/use-confirmation.ts` and the
-workout logging components are now `deep` at recorded blobs. Twenty-two of B08's
-54 rows are closed and the area-level `reported` claim has been replaced with
-per-file evidence for every one of them.
+workout components are `deep` at recorded blobs. Twenty-five of B08's 54 rows are
+closed, each with per-file evidence in place of the area-level `reported` claim.
 
-**The in-flight-guard question is settled: the guard belongs in `Modal`, not at
-each call site.** `Modal` owns Escape, swallows it with `stopPropagation`
-(`Modal.tsx:102-107`) and calls `onClose` unconditionally, so every dialog has a
-close path its own buttons cannot gate — B08a probe P3 reached F33's duplicate-cycle
-race with one tap plus one keypress. `LiftSetupModal.tsx:169` already hand-rolls
-the fix (`onClose={() => { if (!saving()) props.onCancel() }}` plus `disabled` on
-both footer buttons); lift that into `Modal` as a `busy?: boolean` prop.
+**Two patterns now account for most of what this area is producing, and both are
+worth looking for on purpose in the remaining slices.**
 
-**A second pattern is now worth naming: single-slot state standing in for
-per-item state.** F51 (`retrying` is one id for a list of failures) and F52
-(`crossSections()` hands `For` a fresh wrapper object per evaluation, remounting
-every block) are different symptoms of the same habit, and F52 is the third
-appearance of the `For`-identity regression this repo has already fixed twice.
-Worth checking for deliberately in the remaining B08 slices rather than stumbling
-onto it.
+1. **No single-flight guard on an async handler wired to `onClick`.** F33, F34,
+   F41, F51 and now F55 are all the same shape. The guard belongs in `Modal` —
+   `Modal` owns Escape, swallows it with `stopPropagation` (`Modal.tsx:102-107`)
+   and calls `onClose` unconditionally, so a call site cannot gate its own close
+   path; B08a probe P3 reached F33's race with one tap plus one keypress.
+   `LiftSetupModal.tsx:169` already hand-rolls the fix
+   (`onClose={() => { if (!saving()) props.onCancel() }}` plus `disabled` on both
+   footer buttons) — lift that into `Modal` as a `busy?: boolean` prop.
+2. **Single-slot or snapshotted state standing in for per-item state.** F51 (one
+   `retrying` id for a list of failures), F52 (`For` over freshly built wrapper
+   objects, remounting every cross block), F54 (one TM buffer reused across
+   exercises) and F55's `alreadyAdded` (snapshotted into `rows()` at load) are the
+   same habit. F52 is sharpened by `Workout.tsx:261-262`, which states that the
+   linear lists use `<Index>` precisely so a fresh-ref rebuild updates in place —
+   the mitigation was understood and applied to one list and not the other.
 
-**Next batch: B08d — the accessory pair.** `AccessoryLog.tsx` (248) and
-`AccessoryPicker.tsx` (263) with `AccessoryPicker.test.tsx` (88). These are the
-two largest remaining components in the area and they carry L02's accessory tail
-plus F41's ADD-button double-tap, so the slice is deliberately just three files.
+**Next batch: B08e — `RestTimer.tsx` (197) and `CollapsibleSection.tsx` (140)
+with `RestTimer.test.tsx` (322) and `CollapsibleSection.test.tsx` (108).**
+`RestTimer` is the only B08 component with a worker behind it and it carries F24's
+bell-ordering tail, so it wants its own slice; `CollapsibleSection` comes along as
+`CrossBlockLog`'s shell.
 
-Latest run: **B08c complete** — `src/components/workout/SetRow.tsx` (179),
-`CrossBlockLog.tsx` (61), `SessionBar.tsx` (93), `SaveFailureBanner.tsx` (57),
-`AmrapTargets.tsx` (43), `SetRow.test.tsx` (59), `SaveFailureBanner.test.tsx` (90)
-and `AmrapTargets.test.tsx` (43) reviewed in full. Eight files marked deep;
-**84 files deep in total.** All 18 existing tests passed
-(`pnpm exec vitest run src/components/workout/SetRow.test.tsx src/components/workout/SaveFailureBanner.test.tsx src/components/workout/AmrapTargets.test.tsx`);
-`pnpm lint` and `tsc -b` clean (exit 0). Three new findings: **F51** (medium,
-probe-confirmed — one `retrying` id for a list of failures re-enables a retry
-mid-flight and fires the same write twice), **F52** (medium, probe-confirmed with
-a control — a cross block's in-progress weight entry is silently discarded when
-the parent re-derives, which logging in any other cross block does) and **F53**
-(low, source inspection — `padEnd(14)` alignment in `AmrapTargets` is dead, no
-`whitespace-pre` anywhere in `src/`). Only this tracker changed; probes were
-created inside `src/`, run, and deleted, leaving the tree clean. This card
-authorizes commit, push and PR; operator acceptance remains a separate native
-Kanban review step.
+Latest run: **B08d complete** — `src/components/workout/AccessoryLog.tsx` (248),
+`AccessoryPicker.tsx` (263) and `AccessoryPicker.test.tsx` (88) reviewed in full.
+Three files marked deep; **87 files deep in total.** Both existing tests passed
+(`pnpm exec vitest run src/components/workout/AccessoryPicker.test.tsx`);
+`pnpm lint` and `tsc -b` clean (exit 0). Three new findings, all probe-confirmed:
+**F54** (medium — the SET TRAINING MAX buffer is never reset, so backing out with
+Escape and picking another exercise offers the previous one's number, and SAVE
+writes it), **F55** (medium — three taps on SAVE write three training-max rows and
+add the exercise three times; two taps on a row add it twice, because
+`alreadyAdded` is a load-time snapshot) and **F56** (low — a timed accessory
+renders the reps control until `exercises()` resolves, which after a reload is
+several awaits later than the store's synchronous hydration). Only this tracker
+changed; probes were created inside `src/`, run, and deleted, leaving the tree
+clean. This card authorizes commit, push and PR; operator acceptance remains a
+separate native Kanban review step.
 
-**Remaining work — 95 of 179 ledger rows are not yet `deep`** (84 are). Recounted
+**Remaining work — 92 of 179 ledger rows are not yet `deep`** (87 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -66,7 +68,7 @@ correct; only the remaining-work totals were not.
 | Area | Rows left | Shape of the work |
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
-| B08 | 32 (31 `reported`, 1 `partial`) | **Open (B08a–B08c done).** Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08d accessory (`AccessoryLog`, `AccessoryPicker`), B08e `RestTimer`/`CollapsibleSection`, B08f form inputs (`Stepper`, `NotesField`, `NotesText`, `DurationInput`), B08g form display + exercise editing, B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
+| B08 | 29 (28 `reported`, 1 `partial`) | **Open (B08a–B08d done).** Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08e `RestTimer`/`CollapsibleSection`, B08f form inputs (`Stepper`, `NotesField`, `NotesText`, `DurationInput`), B08g form display + exercise editing, B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
@@ -173,6 +175,9 @@ claimed here.
 | F51 | Medium; B08c probe (P9) | `src/components/workout/SaveFailureBanner.tsx:8`, `10-22`, `35-41` | `retrying` is a **single** `number | null` signal tracking in-flight state for a **list** of failures, so it gets two things wrong at once. Probe with two outstanding failures: tap RETRY on A → `A.disabled=true`, `B.disabled=false` (correct); tap RETRY on B → `A.disabled=false` with A's write **still in flight**, its label back to `RETRY`, and a third tap calls `retryA` a second time — `retryA.mock.calls.length === 2` concurrently. Then A settles and its `finally { setRetrying(null) }` clears **B's** marker too: `B.disabled=false` while B is still pending. The retry closure re-attempts the original write, so a duplicate accepted retry writes the set twice — the same shape as F33/F34, on the one path whose entire purpose is recovering a set that was already lost once. | Track in-flight retries as a set of ids (`createSignal<Set<number>>`) and add/remove per failure, or disable every retry button while any one is running. `SaveFailureBanner.test.tsx` has eight cases including a failed retry and a multi-failure list, but never two retries at once; add that case. |
 | F52 | Medium; B08c probe (P10) | `src/screens/Workout.tsx:650-656`, `910-924`; `src/components/workout/CrossBlockLog.tsx:44-57`; `src/components/workout/SetRow.tsx:38-53`, `88-96` | `crossSections()` rebuilds its wrapper objects on every evaluation (`crossBlocks().map(block => ({ block, sets, logged, cursor }))`), and `<For each={crossSections()}>` keys items by reference — so each re-derive **remounts every cross block**, and `SetRow`'s uncommitted local state (`reps`, `weight`, `weightTouched`) is destroyed with it. Probe: three taps on the active cross set's weight stepper → `207.5lb`; one parent re-derive → back to `200lb`, silently. Control with the same item references held stable across the re-derive keeps `207.5lb`, so identity is the cause, not the re-render. `crossSections()` depends on `crossBlocks()`, `crossSets()` and `workout.loggedCrossSets`, so **logging a set in one cross block wipes a weight the user has dialled into another** — the case the independent-cursor design at `CrossBlockLog.tsx:29-32` exists to support. The linear flow is unaffected: `warmupSets()`/`mainSets()`/`fslSets()` are `filter`s over `allSets()` and preserve item references. | Give the cross sections a stable identity — memoize per `movementLiftId` (`createMemo` / `mapArray`), or key the `For` on the id rather than the wrapper object. Same defect family as the stepper hold-to-repeat and cross-lift scroll-jump regressions already fixed in this repo. Add a test that dials a weight in one block, logs a set in another, and asserts the first block's entry survives. |
 | F53 | Low (cosmetic); B08c source inspection | `src/components/workout/AmrapTargets.tsx:23`, `33` | Both branches pad the target label with `t.label.toUpperCase().padEnd(14)` to line the rep counts up into a column, but the padding is emitted as ordinary HTML text with no `whitespace-pre` on the element or any ancestor (`grep -rn 'whitespace-pre' src/` returns nothing), so the browser collapses every run of spaces to one and the columns never align. `font-mono` sets the typeface, not the whitespace mode. | Either add `whitespace-pre` to the label span, or drop `padEnd` and lay the row out with a grid/flex column so the alignment is real. Verified by inspection of the class lists rather than by measuring rendered layout — `textContent` keeps the spaces either way, so a jsdom assertion could not settle it. |
+| F54 | Medium; B08d probe (P11) | `src/components/workout/AccessoryPicker.tsx:40-42`, `146-166`, `225-228` | The SET TRAINING MAX sub-sheet's buffer (`tmWeight`, `tmIncrement`) is component-level state that is never reset when `settingTm` changes, and the sheet's documented way out — Escape, which `setSettingTm(null)`s back to the list rather than closing the picker — leaves it dirty. Probe: dial Aaa Dips' TM to `25`, press Escape, pick Bbb Pushups → the header reads `Bbb Pushups` and the TM stepper still reads **`25`**. SAVE writes that number as the new exercise's training max, and an accessory TM drives every prescribed weight for that exercise from then on, so a wrong one is not self-correcting. The stepper starts at 0 for a genuinely fresh pick, which is what makes a carried-over non-zero value look like a real suggestion. | Reset `tmWeight`/`tmIncrement` when `settingTm` changes — seed them in `handleSelect` alongside `setSettingTm(row.exercise)`, or key the sub-sheet on the exercise id so it remounts. Add a back-out-and-pick-another test. |
+| F55 | Medium; B08d probes (P12, P14) | `src/components/workout/AccessoryPicker.tsx:127-144`, `146-166`, `252-258`; `src/store/workout-store.ts:199-208` | Neither commit path in the picker has an in-flight guard, and both are `async` handlers wired straight to `onClick`. **SAVE** (P12): three taps on the TM sheet → **three** `accessoryTrainingMaxes` rows, all weight 20, and **three** copies of the exercise in `activeAccessories`. The duplicate TM rows share a `setAt` instant, which is exactly the tie-break F36 says the two "current TM" helpers resolve differently. **Row select** (P14): the `if (row.alreadyAdded) return` guard reads a flag baked into `rows()` at load time, so it cannot see an add made by the previous tap — two taps on one row → the exercise added twice. For a fixed slot `addAccessory` filters by slot and the duplicate collapses; for `'extra'` it appends, so the session renders the same exercise two or three times, each with its own independent set log. | Same fix as F33/F34/F41: a single-flight flag that disables both SAVE and the row buttons for the duration of the handler. `alreadyAdded` should also be derived live from `workout.activeAccessories` rather than snapshotted into `rows()`. |
+| F56 | Low; B08d probe (P13) | `src/components/workout/AccessoryLog.tsx:24`, `73-87`; `src/screens/Workout.tsx:258`, `950`, `969`; `src/store/workout-store.ts:109-112` | `type()` falls back to `'reps'` whenever `props.exercise` is `undefined`, and the exercise row is looked up from `exercises()`, which starts empty and is filled by the **last** await of Workout's load (`setExercises(await db.exercises.toArray())` at `:258`). `workout.activeAccessories`, by contrast, is hydrated synchronously at module load from localStorage (`...loadFromStorage()`), so after a reload mid-session the accessory renders before its exercise row exists. Probe: same accessory, `exercise={undefined}` → the **reps** control renders and no time control; with the timed exercise passed → time control, no reps. Logging inside that window writes `reps: n, duration: null` for a timed exercise, which `accessorySetValue` then renders as a rep count. | Render the log controls only once `props.exercise` is resolved (a skeleton or a disabled form in the meantime), or hoist the exercise lookup so the accessory and its type arrive together. Load `exercises()` earlier in Workout's sequence — it has no dependency on the awaits ahead of it. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -320,9 +325,9 @@ column as work is completed.
 | `src/components/ui/InlineConfirm.test.tsx` | B08 | reported | Area claim only |
 | `src/components/ui/InlineConfirm.tsx` | B08 | reported | Area claim only |
 | `src/components/ui/ToggleChip.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/AccessoryLog.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/AccessoryPicker.test.tsx` | B08 | reported | Area claim only |
-| `src/components/workout/AccessoryPicker.tsx` | B08 | reported | Area claim only |
+| `src/components/workout/AccessoryLog.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (F56; no test file) |
+| `src/components/workout/AccessoryPicker.test.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (recency window only) |
+| `src/components/workout/AccessoryPicker.tsx` | B08 | deep | B08d — accessory logging and picking (4/8); evidence below (F54, F55) |
 | `src/components/workout/AmrapTargets.test.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (no onPick coverage) |
 | `src/components/workout/AmrapTargets.tsx` | B08 | deep | B08c — workout logging components (3/8); evidence below (F53) |
 | `src/components/workout/CollapsibleSection.test.tsx` | B08 | reported | Area claim only |
@@ -2630,3 +2635,96 @@ finding against a reviewed file, not a reopened row.
 `deep`; B08 now has 32 rows left. **Next action: B08d — `AccessoryLog.tsx` and
 `AccessoryPicker.tsx` with `AccessoryPicker.test.tsx`**, carrying L02's accessory
 tail and F41's ADD-button double-tap.
+
+### 2026-09-15 — B08d: accessory logging and picking
+
+**Revision:** `3aacf3c` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; two implementation components (511 lines,
+the two largest left in the area) and one test file deeply reviewed; no
+application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/components/workout/AccessoryLog.tsx` | 1–248 | `c36366762a17902e55b005211af99f3153f388cd` |
+| `src/components/workout/AccessoryPicker.tsx` | 1–263 | `edec8ad1c4df015ca8168cf7ea104fb7683db0f2` |
+| `src/components/workout/AccessoryPicker.test.tsx` | 1–88 | `60ac24ebbf952fde781431ad296f71567af338bd` |
+
+**Behavior and invariants traced:**
+
+- `AccessoryLog`: the three exercise types (`reps` / `timed` / `distance`) and how
+  each selects its control and its persisted field, `nextSet`/`done` memos and the
+  `addingExtra` escape hatch past `ACCESSORY_SETS`, the weight carried from the last
+  logged set (`initWeight`), the separate per-set edit buffer, notes editing through
+  the store, `startRest` keyed on `restTypeAfterSet`, and the documented decision
+  that logging changes no program state (the TM question is asked once at session
+  end). F56 opened on the `type()` fallback.
+- `AccessoryPicker`: both modes (`'session'` vs `'default'`), the recency ranking
+  that floats previously used accessories above the alphabetical rest, the
+  `groupByAssistanceSection` layout for the `'extra'` library view, the
+  best-effort `persistDefault` that must never block a pick, the TM sub-sheet for
+  an exercise with no training max, and Escape backing out to the list rather than
+  out of the picker. F54 and F55 opened.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm exec vitest run src/components/workout/AccessoryPicker.test.tsx` — **2 tests passed**.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P11 (`AccessoryPicker`, two push exercises, neither with a TM): dialled
+  Aaa Dips to `25`, Escape back to the list, picked Bbb Pushups → header
+  `"Bbb Pushups"`, TM stepper still `"25"`. F54.
+- Probe P12 (`AccessoryPicker` `'extra'`, three taps on SAVE at TM 20):
+  `accessoryTrainingMaxes` → **3 rows** `[20,20,20]`; `activeAccessories` → **3
+  entries** `[1,1,1]`; SAVE never disabled. F55.
+- Probe P14 (`AccessoryPicker` `'extra'`, exercise already has a TM, two taps on
+  the row): row not disabled, `activeAccessories` → `[1,1]`. F55's second trigger.
+- Probe P13 (`AccessoryLog`, same accessory rendered twice): with
+  `exercise={undefined}` a reps control renders and no time control; with the timed
+  exercise passed, a time control renders and no reps control. F56.
+- Reachability for F56 traced in source rather than probed end to end:
+  `workout.activeAccessories` is hydrated synchronously at module scope
+  (`workout-store.ts:109-112`, `...loadFromStorage()`), while `exercises()` is
+  filled by the last await of Workout's load (`Workout.tsx:258`).
+- Not run: the full suite.
+
+**Findings:** F54 (medium, confirmed), F55 (medium, confirmed on two independent
+triggers), F56 (low, confirmed).
+
+**Substantive negative conclusions:**
+
+- The accessory lists do **not** share F52's remount defect. `extraAccessories()`
+  (`Workout.tsx:133`) is a `filter` over `workout.activeAccessories`, so item
+  references survive a re-derive, and the fixed slots render through a `<Show>`
+  rather than a `For`. `AccessoryLog`'s own `<For each={props.accessory.loggedSets}>`
+  iterates store rows directly. Checked deliberately because F52 came out of the
+  neighbouring component.
+- `Workout.tsx:261-262` documents that the linear lists use `<Index>` so that a
+  fresh-ref rebuild updates in place without remounting. Recorded here because it
+  confirms F52 is a gap in an understood mitigation, not an unknown hazard.
+- `AccessoryPicker`'s `grouped()`, `slotRows()`, `usedSlotRows()` and
+  `restSlotRows()` all build new arrays per evaluation, but every row is a
+  stateless `<button>`, so a remount costs nothing. Not a finding.
+- `persistDefault` swallows its error into `console.warn` by design — the comment
+  at `:112-117` states that persisting a default must never block the pick. The
+  user gets no signal that the default did not update; left as documented
+  behaviour rather than reopened as a finding.
+- `saveEditSet` writes `weight` for every exercise type, including `timed` and
+  `distance` sets where the buffer seeds to `s.weight ?? 0`. Consistent with
+  `handleLog`, which also always writes `weight`, and harmless for bodyweight work.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- `AccessoryPicker.test.tsx` has **two** cases and both are about the recency
+  window. For a 263-line component with two modes, three list layouts, a TM
+  sub-sheet and two commit paths, nothing else is covered — F54 and F55 both sit in
+  untested code.
+- `AccessoryLog.tsx` has no test file at all: 248 lines covering three exercise
+  types, an edit buffer, notes and the extra-set path.
+
+**Open questions / remaining ranges:** none carried from this batch. F56's fix
+touches `Workout.tsx` (already `deep` from B05/B06) as well as the component.
+
+**Ledger rows updated:** three `src/components/workout/**` rows moved `reported` →
+`deep`; B08 now has 29 rows left. **Next action: B08e — `RestTimer.tsx` and
+`CollapsibleSection.tsx` with `RestTimer.test.tsx` and
+`CollapsibleSection.test.tsx`**, carrying F24's bell-ordering tail.
