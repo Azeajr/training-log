@@ -8,60 +8,76 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07 through B11 are all CLOSED.** All 11 B11 rows are `deep` across
-three batches (B11a–B11c). **162 of 179 ledger rows are now `deep`.** One area
-remains: **B12 — documentation relevance and the final reconciliation (17 rows)**,
-which closes the review.
+# ✅ REVIEW COMPLETE — 2026-09-15
 
-**B11 reviewed the test layer itself, and every batch found the same shape: the
-thing under test and the thing testing it had drifted, with nothing in between to
-notice.**
+**All 179 ledger rows are `deep`. All twelve areas (B01–B12) are closed. The
+four conditions of batch rule 8 are met**; the evidence for each is in the B12d
+entry at the end of this document.
 
-- **F85 (medium)** — B11a ran the end-to-end suite, apparently for the first
-  time, and **6 of 32 tests fail**. Every failure is spec drift, not a product
-  bug. Three causes: the wizard went from three steps to two, `SessionBar` split
-  FINISH from COMPLETE SESSION, and `Stepper` gained `fieldLabel` so `+` is no
-  longer the button's accessible name. In all three the **helper was updated and
-  the specs were not** — helpers are shared, specs are executed by nothing (F74).
-- **F87 (medium)** — B11b measured `test-setup.ts`'s `MockWorker` against the
-  real `timer.worker.ts` and found three divergences. Neither is checked against
-  the other, because `timer.worker.ts` has no tests. Sharpest consequence: **fix
-  F68 and a test asserting the fix fails under the stub.**
-- **F86, F88 (low)** — `test-results/.last-run.json` is tracked and carries a
-  stale `{"status": "passed"}` receipt for a suite that fails; and
-  `sessionIdsWithGaps` is a dead export whose comment names a consumer that does
-  not exist, with a passing test covering it.
+| Rule 8 condition | Status |
+|---|---|
+| Every in-scope file `deep` at its applicable revision | **Met** — 179/179, no row in any other state |
+| Cross-file questions resolved or explicitly blocked | **Met** — L01–L05 and L07 resolved; **L06 explicitly blocked on authorization** (it needs a failure-injection pass, which is a different kind of work and was never authorized) |
+| Findings reconciled | **Met** — 94 findings recorded with severity, evidence and current state; F36 decided, F82 decided, F52/F70/F76/F78/F79/F80/F82 amended against later evidence |
+| Appropriate final integration checks | **Met** — `pnpm check:ci` green: 48 files / **1,094 tests passing**, coverage **93% stmts / 85.4% branch / 91.7% funcs / 95.9% lines**, production build clean |
 
-**F78 was amended** with a constraint found in B11a: the E2E suite is
-structurally bound to the dev server by its reset strategy —
-`helpers.freshStart` waits on `window.__e2eResetDb`, and `sqlite-client.ts:93`
-defines that hook inside `if (import.meta.env.DEV)`. Pointing it at a production
-build is not a one-line change.
+**What this does NOT claim.** Review completion and bug resolution are separate
+states, as rule 8 says. **No application or test file was changed at any point in
+this review** — all 94 findings remain open. Specifically not claimed: that the
+app is correct (F65 is a high-severity live defect), that the test suite is
+trustworthy end to end (**F85: 6 of 32 E2E tests fail**), or that the
+mobile-specific items are settled (**F67 needs a device check** and is recorded as
+unverified, per this project's rule about mobile claims).
 
-**Next and last area: B12 — documentation relevance and final reconciliation
-(17 rows).** `CLAUDE.md`, `README.md`, `ROADMAP.md`, `ENGINEERING_PASSES.md`,
-`docs/INDEX.md`, the three `.claude/` key docs, three verification docs,
-`AMRAP_TARGET_REPS_ANALYSIS.md`, `docs/design/plate-loading-model.md`,
-`docs/ui-consistency-review.md` and two READMEs. It already carries inbound work
-from earlier areas: **F36** (the `getCurrentTm`/`getAllCurrentTms` tie-break
-reconcile was explicitly deferred here), **F76** (`CLAUDE.md` claims the deploy
-workflow runs no lint and no tests; it runs `check:ci`), **F82** (decide whether
-`demo-seed.json` is wired up or deleted) and **F83** (`.gitignore` hides
-`.claude/` while `CLAUDE.md` points at three tracked files inside it). Per batch
-rule 8, the area also owns the completion claim: every in-scope file `deep`,
-cross-file questions resolved or explicitly blocked, and findings reconciled.
+## The findings, in one view
 
-Latest run: **B11c complete** — `src/store/save-failure-store.ts` (116),
-`save-failure-store.test.ts` (75), `src/store/toast-store.ts` (12) and
-`toast-store.test.ts` (47) reviewed in full. Four files marked deep; **162 files
-deep in total.** All 12 existing tests passed
-(`pnpm exec vitest run src/store/save-failure-store.test.ts src/store/toast-store.test.ts`);
-`pnpm lint` and `tsc -b` clean (exit 0). One new finding (F88). `toast-store.ts`
-is clean. Only this tracker changed; the tree is clean. This card authorizes
-commit, push and PR; operator acceptance remains a separate native Kanban review
-step.
+**94 findings — 12 high, ~48 medium, ~32 low** (F47 and F70 carry conditional
+severities). They are not 94 unrelated bugs; they cluster into seven patterns,
+each with a one-place fix:
 
-**Remaining work — 17 of 179 ledger rows are not yet `deep`** (162 are). Recounted
+1. **No single-flight guard on an async `onClick`** — F33, F34, F41, F51, F55.
+   The guard belongs in `Modal`, which owns Escape and so owns a close path no
+   call site can gate. `LiftSetupModal.tsx:169` already hand-rolls it.
+2. **Single-slot or snapshotted state standing in for per-item state** — F51,
+   F52, F54, F55, F57, F63.
+3. **State seeded once and never re-synced, or re-synced over the user** — F49,
+   F54, F56, F63. `DurationInput.tsx:18-23` is the counter-example done right.
+4. **Cleanup or a default bound to something that can stop existing** — F57, F58,
+   F62.
+5. **Uneven keyboard and screen-reader access** — F59, F60, F61, F64. In each
+   case a neighbouring file does it correctly.
+6. **Unvalidated external data written to durable storage or trusted as control
+   flow** — F65, F66 (a response *status*), F03/F08 (a restored envelope), F67
+   (an engine capability assumed rather than tested).
+7. **A change made and its description not updated** — F76, F89, F90, F91, F92,
+   F93, and F84. This is B12's whole story.
+
+## If only a few things get fixed
+
+1. **F65 (high)** — one 503 while online permanently poisons the offline shell.
+   For an offline-first training log this is the product's core promise failing.
+   **Fix it with F79**: wire `verify-notify-hardening.js` into CI and add a 503
+   leg to it. That harness already exists, already passes, and its leg A is the
+   healthy-path twin of this bug. F78 is the precondition.
+2. **F85 + F74** — the E2E suite fails 6 of 32 and nothing runs it. Fixing the
+   assertions without wiring up CI returns it to exactly the state that produced
+   the finding.
+3. **F69** — the coverage gate measures a third of the codebase; 22 of the 23
+   findings from B08 and B09 live where it cannot see.
+4. **F73** — `pnpm dlx wrangler` runs unpinned with a production token, past
+   every supply-chain control the repo otherwise applies.
+5. **F94** — one missing index on the table the mid-set PR check scans.
+
+## Read the documentation findings differently
+
+B12 established that **four findings this review opened were already documented**
+— F82 (`COMMON_MISTAKES` #7), F80 (`QUICK_START:36-38`), F69's scope
+(`QUICK_START:22`), and F52's rule (`COMMON_MISTAKES` #6, which states the defect
+exactly and prescribes the fix). Those are **known, deliberate states**, not
+oversights, and they should not be closed the same way as a finding nobody knew
+about. The amendments are recorded on each finding.
+
+**Remaining work — 0 of 179 ledger rows are not yet `deep`** (**all 179 are**). The File ledger is complete; what remains is B12d's reconciliation, not further per-file review. Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -77,7 +93,7 @@ correct; only the remaining-work totals were not.
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
-| B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
+| B12 | **0 — closed** | All 17 rows `deep` (B12a–B12c); B12d discharged rule 8. F89–F94 opened; F36 and F82 decided; seven findings amended. |
 | B11 | **0 — closed** | All 11 rows `deep` across B11a–B11c. F85–F88 opened; F78 amended. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
@@ -164,7 +180,7 @@ claimed here.
 | F33 | High; B07c concurrent-call probe against real SQLite | `src/screens/Workout.tsx:501-509`, `512-552`; `src/lib/cycle.ts:108-136`; `src/components/modals/TmRecommendationModal.tsx:48-53`; `src/components/modals/AccessoryTmModal.tsx:52-60` | The post-session modal callbacks are the one finishing path outside `runFinishing`, and neither modal disables its ACCEPT button while its handler is awaiting. `handleTmRecommendationAccept` awaits `setTm` *before* clearing `tmRecommendation`, so a second tap re-enters with `rec` still non-null; `handleAccessoryTmAccept` never clears `pendingFinish` at all. Both then call `proceedAfterSession` → `advanceCycleIfComplete` concurrently. `advanceCycleIfComplete` reads the cycle, tests `weekComplete`, and only afterwards opens its transaction, so both calls pass the guard: probe leaves **two cycle rows both numbered 2** (`[{id:1,n:1,end:1},{id:2,n:2},{id:3,n:2}]`) plus a duplicate TM row (`200,205,205`). `db.cycles.orderBy('number').last()` then picks one arbitrarily and the other cycle is unreachable but permanent — cycle numbering, History grouping and every `where('cycleId')` query are wrong from then on. The awaited/sequential case is genuinely idempotent (probe + `cycle.test.ts:325`), so only the concurrent one breaks. **B08a adds a second, cheaper trigger:** `Modal` owns Escape, stops its propagation and calls `onClose` unconditionally (`Modal.tsx:102-107`), so the dialog's own buttons cannot gate it. Probe P3 — tap UPDATE TM, press Escape while `onAccept` is still awaiting — records `accept:start → dismiss → accept:end` with both callbacks fired once, so `handleTmRecommendationDismiss` enters `proceedAfterSession` while the accept's own call is still pending. One tap plus one keypress reaches the same duplicate-cycle state as the double tap. `AccessoryTmModal`'s UPDATE is likewise live throughout: three taps → three `onAccept` calls, `disabled=false` (its `disabled` only covers the empty selection). | Single-flight the whole post-session chain: extend `runFinishing` (or an equivalent guard) across the accessory-TM and TM-recommendation callbacks, clear `tmRecommendation`/`pendingFinish` before the first await, and disable modal buttons while their handler is in flight. Independently, make `advanceCycleIfComplete` self-guarding — re-read the cycle inside the transaction and abort when `endDate` is already set or a cycle with `number + 1` exists, so a second caller cannot duplicate it. Note this cannot rely on `db.transaction` for isolation while F05/F06 stand. Add a concurrent-call test to `cycle.test.ts`, which has none. **Guard location settled in B08a:** put it in `Modal` as a `busy?: boolean` prop that suppresses Escape and `← BACK`, with each call site passing the same flag to its buttons' `disabled` — a per-call-site guard cannot close the Escape path. |
 | F34 | Medium; B07c staggered-call probe against real SQLite | `src/lib/cycle.ts:167-169`, `187-204`; `src/components/modals/CycleCompleteModal.tsx:48-53`, `66-71`; `src/screens/Workout.tsx:634-641`; `src/screens/Settings.tsx:1040-1043` | `CycleCompleteModal` fires `onDoubleIncrement`/`onDeload` as un-awaited `void` callbacks and never disables the buttons, and neither `applyCycleDoubling` nor `deloadTms` is idempotent — both read the latest TM and append a new row. A second tap after the first read settles compounds: TM **205 → 210 → 215** for one "+10 LBS" button, and **200 → 180 → 160** for one "CUT ALL TMS −10%". Simultaneous taps instead append a duplicate row at the same weight (`205,210,210` / `200,180,180`), which is silent but leaves two TMs at the same instant (see F36). The returned summary even renders the compounded 215, so the readout confirms a change the user asked for once. `applyCycleDoubling` also folds back **by lift name** (`t.liftName === liftName`) while `lifts.name` has no UNIQUE constraint: with two lifts named "Bench", accepting on one rewrites the other's summary row to the wrong weight (`300 → 210`; probe P8). The DB write itself is by `liftId` and stays correct. | Disable the modal's buttons for the duration of their handler and await the callbacks; make the two writes idempotent or guard them behind a single-flight token. Key the summary fold-back on `liftId` — `newTms` should carry the id alongside the name. Add `applyCycleDoubling` and `deloadTms` double-invocation tests; `cycle.test.ts` never imports `applyCycleDoubling` at all. |
 | F35 | Medium; B07c real-SQLite probe (P5) | `src/lib/cycle.ts:119-121`, `234-242`; `src/screens/Settings.tsx:415-442`; `src/screens/Today.tsx:58`, `83-87` | Retiring the sessions that a cycle shrink orphans lives only in `Settings.handleCycleShapeChange:430-434`, not in `advanceCycleIfComplete`. With `hasDeloadWeek: false` reached by any other route, a live week-4 session is stepped over: probe seeds weeks 1–3 complete plus one `pending` week-4 row with a logged set, calls `getNextSessionAdvancingIfDone`, and gets cycle 2 / week 1 while the week-4 row stays `pending` in cycle 1 **with its sets intact**. Today only queries `next.cycleId` so it can never be resumed or discarded; History drops non-`completed` rows so it is never displayed; `RecordsPanel` filters nothing but `liftId`, so its sets keep counting toward the all-time record (F22). The route around the Settings handler is a backup import, whose settings envelope is already weak (F03, F08). | Move the "weeks past the new final week no longer exist" reconcile into `advanceCycleIfComplete` (or a shared helper both callers use) so the invariant holds however `hasDeloadWeek` changes, and decide whether the orphaned sets are deleted or retained as `skipped` history — consistently with whatever F22 settles for record ownership. Cover "advance with a stranded week-4 pending row under a 3-week setting" in `cycle.test.ts`; the existing 3-week block only tests clean cycles. |
-| F36 | Low; B07c probe (P7); reconcile in B12 | `src/lib/training-max.ts:36-39`, `61-75` | The two "current training max" helpers in the same module break ties differently. `getCurrentTm` uses `sortBy('setAt')` and takes the last element — `Array.prototype.sort` is stable, so equal timestamps keep insertion order and the **newest** row wins. `getAllCurrentTms` compares with strict `>` over `toArray()` order, so on a tie the **first** row wins. Probe: two rows for one lift at the same instant, weights 200 then 210 → `getCurrentTm` returns 210, `getAllCurrentTms` returns 200. The table is append-only with no ordering key besides `setAt`, and F33/F34's concurrent paths are exactly what produce same-instant rows; a restored backup (F08) can carry them verbatim. | Give both helpers one tie-break — prefer the higher row id at equal `setAt`, or store a monotonic sequence — and cover a tie in `training-max.test.ts`. `src/lib/training-max.ts` stays `deep` (B01b); this is a cross-file reconcile for B12, not a reopened row. |
+| F36 | Low; B07c probe (P7); reconcile in B12 | `src/lib/training-max.ts:36-39`, `61-75` | The two "current training max" helpers in the same module break ties differently. `getCurrentTm` uses `sortBy('setAt')` and takes the last element — `Array.prototype.sort` is stable, so equal timestamps keep insertion order and the **newest** row wins. `getAllCurrentTms` compares with strict `>` over `toArray()` order, so on a tie the **first** row wins. Probe: two rows for one lift at the same instant, weights 200 then 210 → `getCurrentTm` returns 210, `getAllCurrentTms` returns 200. The table is append-only with no ordering key besides `setAt`, and F33/F34's concurrent paths are exactly what produce same-instant rows; a restored backup (F08) can carry them verbatim. | **Reconciled in B12d — decision: standardise on "highest `id` wins at equal `setAt`".** `schema.ts:11` declares `trainingMaxes.id INTEGER PRIMARY KEY AUTOINCREMENT`, so the id is monotonic and never reused: the highest id at a given instant *is* the newest insert. That makes it a correct tie-break requiring no new column, and it **preserves `getCurrentTm`'s existing behaviour** (stable sort, newest-last) while changing `getAllCurrentTms`, which is the helper currently disagreeing with it. Cover a tie in `training-max.test.ts`. `src/lib/training-max.ts` stays `deep` (B01b); this is a cross-file reconcile for B12, not a reopened row. |
 | F37 | Medium; B07d real-SQLite probe | `src/lib/pr.ts:106-119` | The "this lift has no history at all" guard returns at line 108 **before** the cross-set query at line 116, and `db.sessions.where('liftId')` only finds the movement's *own* sessions. A movement whose history is entirely cross work is therefore scored against nothing: probe seeds two cross blocks for lift 2 at 400×5 and 405×5 (e1RM 466) inside lift 1's sessions, then `detectPRs(db, 2, 600, 5)` — e1RM 699 — returns `{repPr: false, e1RmPr: false}` with **no `prevBestE1Rm` field at all**. Adding one *empty* own session for lift 2 flips the identical call to `e1RmPr: true, prevBestE1Rm: 466`, so the answer turns on a session row's existence rather than on the lift's actual history. `Workout.checkPr` passes the movement's `liftId` for every cross set (`Workout.tsx:317-321`), so this is the live path; reachable whenever a cross block is logged before the movement's own training day comes round. | Move the empty-history check after both queries — decide it on `prior.length`, which already has its own branch at line 124 — or query cross sets first. Keep the existing "first work on a lift with no history is not a toast" behavior if that is wanted (`pr.test.ts:24` pins it), but base it on the combined set list. Add a cross-only-history case to `pr.test.ts`; `pr.test.ts:133` only covers a movement that already owns a session. |
 | F38 | Medium; B07d real-SQLite probe | `src/lib/pr.ts:106`; `src/screens/History.tsx:399`; `src/components/stats/RecordsPanel.tsx:52` | Three features now answer "what counts as a record" three different ways. `detectPRs` (the mid-set toast) queries `db.sessions.where('liftId')` with **no status filter**; `History.loadPrs` feeds `prSessionIds` from **`completed` sessions only**; `RecordsPanel` filters **nothing but `liftId`** (F22). Probe: with one `skipped` session holding 400×5, `detectPRs(db, 1, 300, 5)` reports `prevBestE1Rm: 466` and no PR, while History's baseline for the same database is empty and `prSessionIds` badges the very next session. A `pending` session behaves identically. The reverse also holds — F37's probe shows History badging two sessions the toast never announced. `pr.ts:78-84` states the invariant this breaks: "the toast has to read the same history or the two disagree about the same session." | Settle F22's ownership rule once and apply it in all three readers; the natural home is a shared "performance records for a lift" query in `pr.ts` or `performance.ts` that History, Workout and `RecordsPanel` all call, rather than three `db.sessions` queries with three different filters. Note the live `pending` session is a genuine special case for the toast — its own earlier sets must stay in the baseline — so the rule is "completed, plus the session being logged", not simply "completed". Cover a skipped-session baseline in `pr.test.ts`, whose helper writes `status: 'completed'` for every fixture. |
 | F39 | Medium; B07e real-SQLite probe | `src/lib/tm-recommendations.ts:9`, `101-108`; `src/screens/Workout.tsx:634-641`; `src/screens/Settings.tsx:1040-1043`; `src/lib/cycle.ts:128-133` | Whether a training max was written by auto-progression or chosen by the user is inferred from a **60-second wall clock** (`CYCLE_START_TOLERANCE_MS`) rather than recorded. `advanceCycleIfComplete` creates the new cycle and its progressed TMs in one transaction, so those land inside the window — but the CYCLE COMPLETE modal that opens immediately afterwards writes TMs too (`applyCycleDoubling`, `deloadTms`), and those land on whichever side of the window the user's dwell time puts them. Probe R6 holds the data and the user action fixed and varies only the tap delay: tapped at 10 s or 59 s the lift is a doubling candidate at the end of the next cycle; tapped at 61 s or 5 min it is **silently disqualified**, because `hasBump` reads the modal's own write as a mid-cycle user bump. Racking a bar, answering a text, or a phone locking between the roll-over and the tap changes the program's behavior a cycle later, with nothing on screen to explain it. | Record provenance instead of inferring it — add a `source` column (`'progression' \| 'manual' \| 'deload' \| 'doubling'`) to `trainingMaxes`, or stamp progression rows with the `cycleId` they open, and have `hasBump` test that rather than a timestamp delta. Failing that, tie the tolerance to the cycle's own creation rather than to `startDate`, and cover a >60 s post-modal write in `tm-recommendations.test.ts` — the existing boundary tests at `:497` only exercise a synthetic TM row, never the modal path that produces one. |
@@ -180,7 +196,7 @@ claimed here.
 | F49 | Low; B08b probe (P8) | `src/components/modals/LiftSetupModal.tsx:50-53`, `64-80`, `182-205` | The modal renders fully interactive before `load()` resolves, and `load()` then writes over whatever the user touched. `plateMode` and `implementBase` are seeded with defaults (`'paired'`, `settings.barWeight`) at setup, and for an existing lift `load()` replaces them at `:74-75` after an awaited query. Probe: open setup for a lift, tap NONE before the query settles → the readout shows `none`, then flips back to `paired` on its own. The same await also means a lift stored as `none` shows the wrong equipment mode until `load()` lands. The cross-block buffer is protected by accident only — `movementOptions()` is empty until `activeLifts()` is populated, so ADD BLOCK cannot be reached early. | Gate the form on a `loaded` flag (the modal already has `saving()` as a precedent for disabling its own controls), or apply loaded values only to fields the user has not touched. Add a test; `LiftSetupModal.tsx` has no test file at all. |
 | F50 | Medium; B08b probe (P7) | `src/components/modals/LiftSetupModal.tsx:122-162`, `303-309`; `src/screens/Settings.tsx:1047-1051`; `src/screens/Setup.tsx:363-366` | `handleCommit` has a `try/finally` and no `catch`, and its button calls it as `void handleCommit()`, so a rejected transaction is discarded. Probe with `db.transaction` rejecting `SQLITE_IOERR`: `onCommit` is **not** called, `SAVING…` reverts to `DONE`, the dialog stays open and its text contains no error, warning or retry — the user's only signal is that the screen behind never refetches. Nothing was written, but per F05/F06 a *timed-out* write can still land in the worker, so the same silent path also covers "it failed" and "it may have succeeded". The app already surfaces this class of failure elsewhere (`SaveFailureBanner`, `showToast`), so the idiom exists and this path does not use it. | Catch the rejection and surface it in the dialog with a retry, the way the workout save path does; at minimum `showToast` and keep the buffered state. Add a rejected-commit test. |
 | F51 | Medium; B08c probe (P9) | `src/components/workout/SaveFailureBanner.tsx:8`, `10-22`, `35-41` | `retrying` is a **single** `number | null` signal tracking in-flight state for a **list** of failures, so it gets two things wrong at once. Probe with two outstanding failures: tap RETRY on A → `A.disabled=true`, `B.disabled=false` (correct); tap RETRY on B → `A.disabled=false` with A's write **still in flight**, its label back to `RETRY`, and a third tap calls `retryA` a second time — `retryA.mock.calls.length === 2` concurrently. Then A settles and its `finally { setRetrying(null) }` clears **B's** marker too: `B.disabled=false` while B is still pending. The retry closure re-attempts the original write, so a duplicate accepted retry writes the set twice — the same shape as F33/F34, on the one path whose entire purpose is recovering a set that was already lost once. | Track in-flight retries as a set of ids (`createSignal<Set<number>>`) and add/remove per failure, or disable every retry button while any one is running. `SaveFailureBanner.test.tsx` has eight cases including a failed retry and a multi-failure list, but never two retries at once; add that case. |
-| F52 | Medium; B08c probe (P10) | `src/screens/Workout.tsx:650-656`, `910-924`; `src/components/workout/CrossBlockLog.tsx:44-57`; `src/components/workout/SetRow.tsx:38-53`, `88-96` | `crossSections()` rebuilds its wrapper objects on every evaluation (`crossBlocks().map(block => ({ block, sets, logged, cursor }))`), and `<For each={crossSections()}>` keys items by reference — so each re-derive **remounts every cross block**, and `SetRow`'s uncommitted local state (`reps`, `weight`, `weightTouched`) is destroyed with it. Probe: three taps on the active cross set's weight stepper → `207.5lb`; one parent re-derive → back to `200lb`, silently. Control with the same item references held stable across the re-derive keeps `207.5lb`, so identity is the cause, not the re-render. `crossSections()` depends on `crossBlocks()`, `crossSets()` and `workout.loggedCrossSets`, so **logging a set in one cross block wipes a weight the user has dialled into another** — the case the independent-cursor design at `CrossBlockLog.tsx:29-32` exists to support. **Second symptom, B08e probe P16:** the block's `CollapsibleSection` shell is remounted with it, so `userExpanded` resets — a finished cross block the user opened to check something folds itself away again on the next re-derive (`hidden=false` → `hidden=true` with no user action). The linear flow is unaffected: `warmupSets()`/`mainSets()`/`fslSets()` are `filter`s over `allSets()` and preserve item references. | Give the cross sections a stable identity — memoize per `movementLiftId` (`createMemo` / `mapArray`), or key the `For` on the id rather than the wrapper object. Same defect family as the stepper hold-to-repeat and cross-lift scroll-jump regressions already fixed in this repo. Add a test that dials a weight in one block, logs a set in another, and asserts the first block's entry survives. |
+| F52 | Medium; B08c probe (P10) | `src/screens/Workout.tsx:650-656`, `910-924`; `src/components/workout/CrossBlockLog.tsx:44-57`; `src/components/workout/SetRow.tsx:38-53`, `88-96` | `crossSections()` rebuilds its wrapper objects on every evaluation (`crossBlocks().map(block => ({ block, sets, logged, cursor }))`), and `<For each={crossSections()}>` keys items by reference — so each re-derive **remounts every cross block**, and `SetRow`'s uncommitted local state (`reps`, `weight`, `weightTouched`) is destroyed with it. Probe: three taps on the active cross set's weight stepper → `207.5lb`; one parent re-derive → back to `200lb`, silently. Control with the same item references held stable across the re-derive keeps `207.5lb`, so identity is the cause, not the re-render. `crossSections()` depends on `crossBlocks()`, `crossSets()` and `workout.loggedCrossSets`, so **logging a set in one cross block wipes a weight the user has dialled into another** — the case the independent-cursor design at `CrossBlockLog.tsx:29-32` exists to support. **Second symptom, B08e probe P16:** the block's `CollapsibleSection` shell is remounted with it, so `userExpanded` resets — a finished cross block the user opened to check something folds itself away again on the next re-derive (`hidden=false` → `hidden=true` with no user action). The linear flow is unaffected: `warmupSets()`/`mainSets()`/`fslSets()` are `filter`s over `allSets()` and preserve item references. | Give the cross sections a stable identity — memoize per `movementLiftId` (`createMemo` / `mapArray`), or key the `For` on the id rather than the wrapper object. Same defect family as the stepper hold-to-repeat and cross-lift scroll-jump regressions already fixed in this repo — and the rule is already written down: `.claude/COMMON_MISTAKES.md` #6 ("`<For>` over a rebuilt array remounts every row") names this exact hazard and prescribes `<Index>` for positional lists. The documentation is correct; `crossSections()` is the instance that escaped it. Add a test that dials a weight in one block, logs a set in another, and asserts the first block's entry survives. |
 | F53 | Low (cosmetic); B08c source inspection | `src/components/workout/AmrapTargets.tsx:23`, `33` | Both branches pad the target label with `t.label.toUpperCase().padEnd(14)` to line the rep counts up into a column, but the padding is emitted as ordinary HTML text with no `whitespace-pre` on the element or any ancestor (`grep -rn 'whitespace-pre' src/` returns nothing), so the browser collapses every run of spaces to one and the columns never align. `font-mono` sets the typeface, not the whitespace mode. | Either add `whitespace-pre` to the label span, or drop `padEnd` and lay the row out with a grid/flex column so the alignment is real. Verified by inspection of the class lists rather than by measuring rendered layout — `textContent` keeps the spaces either way, so a jsdom assertion could not settle it. |
 | F54 | Medium; B08d probe (P11) | `src/components/workout/AccessoryPicker.tsx:40-42`, `146-166`, `225-228` | The SET TRAINING MAX sub-sheet's buffer (`tmWeight`, `tmIncrement`) is component-level state that is never reset when `settingTm` changes, and the sheet's documented way out — Escape, which `setSettingTm(null)`s back to the list rather than closing the picker — leaves it dirty. Probe: dial Aaa Dips' TM to `25`, press Escape, pick Bbb Pushups → the header reads `Bbb Pushups` and the TM stepper still reads **`25`**. SAVE writes that number as the new exercise's training max, and an accessory TM drives every prescribed weight for that exercise from then on, so a wrong one is not self-correcting. The stepper starts at 0 for a genuinely fresh pick, which is what makes a carried-over non-zero value look like a real suggestion. | Reset `tmWeight`/`tmIncrement` when `settingTm` changes — seed them in `handleSelect` alongside `setSettingTm(row.exercise)`, or key the sub-sheet on the exercise id so it remounts. Add a back-out-and-pick-another test. |
 | F55 | Medium; B08d probes (P12, P14) | `src/components/workout/AccessoryPicker.tsx:127-144`, `146-166`, `252-258`; `src/store/workout-store.ts:199-208` | Neither commit path in the picker has an in-flight guard, and both are `async` handlers wired straight to `onClick`. **SAVE** (P12): three taps on the TM sheet → **three** `accessoryTrainingMaxes` rows, all weight 20, and **three** copies of the exercise in `activeAccessories`. The duplicate TM rows share a `setAt` instant, which is exactly the tie-break F36 says the two "current TM" helpers resolve differently. **Row select** (P14): the `if (row.alreadyAdded) return` guard reads a flag baked into `rows()` at load time, so it cannot see an add made by the previous tap — two taps on one row → the exercise added twice. For a fixed slot `addAccessory` filters by slot and the duplicate collapses; for `'extra'` it appends, so the session renders the same exercise two or three times, each with its own independent set log. | Same fix as F33/F34/F41: a single-flight flag that disables both SAVE and the row buttons for the duration of the handler. `alreadyAdded` should also be derived live from `workout.activeAccessories` rather than snapshotted into `rows()`. |
@@ -198,32 +214,38 @@ claimed here.
 | F67 | Medium (platform impact needs device verification); B09b probe (P27) + source inspection | `src/lib/notifications.ts:96-99`, `114-124` | `firePage` calls `new Notification(title, …)` behind a permission check only — **no `try`/`catch` and no fallback to `ServiceWorkerRegistration.showNotification`**. Probe P27 shows what an engine that rejects the constructor produces: the `TypeError` escapes the timer tick uncaught (`"TypeError: Failed to construct 'Notification': Illegal constructor."`), no notification appears, and nothing in the module reports it. The registry itself stays consistent — `pending()` correctly holds only the remaining target and the second bell still fires — so the failure is silent rather than cascading. **Why it matters:** this module designates the page path as the *reliable* one and the service-worker path as explicitly best-effort (`:1-13`), so if the page constructor is unavailable the reliability story inverts on exactly the platform this PWA targets. The `Notification` constructor is not the supported page-context path on Android Chrome or in iOS PWAs, but that claim is **not verified here** — per this project's standing rule about mobile behaviour, it needs a device check before the severity is settled. | Wrap the call and fall back: `try { new Notification(...) } catch { void registration?.showNotification(...) }`, or prefer `showNotification` whenever a registration exists. Settle the platform question on a real device (installed PWA, permission granted, tab hidden, one rest bell) and record the result. `notifications.test.ts` stubs `Notification` as a spy that always succeeds, so no existing case can observe a throwing constructor. |
 | F68 | Low; B09c probe (P28) | `src/workers/timer.worker.ts:26-31`, `5-12`; `src/components/workout/RestTimer.tsx:101-105`; `src/App.tsx:47-58` | `resume` clears the `paused` flag but posts nothing, and the 1 Hz interval keeps its original phase, so the first `elapsed` after the tab becomes visible arrives up to **a full second late**. Probe: 0 posts immediately on resume, 0 posts at 999 ms, first post at 1000 ms. Meanwhile `RestTimer`'s `elapsed` signal still holds the value from **before** the tab was hidden — the worker posts nothing while paused — so returning mid-rest after a five-minute background shows the five-minute-old countdown for about a second and then jumps (`"2:30 LEFT"` → `"OVER +4:12"`). This is **not** covered by the existing resume veil: `App.tsx:47-53` is deliberately scoped to bfcache restores (`pageshow.persisted`) and its own comment excludes `visibilitychange` as "ordinary app-switches where there's no repaint to mask" — which is exactly this case — and the veil lasts two animation frames, not a second. | Post one immediate tick on `resume` before letting the interval carry on: `case 'resume': paused = false; if (restStartedAt != null) self.postMessage({ elapsed: Math.floor((Date.now() - restStartedAt) / 1000) }); break`. Restarting the interval there would also reset its phase. `src/workers/timer.worker.ts` has **no test file**; add one for the start/pause/resume/stop protocol. |
 | F69 | Medium; B10a coverage run | `vite.config.ts:21-27` | The coverage gate measures the wrong half of the codebase. `include` is `['src/lib/**/*.ts', 'src/screens/**/*.tsx', 'src/store/**/*.ts']`, so **`src/components/**`, `src/db/**`, `src/hooks/**`, `src/service-worker.ts` and `src/workers/**` are not measured at all** — a coverage run reports only `lib`, `screens` and `store` sections and a denominator of 3,945 statements, with no `components` section present. The 80 % statements/branches/functions/lines thresholds therefore gate a subset chosen before the components tree existed at its current size. The cost is measurable against this review: of the 23 findings opened in B08 and B09 (F46–F68), **22 live in files the gate cannot see** — every one of F46–F64 (`src/components`, `src/hooks`), F65–F66 (`src/service-worker.ts`) and F68 (`src/workers`); only F67 (`src/lib/notifications.ts`) is inside the measured set. Eleven reviewed component files have no test file at all and none of them costs the gate a single point. | Widen `include` to `src/**/*.{ts,tsx}` with the existing `exclude` for tests, then re-baseline the thresholds to whatever the true number is and ratchet up — a gate that measures everything at 60 % is worth more than one that measures a third at 80 %. Excluding `src/main.tsx` and `src/test-setup.ts` is reasonable; excluding the entire component tree is not. |
-| F70 | Medium (installability impact worth a Lighthouse check); B10a build-output inspection | `vite.config.ts:63-73`; `dist/manifest.webmanifest`; `public/`; `index.html:14` | The web app manifest declares two icons — `icon-192.png` and `icon-512.png` — and **neither file exists**. `public/` contains only `_headers`, `demo-seed.json`, `favicon.svg` and `icons.svg`, and the built `dist/` carries the same four plus `manifest.webmanifest`, which ships the two names verbatim: `"icons":[{"src":"icon-192.png",…},{"src":"icon-512.png",…}]`. No icon generator is configured (no `pwa-assets`, no `@vite-pwa/assets-generator` in `package.json`), so nothing produces them at build time. `index.html` also has **no `<link rel="apple-touch-icon">`**, so the iOS home-screen path has no icon either. Chrome's installability criteria require a manifest icon of at least 144×144 that actually loads; both of these 404. For an app whose stated distribution is an installed offline-first PWA (`display: 'standalone'`, `apple-mobile-web-app-capable`), that is the delivery mechanism failing silently — the build succeeds, CI passes, and the install prompt simply never appears. | Generate the two PNGs from `favicon.svg` (or add `@vite-pwa/assets-generator`), add an `apple-touch-icon` link, and assert in CI that every `manifest.icons[].src` resolves to a file in `dist/`. Run Lighthouse's installability audit against a preview build to confirm what the missing icons currently cost. |
+| F70 | Medium (installability impact worth a Lighthouse check); B10a build-output inspection | `vite.config.ts:63-73`; `dist/manifest.webmanifest`; `public/`; `index.html:14` | The web app manifest declares two icons — `icon-192.png` and `icon-512.png` — and **neither file exists**. `public/` contains only `_headers`, `demo-seed.json`, `favicon.svg` and `icons.svg`, and the built `dist/` carries the same four plus `manifest.webmanifest`, which ships the two names verbatim: `"icons":[{"src":"icon-192.png",…},{"src":"icon-512.png",…}]`. No icon generator is configured (no `pwa-assets`, no `@vite-pwa/assets-generator` in `package.json`), so nothing produces them at build time. `index.html` also has **no `<link rel="apple-touch-icon">`**, so the iOS home-screen path has no icon either. Chrome's installability criteria require a manifest icon of at least 144×144 that actually loads; both of these 404. For an app whose stated distribution is an installed offline-first PWA (`display: 'standalone'`, `apple-mobile-web-app-capable`), that is the delivery mechanism failing silently — the build succeeds, CI passes, and the install prompt simply never appears. **B12b adds a fourth affected site:** `README.md`'s feature list promises "**PWA** — installable, works offline" to users, which is the claim the missing icons contradict. | Generate the two PNGs from `favicon.svg` (or add `@vite-pwa/assets-generator`), add an `apple-touch-icon` link, and assert in CI that every `manifest.icons[].src` resolves to a file in `dist/`. Run Lighthouse's installability audit against a preview build to confirm what the missing icons currently cost. |
 | F71 | Medium; B10a config inspection | `tsconfig.json:1-11`; `tsconfig.e2e.json`; `tsconfig.node.json:24`; `package.json:8`, `10`, `18` | `tsconfig.e2e.json` is referenced by no **compiler** entry point — not by `tsconfig.json`'s `references` (which lists only app and node), not by any `package.json` script, not by the CI workflow, not by `playwright.config.ts`. **Amended in B10c:** `eslint.config.js:34` *does* point at it, for type-aware linting of `tests/e2e/**` (`no-floating-promises`). That makes the file used but not built: ESLint loads the project for type information and reports rule violations, while `tsc` never compiles the specs, so type errors themselves are still reported by nothing. `typecheck` and `build` are both `tsc -b` against the solution file, and `test:e2e` is `playwright test`, which transpiles specs without type-checking. So **`tests/e2e/**` is never type-checked by any command in the repo** — four files including an 11 KB `workout.spec.ts`, the app's only integration coverage. The irony is that `tsconfig.e2e.json` is the one config that declares `"strict": true` explicitly. The same gap covers the toolchain: `tsconfig.node.json` includes only `vite.config.ts`, so `playwright.config.ts` (a `.ts` file), `stryker.config.mjs`, `eslint.config.js` and `scripts/*` belong to no project and are type-checked by nothing. A renamed helper or a changed fixture shape in the E2E suite surfaces as a runtime failure, or not at all. | Add `{ "path": "./tsconfig.e2e.json" }` to `tsconfig.json`'s references so `tsc -b` builds it, and widen `tsconfig.node.json`'s `include` to cover the root config files and `scripts/`. |
 | F72 | Low; B10a config and asset inspection | `vite.config.ts:58`; `index.html:14`; `public/icons.svg` | Two small asset problems in the same place. (a) `globPatterns: ['**/*.{html,js,css,ico,png,wasm}']` omits **`svg`**, and `favicon.svg` — the only icon that actually exists — is therefore not precached; the SW's fetch handler passes it through (it is not in `PRECACHE_PATHS`), so offline it simply fails to load. (b) `public/icons.svg` (4.9 KB) is referenced by **nothing** — no `src/` file, no `index.html`, no stylesheet — yet it ships to production in `dist/`. | Add `svg` to `globPatterns`; delete `icons.svg` or wire it up. Both are a line each, and (a) becomes moot for the PNGs once F70 is fixed, which is a reason to fix them together. |
 | F73 | Medium (supply chain); B10b workflow inspection | `.github/workflows/deploy.yml:42`; `package.json`; `pnpm-lock.yaml` | The deploy step is `pnpm dlx --allow-build=esbuild --allow-build=workerd wrangler pages deploy dist`. `wrangler` appears **0 times** in `package.json` and **0 times** in `pnpm-lock.yaml`, so it is fetched fresh from the registry at every deploy, unpinned and unlocked — and it runs with `CLOUDFLARE_API_TOKEN` in its environment, with lifecycle scripts explicitly permitted for `esbuild` and `workerd`. Whatever those three publish is executed with a production deploy credential. This is the **one unpinned link in an otherwise carefully locked chain**: the same workflow already runs `pnpm install --frozen-lockfile` and `pnpm audit signatures`, `packageManager` pins `pnpm@12.3.4`, dependabot watches both ecosystems weekly, and `pnpm-workspace.yaml` carries a security floor override. Every one of those controls is bypassed by the deploy line itself. | Add `wrangler` to `devDependencies` so it is lockfile-pinned and signature-audited with everything else, then invoke it as `pnpm exec wrangler …`. If `dlx` must stay, pin an exact version (`pnpm dlx wrangler@x.y.z`). Consider whether `--allow-build` is needed at all once the package is installed normally. |
 | F74 | Medium; B10b workflow inspection (with F71) | `.github/workflows/ci.yml:30`; `.github/workflows/deploy.yml:39`; `package.json:17-18`; `tests/e2e/` | **The end-to-end suite is dormant.** `check:ci` is `pnpm lint && pnpm test:coverage && pnpm build` — it does not include `test:e2e` — and a grep for `playwright` or `test:e2e` across `.github/` returns nothing, so **no workflow ever runs it**. Combined with F71, `tests/e2e/**` is neither type-checked nor executed by any automation: four files including an 11 KB `workout.spec.ts`, the app's only integration coverage, which exercise the real browser paths that unit tests cannot (OPFS persistence, the service worker, navigation). They run only if a person remembers to type `pnpm test:e2e`. A spec that no longer compiles or no longer passes can sit green in the repo indefinitely. | Add a Playwright job to `ci.yml` (it needs its own browser install step and a longer timeout, so a separate job rather than a line in `check:ci`), and wire `tsconfig.e2e.json` into the solution file per F71 so the specs are type-checked too. If the suite is too slow for every PR, run it on a schedule or on `main` pushes — dormant is the worst of the options. |
 | F75 | Low; B10b workflow inspection | `.github/workflows/ci.yml:3-4`; `.github/workflows/deploy.yml:5-15` | CI triggers on `pull_request` **only** — there is no `push` trigger — and the deploy workflow is path-filtered. A commit pushed straight to `main` therefore runs checks only if it touches a deploy path (`src/**` minus tests, `public/**`, `index.html`, `package.json`, `pnpm-lock.yaml`, `vite.config.*`, `tsconfig*`). Anything else gets **no workflow at all**: `eslint.config.js`, `stryker.config.mjs`, `playwright.config.ts`, `scripts/**`, `tests/e2e/**`, `.github/**`. The sharpest case is the deploy filter's own `'!src/**/*.test.*'` exclusion — a broken test committed directly to `main` triggers nothing, and then surfaces later by failing `check:ci` inside an unrelated deploy, blocking that deploy for a reason that has nothing to do with it. Committing on `main` is an accepted workflow in this repo, which is what makes the gap reachable rather than theoretical. | Add `push: branches: [main]` to `ci.yml`; the existing `concurrency` group keys on `github.event.pull_request.number`, so give it a fallback such as `ci-${{ github.event.pull_request.number || github.sha }}`. |
-| F76 | Low (documentation); B10b cross-check, reconcile in B12 | `CLAUDE.md:17-19`; `.github/workflows/deploy.yml:39`; `package.json:17` | `CLAUDE.md` states: "The workflow is path-filtered and runs **no lint and no tests** — `pnpm build && pnpm lint && pnpm test` locally is the only regression gate." The path-filtering half is correct; the rest is not. `deploy.yml:39` runs `pnpm run check:ci`, which is `pnpm lint && pnpm test:coverage && pnpm build`, and it runs **before** the deploy step, so a failure blocks the deploy. The deploy path is in fact the stricter gate of the two — it is the only place `test:coverage` and its 80 % thresholds run. The doc understates the automation, which misdirects effort rather than creating risk, but it is the sentence a contributor (or an agent) reads to decide what CI will catch. | Correct the sentence to describe what the workflow does today, and note that `test:coverage` (not plain `test`) is what gates deploys — which is also why F69's `include` gap matters at the gate rather than only locally. Fold into B12's documentation reconciliation. |
+| F76 | Low (documentation); B10b cross-check, reconcile in B12 | `CLAUDE.md:17-19`; `.github/workflows/deploy.yml:39`; `package.json:17` | **The claim appears in two documents.** `CLAUDE.md:17-19` states: "The workflow is path-filtered and runs **no lint and no tests** — `pnpm build && pnpm lint && pnpm test` locally is the only regression gate." The path-filtering half is correct; the rest is not. `deploy.yml:39` runs `pnpm run check:ci`, which is `pnpm lint && pnpm test:coverage && pnpm build`, and it runs **before** the deploy step, so a failure blocks the deploy. The deploy path is in fact the stricter gate of the two — it is the only place `test:coverage` and its 80 % thresholds run. The doc understates the automation, which misdirects effort rather than creating risk, but it is the sentence a contributor (or an agent) reads to decide what CI will catch. | Correct the sentence to describe what the workflow does today, and note that `test:coverage` (not plain `test`) is what gates deploys — which is also why F69's `include` gap matters at the gate rather than only locally. `QUICK_START.md:81-82` repeats it: "CI never runs lint or tests, so `pnpm build && pnpm lint && pnpm test` locally is the only regression gate." Both need the same correction. Fold into B12's documentation reconciliation. |
 | F77 | Low; B10c `eslint --print-config` | `eslint.config.js:9`, `19`, `31`; `scripts/*.js`; `stryker.config.mjs` | Every config block in `eslint.config.js` is scoped to `**/*.{ts,tsx}` or narrower, so **no rule applies to a `.js` or `.mjs` file anywhere in the repo**. Verified: `eslint --print-config scripts/debug-browser.js` resolves **0 rules**, against **92** for `src/lib/calc.ts`. `pnpm lint` therefore walks `scripts/debug-browser.js` (157 lines), `scripts/verify-notify-hardening.js` (256), `stryker.config.mjs` and `eslint.config.js` itself and checks nothing in them. With F71 — no tsconfig project covers `scripts/**` either — those 413 lines of Playwright-driving Node are checked by no tool at all. | Add a config block for `['**/*.{js,mjs}']` extending `js.configs.recommended` with `globals.node`, and widen `tsconfig.node.json` per F71 so the same files get type-checked in JSDoc-less mode or are explicitly excluded on purpose. |
 | F78 | Medium; B10c config cross-check | `playwright.config.ts:38-42`; `vite.config.ts:43-62`; `tests/e2e/` | The Playwright suite starts `pnpm dev` and points at `http://localhost:5173`, so the E2E tests run against the **development server**. `VitePWA` is configured with no `devOptions`, which means the service worker is **not registered in dev at all** — and the dev server serves unbundled modules with none of `public/_headers` applied. So the app's only automated integration suite exercises neither the service worker, nor the production bundle, nor the production CSP and security headers. That is exactly the surface F65 and F66 live on: a cache-poisoning bug in the navigation handler is invisible to every automated test the repo has, by construction rather than by omission. | Point the E2E `webServer` at `vite preview` (port 5175, which `verify-notify-hardening.js` already uses) after a build, so the specs run against the real artifact — or add `devOptions: { enabled: true }` to `VitePWA` if a dev-server suite is wanted as well. Fixing this is a precondition for the F65 regression test, which cannot be written against the current setup. **B11a sharpens the cost:** the switch is not a one-line `webServer` change. Every test depends on `helpers.freshStart`, which `waitForFunction`s on `window.__e2eResetDb` — and `sqlite-client.ts:93` defines that hook inside `if (import.meta.env.DEV)`. Against a production build it never appears and every test hangs. The suite is structurally bound to the dev server by its reset strategy, which is exactly why `verify-notify-hardening.js` resets with a fresh browser context per leg instead and says so in its own header. Either give the E2E suite the same context-per-test reset, or expose a reset path that survives a production build. |
-| F79 | Medium; B10c script inspection | `scripts/verify-notify-hardening.js:1-256`; `package.json:6-20`; `.github/workflows/`; `docs/verification/2026-08-09-swe-hardening.md:49`, `68` | A complete, **CI-ready** service-worker verification harness exists and is invoked by nothing. `verify-notify-hardening.js` spawns `vite preview` against the **production build**, drives the real app in headless Chromium with the **real service worker**, runs five independent legs in fresh browser contexts (A: offline hard reload at `/` and `/workout` renders the shell; B/C/D/E: the page-vs-SW notification matrix), stubs `registration.showNotification` to count fires, prints PASS/FAIL per leg and **exits 1 on failure**. It has no `package.json` script entry and appears in no workflow — it is reachable only by typing `node scripts/verify-notify-hardening.js`, as its own documentation says. Leg A is one 503 away from being F65's regression test. Same family as F74: the capability was built, then left dormant. | Add a `verify:sw` script and a CI job (it needs `pnpm build` first and a Chromium install, so a separate job like the Playwright one F74 asks for). Extend leg A with a poisoned-shell case — serve a 503 navigation, then go offline and assert the shell still renders — which converts F65 from a finding into a guarded regression. |
-| F80 | Low; B10c script inspection | `scripts/debug-browser.js:7`, `96-102` | The debug script's headline feature does nothing. It prints `'[debug] wiping IndexedDB (TrainingLog)...'` and calls `indexedDB.deleteDatabase('TrainingLog')`, but **the app uses no IndexedDB** — `grep -rn indexedDB src/` returns nothing outside tests; persistence is OPFS via SQLite WASM (the SAH pool VFS) plus `localStorage` for the workout store and the session-gap log. Deleting a database that never existed resolves successfully and silently, so the default `node scripts/debug-browser.js` — documented as "fresh run (clears DB)" and "a true first-run experience" — leaves every byte of real state in place, and the script then tries to walk the setup wizard that a returning user never sees. The name `TrainingLog` suggests this was correct before the storage layer moved. | Wipe what the app actually uses: `navigator.storage.getDirectory()` + remove the OPFS entries, and `localStorage.clear()`. Until then the `--no-wipe` flag and the default behave identically, so the flag should either work or go. |
+| F79 | Medium; B10c script inspection | `scripts/verify-notify-hardening.js:1-256`; `package.json:6-20`; `.github/workflows/`; `docs/verification/2026-08-09-swe-hardening.md:49`, `68` | A complete, **CI-ready** service-worker verification harness exists and is invoked by nothing. `verify-notify-hardening.js` spawns `vite preview` against the **production build**, drives the real app in headless Chromium with the **real service worker**, runs five independent legs in fresh browser contexts (A: offline hard reload at `/` and `/workout` renders the shell; B/C/D/E: the page-vs-SW notification matrix), stubs `registration.showNotification` to count fires, prints PASS/FAIL per leg and **exits 1 on failure**. It has no `package.json` script entry and appears in no workflow — it is reachable only by typing `node scripts/verify-notify-hardening.js`, as its own documentation says. Leg A is one 503 away from being F65's regression test. Same family as F74: the capability was built, then left dormant. **B12c confirms it works:** `docs/verification/2026-08-09-swe-hardening.md` records a full run with all five legs passing, plus the harness caveats (stubbed permission getter, wrapped `showNotification`, shadowed `document.hidden`). So this is not untested scaffolding — it ran, it passed, it was written up, and then nothing ever ran it again. Leg **A** ("offline hard reload at `/` and `/workout` renders the shell") passing is also exactly consistent with **F65**: it exercises the healthy path, and F65 is the poisoned one, which is why adding a 503 leg is cheap. | Add a `verify:sw` script and a CI job (it needs `pnpm build` first and a Chromium install, so a separate job like the Playwright one F74 asks for). Extend leg A with a poisoned-shell case — serve a 503 navigation, then go offline and assert the shell still renders — which converts F65 from a finding into a guarded regression. |
+| F80 | Low; B10c script inspection | `scripts/debug-browser.js:7`, `96-102` | The debug script's headline feature does nothing. It prints `'[debug] wiping IndexedDB (TrainingLog)...'` and calls `indexedDB.deleteDatabase('TrainingLog')`, but **the app uses no IndexedDB** — `grep -rn indexedDB src/` returns nothing outside tests; persistence is OPFS via SQLite WASM (the SAH pool VFS) plus `localStorage` for the workout store and the session-gap log. Deleting a database that never existed resolves successfully and silently, so the default `node scripts/debug-browser.js` — documented as "fresh run (clears DB)" and "a true first-run experience" — leaves every byte of real state in place, and the script then tries to walk the setup wizard that a returning user never sees. The name `TrainingLog` suggests this was correct before the storage layer moved. **Amended in B12a:** the no-op is already known — `QUICK_START.md:36-38` states it plainly ("deletes an IndexedDB named `TrainingLog`, unused since the SQLite migration — it does **not** clear OPFS") and points readers at `pnpm test:e2e` for a genuine first-run state. So this is a documented wart, not an unnoticed bug. What remains is that the script's **own header still claims the opposite** ("Optionally wipes IndexedDB so you get a true first-run experience", and a `--no-wipe` flag that changes nothing), and the script header is what a reader hits first. | Wipe what the app actually uses: `navigator.storage.getDirectory()` + remove the OPFS entries, and `localStorage.clear()`. Until then the `--no-wipe` flag and the default behave identically, so the flag should either work or go. |
 | F81 | Medium; B10d asset inspection | `public/favicon.svg`; `public/icons.svg`; `index.html:14`; `src/index.css:3-18` | **The app's icon set is scaffold leftovers from another project.** `public/icons.svg` is a social-link sprite — its symbols are `bluesky-icon`, `discord-icon`, `documentation-icon`, `github-icon`, `social-icon` and `x-icon` — for links this app does not have. `public/favicon.svg` (9.3 KB) is drawn entirely in purple and blue (`#863bff`, `#7e14ff`, `#47bfff`, `#ede6ff`), which is unrelated to the app's own design tokens: `--color-accent: #4ade80` on `--color-bg: #000000`. It is the icon a user sees in the browser tab and, per `index.html:14`, the only icon reference the document makes. Read with **F70** (the manifest names `icon-192.png` and `icon-512.png`, neither of which exists) and **F72** (`icons.svg` is referenced by nothing; `svg` is not precached), the whole icon story is: no PWA icons, no `apple-touch-icon`, a foreign favicon, and an orphaned template sprite shipping to production. | Draw an icon set for the app and wire it up once: an SVG favicon in the app's own palette, `icon-192.png`/`icon-512.png` for the manifest, and an `apple-touch-icon` link. Delete `icons.svg`. This is the change F70 and F72 are both waiting on — they are not three separate fixes but one asset task, which is why none of them has been done. |
-| F82 | Low; B10d asset inspection | `public/demo-seed.json` | A 44.8 KB export-format JSON that **no code reads** — `grep -rn 'demo-seed' src/ tests/ scripts/` returns nothing — and that `public/` therefore ships verbatim to `dist/`, publicly fetchable at `/demo-seed.json`. It is not a fixture: it carries the full import envelope (`exportedAt: 2026-05-08T18:04:36.896Z`, `version: 1`) and real training history — 4 lifts (OHP/Deadlift/Bench/Squat), 18 training maxes, 2 cycles, 23 sessions, **184 sets**, 18 exercises, 25 accessory sets and a settings row. Whatever it was staged for (a demo mode, a seeding path) was never wired up, so the cost today is a published copy of the author's training log and 45 KB of dead weight in every deploy. | Decide which it is: wire it to an actual demo/seed path, move it out of `public/` into a fixture directory if it is test data, or delete it. Note that the tracker scoped this file in deliberately ("Tracked `public/demo-seed.json` is in scope"), so the decision belongs in B12's reconciliation if it is not made sooner. |
+| F82 | Low; B10d asset inspection | `public/demo-seed.json` | A 44.8 KB export-format JSON that **no code reads** — `grep -rn 'demo-seed' src/ tests/ scripts/` returns nothing — and that `public/` therefore ships verbatim to `dist/`, publicly fetchable at `/demo-seed.json`. It is not a fixture: it carries the full import envelope (`exportedAt: 2026-05-08T18:04:36.896Z`, `version: 1`) and real training history — 4 lifts (OHP/Deadlift/Bench/Squat), 18 training maxes, 2 cycles, 23 sessions, **184 sets**, 18 exercises, 25 accessory sets and a settings row. **Amended in B12a:** this is not an oversight. `.claude/COMMON_MISTAKES.md` #7 documents the exact state — "Demo data is a static asset, not an auto-seed … `public/demo-seed.json` is bundled but nothing reads it; the `VITE_DEMO` declaration was removed" — and records the intended use: import it by hand through Settings → IMPORT JSON. `ARCHITECTURE_MAP.md` says the same. So the file has a documented purpose and a recorded decision behind it; what remains is that the purpose is served by a 45 KB published copy of the author's real training log, which nothing in the app fetches. | Decide which it is: wire it to an actual demo/seed path, move it out of `public/` into a fixture directory if it is test data, or delete it. Note that the tracker scoped this file in deliberately ("Tracked `public/demo-seed.json` is in scope"), so the decision belongs in B12's reconciliation if it is not made sooner. |
 | F83 | Low; B10d `git check-ignore` | `.gitignore:28`; `CLAUDE.md:32-34`, `41-42` | `.gitignore` ignores `.claude/`, yet **five files under it are tracked** — `ARCHITECTURE_MAP.md`, `COMMON_MISTAKES.md`, `QUICK_START.md`, `completions/README.md`, `sessions/README.md` — and `CLAUDE.md` names the first three as the project's key documents. Already-tracked files are unaffected by a later ignore rule, so the current five are safe; anything **new** added there is silently invisible. `git check-ignore -v .claude/NEW_DOC.md` → `.gitignore:28:.claude/`. A contributor or agent writing a fourth key document in the directory the project points at gets no warning from `git status` and the file never reaches the repo. | Narrow the rule to the local-only subtrees and let the documentation through: replace `.claude/` with `.claude/settings.local.json` and `.claude/agents/` (which is what the ignore is actually for — see the ignored entries listed by `git status --ignored`). |
 | F84 | Low; B10d cross-check | `scripts/migrate-history.py:23-51`; `src/db/seed.ts:5-31` | The migration script hardcodes its own copies of the lift and exercise tables with fixed ids, under a comment stating they "must match seed.ts order so IDs are 1–4", and **they have already drifted**. The lifts still match. The exercises do not: id 3 is `"Curls"` in the script and `'Bicep Curls'` in `seed.ts`, and `seed.ts` has since grown to **20** exercises (`Reverse Nordic`, `Pull Through`) against the script's 18. A migration run today emits `{"id": 3, "name": "Curls"}` into an import envelope that `importJson` validates weakly (**F08**), landing a second exercise alongside the seeded `Bicep Curls` — and **F41** records that once two exercises share a name the repair path is closed, because `renameExercise` rejects on the twin. A one-shot tool, but its one shot is a user's entire history. | Have the script read the tables from a single source rather than restating them — generate them from `seed.ts`, or emit exercises by name without ids and let the importer resolve them. At minimum, re-sync the two tables and add a test that fails when they diverge. |
 | F85 | Medium; B11a — first recorded execution of the suite | `tests/e2e/app.spec.ts:13-20`; `tests/e2e/workout.spec.ts:14`, `19-25`, `53`, `119`, `152` | **The E2E suite does not pass.** Nothing runs it (F74), so this batch ran it — apparently for the first time — and **6 of 32 tests fail**: `app.spec.ts` 1 failed / 3 passed, `workout.spec.ts` 5 failed / 23 passed. Every failure is spec drift, not a product bug; the app is right in all six cases. Three independent causes, each an app improvement whose specs were never updated: **(a)** the setup wizard went from three steps to two (`Setup.tsx:17` is `createSignal<1 | 2>(1)`, titles read "STEP 1 OF 2"), but `app.spec.ts:13` still clicks a second NEXT and waits for a `STEP 3` heading — it times out at `:17`. **(b)** `SessionBar` split the finish control: `allDone()` gates `COMPLETE SESSION` and everything else renders `FINISH`, so at the start of a session the button reads FINISH — four tests assert `COMPLETE SESSION` with work outstanding and all four fail. **(c)** `Stepper` gained `fieldLabel`, so the increment button's accessible name became `Increase reps` rather than its visible `+` — `workout.spec.ts:23`'s `getByRole('button', { name: '+' })` finds nothing. In all three the **helper was updated and the specs were not**: `startWorkout` already accepts `/^(FINISH|COMPLETE SESSION)$/`, `completeSetupWizard` carries the comment "onboarding no longer has a read-only step 3", and `fillStepper` uses test ids rather than button names. Helpers are shared, so whoever changed the app noticed them; the specs are executed by nothing, so they rotted. | Fix the six assertions, then fix the reason they rotted — F74's CI job — in the same change, or they will rot again. The 26 passing tests are worth keeping: they cover reload persistence, rest-timer hydration from the worker, resume/abandon, and the joker-set ladder, none of which the unit suite can reach. |
 | F86 | Low; B11a run artifacts | `test-results/.last-run.json`; `.gitignore`; `playwright.config.ts` | `test-results/` is neither configured as Playwright's `outputDir` nor listed in `.gitignore`, and **`test-results/.last-run.json` is tracked**. Running the suite therefore dirties the working tree with untracked per-failure directories (screenshots, videos, error context) and modifies a tracked file. The committed copy reads `{"status": "passed", "failedTests": []}` — a stale receipt asserting the suite is green, in a repo where it is not (F85) and where nothing has run it (F74). Anyone reading it gets the wrong answer. | Add `test-results/` (and `playwright-report/`) to `.gitignore` and `git rm --cached test-results/.last-run.json`. Worth doing before F74's CI job lands, or every run will leave a diff. |
 | F87 | Medium; B11b probe (P29) | `src/test-setup.ts:8-51`; `src/workers/timer.worker.ts:1-33` | `test-setup.ts`'s `MockWorker` re-implements the rest-timer protocol, and it is the **only** implementation any test exercises — `timer.worker.ts` has no test file (B09c), so neither is ever checked against the other. Three divergences, measured side by side: **(a) `pause`** — the stub clears its interval (`vi.getTimerCount()` → 0); the real worker keeps the interval running and gates posting on a `paused` flag (→ 1). **(b) `start` without `restStartedAt`** — the stub falls back to `Date.now()` and posts `[1,2]`; the real worker leaves `restStartedAt` undefined, so its `!= null` guard blocks **every** post (`[]`). Opposite behaviour from the same message. **(c) delivery** — the stub calls `onmessage` synchronously inside the timer tick, so a test can assert immediately after `advanceTimersByTime`; a real `Worker` delivers asynchronously through the message port. The sharpest consequence is for **F68**. Resume timing matches today (first post at 1000 ms) but for unrelated reasons — the stub starts a fresh interval, the real worker keeps the old phase — so the stub reproduces F68's symptom by coincidence, not fidelity. Fix F68 by posting immediately on `resume`, and the stub still will not: **a test written against the fix fails under the stub**, which is the stub blocking its own fix. | Delete the re-implementation and drive the real module: `timer.worker.ts` is 33 lines with no `Worker`-only APIs, so a stub can import it and forward `postMessage` into its `self.onmessage`, giving one implementation for tests and production. Failing that, give `timer.worker.ts` the test file B09c asks for and assert the same protocol table against both. |
 | F88 | Low; B11c call-graph check | `src/store/save-failure-store.ts:109`; `src/store/save-failure-store.test.ts:55`; `src/screens/History.tsx:261` | `sessionIdsWithGaps` is exported with the doc comment "Sessions with at least one unresolved gap, for History's flag" — and **nothing calls it**. `grep -rn sessionIdsWithGaps src/ tests/` outside the store's own file and test returns nothing; History flags gaps per row through `gapsForSession(sid())` instead. The export is dead, and its comment names a consumer that does not exist. Its test — "dedupes session ids for the History flag" — passes, so the dedupe logic is covered while the thing it claims to serve is imaginary: coverage that reads as confidence about an integration there is none of. | Delete the function and its test, or wire History's per-row flag to it if a whole-list query is wanted later. Either way the comment should stop asserting a caller. |
+| F89 | Medium; B12a doc-vs-code diff | `.claude/ARCHITECTURE_MAP.md` (directory tree, `lib/` list, `public/` list, Key Patterns → Rest); `.claude/QUICK_START.md:62` | `ARCHITECTURE_MAP.md` is one of the three documents `CLAUDE.md` tells an agent to read, and it has drifted materially from the tree it describes. Measured against the actual directories: **11 of 38 components are absent** — `modals/` omits `Modal` and `ModalAsyncStates` (the shared dialog shell every other modal is built on, and the subject of an entire review batch) plus both history modals; `forms/` omits `ExerciseSetsBlock`, `LiftSetsByType`, `NotesBlock`; `workout/` omits `CollapsibleSection` and `SaveFailureBanner`; `layout/` omits `SubLabel` and `WeekBadge`. **5 of 21 `lib/` modules are absent** — `workout-compose`, `performance`, `exercise-history`, `notifications`, `notify-timers`. Two API descriptions name things that do not exist: `pr.ts` is documented as **`detectAmrapPRs`** when the export is `detectPRs` (the same stale name also appears at `QUICK_START.md:62`; `detectAmrapPRs` occurs nowhere in the repo), and the **Rest** pattern describes `restThresholds` returning `{ normal, transition, failNudge, failMax }` derived through a `FAIL_NUDGE_RATIO` — the real shape is `{ firstBell, secondBell, failedBell }` and `FAIL_NUDGE_RATIO` does not exist, so the doc describes a rest model that has been replaced. Finally the `public/` listing documents `icon-192.png / icon-512.png  # PWA icons`, **which have never existed** (F70) — good evidence that section was written from intent rather than from the directory. An agent trusting this map would not know `Modal`, `workout-compose`, `performance` or the notification modules exist, and would go looking for `failNudge`. | Regenerate the inventories from the tree rather than editing them by hand — the component and `lib/` lists are `ls` output with a comment column, and a CI check could diff them. Fix the two API descriptions against `pr.ts` and `calc.ts`, and drop the icon lines until F70/F81 actually produce the files. |
+| F90 | Medium; B12b code-vs-doc diff | `README.md` (Features → AMRAP tracking); `src/components/stats/RecordsPanel.tsx:71-73`; `src/lib/pr.ts:113-133` | **PR detection was widened from AMRAP-only to every working set, and four descriptions still say otherwise.** `detectPRs` builds its baseline from the lift's own non-cross sets **plus** cross sets attributed to it, each filtered by `isWorkingPerformance` — a hard main, joker or supplemental set all count. But `README.md` tells users an e1RM PR is "higher Wathan estimated 1RM than any prior **AMRAP**", and `RecordsPanel.tsx:71-73` carries the comment "This is intentionally broader than the **AMRAP-only PR toast**" — describing a distinction between the panel and the toast that no longer exists, since both now compute over the same working-set population. F89 records the other half of the same drift: the function is still called `detectAmrapPRs` in `ARCHITECTURE_MAP.md` and `QUICK_START.md:62`. One widening, four stale descriptions, and the one inside the code is the one most likely to mislead the next person editing `RecordsPanel`. | Correct all four against `pr.ts`. Note that F38 is the substantive version of this question — three readers of "what counts as a record" applying three different filters — so the doc fix and F38's shared-query fix should land together, or the docs will describe the pre-F38 behaviour again. |
+| F91 | Medium; B12b relevance check | `ROADMAP.md:728-762` (Security), `:765-767` (Tech Debt) | Both sections declare **"No open items."** That was true when written and is now materially false: this review has opened **89 findings**, of which several sit squarely in those two categories — F65 (high: one 503 poisons the offline shell permanently), F73 (supply chain), F41 and F08 (missing storage invariants, weak import envelope) for Security; F69, F71, F74, F77, F79, F85 and F87 (a blind coverage gate, directories no tool checks, two dormant suites, a failing E2E suite, a stub that diverges from the code it stands in for) for Tech Debt. Two specific mitigation claims also **overstate what is in place**: the *Supply chain* bullet credits least-privilege, `--frozen-lockfile` and `pnpm audit signatures` — and **F73 shows the deploy step's `pnpm dlx wrangler` bypasses all three**, running an unpinned executable with a production token; and the *PWA cache* bullet claims `cleanupOutdatedCaches: true` when the service worker imports no workbox runtime and hand-rolls its own `precache-`-prefixed eviction instead (the same wrong claim appears at `vite.config.ts:48` and in `ARCHITECTURE_MAP.md`'s PWA pattern — three sites, one origin). | Feed this review's findings back into both sections as part of B12d rather than leaving "No open items" standing, and correct the two mitigation bullets to describe what the code does. The CSP bullet, the `assertIdent` guard, the persisted-store allowlist and the `__e2eResetDb` DEV gate were all checked and are accurate — the section is well-written, just out of date. |
+| F92 | Low; B12b count check | `docs/INDEX.md:12`, `:55` | `docs/INDEX.md` describes `.claude/COMMON_MISTAKES.md` as **"Ten recurring failure modes"**; there are **eleven** (#11, the service-worker `setTimeout` entry, was added without updating the index). Its own footer reads `**Last Updated**: 2026-07-29` while the file indexes two verification documents dated 2026-08-09 and describes `ui-consistency-review.md` as resolved on 2026-08-08 — so the index was edited after its own stamp. Both are small, but this is the file whose entire job is to describe the other files accurately. | Correct the count, refresh the stamp, and consider dropping the count from the description so it cannot drift again. Checked and correct in the same file: the "Seven self-contained agent prompts" for `ENGINEERING_PASSES.md` (passes 1–7), and the ROADMAP description ("changelog, planned features, security posture, tech debt") which matches its four sections. |
+| F93 | Low; B12c record check | `docs/INDEX.md:41-45`; `docs/verification/2026-08-09-swe-hardening.md:4-6` | **The state of the two 2026-08-09 verification records is misreported in three places, all in the stale-pessimistic direction.** `docs/INDEX.md` describes `2026-08-09-rest-timer-notifications.md` as "Automated evidence; runtime pass **pending**" — the record's own verdict is "PASS — automated tests **+ Chrome desktop runtime pass**", naming which legs remain unverified. It describes `2026-08-09-swe-hardening.md` as "Automated evidence; **browser legs TODO**" — that record's runtime table marks **all five legs A–E as PASS**, executed by `scripts/verify-notify-hardening.js` against the production build. And the swe-hardening record **contradicts itself**: its header still reads "Runtime legs requiring a browser … listed as TODO below" directly above the table that marks them all passed. The header and the index were both written before the legs ran and never updated after. The effect is that the repo understates its own verification coverage — a reader deciding whether the offline shell has ever been checked in a browser is told no, when the answer is yes and the harness is committed. | Correct the record's header to match its table, and correct both index entries. Worth doing alongside F79 (wiring that harness into CI), since the same reader question — "has this actually been verified?" — is what both findings are about. |
+| F94 | Medium; B12d schema check, resolves L07(2) | `src/db/schema.ts:97-104`; `src/lib/pr.ts:116-117`; `src/lib/cycle.ts:287`; `src/components/stats/RecordsPanel.tsx:65` | **`sets.liftId` is the only foreign key in the schema with no index.** `schema.ts` declares eight indexes — `trainingMaxes(liftId)`, `sessions(cycleId)`, `sessions(liftId)`, `sets(sessionId)`, `accessorySets(sessionId)`, `accessoryNotes(sessionId)`, `accessoryTrainingMaxes(exerciseId)`, `liftSupplementals(liftId)` — and **no `idx_sets_liftId`**, while three separate call sites query `db.sets.where('liftId')`: `RecordsPanel.tsx:65` (once per lift on `/stats` and History's by-lift view), `cycle.ts:287` inside `getRecentWorkingSets` (the AMRAP seed, on workout load), and — the one that matters — **`pr.ts:116-117` inside `detectPRs`, which runs on every single logged set**. So the mid-workout PR check does a full scan of `sets`, the largest table in the database, once per set, on a phone. L07 framed this as a `RecordsPanel` concern; the hot path is the PR toast. | `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId);` — and per `COMMON_MISTAKES` #1 it belongs in `ADDITIVE_MIGRATIONS` as well as `SCHEMA`, since it must reach deployed OPFS databases. It cannot fail against existing rows (no uniqueness), so either location is safe. Measure `detectPRs` against a realistic set count before and after rather than assuming the win. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
-| L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
+| L02 | **Resolved** into F14/F15 + F54–F56 (B12d) | `src/screens/Workout.tsx`; accessory components reviewed in B08d | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. **Closed in B12d:** B08d reviewed `AccessoryLog` and `AccessoryPicker` in full and opened F54, F55 and F56. The original unspecified accessory-editing concern was never independently recovered and is not recoverable — it is recorded as lost rather than carried, per rule 5's prohibition on inventing evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
 | L04 | **Resolved into confirmed F65** (B09a probe P23) | `src/service-worker.ts:63-73` | HTTP 503 navigation response replaces a good cached shell; later offline navigation returns the cached error. Root cause located: the network-first navigation handler caches every resolved response with no `response.ok` check, so any server error status is written over `/index.html`. Reproduced end to end — see F65. | Closed as a lead; the fix and test guidance live on F65. |
 | L05 | Resolved into confirmed F33/F34 (B07c probes) | `src/screens/Workout.tsx:501–552`, `634–641`; `src/lib/cycle.ts:108–136`, `167–204`; TM/cycle modal callbacks | Post-session accept/dismiss callbacks are outside runFinishing; modal controls do not await/disable competing callbacks. Concurrent progression does use the same pre-transaction cycle snapshot — both callers pass the `weekComplete` guard and duplicate the cycle. | Use F33 for the double-advance and F34 for the compounding TM writes. The dismiss arms clear their signal before awaiting and are safe; modal *error* recovery (a rejected `setTm`/`applyAccessoryTm` inside these handlers) is still unprobed and belongs to B08's modal rows. |
-| L06 | Lead; B06a source inspection only, no injected failure | `src/screens/Today.tsx:43–71`, `113–122`, `135–148`, `174–192`; `src/components/workout/AccessoryPicker.tsx:118–143` | Today fires load/start without a catch or local error state; defaults load after startSession, and selection/cross-preview failures have no local recovery UI. The default-mode picker also swallows persistence failure before reporting a successful pick, while launch rereads the DB. Exact user-visible failure and retry outcomes remain unprobed. | In a separately authorized follow-up, inject failures at initial load, abandon/delete, session insert, default seeding, cross-preview, and default-picker persistence. Check partial state, promise ownership, recoverability and late settlement after navigation; keep B08 component review separate. |
-| L07 | Lead; B06e source inspection, re-verified against the tree at `9cfe025` during B07a salvage; no probe | `src/components/stats/RecordsPanel.tsx:42`, `65`, `74`, `76`; `src/db/schema.ts:97–104` | Two defects in `RecordsPanel` that F22/F23 do not cover. (1) **Stale discount:** `createEffect(() => { void load(props.liftId) })` tracks only `props.liftId`; `settings.highRepDiscount` is read at lines 74 and 76 inside `load`, after two awaits and therefore outside the tracking scope, so changing the high-rep discount never refreshes the records panel — the user sees e1RM figures computed under the previous setting until the lift is re-selected. (2) **Unindexed scan:** `db.sets.where('liftId')` at line 65 has no supporting index; `schema.ts` declares `idx_sets_sessionId` but no `idx_sets_liftId`, so every cross-set lookup is a full scan of the largest table. Both confirmed by source inspection, neither reproduced under load or timed. | Track the discount explicitly (read `settings.highRepDiscount` in the effect body, or pass it as a `load` argument) and cover a discount change with a Stats test. Add `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId);` alongside the existing indexes, then measure the cross-set path with a realistic set count before and after. Two further observations from the same run need no separate ID: orphaned cross-set attribution is already inside F22's recommended fix, and the fallback to 0 for lifts with no training max is cosmetic. |
+| L06 | **Open — explicitly deferred** (B12d); B06a source inspection only, no injected failure | `src/screens/Today.tsx:43–71`, `113–122`, `135–148`, `174–192`; `src/components/workout/AccessoryPicker.tsx:118–143` | Today fires load/start without a catch or local error state; defaults load after startSession, and selection/cross-preview failures have no local recovery UI. The default-mode picker also swallows persistence failure before reporting a successful pick, while launch rereads the DB. Exact user-visible failure and retry outcomes remain unprobed. | In a separately authorized follow-up, inject failures at initial load, abandon/delete, session insert, default seeding, cross-preview, and default-picker persistence. Check partial state, promise ownership, recoverability and late settlement after navigation; keep B08 component review separate. **B12d disposition:** this is the one cross-file question the review does not resolve, and it is deferred by **scope, not by missing evidence**. The lead asks for a failure-injection pass — inject at initial load, abandon/delete, session insert, default seeding, cross-preview and default-picker persistence — which was never authorized and is a different kind of work from reading code. B08's component review is complete and was deliberately kept separate. Recorded as **explicitly blocked on authorization** under batch rule 8. |
+| L07 | **Resolved** (B12d): (1) assessed and not opened, (2) opened as F94 | `src/components/stats/RecordsPanel.tsx:42`, `65`, `74`, `76`; `src/db/schema.ts:97–104` | Two defects in `RecordsPanel` that F22/F23 do not cover. (1) **Stale discount:** `createEffect(() => { void load(props.liftId) })` tracks only `props.liftId`; `settings.highRepDiscount` is read at lines 74 and 76 inside `load`, after two awaits and therefore outside the tracking scope, so changing the high-rep discount never refreshes the records panel — the user sees e1RM figures computed under the previous setting until the lift is re-selected. (2) **Unindexed scan:** `db.sets.where('liftId')` at line 65 has no supporting index; `schema.ts` declares `idx_sets_sessionId` but no `idx_sets_liftId`, so every cross-set lookup is a full scan of the largest table. Both confirmed by source inspection, neither reproduced under load or timed. | Track the discount explicitly (read `settings.highRepDiscount` in the effect body, or pass it as a `load` argument) and cover a discount change with a Stats test. Add `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId);` alongside the existing indexes, then measure the cross-set path with a realistic set count before and after. **B12d disposition — both halves settled.** (1) The stale-discount defect was re-examined in B08h with `RecordsPanel` under full review: the read is indeed outside the tracking scope, but it is **not reachable** — `RecordsPanel` renders only on `/stats` and `/history`, `highRepDiscount` is changeable only on `/settings`, and every path between them unmounts and remounts the panel. Recorded as a latent hazard, not opened. (2) The missing index is confirmed and **opened as F94**, with a wider blast radius than this lead described: `sets.liftId` is the only unindexed foreign key in the schema, and its hottest caller is `detectPRs`, which runs on every logged set — not `RecordsPanel`. Two further observations from the same run need no separate ID: orphaned cross-set attribution is already inside F22's recommended fix, and the fallback to 0 for lifts with no training max is cosmetic. |
 
 ## Batch rules and completion evidence
 
@@ -278,7 +300,7 @@ area membership is not permission to review the entire area in one session.
 | B09 | Service worker, timers, notifications and tests | **Closed** (B09a–B09c). L04 resolved into F65; F65–F68 opened |
 | B10 | Build/deploy/config/scripts/public assets | **Closed** (B10a–B10d). F69–F84 opened |
 | B11 | E2E, test infrastructure, domain types and remaining stores | **Closed** (B11a–B11c). F85–F88 opened |
-| B12 | Documentation/data relevance and final reconciliation | Scope accounting and cross-file closure |
+| B12 | Documentation/data relevance and final reconciliation | **Closed** (B12a–B12d). F89–F94 opened; review complete |
 
 ## File ledger
 
@@ -290,28 +312,28 @@ column as work is completed.
 
 | File | Queue | Status | Evidence / resume note |
 |---|---|---|---|
-| `.claude/ARCHITECTURE_MAP.md` | B12 | pending | — |
-| `.claude/COMMON_MISTAKES.md` | B12 | pending | — |
-| `.claude/QUICK_START.md` | B12 | pending | — |
-| `.claude/completions/README.md` | B12 | pending | — |
-| `.claude/sessions/README.md` | B12 | pending | — |
+| `.claude/ARCHITECTURE_MAP.md` | B12 | deep | B12a — agent-facing documentation (1/4); evidence below (F89) |
+| `.claude/COMMON_MISTAKES.md` | B12 | deep | B12a — agent-facing documentation (1/4); evidence below (accurate; #3 note stale per F84) |
+| `.claude/QUICK_START.md` | B12 | deep | B12a — agent-facing documentation (1/4); evidence below (F76, F89; documents F69/F80 correctly) |
+| `.claude/completions/README.md` | B12 | deep | B12a — agent-facing documentation (1/4); evidence below (accurate) |
+| `.claude/sessions/README.md` | B12 | deep | B12a — agent-facing documentation (1/4); evidence below (accurate) |
 | `.claudeignore` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (clean) |
 | `.github/dependabot.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (clean) |
 | `.github/workflows/ci.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F74, F75) |
 | `.github/workflows/deploy.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F73, F74, F75, F76) |
 | `.gitignore` | B10 | deep | B10d — data, assets, css and ignore files (4/4); evidence below (F83) |
-| `AMRAP_TARGET_REPS_ANALYSIS.md` | B12 | pending | — |
-| `CLAUDE.md` | B12 | pending | — |
-| `ENGINEERING_PASSES.md` | B12 | pending | — |
-| `README.md` | B12 | pending | — |
-| `ROADMAP.md` | B12 | pending | — |
-| `docs/INDEX.md` | B12 | pending | — |
-| `docs/archive/README.md` | B12 | pending | — |
-| `docs/design/plate-loading-model.md` | B12 | pending | — |
-| `docs/ui-consistency-review.md` | B12 | pending | — |
-| `docs/verification/2026-06-27-deload-toggle.md` | B12 | pending | — |
-| `docs/verification/2026-08-09-rest-timer-notifications.md` | B12 | pending | — |
-| `docs/verification/2026-08-09-swe-hardening.md` | B12 | pending | — |
+| `AMRAP_TARGET_REPS_ANALYSIS.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (current and accurate) |
+| `CLAUDE.md` | B12 | deep | B12a — agent-facing documentation (1/4); evidence below (F76; stale Last Updated) |
+| `ENGINEERING_PASSES.md` | B12 | deep | B12b — project documentation (2/4); evidence below (current; lib listing illustrative not exhaustive) |
+| `README.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F90; deploy section correct where F76 docs are wrong) |
+| `ROADMAP.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F91) |
+| `docs/INDEX.md` | B12 | deep | B12b — project documentation (2/4); evidence below (F92) |
+| `docs/archive/README.md` | B12 | deep | B12b — project documentation (2/4); evidence below (accurate — archive is empty) |
+| `docs/design/plate-loading-model.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (accurate rationale record) |
+| `docs/ui-consistency-review.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (nine findings, resolved as described) |
+| `docs/verification/2026-06-27-deload-toggle.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (accurate) |
+| `docs/verification/2026-08-09-rest-timer-notifications.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (accurate; carries a historical banner — F93 is the index entry) |
+| `docs/verification/2026-08-09-swe-hardening.md` | B12 | deep | B12c — design, analysis and verification records (3/4); evidence below (F93 — header contradicts its own table) |
 | `eslint.config.js` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (F77; amends F71) |
 | `index.html` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F70 apple-touch-icon; CSP meta checked) |
 | `package.json` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (check:ci composition; no wrangler dep) |
@@ -4196,3 +4218,365 @@ end-to-end suite was executed for the first time in this review and fails 6 of 3
 entirely through spec drift. **Next action: B12 — documentation relevance and the
 final reconciliation (17 rows)**, which owns the completion claim under batch rule
 8 and already carries F36, F76, F82 and F83.
+
+### 2026-09-15 — B12a: agent-facing documentation
+
+**Revision:** `81b7e5a` (B11c, stacked on B11b → B11a → `main`). No application
+files were touched; no probes were needed — this batch's method is diffing claims
+against the code the earlier areas established. Single agent; six documents
+deeply reviewed.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `CLAUDE.md` | 1–47 | `66ca2d9f1754112fee16acd138085a2b35eb2f8f` |
+| `.claude/ARCHITECTURE_MAP.md` | 1–217 | `af1f0c63588a5b7bb1181d235dd2a2598905350c` |
+| `.claude/COMMON_MISTAKES.md` | 1–149 | `62e093099bbfac0ee8da755c8461aca9513a2522` |
+| `.claude/QUICK_START.md` | 1–86 | `7568cd93dc6250ee8f183137b103a65b35d7b87b` |
+| `.claude/completions/README.md` | 1–14 | `8ca01745702c1842b940b7fffc07259c2c23a7a0` |
+| `.claude/sessions/README.md` | 1–13 | `b030f063ebed2ab08cdd5c301c818ab18849a27a` |
+
+**Claims verified against the code (the batch's actual work):**
+
+| Claim | Where | Verdict |
+|---|---|---|
+| `tsc -p tsconfig.json` checks nothing; use `tsc -b` | `CLAUDE.md:23`, `QUICK_START:15` | **correct** (B10a) |
+| Cycle length is `cycleFinalWeek(hasDeloadWeek)`, never hardcode 4 | `CLAUDE.md:24`, `QUICK_START:67` | **correct** |
+| e1RM is Wathan, `reps === 1` short-circuits | `CLAUDE.md:25`, `QUICK_START:59` | **correct** |
+| AMRAP targets seed off the median of the last 3 non-deload AMRAPs | `QUICK_START:61` | **correct** |
+| `SESSION_TM_BUMP_THRESHOLD = 0.15`, `CYCLE_DOUBLE_THRESHOLD = 0.10` | `QUICK_START:65` | **correct** |
+| Coverage gates 80% over `lib/`, `screens/`, `store/` only | `QUICK_START:22`, map | **correct** — states F69's gap plainly |
+| `debug:browser`'s wipe hits IndexedDB and not OPFS | `QUICK_START:36-38` | **correct** — F80 amended |
+| `demo-seed.json` is bundled and nothing reads it | `COMMON_MISTAKES` #7 | **correct** — F82 amended |
+| SW `setTimeout` dies with the worker; page owns reliable timers | `COMMON_MISTAKES` #11 | **correct** (B09) |
+| `<For>` over a rebuilt array remounts every row; use `<Index>` | `COMMON_MISTAKES` #6 | **correct** — F52 cites it |
+| Setup is a 2-step wizard | map, `QUICK_START` | **correct** — the doc was right where `app.spec.ts` was wrong (F85) |
+| OPFS SAH pool, 10 s RPC timeout, `__e2eResetDb` DEV-only | map, Key Patterns | **correct** (B10a, B11a) |
+| 14 `--color-*` tokens, 11 themes | map, Key Patterns | **correct** — counted both |
+| Solid 1.9 / router 0.16 / Tailwind 4 / Vite 8 | map, Key Patterns | **correct** |
+| CI never runs lint or tests | `CLAUDE.md:17-19`, `QUICK_START:81-82` | **wrong** — F76, now recorded in both places |
+| `pr.ts` exports `detectAmrapPRs` | map, `QUICK_START:62` | **wrong** — it is `detectPRs`; old name occurs nowhere |
+| `restThresholds` → `{normal, transition, failNudge, failMax}` via `FAIL_NUDGE_RATIO` | map, Key Patterns | **wrong** — real shape is `{firstBell, secondBell, failedBell}`; the constant does not exist |
+| `public/icon-192.png`, `icon-512.png` | map, `public/` list | **wrong** — never existed (F70) |
+| Component and `lib/` inventories | map, directory tree | **incomplete** — 11 of 38 components, 5 of 21 modules absent |
+| `migrate-history.py` hardcodes the same order as `seed.ts` | `COMMON_MISTAKES` #3 | **stale for exercises** — F84 |
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Inventory diff: `ls src/components/*/` and `ls src/lib/*.ts` against the map's
+  tree, producing the 11-of-38 and 5-of-21 counts in F89.
+- API checks: `grep -n export src/lib/pr.ts` → `prSessionIds`, `detectPRs` (no
+  `detectAmrapPRs` anywhere in the repo); `grep -n 'RestThresholds\|FAIL_NUDGE_RATIO'
+  src/lib/calc.ts` → `{ firstBell, secondBell, failedBell }`, no such constant.
+- Count checks: 14 `--color-*` tokens in `index.css`'s `@theme`; 11 keys in the
+  `THEMES` map.
+- Not run: the test suites — this batch changes no code and its evidence is the
+  doc-to-code diff.
+
+**Findings:** F89 (medium). **F76 widened** to `QUICK_START.md:81-82`.
+**F52, F80 and F82 amended** — see below.
+
+**Substantive negative conclusions:**
+
+- **`COMMON_MISTAKES.md` is the strongest document in the repo** and is almost
+  entirely accurate. Entries #1, #2, #4, #5, #6, #8, #9, #10 and #11 all hold
+  against what this review established independently. Its only drift is #3's note
+  that `migrate-history.py` "hardcodes the same order" — true for lifts, stale for
+  exercises, which is F84.
+- **Three findings this review opened were already documented**, and the entries
+  are amended rather than left implying nobody knew: F82 (`COMMON_MISTAKES` #7),
+  F80 (`QUICK_START:36-38`), and F69's scope (`QUICK_START:22` and the map's Tests
+  pattern). This matters for B12d's reconciliation: a finding whose state is
+  documented and deliberate is a different kind of open item from one nobody knew
+  about, and the two should not be closed the same way.
+- Both `.claude/` READMEs are accurate, including their own "Currently empty; the
+  convention is unused" — `git ls-files .claude/` confirms each directory holds
+  nothing but its README.
+- `CLAUDE.md` carries `**Last Updated**: 2026-07-29`, `QUICK_START.md` the same,
+  `COMMON_MISTAKES.md` 2026-08-09 and `ARCHITECTURE_MAP.md` 2026-09-05. The dates
+  are honest and correlate with the drift found: the two oldest documents hold F76,
+  and the map — the most recently touched — is the one with the inventory gaps,
+  because it is the one that must track the tree.
+- `CLAUDE.md`'s pointer list is itself affected by **F83**: it names three
+  `.claude/` documents as key reading while `.gitignore:28` ignores that directory.
+  The three are tracked so they survive; a fourth would not. Recorded on F83
+  already, noted here because this is the file that creates the expectation.
+
+**Open questions / remaining ranges:** none carried. The F36 tie-break reconcile,
+the F82 decision and the completion claim all belong to B12d and are listed there.
+
+**Ledger rows updated:** six B12 rows moved `pending` → `deep`; B12 now has 11 rows
+left. **Next action: B12b — `README.md`, `ROADMAP.md`, `ENGINEERING_PASSES.md`,
+`docs/INDEX.md` and `docs/archive/README.md`.**
+
+### 2026-09-15 — B12b: project documentation
+
+**Revision:** `3575545` (B12a). No application files were touched; no probes — the
+method is diffing documented claims against the code the earlier areas
+established. Single agent; five documents deeply reviewed.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `README.md` | 1–105 | `69b81c94945e9243e6f83b37e8dc9a178ac028ed` |
+| `ROADMAP.md` | 1–815 | `a6e858f9de678d31576f19209bbcf338455b66c9` |
+| `ENGINEERING_PASSES.md` | 1–366 | `b3550d17c1c79516283d82126f97760e8a3c5596` |
+| `docs/INDEX.md` | 1–55 | `5c9d4cd9babfa7cf77c68c875772e8a59a19b1e9` |
+| `docs/archive/README.md` | 1–11 | `be2133ae6d7fef7ab86b5a2fdc4872de0c813d6b` |
+
+**Claims verified against the code:**
+
+| Claim | Where | Verdict |
+|---|---|---|
+| Deploy is path-filtered and runs the same checks before publishing | `README.md` Deployment | **correct** — and it is the doc F76's two get wrong |
+| 11 themes / 14 CSS-variable tokens | `README.md` Features | **correct** |
+| Stack versions: Solid 1.9, TS 6, Tailwind 4, router 0.16, Vite 8, Vitest 4, Playwright 1, Stryker 9 | `README.md` Stack | **correct** against `package.json` |
+| Coverage ≥80% over `src/lib`, `src/screens`, `src/store` | `README.md` | **correct** — states F69's scope |
+| Mutation over `src/lib`, fails below 40%, target 80% | `README.md` | **correct** against `stryker.config.mjs` |
+| Warmups 40/50/60% TM × 5/5/3, dropped at/above first working weight | `README.md` | **correct** |
+| Deload week on by default | `README.md` | **correct** — `hasDeloadWeek: true` |
+| e1RM PR is "vs any prior **AMRAP**" | `README.md` Features | **wrong** — F90 |
+| "**PWA** — installable, works offline" | `README.md` Features | **wrong** — F70's icons never existed |
+| ROADMAP has changelog / planned / security / tech debt | `docs/INDEX.md` | **correct** — all four sections present |
+| `ENGINEERING_PASSES.md` has seven agent prompts | `docs/INDEX.md` | **correct** — passes 1–7 |
+| `COMMON_MISTAKES.md` has "Ten" failure modes | `docs/INDEX.md` | **wrong** — eleven — F92 |
+| CSP identical in three places; other headers deliberately differ | `ROADMAP.md` Security | **correct** (B10a) |
+| `assertIdent`, `MAX_IMPORT_BYTES`, `PERSISTED_KEYS`/validators, route-slug coercion | `ROADMAP.md` Security | **correct** |
+| `window.__e2eResetDb` behind `import.meta.env.DEV` | `ROADMAP.md` Security | **correct** (B11a) |
+| Supply chain covered by least-privilege + frozen-lockfile + audit signatures | `ROADMAP.md` Security | **overstated** — F73 bypasses all three — F91 |
+| PWA cache uses `cleanupOutdatedCaches: true` | `ROADMAP.md` Security | **wrong** — SW hand-rolls eviction — F91 |
+| Security: "No open items" / Tech Debt: "No open items" | `ROADMAP.md` | **stale** — F91 |
+| Archive is empty | `docs/archive/README.md` | **correct** |
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Count checks: `grep -c '^### [0-9]' .claude/COMMON_MISTAKES.md` → **11** against
+  the index's "Ten"; `ENGINEERING_PASSES.md` numbered passes → **7**, matching;
+  `grep -n '^## ' ROADMAP.md` → Done / Planned / Security / Tech Debt, matching.
+- Behaviour checks: `settings-store.ts:251` `hasDeloadWeek: true`; `pr.ts:113-133`
+  builds its PR baseline from own non-cross sets plus attributed cross sets under
+  `isWorkingPerformance`, with no AMRAP filter anywhere.
+- Not run: the test suites — this batch changes no code.
+
+**Findings:** F90 (medium), F91 (medium), F92 (low). **F70 widened** to
+`README.md`'s installability promise.
+
+**Substantive negative conclusions:**
+
+- **`ENGINEERING_PASSES.md` is current.** Its Repository-model section matches the
+  stack exactly, and every command it names (`pnpm check`, `test:coverage`,
+  `test:mutation`, `debug:browser:nowipe`, …) exists in `package.json`. Its `lib/`
+  listing omits the same modules `ARCHITECTURE_MAP.md` does, but the framing there
+  is illustrative ("the highest-value test surface", with examples) rather than an
+  inventory, so it is not the same defect as F89 and is not opened as one.
+- **`README.md` is the most accurate document in the repo on the subject F76 gets
+  wrong.** Its Deployment section describes the workflow correctly. The two
+  documents an agent is told to read at session start are the ones that are wrong,
+  which is the worst possible distribution of that particular error.
+- `ROADMAP.md`'s Security section is well-constructed — the threat model is stated,
+  every mitigation names its mechanism, and five of the seven bullets check out
+  exactly. Its problem is age, not quality.
+- `docs/archive/README.md` is accurate, including "None yet"; `docs/archive/`
+  contains nothing but that README.
+- The **Future considerations** entry under Security correctly marks the
+  `npm ci` item moot after the pnpm migration, and the SRI item is honestly scoped
+  ("all assets are self-hosted today so impact is low"). Both still hold — B10's
+  review found no external `<script>`, and the CSP forbids one.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- Nothing checks documented counts or inventories against the tree (F89, F92), and
+  nothing checks that a renamed export is renamed in prose too (F90). All three are
+  the same class: a CI check that greps the docs for symbols that no longer resolve
+  would have caught `detectAmrapPRs` and `FAIL_NUDGE_RATIO` the day they were
+  renamed.
+
+**Open questions / remaining ranges:** one carried to B12c — `docs/INDEX.md`
+describes two verification records as "runtime pass pending" and "browser legs
+TODO", while B10c found `verify-notify-hardening.js` to be a complete five-leg
+harness against the production build. Reading the records themselves settles which
+is behind.
+
+**Ledger rows updated:** five B12 rows moved `pending` → `deep`; B12 now has 6 rows
+left. **Next action: B12c — `AMRAP_TARGET_REPS_ANALYSIS.md`,
+`docs/design/plate-loading-model.md`, `docs/ui-consistency-review.md` and the three
+`docs/verification/` records.**
+
+### 2026-09-15 — B12c: design, analysis and verification records
+
+**Revision:** `088b23e` (B12b). No application files were touched; no probes.
+Single agent; six documents deeply reviewed. **This completes the File ledger:
+all 179 rows are `deep`.**
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `AMRAP_TARGET_REPS_ANALYSIS.md` | 1–173 | `456f8409b656b8e27699c1aa5e4dc63f5428b9a7` |
+| `docs/design/plate-loading-model.md` | 1–95 | `e38da640dad553534a2f4f8e524099926f996141` |
+| `docs/ui-consistency-review.md` | 1–203 | `c7714aab50f18c6a3c8b7bafb657803b0388cd6e` |
+| `docs/verification/2026-06-27-deload-toggle.md` | 1–47 | `56ea8b132b33e2e8161829bf97b82836e1a2e7fe` |
+| `docs/verification/2026-08-09-rest-timer-notifications.md` | 1–91 | `87657c83387a1578a722eb5049fea78b56c1abbb` |
+| `docs/verification/2026-08-09-swe-hardening.md` | 1–73 | `dfdfa950e05c42d59c3ece205df02b62843ac277` |
+
+**Claims verified against the code and against each other:**
+
+| Claim | Where | Verdict |
+|---|---|---|
+| AMRAP path is weeks 1–3 only (`isAmrap: week !== 4 && i === 2`) | AMRAP analysis | **correct** |
+| Seed is a median over recent per-week bests, inverted through Wathan | AMRAP analysis | **correct** |
+| Qualifying work = own non-cross + attributed cross, under `isWorkingPerformance` | AMRAP analysis | **correct** — and the same population F90 shows `detectPRs` uses |
+| `plateMode`/`implementBase` shipped, replacing the `usesBarbell` boolean | plate-loading design | **correct** |
+| Nine UI findings, all validated then fixed in one pass | `ui-consistency-review.md`, `docs/INDEX.md` | **correct** — nine numbered findings present |
+| Deload toggle verified at `e72e46d` | deload-toggle record | **correct**, and self-scoped |
+| Rest-timer record covers pre-checkpoint behaviour | that record's banner | **correct** — banner added when the behaviour changed 2026-09-11 |
+| "runtime pass pending" for the rest-timer record | `docs/INDEX.md` | **wrong** — the record records a Chrome desktop runtime pass — F93 |
+| "browser legs TODO" for the swe-hardening record | `docs/INDEX.md` | **wrong** — all five legs marked PASS — F93 |
+| "Runtime legs … listed as TODO below" | swe-hardening record header | **contradicts its own table** — F93 |
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Count check: nine numbered findings in `docs/ui-consistency-review.md`, matching
+  both its own status line and `docs/INDEX.md`.
+- Cross-check: the swe-hardening record's runtime table (legs A–E, all PASS,
+  executed by `scripts/verify-notify-hardening.js` against `vite preview`) against
+  its own header and against `docs/INDEX.md`.
+- Not run: the test suites — this batch changes no code. The verification harness
+  was **not** re-run here; B10c reviewed it and this batch reads its record.
+
+**Findings:** F93 (low). **F79 sharpened** with the evidence that the harness has
+demonstrably run and passed.
+
+**Substantive negative conclusions:**
+
+- **`AMRAP_TARGET_REPS_ANALYSIS.md` is the most rigorous document in the repo** and
+  is fully current. It states the week-4 exclusion with the code that enforces it,
+  explains the one-performance-per-(cycle, week) ranking including why a redo
+  supersedes the attempt it replaces, and its conclusion — that the two defects
+  found were in *what qualifies as a performance* rather than in the math — matches
+  what the code now does. Notably it references `src/lib/performance.ts` and
+  `src/lib/workout-compose.ts`, **two of the five modules `ARCHITECTURE_MAP.md`
+  omits** (F89): the analysis doc knows about modules the architecture map does not.
+- **`2026-08-09-rest-timer-notifications.md` carries a "historical" banner** added
+  when the two-bell checkpoint model shipped on 2026-09-11, scoping itself to the
+  behaviour it actually verified. That is the correct way to age a verification
+  record, and it is why F93 is about the *index* entry rather than this record.
+- `docs/design/plate-loading-model.md` is an accurate shipped-rationale record, and
+  its "Out of scope" section (pulley ratio, landmine/lever) is honest about what the
+  model deliberately does not attempt.
+- `docs/ui-consistency-review.md` retains a "Validation checklist (for the
+  validating session)" section although that session happened and the document is
+  marked resolved. Harmless — the resolutions are recorded inline beneath each
+  finding, so the checklist reads as history rather than as an instruction. Not
+  opened.
+- The swe-hardening record's **harness caveats are properly disclosed** — stubbed
+  `Notification.permission`, `showNotification` wrapped through a Playwright worker
+  handle, `document.hidden` shadowed because CDP visibility emulation was
+  unavailable. A verification record that states what it faked is worth more than
+  one that claims a clean pass, and this one does it well.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- Nothing re-runs the verification harnesses or re-checks these records against the
+  code, so a record can drift from PASS to inaccurate with no signal — which is
+  what F93 documents happening to the index entries, and F79 to the harness itself.
+
+**Open questions / remaining ranges:** B12b's carried question is answered — the
+index is behind, and so is the swe-hardening record's own header. Nothing further
+carried; the remaining items belong to B12d.
+
+**Ledger rows updated:** six B12 rows moved `pending` → `deep`. **The File ledger
+is complete: 179 of 179 rows `deep`, with no row in any other state.** **Next
+action: B12d — the final reconciliation under batch rule 8.**
+
+### 2026-09-15 — B12d: final reconciliation (closes the review)
+
+**Revision:** `9b755b5` (B12c). No application files were touched at any point in
+this review. Single agent. This batch reviews no new files — the File ledger was
+completed by B12c — and instead discharges batch rule 8.
+
+**Rule 8, condition by condition:**
+
+**1. Every in-scope file `deep` at its applicable revision.** Verified by count:
+179 ledger rows matching `| path | area | deep |`, and **zero** matching
+`pending`, `partial`, `reported`, `stale` or `blocked`. The `reported` status —
+the area-level claim that once covered 52 unverified `src/components/**` rows —
+no longer appears anywhere in the document.
+
+**2. Cross-file questions resolved or explicitly blocked.**
+
+| Lead | Disposition |
+|---|---|
+| L01 | Resolved into confirmed F07 |
+| L02 | **Closed in B12d** — F14/F15 for save ordering, plus F54–F56 from B08d's accessory review. The original unspecified accessory-editing concern was never independently recovered and is recorded as lost rather than carried, per rule 5 |
+| L03 | Resolved into confirmed F13 |
+| L04 | **Resolved into confirmed F65** — reproduced in B09a, the last lead in the tracker that had never been reproduced |
+| L05 | Resolved into confirmed F33/F34 |
+| L06 | **Open — explicitly blocked on authorization.** Deferred by scope, not by missing evidence: it asks for a failure-injection pass across Today's load/start/abandon paths, which is different work from reading code and was never authorized |
+| L07 | **Resolved in B12d.** (1) The stale-discount read is real but unreachable — B08h traced it with `RecordsPanel` under full review; every route that changes `highRepDiscount` remounts the panel. Recorded as a latent hazard, not opened. (2) The missing index is confirmed and **opened as F94**, with a wider blast radius than the lead described |
+
+**3. Findings reconciled.** 94 findings carry a severity, a location, evidence and
+a current state. Settled in this batch:
+
+- **F36 decided** (it was explicitly deferred to B12): standardise both "current
+  training max" helpers on **"highest `id` wins at equal `setAt`"**.
+  `schema.ts:11` makes `trainingMaxes.id` `AUTOINCREMENT`, so the id is monotonic
+  and never reused — the highest id at an instant *is* the newest insert. This
+  needs no new column and preserves `getCurrentTm`'s current behaviour while
+  correcting `getAllCurrentTms`, the helper that disagrees with it.
+- **F82 decided**: keep the file, move it out of `public/`. B12a established the
+  state is documented and deliberate (`COMMON_MISTAKES` #7), so the finding is not
+  "nobody wired this up". What remains is that a manual-import convenience is
+  served by publishing 44.8 KB of the author's real training history — 23 sessions,
+  184 sets — to the web on every deploy. Moving it to a non-served path keeps the
+  documented workflow (the user picks a file; it need not be a URL) and drops both
+  the payload and the exposure. If it must stay served, that is a deliberate choice
+  and should be written down as one.
+- **Seven findings amended against later evidence** rather than left standing as
+  first written: F52 (cites `COMMON_MISTAKES` #6, which states its rule), F70
+  (README's installability promise), F71 (ESLint does reference `tsconfig.e2e.json`
+  — the original "referenced by nothing" was too strong), F76 (the claim appears in
+  two documents), F78 (the DEV-only reset hook makes the fix structural), F79 (the
+  harness demonstrably ran and passed), F80 and F82 (both states already
+  documented). Corrections were recorded where the finding lives, not silently.
+
+**4. Appropriate final integration checks.** `pnpm run check:ci` — the same
+command `deploy.yml` gates production on — run in full:
+
+| Gate | Result |
+|---|---|
+| `pnpm lint` | **PASS** |
+| `pnpm test:coverage` | **PASS** — 48 files, **1,094 tests** |
+| Coverage vs the 80% gate | **PASS** — statements 93% (3669/3945), branches 85.43% (1273/1490), functions 91.69% (1247/1360), lines 95.92% (2705/2820) |
+| `pnpm build` | **PASS** — production bundle emitted, injectManifest ran |
+
+The coverage numbers are strong *within the measured set*, which is exactly F69's
+point: that set is `lib/` + `screens/` + `store/` only, and 22 of the 23 findings
+opened in B08 and B09 live outside it.
+
+**What this review did not do, stated plainly:**
+
+- **No application or test file was changed.** Rule 4 held for all twelve areas.
+  Every probe was created, run, and deleted; the working tree was verified clean at
+  every commit. All 94 findings are therefore open.
+- **The E2E suite fails** — F85, 6 of 32 — and this review did not fix it.
+- **F67 is unverified.** The `new Notification(...)` platform question needs a real
+  device (installed PWA, permission granted, tab hidden, one rest bell). It is
+  recorded as needing that check rather than asserted, per this project's standing
+  rule about mobile claims.
+- **L06 is not resolved**, and is recorded as blocked on authorization rather than
+  quietly dropped.
+- Performance findings (F94, and the N+1 shape noted in B08h) were identified by
+  inspection and **not measured**. Each says so.
+
+**Findings:** F94 (medium, resolves L07(2)).
+
+**Where to start, if only a few things get fixed:** F65 with F79 and F78 (one 503
+permanently breaks the offline shell; the harness that would catch it exists and
+passes); then F85 with F74 (fixing the specs without running them anywhere returns
+them to the state that produced the finding); then F69, F73 and F94. The reasoning
+is in the completion card at the top of this document.
+
+**Ledger rows updated:** none — B12d reviews no files. **Area B12 is closed and
+the review is complete.** The next action is not another batch: it is deciding
+which findings to fix, in what order, and whether the fixes are done here or
+handed to `ENGINEERING_PASSES.md`'s prompts.
