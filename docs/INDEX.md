@@ -38,8 +38,13 @@ Dated runtime-verification logs, one per claim checked against the running app.
 
 ## Review notes
 
-- `docs/deep-code-review.md` — exhaustive review progress, prior findings, per-file
-  coverage, and bounded batches. **Single agent only**; resume here for code review.
+- `docs/deep-code-review.md` — exhaustive review evidence: 94 findings with per-file
+  coverage and bounded batches. **Review complete 2026-09-15; the document is frozen.**
+  Read it to learn what a finding *is*.
+
+- `docs/deep-code-review-fixes.md` — the fix ledger for those 94 findings: state,
+  commit, PR and regression test, one row each. Read it to learn whether a finding
+  is *resolved*. Update it in the same commit as the code change it describes.
 
 - `docs/ui-consistency-review.md` — UI/UX consistency findings from the history-modal /
   history-label work. **RESOLVED 2026-08-08**: all nine findings validated, then fixed
@@ -52,4 +57,4 @@ Read them only on explicit request.
 
 ---
 
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-09-15

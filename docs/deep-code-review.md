@@ -1,5 +1,17 @@
 # Deep code review tracker
 
+> **This document is frozen.** The review is complete and this is its evidence
+> record — why each of the 94 findings exists, and the per-file coverage behind
+> them. Its central claim is that **no application or test file was changed at any
+> point in the review**, so fix state does not belong here.
+>
+> **Fix state lives in [`docs/deep-code-review-fixes.md`](./deep-code-review-fixes.md)** —
+> one row per finding, with state, commit, PR and regression test. Go there to
+> learn whether a finding is resolved; come here to learn what it is.
+>
+> Edit this document only to amend a finding against new evidence (record the
+> amendment inline, as B12 did) — never to record that something was fixed.
+
 ## Resume here
 
 **Single agent only. Do not spawn or delegate to sub-agents, including sequentially.**
