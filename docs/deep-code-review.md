@@ -8,63 +8,54 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07–B10 are CLOSED; B11 is open and B11a is done.** 155 of 179 ledger
-rows are `deep`. Seven B11 rows remain, then B12 (17) closes the review.
+**Areas B07–B10 are CLOSED; B11 is open with B11a and B11b done.** 158 of 179
+ledger rows are `deep`. Four B11 rows remain, then B12 (17) closes the review.
 
-**B11a ran the end-to-end suite, apparently for the first time — and it does not
-pass.** F74 established that no workflow executes it; this batch executed it:
-**6 of 32 tests fail** (`app.spec.ts` 1/4, `workout.spec.ts` 5/28). Every failure
-is spec drift, not a product bug — the app is correct in all six. Opened as
-**F85 (medium)**, with three independent causes, each an app improvement whose
-specs were never updated:
+**B11 so far is about the test layer itself, and both batches found the same
+shape: the thing under test and the thing testing it have drifted apart, with
+nothing in between to notice.**
 
-1. the setup wizard went from three steps to two, but `app.spec.ts:13` still
-   clicks a second NEXT and waits for `STEP 3`;
-2. `SessionBar` split the finish control, so the button reads `FINISH` while work
-   is outstanding — four tests assert `COMPLETE SESSION` and fail;
-3. `Stepper` gained `fieldLabel`, so the increment button's accessible name is
-   `Increase reps`, not its visible `+`.
+- **F85 (medium)** — B11a ran the end-to-end suite, apparently for the first
+  time, and **6 of 32 tests fail**. Every failure is spec drift, not a product
+  bug. Three causes — the wizard went three steps to two, `SessionBar` split
+  FINISH from COMPLETE SESSION, `Stepper` gained `fieldLabel` so `+` is no longer
+  the button's accessible name. In all three the **helper was updated and the
+  specs were not**, because helpers are shared and specs are executed by nothing
+  (F74).
+- **F87 (medium)** — B11b measured `test-setup.ts`'s `MockWorker` against the
+  real `timer.worker.ts`: `pause` clears the interval in one and keeps it in the
+  other; `start` without `restStartedAt` posts in one and is silent in the other;
+  the stub delivers `onmessage` synchronously where a real Worker goes through
+  the message port. `timer.worker.ts` has no tests, so neither is checked against
+  the other. The sharpest consequence: **fix F68 and a test asserting the fix
+  fails under the stub** — the stub blocks its own fix.
 
-**In all three the helper was updated and the specs were not** — `startWorkout`
-already accepts either button, `completeSetupWizard` comments that step 3 is
-gone, `fillStepper` uses test ids. Helpers are shared, so whoever changed the app
-noticed them; the specs are executed by nothing, so they rotted. That is F74's
-cost, made concrete.
+**B11a also sharpened F78.** Pointing the E2E suite at a production build is not
+a one-line `webServer` change: every test goes through `helpers.freshStart`,
+which waits on `window.__e2eResetDb`, and `sqlite-client.ts:93` defines that hook
+inside `if (import.meta.env.DEV)`. The suite is structurally bound to the dev
+server by its reset strategy — which is why `verify-notify-hardening.js` resets
+with a fresh browser context per leg instead.
 
-**B11a also sharpened F78.** Pointing the suite at a production build is not a
-one-line `webServer` change: every test goes through `helpers.freshStart`, which
-`waitForFunction`s on `window.__e2eResetDb`, and `sqlite-client.ts:93` defines
-that hook inside `if (import.meta.env.DEV)`. Against a production build it never
-appears and every test hangs. The suite is **structurally bound to the dev server
-by its reset strategy** — which is exactly why `verify-notify-hardening.js` resets
-with a fresh browser context per leg and says so in its own header. The two
-browser suites made opposite choices about DB reset, and that choice is what
-decides which build each one can test.
+**Next batch: B11c — the last two stores, which closes B11.**
+`src/store/save-failure-store.ts` (116) and `src/store/toast-store.ts` (12) with
+`save-failure-store.test.ts` (75) and `toast-store.test.ts` (47).
+`save-failure-store` is **F51**'s other half — B08c reviewed the banner and found
+its single-slot `retrying` id re-enables a retry mid-flight; the store owns the
+retry closures those buttons call, and the `localStorage` gap log that outlives a
+reload. Then **B12** (17 rows) closes the review, already carrying F36, F76 and
+F82.
 
-Also opened: **F86 (low)** — `test-results/` is neither Playwright's configured
-`outputDir` nor gitignored, and `test-results/.last-run.json` is **tracked**,
-carrying a stale `{"status": "passed"}` receipt for a suite that currently fails.
+Latest run: **B11b complete** — `src/test-setup.ts` (80), `src/types/domain.ts`
+(184) and `src/vite-env.d.ts` (1) reviewed in full. Three files marked deep;
+**158 files deep in total.** The **full unit suite** was run as this batch's check,
+since `test-setup.ts` is loaded by every test — **48 files, 1,094 tests, all
+passing**; `pnpm lint` and `tsc -b` clean (exit 0). One new finding (F87).
+`domain.ts` is clean. Only this tracker changed; the probe was created inside
+`src/`, run, and deleted, leaving the tree clean. This card authorizes commit,
+push and PR; operator acceptance remains a separate native Kanban review step.
 
-**Next batch: B11b — test infrastructure and shared types.** `src/test-setup.ts`
-(80), `src/types/domain.ts` (184) and `src/vite-env.d.ts` (1). B09c recorded that
-`test-setup.ts`'s `MockWorker` re-implements `timer.worker.ts`'s start/pause/
-resume/stop protocol with nothing to catch drift — and **F68** lives in exactly
-that protocol, so the stub and the real worker want diffing directly.
-`types/domain.ts` is the shared contract every area has been reading through.
-Then **B11c** — `save-failure-store.ts` (**F51**'s other half; B08c reviewed only
-the banner) and `toast-store.ts`, with their tests — closes B11.
-
-Latest run: **B11a complete** — `tests/e2e/workout.spec.ts` (275),
-`app.spec.ts` (35), `helpers.ts` (77) and `fixtures.ts` (21) reviewed in full.
-Four files marked deep; **155 files deep in total.** `pnpm lint` and `tsc -b`
-clean (exit 0); the E2E suite was executed and its results are the batch's
-evidence. Two new findings (F85, F86); F78 sharpened. `fixtures.ts` is clean and
-`helpers.ts` is current. Only this tracker changed — run artifacts were removed
-and the tracked `.last-run.json` restored, leaving the tree clean. This card
-authorizes commit, push and PR; operator acceptance remains a separate native
-Kanban review step.
-
-**Remaining work — 24 of 179 ledger rows are not yet `deep`** (155 are). Recounted
+**Remaining work — 21 of 179 ledger rows are not yet `deep`** (158 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -81,7 +72,7 @@ correct; only the remaining-work totals were not.
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
 | B10 | **0 — closed** | All 25 rows `deep` across B10a–B10d. Sixteen findings opened (F69–F84); F71 amended. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
-| B11 | 7 pending | **Open (B11a done).** Test infrastructure, domain types, remaining stores. Remaining slices: B11b `test-setup.ts` / `types/domain.ts` / `vite-env.d.ts`, B11c the two remaining stores and their tests. |
+| B11 | 4 pending | **Open (B11a, B11b done).** Remaining slice: B11c — `save-failure-store.ts` and `toast-store.ts` with their tests. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
 
 B01–B07 are closed. Per-area scope and starting concerns are in the Queue table
@@ -218,6 +209,7 @@ claimed here.
 | F84 | Low; B10d cross-check | `scripts/migrate-history.py:23-51`; `src/db/seed.ts:5-31` | The migration script hardcodes its own copies of the lift and exercise tables with fixed ids, under a comment stating they "must match seed.ts order so IDs are 1–4", and **they have already drifted**. The lifts still match. The exercises do not: id 3 is `"Curls"` in the script and `'Bicep Curls'` in `seed.ts`, and `seed.ts` has since grown to **20** exercises (`Reverse Nordic`, `Pull Through`) against the script's 18. A migration run today emits `{"id": 3, "name": "Curls"}` into an import envelope that `importJson` validates weakly (**F08**), landing a second exercise alongside the seeded `Bicep Curls` — and **F41** records that once two exercises share a name the repair path is closed, because `renameExercise` rejects on the twin. A one-shot tool, but its one shot is a user's entire history. | Have the script read the tables from a single source rather than restating them — generate them from `seed.ts`, or emit exercises by name without ids and let the importer resolve them. At minimum, re-sync the two tables and add a test that fails when they diverge. |
 | F85 | Medium; B11a — first recorded execution of the suite | `tests/e2e/app.spec.ts:13-20`; `tests/e2e/workout.spec.ts:14`, `19-25`, `53`, `119`, `152` | **The E2E suite does not pass.** Nothing runs it (F74), so this batch ran it — apparently for the first time — and **6 of 32 tests fail**: `app.spec.ts` 1 failed / 3 passed, `workout.spec.ts` 5 failed / 23 passed. Every failure is spec drift, not a product bug; the app is right in all six cases. Three independent causes, each an app improvement whose specs were never updated: **(a)** the setup wizard went from three steps to two (`Setup.tsx:17` is `createSignal<1 | 2>(1)`, titles read "STEP 1 OF 2"), but `app.spec.ts:13` still clicks a second NEXT and waits for a `STEP 3` heading — it times out at `:17`. **(b)** `SessionBar` split the finish control: `allDone()` gates `COMPLETE SESSION` and everything else renders `FINISH`, so at the start of a session the button reads FINISH — four tests assert `COMPLETE SESSION` with work outstanding and all four fail. **(c)** `Stepper` gained `fieldLabel`, so the increment button's accessible name became `Increase reps` rather than its visible `+` — `workout.spec.ts:23`'s `getByRole('button', { name: '+' })` finds nothing. In all three the **helper was updated and the specs were not**: `startWorkout` already accepts `/^(FINISH|COMPLETE SESSION)$/`, `completeSetupWizard` carries the comment "onboarding no longer has a read-only step 3", and `fillStepper` uses test ids rather than button names. Helpers are shared, so whoever changed the app noticed them; the specs are executed by nothing, so they rotted. | Fix the six assertions, then fix the reason they rotted — F74's CI job — in the same change, or they will rot again. The 26 passing tests are worth keeping: they cover reload persistence, rest-timer hydration from the worker, resume/abandon, and the joker-set ladder, none of which the unit suite can reach. |
 | F86 | Low; B11a run artifacts | `test-results/.last-run.json`; `.gitignore`; `playwright.config.ts` | `test-results/` is neither configured as Playwright's `outputDir` nor listed in `.gitignore`, and **`test-results/.last-run.json` is tracked**. Running the suite therefore dirties the working tree with untracked per-failure directories (screenshots, videos, error context) and modifies a tracked file. The committed copy reads `{"status": "passed", "failedTests": []}` — a stale receipt asserting the suite is green, in a repo where it is not (F85) and where nothing has run it (F74). Anyone reading it gets the wrong answer. | Add `test-results/` (and `playwright-report/`) to `.gitignore` and `git rm --cached test-results/.last-run.json`. Worth doing before F74's CI job lands, or every run will leave a diff. |
+| F87 | Medium; B11b probe (P29) | `src/test-setup.ts:8-51`; `src/workers/timer.worker.ts:1-33` | `test-setup.ts`'s `MockWorker` re-implements the rest-timer protocol, and it is the **only** implementation any test exercises — `timer.worker.ts` has no test file (B09c), so neither is ever checked against the other. Three divergences, measured side by side: **(a) `pause`** — the stub clears its interval (`vi.getTimerCount()` → 0); the real worker keeps the interval running and gates posting on a `paused` flag (→ 1). **(b) `start` without `restStartedAt`** — the stub falls back to `Date.now()` and posts `[1,2]`; the real worker leaves `restStartedAt` undefined, so its `!= null` guard blocks **every** post (`[]`). Opposite behaviour from the same message. **(c) delivery** — the stub calls `onmessage` synchronously inside the timer tick, so a test can assert immediately after `advanceTimersByTime`; a real `Worker` delivers asynchronously through the message port. The sharpest consequence is for **F68**. Resume timing matches today (first post at 1000 ms) but for unrelated reasons — the stub starts a fresh interval, the real worker keeps the old phase — so the stub reproduces F68's symptom by coincidence, not fidelity. Fix F68 by posting immediately on `resume`, and the stub still will not: **a test written against the fix fails under the stub**, which is the stub blocking its own fix. | Delete the re-implementation and drive the real module: `timer.worker.ts` is 33 lines with no `Worker`-only APIs, so a stub can import it and forward `postMessage` into its `self.onmessage`, giving one implementation for tests and production. Failing that, give `timer.worker.ts` the test file B09c asks for and assert the same protocol table against both. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -456,9 +448,9 @@ column as work is completed.
 | `src/store/toast-store.ts` | B11 | pending | — |
 | `src/store/workout-store.test.ts` | B05 | deep | B05a — workout store and persistence (2/3); evidence below |
 | `src/store/workout-store.ts` | B05 | deep | B05a — workout store and persistence (2/3); evidence below |
-| `src/test-setup.ts` | B11 | pending | — |
-| `src/types/domain.ts` | B11 | pending | — |
-| `src/vite-env.d.ts` | B11 | pending | — |
+| `src/test-setup.ts` | B11 | deep | B11b — test infrastructure and shared types (2/3); evidence below (F87) |
+| `src/types/domain.ts` | B11 | deep | B11b — test infrastructure and shared types (2/3); evidence below (clean; unbranded ids noted) |
+| `src/vite-env.d.ts` | B11 | deep | B11b — test infrastructure and shared types (2/3); evidence below (redundant with tsconfig types) |
 | `src/workers/timer.worker.ts` | B09 | deep | B09c — timer worker and audio cues (3/3); evidence below (F68; no test file) |
 | `stryker.config.mjs` | B10 | deep | B10c — scripts and tooling config (3/4); evidence below (clean; mutate scoped to src/lib — F69 theme) |
 | `tests/e2e/app.spec.ts` | B11 | deep | B11a — end-to-end specs (1/3); evidence below (F85: 1 of 4 fails) |
@@ -4008,3 +4000,100 @@ anywhere returns the suite to exactly the state that produced this finding.
 now has 7 rows left. **Next action: B11b — `src/test-setup.ts`,
 `src/types/domain.ts` and `src/vite-env.d.ts`**, starting by diffing
 `MockWorker` against `timer.worker.ts`, where F68 lives.
+
+### 2026-09-15 — B11b: test infrastructure and shared types
+
+**Revision:** `5f6d938` (B11a, stacked on `main`). Application files were
+unchanged at batch start and end; one probe file was created inside `src/`, run,
+and deleted. Single agent; three files deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `src/test-setup.ts` | 1–80 | `7d46e86d9857915684b4426653c9ca7f93c4cd5f` |
+| `src/types/domain.ts` | 1–184 | `9e5d2fb7f017b4d0e5d73ecf7bbfe7d4323463c3` |
+| `src/vite-env.d.ts` | 1 | `11f02fe2a0061d6e6e1f271b21da95423b448b32` |
+
+**Behavior and invariants traced:**
+
+- `test-setup.ts`: the `MockWorker` protocol stub and why it exists (jsdom has no
+  `Worker`, and the SQLite worker is aliased away by the
+  `/sqlite-client$/ → sqlite-test-client` swap, so the timer is the only real
+  `Worker` under test); the `afterEach` one-tick drain and the failure it prevents
+  (assertions passing mid-chain, leaving awaits that would hit a cleared table in
+  the next `beforeEach`); the hand-rolled `localStorage`; and the
+  `scrollIntoView` no-op. F87 opened on the stub.
+- `types/domain.ts`: the full persisted schema — `Lift`, `LiftSupplemental`,
+  `TrainingMax`, `Cycle`, `Session`, `Set`, `Exercise`, `AccessoryTrainingMax`,
+  `AccessorySet`, `AccessoryNote`, `AssistanceDefault`, `PlateConfig`, `Settings` —
+  plus the domain unions (`SupplementalTemplate`, `DeloadSupplemental`,
+  `HighRepDiscount`, `PlateMode`, `ExerciseCategory`, `AssistanceSection`). The
+  dual plate-loading source is documented with **opposite** legacy defaults for the
+  two entities — `Lift.usesBarbell` undefined/true ⇒ paired, `Exercise.usesBarbell`
+  undefined/false ⇒ none — which is easy to misread and is stated correctly in both
+  places. `Set.liftId` carries the cross-movement attribution rule that F37 and
+  `RecordsPanel` both depend on.
+
+**Checks and outcomes:**
+
+- **Full unit suite** — `pnpm exec vitest run`: **48 files, 1,094 tests, all
+  passing**. Run deliberately rather than a subset: `test-setup.ts` is the
+  `setupFiles` entry for every test, so the whole suite is its blast radius.
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Probe P29 (`MockWorker` driven through the same message table B09c's P28 ran
+  against the real worker, fake timers, side-by-side comparison):
+  `start` → 1 timer, posts `[1,2,3]` over 3 s (matches);
+  `pause` → **0 timers** against the real worker's 1;
+  `resume` → 0 posts at 999 ms, 1 at 1000 ms (matches, by coincidence — see F87);
+  `start` with no `restStartedAt` → **`[1,2]`** against the real worker's `[]`;
+  `onmessage` ran **inside** the timer tick (synchronous delivery).
+- Not run: the E2E suite (B11a's evidence stands).
+
+**Findings:** F87 (medium, measured against both implementations).
+
+**Substantive negative conclusions:**
+
+- **`types/domain.ts` is clean.** It is the one file every area of this review has
+  read through, and nothing in it is wrong. The comments carry real decisions —
+  the plate-loading fallback chain, `closedThroughWeek`'s "editing the roster
+  mid-cycle never reopens finished weeks", the scope distinction between
+  `AccessoryNote`, `Session.notes` and per-set notes.
+- **Ids are unbranded** — `liftId`, `movementLiftId`, `exerciseId` and `sessionId`
+  are all plain `number`, so passing one where another is expected type-checks.
+  `Set.liftId` (the cross movement) and `Session.liftId` (the day's lift) are
+  different meanings of the same shape, distinguished only by a comment, and F37
+  was a bug about exactly that distinction. Recorded as an observation rather than
+  a finding: no current defect traces to a type mixup, and branding a schema
+  post-hoc is a large change to weigh on its own merits.
+- **`Settings` is almost entirely optional** — only the three rest timers are
+  required. A restore that supplies just those type-checks and silently drops every
+  other preference to `undefined`. This does not add to F03/F08 (the import
+  envelope is weakly validated at runtime, which is the actual defect); it explains
+  why the type system does not catch it. Nor can a type express F24's
+  `firstBell <= secondBell` ordering, which is why F24's fix has to be a runtime
+  normalisation.
+- `src/vite-env.d.ts` is redundant: `tsconfig.app.json` already lists
+  `"vite/client"` in `types`, so the triple-slash reference adds nothing. Harmless
+  and conventional for a Vite scaffold; not worth a finding.
+- `test-setup.ts`'s `afterEach` drain is a pragmatic workaround with a clear
+  comment. It could in principle mask a genuine unawaited-write bug by giving it a
+  tick to land, but the alternative — cross-test table pollution — is worse and the
+  trade is recorded where it is made.
+- The hand-rolled `localStorage` has no `Storage` prototype and fires no `storage`
+  events. Nothing in the app listens for them (the workout store persists through a
+  `createEffect`, not cross-tab sync), so the gap is currently invisible; a future
+  cross-tab feature would need a better stub.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- F87 is the gap: the protocol has one implementation for production and a
+  different one for tests, and no test asserts they agree.
+- `types/domain.ts` needs no tests, but nothing pins the persisted shapes against
+  the schema in `src/db/schema.ts` — a field added to one and not the other is a
+  runtime problem the compiler cannot see. B12's reconciliation is the place to
+  decide whether that is worth a check.
+
+**Open questions / remaining ranges:** none carried.
+
+**Ledger rows updated:** three rows moved `pending` → `deep`; B11 now has 4 rows
+left. **Next action: B11c — `src/store/save-failure-store.ts` and
+`src/store/toast-store.ts` with their tests**, which closes area B11.
