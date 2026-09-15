@@ -1,18 +1,22 @@
 import { createSignal, For } from 'solid-js'
 import Modal from './Modal'
+import { useSingleFlight } from '../../hooks/use-single-flight'
 import ToggleChip from '../ui/ToggleChip'
 import type { AccessoryTmRecommendation } from '../../lib/accessory-tm'
 
 interface Props {
   recommendations: AccessoryTmRecommendation[]
-  onAccept: (accepted: AccessoryTmRecommendation[]) => void
-  onDismiss: () => void
+  onAccept: (accepted: AccessoryTmRecommendation[]) => void | Promise<void>
+  onDismiss: () => void | Promise<void>
 }
 
 // The accessory counterpart to TmRecommendationModal. Several accessories can
 // drift in one session, so this asks about them together rather than stacking
 // dialogs — each row opts in, and the whole thing is skippable in one tap.
 export default function AccessoryTmModal(props: Props) {
+  // Single-flight: these callbacks write training maxes, which are not
+  // idempotent, and Modal owns close paths a call site cannot gate.
+  const { busy, guard } = useSingleFlight()
   const [picked, setPicked] = createSignal<number[]>(
     props.recommendations.map(r => r.exerciseId),
   )
@@ -25,7 +29,8 @@ export default function AccessoryTmModal(props: Props) {
     <Modal
       title="ACCESSORY TM"
       label="Accessory training max adjustments"
-      onClose={props.onDismiss}
+      onClose={() => { void guard(props.onDismiss)() }}
+      busy={busy()}
       class="bg-surface border border-accent p-6 font-mono max-w-sm w-full max-h-[90vh] overflow-y-auto"
     >
       <div>
@@ -50,17 +55,18 @@ export default function AccessoryTmModal(props: Props) {
           </For>
         </div>
         <button
-          onClick={() =>
-            props.onAccept(props.recommendations.filter(r => isPicked(r.exerciseId)))
-          }
-          disabled={picked().length === 0}
+          onClick={() => {
+            void guard(() => props.onAccept(props.recommendations.filter(r => isPicked(r.exerciseId))))()
+          }}
+          disabled={picked().length === 0 || busy()}
           class="w-full border border-accent text-accent py-3 text-xs tracking-widest font-mono mb-2 disabled:opacity-40"
         >
           UPDATE {picked().length === 1 ? 'TM' : `${picked().length} TMS`}
         </button>
         <button
-          onClick={props.onDismiss}
-          class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-accent"
+          onClick={() => { void guard(props.onDismiss)() }}
+          disabled={busy()}
+          class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-accent disabled:opacity-40"
         >
           NOT NOW
         </button>

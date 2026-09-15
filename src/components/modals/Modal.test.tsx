@@ -178,3 +178,45 @@ describe('Modal — title', () => {
     expect(dialog.getAttribute('aria-labelledby')).toBeNull()
   })
 })
+
+// ── F33 ─────────────────────────────────────────────────────────────────────
+// Modal owns Escape, stops its propagation and calls onClose unconditionally,
+// so a dialog's own buttons cannot gate it. Tapping a button whose handler is
+// still awaiting and then pressing Escape fired BOTH callbacks — which is how
+// one tap plus one keypress reached the duplicate-cycle state. The guard has to
+// live here; no call site can close this path.
+describe('Modal busy', () => {
+  it('ignores Escape while a handler is in flight', () => {
+    const onClose = vi.fn()
+    render(() => <Modal label="Busy" busy onClose={onClose}><Body /></Modal>)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('still honours Escape when not busy', () => {
+    const onClose = vi.fn()
+    render(() => <Modal label="Idle" onClose={onClose}><Body /></Modal>)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the sheet back button while busy', () => {
+    const onClose = vi.fn()
+    render(() => (
+      <Modal title="SETUP" variant="sheet" busy onClose={onClose}><Body /></Modal>
+    ))
+    const back = screen.getByRole('button', { name: '← BACK' })
+    expect(back).toBeDisabled()
+    fireEvent.click(back)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('keeps the focus trap working while busy', () => {
+    render(() => <Modal label="Busy" busy onClose={() => {}}><Body /></Modal>)
+    // Escape being suppressed must not also swallow Tab handling.
+    const dialog = screen.getByRole('dialog')
+    screen.getByText('third').focus()
+    fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(document.activeElement).toBe(screen.getByText('first'))
+  })
+})

@@ -9,15 +9,15 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | | Count |
 |---|---|
-| Findings | **99** (F01–F99; F95–F99 opened during fix work) |
-| `open` | **83** |
+| Findings | **100** (F01–F100; F95–F100 opened during fix work) |
+| `open` | **80** |
 | `wip` | 0 |
-| `fixed` | **15** — F02, F04, F05, F06, F22, F37, F38, F42, F65, F66, F73, F79, F95, F96, F97 |
+| `fixed` | **19** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F42, F47, F65, F66, F73, F79, F95, F96, F97 |
 | `fixed-by` | **1** — F43 (reader half; F99 carries the rest) |
 | `wontfix` | 0 |
 | `blocked` | 0 |
 
-**By severity: 14 High / 52 Medium / 33 Low.**
+**By severity: 14 High / 52 Medium / 34 Low.**
 
 > **Count correction.** `deep-code-review.md:34` says "12 high". Counted directly
 > from its own findings table, **13** rows carry High: F01, F02, F04, F05, F07,
@@ -62,7 +62,7 @@ Seven root-cause patterns from `deep-code-review.md:38-53`. A finding can sit in
 
 | ID | Pattern | Members | Owner |
 |---|---|---|---|
-| C1 | No single-flight guard on an async `onClick` | F33, F34, F41, F51, F55 | **F33** — the guard belongs in `Modal` as `busy?: boolean` (settled in B08a; a per-call-site guard cannot close the Escape path) |
+| C1 | No single-flight guard on an async `onClick` | F33 ✅, F34 ✅, F41, F51, F55 | **F33** (done) — the guard belongs in `Modal` as `busy?: boolean` (settled in B08a; a per-call-site guard cannot close the Escape path) |
 | C2 | Single-slot or snapshotted state standing in for per-item state | F51, F52, F54, F55, F57, F63 | None — per-file fixes |
 | C3 | State seeded once and never re-synced, or re-synced over the user | F49, F54, F56, F63 | None — `DurationInput.tsx:18-23` is the counter-example done right |
 | C4 | Cleanup or a default bound to something that can stop existing | F57, F58, F62 | None — per-file fixes |
@@ -121,10 +121,10 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F30 | Medium | B07 | — | `src/lib/calc.ts` | `open` | — | — |
 | F31 | Low | B07 | — | `src/lib/workout-compose.ts` | `open` | — | — |
 | F32 | Low | B07 | — | `src/lib/workout-compose.ts` | `open` | — | — |
-| F33 | **High** | B07 | C1 | `src/screens/Workout.tsx` | `open` | — | **C1 owner.** Guard location settled in B08a: `Modal` `busy?: boolean` prop suppressing Escape + `← BACK`. |
-| F34 | Medium | B07 | C1 | `src/lib/cycle.ts` | `open` | — | — |
+| F33 | **High** | B07 | C1 | `src/screens/Workout.tsx` | `fixed` | `10967b6` · `cycle.test.ts` ×3, `Modal.test.tsx` ×4, `TmRecommendationModal.test.tsx` ×2 | **C1 owner.** Two halves. UI: `Modal` gained `busy`, suppressing Escape and `← BACK` — the paths no call site can gate — and the three post-session modals single-flight their handlers via `useSingleFlight`. DB: `advanceCycleIfComplete` now re-reads the cycle **inside** its transaction and aborts if another caller already advanced. That guard only holds because **F05** serialized transactions first. |
+| F34 | Medium | B07 | C1 | `src/lib/cycle.ts` | `fixed` | `10967b6` · `cycle.test.ts` ×2, `CycleCompleteModal.test.tsx` ×4 | `applyCycleDoubling` now derives its target from the **summary row** instead of re-reading the live TM, so repeating it is idempotent (205→210 however many taps), and skips a write that would be a no-op. Fold-back keyed on `liftId`: `TmChange` carries the id, because `lifts.name` has no UNIQUE constraint and two lifts named "Bench" rewrote each other. `deloadTms` is **deliberately not** made idempotent — see note. |
 | F35 | Medium | B07 | — | `src/lib/cycle.ts` | `open` | — | — |
-| F36 | Low | B07 | — | `src/lib/training-max.ts` | `open` | — | Decided in B12d: highest `id` wins at equal `setAt`. Fix is mechanical. |
+| F36 | Low | B07 | — | `src/lib/training-max.ts` | `fixed` | `10967b6` · `training-max.test.ts` ×2 | B12d decision applied: highest `id` wins at equal `setAt`. One `isNewer` helper shared by `getCurrentTm` and `getAllCurrentTms`, which previously resolved the same tie to opposite rows. |
 | F37 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `013e0f9` · `pr.test.ts` cross-history case | Not in the planned chunk — fixed as a consequence of the shared reader. The "no history at all" guard tested the lift's **own** session rows and returned before the cross query ran, so a movement trained entirely as cross work was scored against nothing. It is now decided on every qualifying session, cross-only included. Both previously pinned behaviours preserved. |
 | F38 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `013e0f9` · `pr.test.ts` ×4 | The three readers now share one rule via `lib/performance.ts`. The live-session clause is what lets the toast and the History badge agree while the toast still works mid-workout — `pr.ts:78-84` asserted that invariant and did not hold it. |
 | F39 | Medium | B07 | — | `src/lib/tm-recommendations.ts` | `open` | — | — |
@@ -135,7 +135,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F44 | Low | B07 | — | `src/lib/lift.ts` | `open` | — | — |
 | F45 | Low | B07 | — | `src/lib/cleanup.ts` | `open` | — | — |
 | F46 | Low | B08 | — | `src/components/modals/ModalAsyncStates.tsx` | `open` | — | — |
-| F47 | Low <br><sub>med w/F34</sub> | B08 | — | `src/components/modals/CycleCompleteModal.tsx` | `open` | — | Low alone, **Medium with F34**. Orthogonal to F34 — does not replace it. |
+| F47 | Low <br><sub>med w/F34</sub> | B08 | — | `src/components/modals/CycleCompleteModal.tsx` | `fixed` | `10967b6` · `CycleCompleteModal.test.tsx` focus case | `initialFocus="container"` on `CycleCompleteModal`. The rule for that prop is now "first control performs a write", not "first control says DELETE" — the first focusable was `+X LBS`, which armed a training-max write under the next Enter keypress. |
 | F48 | Medium | B08 | — | `src/hooks/use-confirmation.ts` | `open` | — | — |
 | F49 | Low | B08 | C3 | `src/components/modals/LiftSetupModal.tsx` | `open` | — | — |
 | F50 | Medium | B08 | — | `src/components/modals/LiftSetupModal.tsx` | `open` | — | — |
@@ -188,6 +188,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F97 | Medium | — | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · exit 0 in 22s | **Opened during fix work.** The 200s watchdog `setTimeout` was never cleared or unref'd, so a fully passing run sat for 200s and then `process.exit(3)`. Wiring the harness into CI without this would have failed every build. |
 | F98 | Low | — | — | `src/db/seed.ts` | `open` | — | **Opened during fix work.** `_seedDatabase` does `db.lifts.clear()` then `db.lifts.bulkAdd(LIFTS)` as two statements. bulkAdd's own transaction never covered the `clear`, so this pair has never been atomic: a failure between them leaves the roster empty. Pre-existing and unchanged by the F05 work — noted rather than folded in, since it is a different defect from the one being fixed. Wrap the pair in `db.transaction`. |
 | F99 | Medium | — | — | `src/lib/lift.ts` | `open` | — | **Split out of F43.** `archiveLift` deletes a pending session row but not its `sets`, `accessorySets` or `accessoryNotes`, while `discardPendingSession` does a complete cascade. The reader half of F43 is fixed (orphans no longer score records), but the orphans are still created. Route `archiveLift`'s cleanup through `discardPendingSession` so there is one definition of "discard an attempt". |
+| F100 | Low | — | — | `src/lib/cycle.ts` | `open` | — | **Noted during C1, not fixed.** `deloadTms` cannot be made idempotent: it is relative (`weight × 0.9` of whatever is current) and nothing records that a training-max row came from a deload rather than from the user, so the library cannot distinguish a second tap from a second cycle's deload. Its only guard is single-flight at the modal, which is now in place. A real fix needs the `source` provenance column **F39** asks for; folding these two together is the cheaper path. |
 
 ## Open leads
 

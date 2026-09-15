@@ -77,6 +77,12 @@ export const syncClosedThroughWeek = async (
 }
 
 export interface TmChange {
+  /**
+   * Carried alongside the name because `lifts.name` has no UNIQUE constraint:
+   * with two lifts called "Bench", folding a summary row back by name rewrote
+   * whichever one matched first (F34).
+   */
+  liftId: number
   liftName: string
   oldWeight: number
   weight: number
@@ -95,7 +101,7 @@ async function progressTms(
     const weight = nextWeight(current, lift)
     await db.trainingMaxes.add({ liftId: lift.id!, weight, setAt: new Date() })
     noteTrainingMaxAdded()
-    changes.push({ liftName: lift.name, oldWeight: current.weight, weight })
+    changes.push({ liftId: lift.id!, liftName: lift.name, oldWeight: current.weight, weight })
   }
   return changes
 }
@@ -125,14 +131,31 @@ export async function advanceCycleIfComplete(db: TrainingDB, discount: HighRepDi
 
   const cycleId = cycle.id!
   let newTms: TmChange[] = []
+  let advanced = false
   await db.transaction(async () => {
+    // Everything above — reading the cycle, testing weekComplete — happens
+    // before any transaction opens, so two callers can both get this far. The
+    // post-session modals are the live path: their ACCEPT and dismiss handlers
+    // both reach here, and one tap plus Escape is enough to run both.
+    //
+    // Re-read inside the transaction and abort if another caller already did the
+    // work. Transactions are serialized (db/transaction.ts), so the second
+    // caller arrives here only after the first has committed and sees its
+    // endDate — this guard would not hold while independent transactions could
+    // interleave.
+    const fresh = await db.cycles.get(cycleId)
+    if (!fresh || fresh.endDate) return
+    const next = await db.cycles.where('number').equals(cycle.number + 1).first()
+    if (next) return
+
     await db.cycles.update(cycleId, { endDate: new Date() })
     await db.cycles.add({ number: cycle.number + 1, startDate: new Date(), endDate: null, closedThroughWeek: 0 })
     newTms = await applyTmProgression(db)
     await applyAccessoryTmProgression(db, cycleId)
+    advanced = true
   })
 
-  return { advanced: true, doublingCandidates, newTms }
+  return { advanced, doublingCandidates: advanced ? doublingCandidates : [], newTms }
 }
 
 export async function applyTmProgression(db: TrainingDB): Promise<TmChange[]> {
@@ -173,7 +196,7 @@ export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<TmChange[]>
 // renders it — Workout and Settings both build and mutate this shape, and the
 // helper below operates on it, so it belongs with the cycle logic.
 export interface CycleCompleteData {
-  newTms: Array<{ liftName: string; oldWeight: number; weight: number }>
+  newTms: TmChange[]
   doublingCandidates: DoublingCandidate[]
 }
 
@@ -190,15 +213,26 @@ export async function applyCycleDoubling(
   liftId: number,
   progressionIncrement: number,
 ): Promise<CycleCompleteData | null> {
-  const currentTm = await getCurrentTm(db, liftId)
-  const newTm = roundToNearest5(currentTm + progressionIncrement)
-  await setTm(db, liftId, newTm)
+  // Derive the target from the SUMMARY row, not from the current TM. Reading
+  // the current TM made this a relative operation, so a second tap read its own
+  // first write and compounded: 205 -> 210 -> 215 for one "+10 LBS" the user
+  // asked for once. Against the summary the target is the same every time.
+  const summaryRow = data?.newTms.find(t => t.liftId === liftId)
+  const base = summaryRow?.weight ?? await getCurrentTm(db, liftId)
+  const newTm = roundToNearest5(base + progressionIncrement)
+
+  // Skip the write when it would be a no-op. Repeating it is harmless for the
+  // weight but appends a second row at the same instant, which is exactly the
+  // tie the two "current TM" helpers used to resolve differently (F36).
+  if (await getCurrentTm(db, liftId) !== newTm) {
+    await setTm(db, liftId, newTm)
+  }
   if (!data) return null
-  // Matched by name because newTms carries the lift's name, not its id.
-  const liftName = data.doublingCandidates.find(c => c.liftId === liftId)?.liftName
   return {
     ...data,
-    newTms: data.newTms.map(t => t.liftName === liftName ? { ...t, weight: newTm } : t),
+    // Folded back by id: `lifts.name` is not unique, so matching on the name
+    // rewrote the wrong lift's summary row when two shared one.
+    newTms: data.newTms.map(t => t.liftId === liftId ? { ...t, weight: newTm } : t),
     doublingCandidates: data.doublingCandidates.filter(c => c.liftId !== liftId),
   }
 }
