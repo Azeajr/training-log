@@ -11,7 +11,9 @@ import {
   deloadTms,
   getNextSessionAdvancingIfDone,
   getRecentWorkingSets,
+  applyCycleDoubling,
 } from './cycle'
+import { getCurrentTm } from './training-max'
 import { archiveLift } from './lift'
 
 const mkLift = (name: string, order: number) =>
@@ -808,5 +810,108 @@ describe('advanceCycleIfComplete doublingCandidates', () => {
     const { advanced, doublingCandidates } = await advanceCycleIfComplete(db)
     expect(advanced).toBe(true)
     expect(doublingCandidates).toEqual([])
+  })
+})
+
+// ── F33 / F34: the post-session writes must survive being run twice ──────────
+describe('cycle advance is idempotent under concurrency', () => {
+  async function seedCompleteCycle() {
+    const lifts = await seedLifts()
+    await seedTms(lifts)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (const week of [1, 2, 3, 4] as const) await addSessions(cycleId, week, lifts)
+    return { lifts, cycleId }
+  }
+
+  it('creates exactly one next cycle when called twice concurrently (F33)', async () => {
+    await seedCompleteCycle()
+    // Both callers read the cycle and pass weekComplete before either opens a
+    // transaction — the post-session modal callbacks are the live path.
+    const [a, b] = await Promise.all([
+      advanceCycleIfComplete(db),
+      advanceCycleIfComplete(db),
+    ])
+
+    const cycles = await db.cycles.toArray()
+    const numbers = cycles.map(c => c.number).sort()
+    expect(numbers).toEqual([1, 2])
+    // Exactly one caller may report that it advanced.
+    expect([a.advanced, b.advanced].filter(Boolean)).toHaveLength(1)
+  })
+
+  it('does not write a duplicate training max when called twice concurrently (F33)', async () => {
+    const { lifts } = await seedCompleteCycle()
+    await Promise.all([advanceCycleIfComplete(db), advanceCycleIfComplete(db)])
+
+    for (const lift of lifts) {
+      const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).toArray()
+      // One seeded + one progression. A second progression is the duplicate.
+      expect(tms).toHaveLength(2)
+    }
+  })
+
+  it('is a no-op when called again after the cycle already advanced (F33)', async () => {
+    await seedCompleteCycle()
+    const first = await advanceCycleIfComplete(db)
+    expect(first.advanced).toBe(true)
+    const second = await advanceCycleIfComplete(db)
+    expect(second.advanced).toBe(false)
+    expect((await db.cycles.toArray()).map(c => c.number).sort()).toEqual([1, 2])
+  })
+})
+
+// ── F34: the CYCLE COMPLETE modal's two writes ──────────────────────────────
+describe('applyCycleDoubling and deloadTms run twice', () => {
+  it('does not compound when the button is tapped twice (F34)', async () => {
+    const lifts = await seedLifts()
+    await seedTms(lifts, 205)
+    const lift = lifts[0]
+    const data = {
+      newTms: [{ liftId: lift.id!, liftName: lift.name, oldWeight: 200, weight: 205 }],
+      doublingCandidates: [{ liftId: lift.id!, liftName: lift.name, progressionIncrement: 5 }],
+    }
+
+    // The modal fires onDoubleIncrement twice with identical arguments — it is
+    // an un-awaited void callback on a button that never disabled itself. Both
+    // taps therefore carry the SAME summary. Reading the live TM instead made
+    // the second tap see the first write: 205 -> 210 -> 215 for one "+10 LBS".
+    const first = await applyCycleDoubling(db, data, lift.id!, 5)
+    await applyCycleDoubling(db, data, lift.id!, 5)
+
+    expect(await getCurrentTm(db, lift.id!)).toBe(210)
+    // And no second row at the same weight — that is the tie F36 is about.
+    expect(await db.trainingMaxes.where('liftId').equals(lift.id!).toArray()).toHaveLength(2)
+    // The offer is spent, so the button is gone after the first accept.
+    expect(first!.doublingCandidates).toHaveLength(0)
+  })
+
+  // deloadTms is deliberately NOT made idempotent here. It is a relative
+  // operation (x0.9 of whatever is current) and nothing records that a TM row
+  // came from a deload rather than from the user, so the library cannot tell a
+  // second tap from a second cycle's deload — that is F39's provenance gap. Its
+  // guard is single-flight at the modal, covered in CycleCompleteModal.test.tsx.
+
+  it('folds the result back by lift id, not by name (F34)', async () => {
+    // lifts.name carries no UNIQUE constraint, so two lifts can share a name.
+    await db.lifts.bulkAdd([
+      { name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+      { name: 'Bench', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' },
+    ] as never)
+    const [a, b] = await db.lifts.orderBy('order').toArray()
+    await db.trainingMaxes.add({ liftId: a.id!, weight: 205, setAt: new Date('2026-01-01') })
+    await db.trainingMaxes.add({ liftId: b.id!, weight: 300, setAt: new Date('2026-01-01') })
+
+    const data = {
+      newTms: [
+        { liftId: a.id!, liftName: 'Bench', oldWeight: 200, weight: 205 },
+        { liftId: b.id!, liftName: 'Bench', oldWeight: 295, weight: 300 },
+      ],
+      doublingCandidates: [{ liftId: a.id!, liftName: 'Bench', progressionIncrement: 5 }],
+    }
+    const out = await applyCycleDoubling(db, data, a.id!, 5)
+
+    // Accepting on the first Bench must not rewrite the second Bench's row.
+    expect(out!.newTms.find(t => t.liftId === b.id!)!.weight).toBe(300)
+    expect(out!.newTms.find(t => t.liftId === a.id!)!.weight).toBe(210)
   })
 })
