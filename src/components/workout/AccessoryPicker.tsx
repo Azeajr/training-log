@@ -1,5 +1,6 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../../db/index'
+import { useSingleFlight } from '../../hooks/use-single-flight'
 import type { Exercise } from '../../types/domain'
 import { workout, addAccessory, toActiveAccessory } from '../../store/workout-store'
 import { accessoryWeight, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
@@ -29,13 +30,16 @@ interface PickerRow {
   exercise: Exercise
   tm: number | null
   calculatedWeight: number | null
-  alreadyAdded: boolean
   // 0-based recency rank among accessories previously logged for this main
   // lift (0 = most recent). null = never used here.
   usedRank: number | null
 }
 
 export default function AccessoryPicker(props: Props) {
+  // Both commit paths are async handlers wired straight to onClick, and both
+  // write: SAVE appends an accessoryTrainingMaxes row, row-select adds to the
+  // session. Three taps used to mean three of each.
+  const { busy, guard } = useSingleFlight()
   const [rows, setRows] = createSignal<PickerRow[]>([])
   const [settingTm, setSettingTm] = createSignal<Exercise | null>(null)
   const [tmWeight, setTmWeight] = createSignal(0)
@@ -75,13 +79,19 @@ export default function AccessoryPicker(props: Props) {
         exercise: ex,
         tm: tmWeight,
         calculatedWeight: tmWeight != null ? accessoryWeight(tmWeight) : null,
-        // In 'default' mode there's no live session, so a stale persisted
-        // session's accessories must not disable rows in the Today picker.
-        alreadyAdded: props.mode !== 'default' && workout.activeAccessories.some(a => a.exerciseId === ex.id),
         usedRank: bestRecency.get(ex.id!) ?? null,
       }
     }))
   }
+
+  // Derived live, not baked into rows() at load time. As a snapshot this could
+  // not see an add made by the previous tap, so two taps on one row added the
+  // exercise twice (F55).
+  //
+  // In 'default' mode there is no live session, so a stale persisted session's
+  // accessories must not disable rows in the Today picker.
+  const alreadyAdded = (exerciseId: number) =>
+    props.mode !== 'default' && workout.activeAccessories.some(a => a.exerciseId === exerciseId)
 
   const grouped = () => groupByAssistanceSection(rows())
   // For a fixed-slot pick, only that section's exercises are offered. Previously
@@ -92,17 +102,17 @@ export default function AccessoryPicker(props: Props) {
 
   const renderRow = (row: PickerRow) => (
     <button
-      onClick={() => handleSelect(row)}
-      disabled={row.alreadyAdded}
+      onClick={() => { void guard(() => handleSelect(row))() }}
+      disabled={alreadyAdded(row.exercise.id!) || busy()}
       class={`w-full text-left px-3 py-2 border font-mono text-sm flex justify-between ${
-        row.alreadyAdded
+        alreadyAdded(row.exercise.id!)
           ? 'border-border-dim text-muted'
           : 'border-border text-text hover:border-accent hover:text-accent'
       }`}
     >
       {/* uppercase to match how the name renders once logged (AccessoryLog
           header) — the exercise should look the same before and after picking */}
-      <span class="uppercase tracking-widest">{row.exercise.name}{row.alreadyAdded ? ' ✓' : ''}</span>
+      <span class="uppercase tracking-widest">{row.exercise.name}{alreadyAdded(row.exercise.id!) ? ' ✓' : ''}</span>
       <span class="text-muted">
         {row.calculatedWeight != null ? `${ACCESSORY_SETS}x${ACCESSORY_REPS} @ ${row.calculatedWeight}lb` : 'NOT SET'}
       </span>
@@ -125,7 +135,7 @@ export default function AccessoryPicker(props: Props) {
   }
 
   const handleSelect = async (row: PickerRow) => {
-    if (row.alreadyAdded) return
+    if (alreadyAdded(row.exercise.id!)) return
     if (row.tm == null) {
       setSettingTm(row.exercise)
       return
@@ -250,7 +260,7 @@ export default function AccessoryPicker(props: Props) {
           {/* Only SAVE here: the way out is the header's ← BACK, and two
               controls both labelled BACK on one screen is worse than one. */}
           <button
-            onClick={handleSaveTm}
+            onClick={() => { void guard(handleSaveTm)() }}
             disabled={tmWeight() < 0}
             class="w-full border border-accent text-accent py-3 mt-8 font-mono text-xs tracking-widest uppercase disabled:opacity-40"
           >

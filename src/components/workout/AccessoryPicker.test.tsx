@@ -86,3 +86,48 @@ describe('AccessoryPicker — "used for this lift" recency window', () => {
     expect(usedGroupNames()).toContain('Bicep Curls')
   })
 })
+
+// ── F55 ─────────────────────────────────────────────────────────────────────
+// Neither commit path had an in-flight guard, and both are async handlers wired
+// straight to onClick. SAVE wrote one accessoryTrainingMaxes row per tap, and
+// the row-select guard read an `alreadyAdded` flag baked into rows() at load
+// time, so it could not see an add made by the previous tap.
+describe('AccessoryPicker single flight', () => {
+  const open = (slot: 'push' | 'pull' | 'extra' = 'pull') =>
+    render(() => (
+      <AccessoryPicker
+        liftId={LIFT_ID} slot={slot} mode="session"
+        onClose={() => {}} onSelected={() => {}}
+      />
+    ))
+
+  it('adds an exercise once for repeated taps on its row (F55)', async () => {
+    const { chinups } = await seedPullExercises()
+    await db.accessoryTrainingMaxes.add({
+      exerciseId: chinups, weight: 100, incrementLb: 5, setAt: new Date(),
+    })
+    // 'extra' rather than a fixed slot: addAccessory filters a fixed slot, so a
+    // duplicate collapses there and hides the bug. 'extra' appends.
+    open('extra')
+    const row = await screen.findByRole('button', { name: /Chinups/ })
+    row.click(); row.click(); row.click()
+    await new Promise(r => setTimeout(r, 30))
+
+    const { workout } = await import('../../store/workout-store')
+    const added = workout.activeAccessories.filter(a => a.exerciseId === chinups)
+    expect(added).toHaveLength(1)
+  })
+
+  it('writes one training max for repeated taps on SAVE (F55)', async () => {
+    const { chinups } = await seedPullExercises()
+    open()
+    // No TM yet, so picking opens the SET TRAINING MAX sub-sheet.
+    ;(await screen.findByRole('button', { name: /Chinups/ })).click()
+    const save = await screen.findByRole('button', { name: /^SAVE$/i })
+    save.click(); save.click(); save.click()
+    await new Promise(r => setTimeout(r, 30))
+
+    const rows = await db.accessoryTrainingMaxes.where('exerciseId').equals(chinups).toArray()
+    expect(rows).toHaveLength(1)
+  })
+})
