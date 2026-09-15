@@ -8,59 +8,64 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07, B08 and B09 are CLOSED; B10 is open and B10a is done.** 133 of
-179 ledger rows are `deep`, and the `reported` status is gone from the tracker
-entirely. Eighteen B10 rows remain.
+**Areas B07, B08 and B09 are CLOSED; B10 is open with B10a and B10b done.**
+139 of 179 ledger rows are `deep`. Twelve B10 rows remain, in two slices.
 
-**B10a reviewed the configuration the last two areas made load-bearing**, and
-found four problems in it — three of which are invisible to every check the repo
-runs.
+**B10a and B10b reviewed the configuration and automation the earlier areas made
+load-bearing, and the theme is consistent: the checks that exist are good, and
+the gaps are in what they do not cover.**
 
 - **F69 (medium) — the coverage gate measures the wrong half of the codebase.**
-  `include` is `lib` + `screens` + `store` only, so `src/components/**`,
-  `src/db/**`, `src/hooks/**`, `src/service-worker.ts` and `src/workers/**` are
-  not measured at all. Of the 23 findings opened in B08 and B09, **22 live in
-  files the 80 % gate cannot see.**
-- **F70 (medium) — the PWA manifest points at two icons that do not exist.**
-  `icon-192.png` and `icon-512.png` are declared in `vite.config.ts` and shipped
-  verbatim in `dist/manifest.webmanifest`; `public/` and `dist/` contain neither,
-  and no generator is configured. There is no `apple-touch-icon` either. For an
-  app distributed by home-screen install, that is the delivery mechanism failing
-  while the build stays green.
-- **F71 (medium) — `tsconfig.e2e.json` is referenced by nothing**, so
-  `tests/e2e/**` is never type-checked; `playwright.config.ts`,
-  `stryker.config.mjs`, `eslint.config.js` and `scripts/*` belong to no project
-  either.
-- **F72 (low)** — `globPatterns` omits `svg` so the one icon that does exist is
-  not precached, and `public/icons.svg` is an orphan shipped to production.
+  `include` is `lib` + `screens` + `store` only. Of the 23 findings opened in B08
+  and B09, **22 live in files the 80 % gate cannot see.** B10b sharpens this:
+  `test:coverage` is what `deploy.yml` runs, so the blind spot is at the
+  production gate, not just locally.
+- **F70 (medium) — the PWA manifest points at two icons that do not exist**, with
+  no `apple-touch-icon` either. The delivery mechanism fails while the build stays
+  green.
+- **F71 + F74 (medium) — the E2E suite is fully dormant.** `tsconfig.e2e.json` is
+  referenced by nothing, so `tests/e2e/**` is never type-checked; and no workflow
+  runs Playwright, so it is never executed. Four files including an 11 KB
+  `workout.spec.ts` — the app's only integration coverage of OPFS, the service
+  worker and navigation — run only when someone types the command.
+- **F73 (medium, supply chain) — `pnpm dlx wrangler` is the one unpinned link.**
+  `wrangler` appears 0 times in `package.json` and 0 times in `pnpm-lock.yaml`, so
+  it is fetched fresh at every deploy and run with `CLOUDFLARE_API_TOKEN` in its
+  environment, with lifecycle scripts allowed for `esbuild` and `workerd` — past
+  `--frozen-lockfile`, `pnpm audit signatures`, the pinned `packageManager`,
+  dependabot and the workspace override, all of which this repo already does.
+- **F75 (low)** — CI runs on `pull_request` only, so a direct push to `main`
+  outside the deploy path filter runs nothing at all.
+- **F76 (low, documentation)** — `CLAUDE.md` says the deploy workflow "runs **no
+  lint and no tests**". It runs `check:ci`, which is lint + coverage-gated tests +
+  build, before deploying. The doc understates the automation.
 
-**One attractive wrong answer was ruled out.** The production `_headers` sets
-`Cross-Origin-Opener-Policy` but no `Cross-Origin-Embedder-Policy`, which would
-deny `SharedArrayBuffer` and looked like a candidate root cause for **F02**
-(persistence silently falling back to in-memory). It is not: `sqlite.worker.ts`
-uses the **OPFS SAH pool** VFS, which does not require cross-origin isolation.
-F02's cause is still open and is not a headers problem.
+**One attractive wrong answer was ruled out in B10a.** The missing
+`Cross-Origin-Embedder-Policy` looked like a root cause for **F02** (persistence
+falling back to in-memory), but `sqlite.worker.ts` uses the **OPFS SAH pool** VFS,
+which needs no cross-origin isolation. F02's cause is still open and is not a
+headers problem.
 
-**Next batch: B10b — CI/CD and supply chain.** `.github/workflows/ci.yml` (30),
+**Next batch: B10c — scripts and tooling configuration.**
+`scripts/verify-notify-hardening.js` (256), `scripts/debug-browser.js` (157),
+`eslint.config.js` (42), `stryker.config.mjs` (19) and `playwright.config.ts`
+(43). F71 puts all five outside every tsconfig project, and F74 makes
+`playwright.config.ts` the config for a suite nothing runs — worth reading with
+that in mind. Then **B10d** (7 rows: `scripts/migrate-history.py`,
+`public/demo-seed.json`, the two SVGs, `src/index.css`, `.gitignore`,
+`.claudeignore`) closes the area.
+
+Latest run: **B10b complete** — `.github/workflows/ci.yml` (30),
 `.github/workflows/deploy.yml` (45), `.github/dependabot.yml` (21),
-`package.json` (52), `pnpm-workspace.yaml` (2) and `pnpm-lock.yaml` (6,935 —
-reviewed as an integrity artifact, not line by line). `CLAUDE.md` states the
-deploy workflow is path-filtered and runs **no lint and no tests**, so it is the
-only thing between a bad commit and production; `check:ci` runs
-`pnpm test:coverage`, which makes F69's blind spot a CI-gating question. Then
-**B10c** (scripts + tooling config, 5 rows) and **B10d** (data, assets, css,
-ignore files, 7 rows) close the area.
+`package.json` (52), `pnpm-workspace.yaml` (2) and `pnpm-lock.yaml` (6,935,
+reviewed as an integrity artifact) reviewed in full. Six files marked deep;
+**139 files deep in total.** `pnpm lint` and `tsc -b` clean (exit 0). Four new
+findings (F73–F76). `dependabot.yml` and `pnpm-workspace.yaml` are clean, and the
+workspace override was verified live in the lockfile. Only this tracker changed;
+the tree is clean. This card authorizes commit, push and PR; operator acceptance
+remains a separate native Kanban review step.
 
-Latest run: **B10a complete** — `vite.config.ts` (77), `index.html` (26),
-`public/_headers` (7), `tsconfig.json` (11), `tsconfig.app.json` (26),
-`tsconfig.node.json` (24) and `tsconfig.e2e.json` (19) reviewed in full. Seven
-files marked deep; **133 files deep in total.** `pnpm lint` and `tsc -b` clean
-(exit 0); a coverage run was used as evidence for F69. Four new findings
-(F69–F72). Only this tracker changed; the probe file was created inside `src/`,
-run, and deleted, leaving the tree clean. This card authorizes commit, push and
-PR; operator acceptance remains a separate native Kanban review step.
-
-**Remaining work — 46 of 179 ledger rows are not yet `deep`** (133 are). Recounted
+**Remaining work — 40 of 179 ledger rows are not yet `deep`** (139 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -75,7 +80,7 @@ correct; only the remaining-work totals were not.
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
-| B10 | 18 pending | **Open (B10a done).** Build/deploy/config/scripts/public assets. Remaining slices: B10b CI/CD + package/lockfile, B10c scripts + tooling config, B10d data, assets, css and ignore files. |
+| B10 | 12 pending | **Open (B10a, B10b done).** Build/deploy/config/scripts/public assets. Remaining slices: B10c scripts + tooling config (5 rows), B10d data, assets, css and ignore files (7 rows). |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
@@ -200,6 +205,10 @@ claimed here.
 | F70 | Medium (installability impact worth a Lighthouse check); B10a build-output inspection | `vite.config.ts:63-73`; `dist/manifest.webmanifest`; `public/`; `index.html:14` | The web app manifest declares two icons — `icon-192.png` and `icon-512.png` — and **neither file exists**. `public/` contains only `_headers`, `demo-seed.json`, `favicon.svg` and `icons.svg`, and the built `dist/` carries the same four plus `manifest.webmanifest`, which ships the two names verbatim: `"icons":[{"src":"icon-192.png",…},{"src":"icon-512.png",…}]`. No icon generator is configured (no `pwa-assets`, no `@vite-pwa/assets-generator` in `package.json`), so nothing produces them at build time. `index.html` also has **no `<link rel="apple-touch-icon">`**, so the iOS home-screen path has no icon either. Chrome's installability criteria require a manifest icon of at least 144×144 that actually loads; both of these 404. For an app whose stated distribution is an installed offline-first PWA (`display: 'standalone'`, `apple-mobile-web-app-capable`), that is the delivery mechanism failing silently — the build succeeds, CI passes, and the install prompt simply never appears. | Generate the two PNGs from `favicon.svg` (or add `@vite-pwa/assets-generator`), add an `apple-touch-icon` link, and assert in CI that every `manifest.icons[].src` resolves to a file in `dist/`. Run Lighthouse's installability audit against a preview build to confirm what the missing icons currently cost. |
 | F71 | Medium; B10a config inspection | `tsconfig.json:1-11`; `tsconfig.e2e.json`; `tsconfig.node.json:24`; `package.json:8`, `10`, `18` | `tsconfig.e2e.json` is referenced by **nothing** — not by `tsconfig.json`'s `references` (which lists only app and node), not by any `package.json` script, not by the CI workflow, not by `playwright.config.ts`. `typecheck` and `build` are both `tsc -b` against the solution file, and `test:e2e` is `playwright test`, which transpiles specs without type-checking. So **`tests/e2e/**` is never type-checked by any command in the repo** — four files including an 11 KB `workout.spec.ts`, the app's only integration coverage. The irony is that `tsconfig.e2e.json` is the one config that declares `"strict": true` explicitly. The same gap covers the toolchain: `tsconfig.node.json` includes only `vite.config.ts`, so `playwright.config.ts` (a `.ts` file), `stryker.config.mjs`, `eslint.config.js` and `scripts/*` belong to no project and are type-checked by nothing. A renamed helper or a changed fixture shape in the E2E suite surfaces as a runtime failure, or not at all. | Add `{ "path": "./tsconfig.e2e.json" }` to `tsconfig.json`'s references so `tsc -b` builds it, and widen `tsconfig.node.json`'s `include` to cover the root config files and `scripts/`. |
 | F72 | Low; B10a config and asset inspection | `vite.config.ts:58`; `index.html:14`; `public/icons.svg` | Two small asset problems in the same place. (a) `globPatterns: ['**/*.{html,js,css,ico,png,wasm}']` omits **`svg`**, and `favicon.svg` — the only icon that actually exists — is therefore not precached; the SW's fetch handler passes it through (it is not in `PRECACHE_PATHS`), so offline it simply fails to load. (b) `public/icons.svg` (4.9 KB) is referenced by **nothing** — no `src/` file, no `index.html`, no stylesheet — yet it ships to production in `dist/`. | Add `svg` to `globPatterns`; delete `icons.svg` or wire it up. Both are a line each, and (a) becomes moot for the PNGs once F70 is fixed, which is a reason to fix them together. |
+| F73 | Medium (supply chain); B10b workflow inspection | `.github/workflows/deploy.yml:42`; `package.json`; `pnpm-lock.yaml` | The deploy step is `pnpm dlx --allow-build=esbuild --allow-build=workerd wrangler pages deploy dist`. `wrangler` appears **0 times** in `package.json` and **0 times** in `pnpm-lock.yaml`, so it is fetched fresh from the registry at every deploy, unpinned and unlocked — and it runs with `CLOUDFLARE_API_TOKEN` in its environment, with lifecycle scripts explicitly permitted for `esbuild` and `workerd`. Whatever those three publish is executed with a production deploy credential. This is the **one unpinned link in an otherwise carefully locked chain**: the same workflow already runs `pnpm install --frozen-lockfile` and `pnpm audit signatures`, `packageManager` pins `pnpm@12.3.4`, dependabot watches both ecosystems weekly, and `pnpm-workspace.yaml` carries a security floor override. Every one of those controls is bypassed by the deploy line itself. | Add `wrangler` to `devDependencies` so it is lockfile-pinned and signature-audited with everything else, then invoke it as `pnpm exec wrangler …`. If `dlx` must stay, pin an exact version (`pnpm dlx wrangler@x.y.z`). Consider whether `--allow-build` is needed at all once the package is installed normally. |
+| F74 | Medium; B10b workflow inspection (with F71) | `.github/workflows/ci.yml:30`; `.github/workflows/deploy.yml:39`; `package.json:17-18`; `tests/e2e/` | **The end-to-end suite is dormant.** `check:ci` is `pnpm lint && pnpm test:coverage && pnpm build` — it does not include `test:e2e` — and a grep for `playwright` or `test:e2e` across `.github/` returns nothing, so **no workflow ever runs it**. Combined with F71, `tests/e2e/**` is neither type-checked nor executed by any automation: four files including an 11 KB `workout.spec.ts`, the app's only integration coverage, which exercise the real browser paths that unit tests cannot (OPFS persistence, the service worker, navigation). They run only if a person remembers to type `pnpm test:e2e`. A spec that no longer compiles or no longer passes can sit green in the repo indefinitely. | Add a Playwright job to `ci.yml` (it needs its own browser install step and a longer timeout, so a separate job rather than a line in `check:ci`), and wire `tsconfig.e2e.json` into the solution file per F71 so the specs are type-checked too. If the suite is too slow for every PR, run it on a schedule or on `main` pushes — dormant is the worst of the options. |
+| F75 | Low; B10b workflow inspection | `.github/workflows/ci.yml:3-4`; `.github/workflows/deploy.yml:5-15` | CI triggers on `pull_request` **only** — there is no `push` trigger — and the deploy workflow is path-filtered. A commit pushed straight to `main` therefore runs checks only if it touches a deploy path (`src/**` minus tests, `public/**`, `index.html`, `package.json`, `pnpm-lock.yaml`, `vite.config.*`, `tsconfig*`). Anything else gets **no workflow at all**: `eslint.config.js`, `stryker.config.mjs`, `playwright.config.ts`, `scripts/**`, `tests/e2e/**`, `.github/**`. The sharpest case is the deploy filter's own `'!src/**/*.test.*'` exclusion — a broken test committed directly to `main` triggers nothing, and then surfaces later by failing `check:ci` inside an unrelated deploy, blocking that deploy for a reason that has nothing to do with it. Committing on `main` is an accepted workflow in this repo, which is what makes the gap reachable rather than theoretical. | Add `push: branches: [main]` to `ci.yml`; the existing `concurrency` group keys on `github.event.pull_request.number`, so give it a fallback such as `ci-${{ github.event.pull_request.number || github.sha }}`. |
+| F76 | Low (documentation); B10b cross-check, reconcile in B12 | `CLAUDE.md:17-19`; `.github/workflows/deploy.yml:39`; `package.json:17` | `CLAUDE.md` states: "The workflow is path-filtered and runs **no lint and no tests** — `pnpm build && pnpm lint && pnpm test` locally is the only regression gate." The path-filtering half is correct; the rest is not. `deploy.yml:39` runs `pnpm run check:ci`, which is `pnpm lint && pnpm test:coverage && pnpm build`, and it runs **before** the deploy step, so a failure blocks the deploy. The deploy path is in fact the stricter gate of the two — it is the only place `test:coverage` and its 80 % thresholds run. The doc understates the automation, which misdirects effort rather than creating risk, but it is the sentence a contributor (or an agent) reads to decide what CI will catch. | Correct the sentence to describe what the workflow does today, and note that `test:coverage` (not plain `test`) is what gates deploys — which is also why F69's `include` gap matters at the gate rather than only locally. Fold into B12's documentation reconciliation. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -279,9 +288,9 @@ column as work is completed.
 | `.claude/completions/README.md` | B12 | pending | — |
 | `.claude/sessions/README.md` | B12 | pending | — |
 | `.claudeignore` | B10 | pending | — |
-| `.github/dependabot.yml` | B10 | pending | — |
-| `.github/workflows/ci.yml` | B10 | pending | — |
-| `.github/workflows/deploy.yml` | B10 | pending | — |
+| `.github/dependabot.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (clean) |
+| `.github/workflows/ci.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F74, F75) |
+| `.github/workflows/deploy.yml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (F73, F74, F75, F76) |
 | `.gitignore` | B10 | pending | — |
 | `AMRAP_TARGET_REPS_ANALYSIS.md` | B12 | pending | — |
 | `CLAUDE.md` | B12 | pending | — |
@@ -297,10 +306,10 @@ column as work is completed.
 | `docs/verification/2026-08-09-swe-hardening.md` | B12 | pending | — |
 | `eslint.config.js` | B10 | pending | — |
 | `index.html` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F70 apple-touch-icon; CSP meta checked) |
-| `package.json` | B10 | pending | — |
+| `package.json` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (check:ci composition; no wrangler dep) |
 | `playwright.config.ts` | B10 | pending | — |
-| `pnpm-lock.yaml` | B10 | pending | — |
-| `pnpm-workspace.yaml` | B10 | pending | — |
+| `pnpm-lock.yaml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (integrity artifact; v9.0, frozen in both workflows) |
+| `pnpm-workspace.yaml` | B10 | deep | B10b — CI/CD and supply chain (2/4); evidence below (clean; override verified live in the lock) |
 | `public/_headers` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (clean; CSP matches the other two copies) |
 | `public/demo-seed.json` | B10 | pending | — |
 | `public/favicon.svg` | B10 | pending | — |
@@ -3579,3 +3588,109 @@ since `CLAUDE.md` states it runs no lint and no tests.
 rows left. **Next action: B10b — `.github/workflows/ci.yml`,
 `.github/workflows/deploy.yml`, `.github/dependabot.yml`, `package.json`,
 `pnpm-workspace.yaml` and `pnpm-lock.yaml`.**
+
+### 2026-09-15 — B10b: CI/CD and supply chain
+
+**Revision:** `85cf632` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; no probe files were created — this
+batch is configuration inspection and cross-checking. Single agent; six files
+deeply reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `.github/workflows/ci.yml` | 1–30 | `1a3501bcbc0a75d0c4458b316086bdb6c8bf08da` |
+| `.github/workflows/deploy.yml` | 1–45 | `e618220ebaa927ff91a90ad98fd76c98d11d4129` |
+| `.github/dependabot.yml` | 1–21 | `312681d1affda3acb38896d53d03ca58bc05a7af` |
+| `package.json` | 1–52 | `79e71ed8350bc08585b8084190e321d9c6884659` |
+| `pnpm-workspace.yaml` | 1–2 | `38bfbf783e2f2236f3e1024f1241012d7d2a1fa8` |
+| `pnpm-lock.yaml` | integrity artifact, not line-reviewed | `4a45c57a1b1fd96c7a8b0ca4613233f9500d6f88` |
+
+**Behavior and invariants traced:**
+
+- `ci.yml`: the `pull_request`-only trigger (F75), `permissions: contents: read`,
+  the `concurrency` group keyed on the PR number with `cancel-in-progress`,
+  `timeout-minutes: 10`, `persist-credentials: false` on checkout, and
+  `pnpm install --frozen-lockfile` before `check:ci`.
+- `deploy.yml`: the `workflow_dispatch` + path-filtered `push: [main]` trigger and
+  exactly which paths it admits (F75, F76); the same least-privilege token and
+  credential-free checkout; `pnpm audit signatures` as a supply-chain step; the
+  ordering that puts `check:ci` **before** the deploy step so a failing check
+  blocks the deploy; and the `pnpm dlx wrangler` invocation (F73).
+- `package.json`: the script graph — `check:ci` = `lint && test:coverage && build`,
+  `check` = `build && test`, `check:local` = cached eslint + `tsc -b` — and the
+  dependency set (5 runtime, 20 dev), `packageManager: pnpm@12.3.4`.
+- `dependabot.yml`: weekly npm and github-actions updates, minor/patch grouped into
+  one PR with security advisories still opening their own, PR limits 5 and 3.
+- `pnpm-lock.yaml`: reviewed as an integrity artifact — `lockfileVersion: '9.0'`
+  matching pnpm 12, enforced by `--frozen-lockfile` in **both** workflows and
+  signature-checked by `pnpm audit signatures` in the deploy path.
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Evidence for F73: `grep -c wrangler package.json pnpm-lock.yaml` → **0 and 0**.
+  The deploy executable is outside the lockfile entirely.
+- Evidence for F74: `grep -rn 'playwright\|test:e2e' .github/` returns nothing, and
+  `check:ci` does not include `test:e2e`.
+- Evidence for F76: `deploy.yml:39` is `pnpm run check:ci`; `package.json:17`
+  defines that as `pnpm lint && pnpm test:coverage && pnpm build`; `CLAUDE.md:17-19`
+  states the workflow "runs **no lint and no tests**".
+- Verification for `pnpm-workspace.yaml`: the `serialize-javascript: '>=7.0.5'`
+  override is live — the lockfile resolves `serialize-javascript@7.1.1`, which
+  satisfies the floor.
+- Not run: any workflow; no CI was triggered as part of this review.
+
+**Findings:** F73 (medium, supply chain), F74 (medium), F75 (low), F76 (low,
+documentation — reconcile in B12).
+
+**Substantive negative conclusions:**
+
+- **The deploy pipeline's ordering is correct.** `check:ci` runs before the
+  `wrangler` step and steps are fail-fast, so lint, coverage-gated tests and the
+  build all have to pass before anything reaches Cloudflare. This is the opposite
+  of what `CLAUDE.md` describes (F76) and is worth stating plainly: the automation
+  is stronger than the documentation claims, and F69's `include` gap is the thing
+  that limits it, not the workflow's structure.
+- **`dependabot.yml` is clean and well-reasoned.** Grouping minor/patch into one PR
+  while leaving security advisories to open individually is the right trade, and
+  covering `github-actions` as its own ecosystem is what keeps the action majors
+  current — visible in the repo's history.
+- **`pnpm-workspace.yaml` is clean.** A `>=` floor rather than an exact pin is
+  correct for a security override: it raises the minimum without freezing the
+  package at a version that will itself age.
+- Both workflows use `persist-credentials: false` and `permissions: contents:
+  read`, which is the right posture for a deploy that needs no repository writes.
+- The actions are pinned by major tag (`actions/checkout@v7`,
+  `actions/setup-node@v7`, `pnpm/action-setup@v6`) rather than by commit SHA.
+  Recorded as an observation rather than opened: SHA-pinning is the stricter
+  hardening, but it defeats the dependabot `github-actions` ecosystem this repo
+  deliberately enables, and the trade is a reasonable one to have made.
+- `CLOUDFLARE_ACCOUNT_ID` is committed in plaintext at `deploy.yml:45`. Not opened:
+  Cloudflare account IDs are identifiers rather than credentials, appear in
+  dashboard URLs, and are useless without the API token, which is correctly a
+  secret.
+- `deploy.yml` has **no `concurrency` group and no `timeout-minutes`**, unlike
+  `ci.yml`. Two pushes to `main` in quick succession can therefore run two deploys
+  concurrently, and a hung job runs to the six-hour default. Recorded as an
+  observation: Cloudflare Pages serialises deployments per project, so the
+  practical risk is a confusing ordering rather than a corrupt deploy — but adding
+  both would cost two lines and match the sibling workflow.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- F74 is this batch's coverage gap and the largest one found so far in absolute
+  terms: an entire integration suite that neither compiles-checks nor runs.
+- Nothing asserts that `check:ci` still contains what the documentation claims
+  (F76), and nothing asserts the deploy path filter matches the set of files that
+  actually affect the build — both are the kind of drift a single CI assertion
+  would pin.
+
+**Open questions / remaining ranges:** B10a's two carried questions are both
+answered here — `ci.yml` runs `check:ci` and therefore `test:coverage` (so F69
+gates production), and the deploy filter's exact path set is recorded above with
+its consequences (F75). Nothing new carried.
+
+**Ledger rows updated:** six B10 rows moved `pending` → `deep`; B10 now has 12
+rows left. **Next action: B10c — `scripts/verify-notify-hardening.js`,
+`scripts/debug-browser.js`, `eslint.config.js`, `stryker.config.mjs` and
+`playwright.config.ts`.**
