@@ -8,65 +8,59 @@ an exhaustive review spread across sessions because the previous parallel review
 exhausted usage limits. This document is the handoff; do not reload entire session
 transcripts on ordinary continuation.
 
-**Areas B07, B08 and B09 are all CLOSED.** All 10 B09 rows are `deep` across
-three batches (B09a–B09c). **126 of 179 ledger rows are now `deep`**, and the
-`reported` status is gone from the tracker entirely.
+**Areas B07, B08 and B09 are CLOSED; B10 is open and B10a is done.** 133 of
+179 ledger rows are `deep`, and the `reported` status is gone from the tracker
+entirely. Eighteen B10 rows remain.
 
-**B09 was opened to settle two things, and both are settled.**
+**B10a reviewed the configuration the last two areas made load-bearing**, and
+found four problems in it — three of which are invisible to every check the repo
+runs.
 
-- **L04 is resolved** — it was the last lead in this tracker never reproduced.
-  B09a probe P23 reproduces it and locates the cause: the network-first
-  navigation handler writes **every** resolved response over the cached shell
-  with no `response.ok` check (`service-worker.ts:66-69`). One 503 while online,
-  then an offline cold launch, and the app serves `503 SERVICE UNAVAILABLE`
-  instead of itself — permanently, until another successful online navigation.
-  Opened as **F65 (high)**; **F66 (medium)** is the same missing check on the
-  cache-first precache branch, where a bad response is never re-fetched at all.
-- **F24's notification tail is confirmed** (B09b probe P26). With
-  `restTimer1=240`/`restTimer2=60` the tray shows *"Second bell"* at 60 s and
-  *"First bell"* at 240 s, and because both carry `tag: 'rest-timer'` the later
-  one **replaces** the earlier — the surviving notification is for the checkpoint
-  that already passed. F24 is amended rather than duplicated, and its fix now
-  wants an upper clamp too (`Settings.tsx:475` bounds only the floor).
+- **F69 (medium) — the coverage gate measures the wrong half of the codebase.**
+  `include` is `lib` + `screens` + `store` only, so `src/components/**`,
+  `src/db/**`, `src/hooks/**`, `src/service-worker.ts` and `src/workers/**` are
+  not measured at all. Of the 23 findings opened in B08 and B09, **22 live in
+  files the 80 % gate cannot see.**
+- **F70 (medium) — the PWA manifest points at two icons that do not exist.**
+  `icon-192.png` and `icon-512.png` are declared in `vite.config.ts` and shipped
+  verbatim in `dist/manifest.webmanifest`; `public/` and `dist/` contain neither,
+  and no generator is configured. There is no `apple-touch-icon` either. For an
+  app distributed by home-screen install, that is the delivery mechanism failing
+  while the build stays green.
+- **F71 (medium) — `tsconfig.e2e.json` is referenced by nothing**, so
+  `tests/e2e/**` is never type-checked; `playwright.config.ts`,
+  `stryker.config.mjs`, `eslint.config.js` and `scripts/*` belong to no project
+  either.
+- **F72 (low)** — `globPatterns` omits `svg` so the one icon that does exist is
+  not precached, and `public/icons.svg` is an orphan shipped to production.
 
-Also opened: **F67** (medium — `firePage`'s unguarded `new Notification(...)`,
-platform impact flagged for a device check rather than asserted) and **F68** (low
-— the timer worker posts nothing on `resume`, so a backgrounded tab shows a stale
-countdown for up to a second before it jumps; the existing veil is scoped to
-bfcache and does not cover it).
+**One attractive wrong answer was ruled out.** The production `_headers` sets
+`Cross-Origin-Opener-Policy` but no `Cross-Origin-Embedder-Policy`, which would
+deny `SharedArrayBuffer` and looked like a candidate root cause for **F02**
+(persistence silently falling back to in-memory). It is not: `sqlite.worker.ts`
+uses the **OPFS SAH pool** VFS, which does not require cross-origin isolation.
+F02's cause is still open and is not a headers problem.
 
-**Next area: B10 — build, deploy, config, scripts and public assets.** 25 rows,
-the largest remaining block, previously under-counted as 1. Start with the files
-B09 just made load-bearing: `vite.config.ts`'s PWA block feeds
-`__WB_MANIFEST` / `globPatterns` straight into F65's and F66's cache paths, and
-`.github/workflows/deploy.yml` is path-filtered and runs **no lint and no tests**
-(`CLAUDE.md`), so it is the only thing standing between a bad commit and
-production. **B11** (11 rows: E2E, test infrastructure, domain types, remaining
-stores) and **B12** (17 rows: documentation relevance and final reconciliation)
-follow.
+**Next batch: B10b — CI/CD and supply chain.** `.github/workflows/ci.yml` (30),
+`.github/workflows/deploy.yml` (45), `.github/dependabot.yml` (21),
+`package.json` (52), `pnpm-workspace.yaml` (2) and `pnpm-lock.yaml` (6,935 —
+reviewed as an integrity artifact, not line by line). `CLAUDE.md` states the
+deploy workflow is path-filtered and runs **no lint and no tests**, so it is the
+only thing between a bad commit and production; `check:ci` runs
+`pnpm test:coverage`, which makes F69's blind spot a CI-gating question. Then
+**B10c** (scripts + tooling config, 5 rows) and **B10d** (data, assets, css,
+ignore files, 7 rows) close the area.
 
-**Six patterns now account for most of what this review has found.** B08's five —
-missing single-flight guards, single-slot state standing in for per-item state,
-state seeded once and never re-synced, cleanup bound to something that can stop
-existing, uneven keyboard/screen-reader access — plus the one B09 added:
-**unvalidated external data written to durable storage or trusted as control
-flow.** A response *status* (F65, F66), a restored settings envelope (F03, F08 —
-and the reason F24's fix needs bounds), and an engine capability assumed rather
-than tested (F67) are all the same mistake in different clothes.
+Latest run: **B10a complete** — `vite.config.ts` (77), `index.html` (26),
+`public/_headers` (7), `tsconfig.json` (11), `tsconfig.app.json` (26),
+`tsconfig.node.json` (24) and `tsconfig.e2e.json` (19) reviewed in full. Seven
+files marked deep; **133 files deep in total.** `pnpm lint` and `tsc -b` clean
+(exit 0); a coverage run was used as evidence for F69. Four new findings
+(F69–F72). Only this tracker changed; the probe file was created inside `src/`,
+run, and deleted, leaving the tree clean. This card authorizes commit, push and
+PR; operator acceptance remains a separate native Kanban review step.
 
-Latest run: **B09c complete** — `src/lib/rest-timer-worker.ts` (13),
-`src/workers/timer.worker.ts` (33), `src/lib/audio-cues.ts` (64),
-`rest-timer-worker.test.ts` (47) and `audio-cues.test.ts` (197) reviewed in full.
-Five files marked deep; **126 files deep in total.** All 15 existing tests passed
-(`pnpm exec vitest run src/lib/rest-timer-worker.test.ts src/lib/audio-cues.test.ts`);
-`pnpm lint` and `tsc -b` clean (exit 0). One new finding (F68). `audio-cues.ts`
-and `rest-timer-worker.ts` are clean, and the worker's start/pause/resume/stop
-protocol was probed and is correct apart from F68. Only this tracker changed;
-probes were created inside `src/`, run, and deleted, leaving the tree clean. This
-card authorizes commit, push and PR; operator acceptance remains a separate native
-Kanban review step.
-
-**Remaining work — 53 of 179 ledger rows are not yet `deep`** (126 are). Recounted
+**Remaining work — 46 of 179 ledger rows are not yet `deep`** (133 are). Recounted
 directly from the File ledger at `7992747` during B07g; decremented by the seven
 rows B08a closed.
 
@@ -81,7 +75,7 @@ correct; only the remaining-work totals were not.
 |---|---|---|
 | B07 | **0 — closed** | All 29 rows `deep` (27 across B07a–B07g; `training-max.ts` and its test were closed earlier in B01b). Findings F24–F45 stay open as bugs; review completion and bug resolution are separate states. |
 | B08 | **0 — closed** | All 54 rows `deep` across B08a–B08h. Twenty findings opened from this area (F46–F64, plus F33/F34/F40/F52 extended); review completion and bug resolution are separate states. | Still the largest remaining area, and the one the `pending` column hides — `reported` is a prior area-level claim with no recoverable per-file evidence, so each row needs bounded verification. Planned slices: B08h `RecordsPanel`/`InlineConfirm`/`ToggleChip`/layout. |
-| B10 | 25 pending | Build/deploy/config/scripts/public assets. Previously under-counted as 1. |
+| B10 | 18 pending | **Open (B10a done).** Build/deploy/config/scripts/public assets. Remaining slices: B10b CI/CD + package/lockfile, B10c scripts + tooling config, B10d data, assets, css and ignore files. |
 | B12 | 17 pending | Tracked documentation relevance plus the final reconciliation. |
 | B11 | 11 pending | E2E, test infrastructure, domain types, remaining stores. |
 | B09 | **0 — closed** | All 10 rows `deep` across B09a–B09c. L04 resolved into F65; F65–F68 opened and F24 extended. | Timers, notifications and their tests. L04 is resolved into F65 and the F24 notification tail is confirmed. Remaining slice: B09c — `rest-timer-worker.ts` / `timer.worker.ts` / `audio-cues.ts` with their tests. |
@@ -202,6 +196,10 @@ claimed here.
 | F66 | Medium; B09a probe (P24) | `src/service-worker.ts:75-84` | Same missing `ok` check on the precache branch, and here the policy is **cache-first**, so a bad response is not merely stored — it is never re-fetched. Probe: request a precached asset while the server answers `502` → the 502 is returned *and* written to the cache; second request with the server healthy again → `status=502`, `"502 BAD GATEWAY"`, `fetchCalled=0`. The network is never consulted again for that URL. **Narrower than F65:** `install` uses `cache.addAll`, which rejects atomically on any non-ok response, so a successfully activated SW normally has every precache path already stored and this branch is not reached. It becomes reachable when the browser evicts Cache API entries under storage pressure, or for a path in `PRECACHE_PATHS` that install did not store. | Add the same `response.ok` gate before `cache.put`, and return the network response without caching it when it is not ok. |
 | F67 | Medium (platform impact needs device verification); B09b probe (P27) + source inspection | `src/lib/notifications.ts:96-99`, `114-124` | `firePage` calls `new Notification(title, …)` behind a permission check only — **no `try`/`catch` and no fallback to `ServiceWorkerRegistration.showNotification`**. Probe P27 shows what an engine that rejects the constructor produces: the `TypeError` escapes the timer tick uncaught (`"TypeError: Failed to construct 'Notification': Illegal constructor."`), no notification appears, and nothing in the module reports it. The registry itself stays consistent — `pending()` correctly holds only the remaining target and the second bell still fires — so the failure is silent rather than cascading. **Why it matters:** this module designates the page path as the *reliable* one and the service-worker path as explicitly best-effort (`:1-13`), so if the page constructor is unavailable the reliability story inverts on exactly the platform this PWA targets. The `Notification` constructor is not the supported page-context path on Android Chrome or in iOS PWAs, but that claim is **not verified here** — per this project's standing rule about mobile behaviour, it needs a device check before the severity is settled. | Wrap the call and fall back: `try { new Notification(...) } catch { void registration?.showNotification(...) }`, or prefer `showNotification` whenever a registration exists. Settle the platform question on a real device (installed PWA, permission granted, tab hidden, one rest bell) and record the result. `notifications.test.ts` stubs `Notification` as a spy that always succeeds, so no existing case can observe a throwing constructor. |
 | F68 | Low; B09c probe (P28) | `src/workers/timer.worker.ts:26-31`, `5-12`; `src/components/workout/RestTimer.tsx:101-105`; `src/App.tsx:47-58` | `resume` clears the `paused` flag but posts nothing, and the 1 Hz interval keeps its original phase, so the first `elapsed` after the tab becomes visible arrives up to **a full second late**. Probe: 0 posts immediately on resume, 0 posts at 999 ms, first post at 1000 ms. Meanwhile `RestTimer`'s `elapsed` signal still holds the value from **before** the tab was hidden — the worker posts nothing while paused — so returning mid-rest after a five-minute background shows the five-minute-old countdown for about a second and then jumps (`"2:30 LEFT"` → `"OVER +4:12"`). This is **not** covered by the existing resume veil: `App.tsx:47-53` is deliberately scoped to bfcache restores (`pageshow.persisted`) and its own comment excludes `visibilitychange` as "ordinary app-switches where there's no repaint to mask" — which is exactly this case — and the veil lasts two animation frames, not a second. | Post one immediate tick on `resume` before letting the interval carry on: `case 'resume': paused = false; if (restStartedAt != null) self.postMessage({ elapsed: Math.floor((Date.now() - restStartedAt) / 1000) }); break`. Restarting the interval there would also reset its phase. `src/workers/timer.worker.ts` has **no test file**; add one for the start/pause/resume/stop protocol. |
+| F69 | Medium; B10a coverage run | `vite.config.ts:21-27` | The coverage gate measures the wrong half of the codebase. `include` is `['src/lib/**/*.ts', 'src/screens/**/*.tsx', 'src/store/**/*.ts']`, so **`src/components/**`, `src/db/**`, `src/hooks/**`, `src/service-worker.ts` and `src/workers/**` are not measured at all** — a coverage run reports only `lib`, `screens` and `store` sections and a denominator of 3,945 statements, with no `components` section present. The 80 % statements/branches/functions/lines thresholds therefore gate a subset chosen before the components tree existed at its current size. The cost is measurable against this review: of the 23 findings opened in B08 and B09 (F46–F68), **22 live in files the gate cannot see** — every one of F46–F64 (`src/components`, `src/hooks`), F65–F66 (`src/service-worker.ts`) and F68 (`src/workers`); only F67 (`src/lib/notifications.ts`) is inside the measured set. Eleven reviewed component files have no test file at all and none of them costs the gate a single point. | Widen `include` to `src/**/*.{ts,tsx}` with the existing `exclude` for tests, then re-baseline the thresholds to whatever the true number is and ratchet up — a gate that measures everything at 60 % is worth more than one that measures a third at 80 %. Excluding `src/main.tsx` and `src/test-setup.ts` is reasonable; excluding the entire component tree is not. |
+| F70 | Medium (installability impact worth a Lighthouse check); B10a build-output inspection | `vite.config.ts:63-73`; `dist/manifest.webmanifest`; `public/`; `index.html:14` | The web app manifest declares two icons — `icon-192.png` and `icon-512.png` — and **neither file exists**. `public/` contains only `_headers`, `demo-seed.json`, `favicon.svg` and `icons.svg`, and the built `dist/` carries the same four plus `manifest.webmanifest`, which ships the two names verbatim: `"icons":[{"src":"icon-192.png",…},{"src":"icon-512.png",…}]`. No icon generator is configured (no `pwa-assets`, no `@vite-pwa/assets-generator` in `package.json`), so nothing produces them at build time. `index.html` also has **no `<link rel="apple-touch-icon">`**, so the iOS home-screen path has no icon either. Chrome's installability criteria require a manifest icon of at least 144×144 that actually loads; both of these 404. For an app whose stated distribution is an installed offline-first PWA (`display: 'standalone'`, `apple-mobile-web-app-capable`), that is the delivery mechanism failing silently — the build succeeds, CI passes, and the install prompt simply never appears. | Generate the two PNGs from `favicon.svg` (or add `@vite-pwa/assets-generator`), add an `apple-touch-icon` link, and assert in CI that every `manifest.icons[].src` resolves to a file in `dist/`. Run Lighthouse's installability audit against a preview build to confirm what the missing icons currently cost. |
+| F71 | Medium; B10a config inspection | `tsconfig.json:1-11`; `tsconfig.e2e.json`; `tsconfig.node.json:24`; `package.json:8`, `10`, `18` | `tsconfig.e2e.json` is referenced by **nothing** — not by `tsconfig.json`'s `references` (which lists only app and node), not by any `package.json` script, not by the CI workflow, not by `playwright.config.ts`. `typecheck` and `build` are both `tsc -b` against the solution file, and `test:e2e` is `playwright test`, which transpiles specs without type-checking. So **`tests/e2e/**` is never type-checked by any command in the repo** — four files including an 11 KB `workout.spec.ts`, the app's only integration coverage. The irony is that `tsconfig.e2e.json` is the one config that declares `"strict": true` explicitly. The same gap covers the toolchain: `tsconfig.node.json` includes only `vite.config.ts`, so `playwright.config.ts` (a `.ts` file), `stryker.config.mjs`, `eslint.config.js` and `scripts/*` belong to no project and are type-checked by nothing. A renamed helper or a changed fixture shape in the E2E suite surfaces as a runtime failure, or not at all. | Add `{ "path": "./tsconfig.e2e.json" }` to `tsconfig.json`'s references so `tsc -b` builds it, and widen `tsconfig.node.json`'s `include` to cover the root config files and `scripts/`. |
+| F72 | Low; B10a config and asset inspection | `vite.config.ts:58`; `index.html:14`; `public/icons.svg` | Two small asset problems in the same place. (a) `globPatterns: ['**/*.{html,js,css,ico,png,wasm}']` omits **`svg`**, and `favicon.svg` — the only icon that actually exists — is therefore not precached; the SW's fetch handler passes it through (it is not in `PRECACHE_PATHS`), so offline it simply fails to load. (b) `public/icons.svg` (4.9 KB) is referenced by **nothing** — no `src/` file, no `index.html`, no stylesheet — yet it ships to production in `dist/`. | Add `svg` to `globPatterns`; delete `icons.svg` or wire it up. Both are a line each, and (a) becomes moot for the PNGs once F70 is fixed, which is a reason to fix them together. |
 | L01 | Resolved into confirmed F07 | `src/db/seed.ts` and startup | Startup seeding risk mentioned; exact failure case unavailable. | Inspect seed idempotency, partial failure, and startup ordering; reject or substantiate. |
 | L02 | Partly resolved into F14/F15 | `src/screens/Workout.tsx`; accessory components still pending B08 | Overlapping set saves and stale retries now reproduced. The earlier unspecified accessory-editing concern has not been independently recovered; F01 remains separate. | Use F14/F15 evidence for Workout save ordering; inspect remaining accessory component behavior in B08 without inventing missing historical evidence. |
 | L03 | Resolved into confirmed F13 | `src/screens/Workout.tsx` and session/store logic | Completed workout can remain editable after reload and then be marked skipped. | Reproduce completion → reload → skip; record exact location, persisted state, and impact. |
@@ -298,12 +296,12 @@ column as work is completed.
 | `docs/verification/2026-08-09-rest-timer-notifications.md` | B12 | pending | — |
 | `docs/verification/2026-08-09-swe-hardening.md` | B12 | pending | — |
 | `eslint.config.js` | B10 | pending | — |
-| `index.html` | B10 | pending | — |
+| `index.html` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F70 apple-touch-icon; CSP meta checked) |
 | `package.json` | B10 | pending | — |
 | `playwright.config.ts` | B10 | pending | — |
 | `pnpm-lock.yaml` | B10 | pending | — |
 | `pnpm-workspace.yaml` | B10 | pending | — |
-| `public/_headers` | B10 | pending | — |
+| `public/_headers` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (clean; CSP matches the other two copies) |
 | `public/demo-seed.json` | B10 | pending | — |
 | `public/favicon.svg` | B10 | pending | — |
 | `public/icons.svg` | B10 | pending | — |
@@ -449,11 +447,11 @@ column as work is completed.
 | `tests/e2e/fixtures.ts` | B11 | pending | — |
 | `tests/e2e/helpers.ts` | B11 | pending | — |
 | `tests/e2e/workout.spec.ts` | B11 | pending | — |
-| `tsconfig.app.json` | B10 | pending | — |
-| `tsconfig.e2e.json` | B10 | pending | — |
-| `tsconfig.json` | B10 | pending | — |
-| `tsconfig.node.json` | B10 | pending | — |
-| `vite.config.ts` | B10 | pending | — |
+| `tsconfig.app.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (strict verified on via TS 6 default) |
+| `tsconfig.e2e.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F71 — referenced by nothing) |
+| `tsconfig.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F71 — e2e project unreferenced) |
+| `tsconfig.node.json` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F71 — covers only vite.config.ts) |
+| `vite.config.ts` | B10 | deep | B10a — build, PWA and type configuration (1/4); evidence below (F69, F70, F72) |
 
 ## Scope exclusions
 
@@ -3466,3 +3464,118 @@ build, deploy, config, scripts and public assets (25 rows)**, starting with
 `vite.config.ts`'s PWA block, which feeds `__WB_MANIFEST` and `globPatterns`
 directly into F65's and F66's cache paths, and `.github/workflows/deploy.yml`,
 which runs no lint and no tests.
+
+### 2026-09-15 — B10a: build, PWA and type configuration
+
+**Revision:** `e2162e7` (tracker-only commits on top of `7c6721d`). Application
+files were unchanged at batch start and end; one probe file was created inside
+`src/`, run, and deleted. Single agent; seven configuration files deeply
+reviewed; no application edits.
+
+| Completed file | Lines | Git blob |
+|---|---|---|
+| `vite.config.ts` | 1–77 | `566161e0805a4a4e693db468e57dc9563d4c8292` |
+| `index.html` | 1–26 | `7a5a629504e1f2ddaf9685e2e17fccbd3f840269` |
+| `public/_headers` | 1–7 | `ecf9e9dd08bac167d1d432825cd369338c3e6559` |
+| `tsconfig.json` | 1–11 | `ea9d0cd8255683d84f125948115daf1de0f06b1f` |
+| `tsconfig.app.json` | 1–26 | `1a7726c19b244501f088f2955f029f2224b213fd` |
+| `tsconfig.node.json` | 1–24 | `d3c52ea64c6cd6bad118474410f5322f48e257a6` |
+| `tsconfig.e2e.json` | 1–19 | `bb685a825f3f1fd580deb75265ce38a03553c3c4` |
+
+**Behavior and invariants traced:**
+
+- `vite.config.ts`: the vitest block (jsdom, setup file, the `/sqlite-client$/ →
+  /sqlite-test-client` alias that swaps the worker-backed client for an in-process
+  one, the exclude list) and the coverage block (F69); `optimizeDeps` excluding
+  `@sqlite.org/sqlite-wasm`; the preview server's CSP and security headers; and the
+  `VitePWA` `injectManifest` configuration — `srcDir`/`filename` pointing at the
+  audited custom SW, `registerType: 'prompt'` matching that SW's deliberate absence
+  of `skipWaiting`, `globPatterns` (F72) and `manifest.icons` (F70).
+- `index.html`: the meta CSP and its stated threat model, the viewport with
+  `viewport-fit=cover`, the Apple standalone meta tags, and the inline LOADING
+  shell.
+- `public/_headers`: the Cloudflare Pages header block — CSP, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`.
+- The tsconfig graph: solution file → app (`src`, 133 files) + node
+  (`vite.config.ts` only), with e2e orphaned (F71).
+
+**Checks and outcomes:**
+
+- Fresh pass: `pnpm lint` (exit 0) and `pnpm exec tsc -b` (exit 0).
+- Coverage evidence for F69: `pnpm exec vitest run --coverage src/lib/format.test.ts`
+  reports only `lib`, `screens` and `store` sections with a denominator of **3,945
+  statements** and **no `components` section present**, then fails all four
+  thresholds as expected for a single-suite run.
+- Probe (type strictness): a temporary `src/` file containing `const x: string =
+  null`, an implicit-`any` parameter, a `string | null` dereference and `const n:
+  number = undefined` was compiled with `tsc -b`. **All four errored** — TS2322,
+  TS7006, TS18047, TS2322 — so the application source *is* strictly checked. See
+  the negative conclusions for where that strictness comes from.
+- Build-output inspection for F70: `dist/manifest.webmanifest` ships
+  `"icons":[{"src":"icon-192.png"…},{"src":"icon-512.png"…}]`; `ls public/` and
+  `ls dist/` show neither file exists.
+- Reference check for F71: `tsc -p tsconfig.app.json --showConfig` resolves 133
+  files, all under `./src`; `tsconfig.node.json` resolves exactly
+  `['./vite.config.ts']`; `grep` for `tsconfig.e2e` across `package.json`,
+  `tsconfig.json`, `.github/workflows/` and `playwright.config.ts` returns nothing.
+- Not run: Lighthouse, any real-browser install check, the full test suite.
+
+**Findings:** F69 (medium), F70 (medium), F71 (medium), F72 (low).
+
+**Substantive negative conclusions:**
+
+- **Type strictness is real but undeclared.** No tsconfig in the repo sets
+  `strict`, yet the probe shows strict errors firing. The reason is the compiler
+  major: `package.json` pins `typescript: ~6.0.2`, and TypeScript 6 defaults
+  `strict` to `true` — `--showConfig` confirms the flag is simply absent rather
+  than set. The checking is therefore inherited from a default, not stated, while
+  `tsconfig.e2e.json` — the one config nothing builds (F71) — declares it
+  explicitly. **Recorded rather than opened:** the current behaviour is correct and
+  verified. It is worth an explicit `"strict": true` in `tsconfig.app.json` so a
+  downgrade or a different toolchain cannot silently remove it.
+- **The missing `Cross-Origin-Embedder-Policy` does not explain F02.**
+  `public/_headers` sets `Cross-Origin-Opener-Policy: same-origin` with no COEP, so
+  the origin is not cross-origin isolated and `SharedArrayBuffer` is unavailable —
+  which would break the SAB-based `opfs` VFS and looked like a strong candidate
+  root cause for F02 (persistence silently falling back to in-memory). Checked and
+  **ruled out**: `sqlite.worker.ts:40` names the **OPFS SAH pool** VFS
+  (`opfs-sahpool`), which uses synchronous access handles and requires no
+  cross-origin isolation. F02's cause remains open and is not a headers problem.
+  Recorded because it is an attractive wrong answer that would otherwise be
+  re-derived.
+- **The three CSP copies are byte-identical.** `index.html:13`, `vite.config.ts:35`
+  and `public/_headers:6` carry the same policy string, so the mirroring discipline
+  the `index.html` comment asks for is currently being kept.
+- `frame-ancestors` is ignored when delivered in a `<meta>` CSP, so
+  `index.html`'s copy of it is inert. Not a finding: production serves the same
+  directive as a real header from `_headers` *and* `X-Frame-Options: DENY`, and the
+  preview server sets it as a header too. Only `vite dev` relies on the meta tag,
+  where there is nothing to protect.
+- The preview and production header sets diverge — preview uses `Referrer-Policy:
+  no-referrer` (stricter) while production uses `strict-origin-when-cross-origin`,
+  and preview omits `X-Frame-Options`, `Permissions-Policy` and COOP. Left as an
+  observation: preview is a local development server, and the divergence makes it
+  stricter in the one place they differ on the same header.
+- `vite.config.ts:48` claims `cleanupOutdatedCaches()` is called on activate in the
+  SW. B09a's review shows the SW hand-rolls the equivalent instead — a
+  `caches.keys()` filter on the `precache-` prefix — because it deliberately
+  imports no workbox runtime. The behaviour matches the claim; only the function
+  name is wrong. Documentation drift, recorded not opened.
+
+**Test-coverage gaps recorded (no fixes made):**
+
+- F69 **is** the coverage-gap finding for this batch: the gate's `include` is the
+  gap, not any individual file's tests.
+- No check asserts that the files named in `manifest.icons` exist in the build
+  output (F70), and nothing type-checks the E2E suite (F71). Both are the kind of
+  thing a CI step would catch in one line; B10b reviews whether CI could.
+
+**Open questions / remaining ranges:** two carried to B10b — whether
+`.github/workflows/ci.yml` runs `test:coverage` (which would make F69's blind spot
+a CI-gating question) and what the deploy workflow's path filter actually admits,
+since `CLAUDE.md` states it runs no lint and no tests.
+
+**Ledger rows updated:** seven B10 rows moved `pending` → `deep`; B10 now has 18
+rows left. **Next action: B10b — `.github/workflows/ci.yml`,
+`.github/workflows/deploy.yml`, `.github/dependabot.yml`, `package.json`,
+`pnpm-workspace.yaml` and `pnpm-lock.yaml`.**
