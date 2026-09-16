@@ -22,6 +22,15 @@ export interface SaveFailure {
   message: string
   /** Re-attempt the write. Absent once the page has reloaded. */
   retry?: () => Promise<void>
+  /**
+   * Whether replaying `retry` would still mean what it meant when it was
+   * recorded. A retry is bound to a session and to a set; both can be
+   * superseded — the user exits into a new session, or logs the missing set by
+   * hand — and replaying it then writes the old set into the wrong place (F15).
+   * Read during render, so it re-evaluates as the workout moves on. Absent means
+   * "always applicable".
+   */
+  retryApplies?: () => boolean
 }
 
 /** The serializable half — what survives a reload. */
@@ -100,6 +109,18 @@ export function clearSaveFailure(id: number): void {
     return next
   })
 }
+
+/**
+ * The banner entries belonging to one session.
+ *
+ * The banner is a workout control — its RETRY writes a set — so it may only ever
+ * show failures from the session on screen. It used to show every outstanding
+ * failure regardless of origin, which put a live RETRY button for a previous
+ * session's set on top of the current one (F15). The *gap* records are not
+ * filtered: they outlive the session on purpose, so History can flag it.
+ */
+export const failuresForSession = (sessionId: number | undefined): SaveFailure[] =>
+  sessionId == null ? [] : failures().filter(f => f.sessionId === sessionId)
 
 /** Everything still unresolved for one session. */
 export const gapsForSession = (sessionId: number): SessionGap[] =>
