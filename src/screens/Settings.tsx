@@ -4,7 +4,7 @@ import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode,
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { clearSession } from '../store/workout-store'
 import { exportJson, importJson, exportCsv } from '../lib/export-import'
-import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling } from '../lib/cycle'
+import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
 import { createExercise, ExerciseNameConflictError, renameExercise, setExerciseCategory, setExercisePlateLoading, archiveExercise, unarchiveExercise } from '../lib/exercise'
@@ -424,18 +424,18 @@ export default function Settings() {
     if (!cycleId) { await load(); return }
 
     const next = cycleFinalWeek(updates.hasDeloadWeek)
+    // Weeks past the new final week no longer exist in this cycle. Shared with
+    // advanceCycleIfComplete rather than done inline here: this screen is only
+    // one of the routes the setting changes by (a backup import is another), and
+    // the invariant has to hold for all of them (F35). Unconditional — a
+    // stranded pending row is stranded whether or not the cycle is finishable.
+    await retireWeeksPastFinalWeek(db, cycleId, next)
+
     const cycle = await db.cycles.get(cycleId)
     const sessions = await db.sessions.where('cycleId').equals(cycleId).toArray()
     const activeIds = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived).map(l => l.id!)
     const closed = await syncClosedThroughWeek(db, cycleId, sessions, activeIds, cycle?.closedThroughWeek ?? 0, next)
     if (closed < next) { await load(); return }
-
-    // Weeks past the new final week no longer exist in this cycle.
-    await db.transaction(async () => {
-      for (const s of sessions) {
-        if (s.week > next && s.status === 'pending') await db.sessions.update(s.id!, { status: 'skipped' })
-      }
-    })
 
     const { advanced, doublingCandidates, newTms } = await advanceCycleIfComplete(db, settings.highRepDiscount)
     if (advanced) {

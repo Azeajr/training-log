@@ -76,6 +76,39 @@ export const syncClosedThroughWeek = async (
   return closed
 }
 
+/**
+ * Retire any session sitting past the cycle's final week.
+ *
+ * Cycle length is a setting, so the final week moves under sessions that already
+ * exist: turning the deload off leaves week-4 rows describing a week the cycle
+ * no longer has. A *pending* one is the damaging case — it is unreachable
+ * (Today only ever offers the current cycle's next owed week) and invisible
+ * (History renders completed rows only), yet it still holds a slot and its sets
+ * still count toward records. Retiring it as `skipped` keeps the work the user
+ * actually did while closing the week out.
+ *
+ * Completed rows are left exactly as they are: a deload day that was genuinely
+ * lifted is history, and history does not stop being true when the setting
+ * changes.
+ *
+ * This lived only in `Settings.handleCycleShapeChange`, which is one of the ways
+ * the setting changes — a backup import is another. Calling it from
+ * `advanceCycleIfComplete` makes the invariant hold however the shape moves.
+ */
+export async function retireWeeksPastFinalWeek(
+  db: TrainingDB,
+  cycleId: number,
+  finalWeek: 3 | 4,
+): Promise<number> {
+  const stranded = (await db.sessions.where('cycleId').equals(cycleId).toArray())
+    .filter(s => s.id != null && s.week > finalWeek && s.status === 'pending')
+  if (stranded.length === 0) return 0
+  await db.transaction(async () => {
+    for (const s of stranded) await db.sessions.update(s.id!, { status: 'skipped' })
+  })
+  return stranded.length
+}
+
 export interface TmChange {
   /**
    * Carried alongside the name because `lifts.name` has no UNIQUE constraint:
@@ -115,6 +148,10 @@ export async function advanceCycleIfComplete(db: TrainingDB, discount: HighRepDi
   if (!cycle?.id) return { advanced: false, doublingCandidates: [], newTms: [] }
 
   const finalWeek = await getFinalWeek(db)
+  // Before anything reads the cycle's sessions: a week past `finalWeek` no
+  // longer exists, so a row still pending there has to be closed out rather
+  // than silently stepped over when the cycle rolls.
+  await retireWeeksPastFinalWeek(db, cycle.id, finalWeek)
   const sessions = await db.sessions.where('cycleId').equals(cycle.id).toArray()
   const activeLiftIds = (await activeLiftsOrdered(db)).map(l => l.id!)
   const closed = computeClosedThroughWeek(sessions, activeLiftIds, cycle.closedThroughWeek ?? 0, finalWeek)
@@ -255,11 +292,16 @@ export async function getNextSessionAdvancingIfDone(db: TrainingDB): Promise<{
     return { liftId: lifts[0].id!, week: 1, cycleId }
   }
 
+  const finalWeek = await getFinalWeek(db)
+  // Read the sessions only after retiring the stranded ones, so `closed` and
+  // `owesWork` below both see the reconciled cycle. The cycle may not be
+  // complete — a week that no longer exists is stranded either way.
+  await retireWeeksPastFinalWeek(db, cycle.id, finalWeek)
+
   let sessions = await db.sessions
     .where('cycleId').equals(cycle.id)
     .toArray()
 
-  const finalWeek = await getFinalWeek(db)
   let lifts = await activeLiftsOrdered(db)
   if (lifts.length === 0) throw new Error('No active lifts')
   const activeLiftIds = lifts.map(l => l.id!)
