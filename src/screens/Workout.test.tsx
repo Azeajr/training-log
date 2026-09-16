@@ -4,7 +4,7 @@ import { Router, Route } from '@solidjs/router'
 import Workout from './Workout'
 import { db } from '../db/index'
 import {
-  clearSession, startSession, addAccessory, logAccessorySet, setNotes, workout,
+  clearSession, startSession, addAccessory, logAccessorySet, logCrossSet, setNotes, workout,
 } from '../store/workout-store'
 import { loadSettings, updateSettings } from '../store/settings-store'
 import { toast } from '../store/toast-store'
@@ -2063,5 +2063,71 @@ describe('Workout screen — a retry belongs to the session that produced it', (
     expect(screen.queryByRole('button', { name: 'RETRY' })).toBeNull()
     await drain()
     expect(await db.sets.toArray()).toHaveLength(1)
+  })
+})
+
+// ─── F32: cross work that lost its plan is still work that was done ──────────
+// Logged self-supplemental sets survive their plan disappearing. Cross sets had
+// no such path, so removing a block mid-session — or moving deloadSupplemental
+// to `skip` during a week-4 session — made already-logged cross work vanish
+// from the screen while its rows stayed in the database and kept counting
+// toward History, PRs and Stats.
+
+describe('Workout screen — cross work with no remaining block', () => {
+  const seedSquat = async () => {
+    await db.lifts.add({ id: 2, name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+    await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
+  }
+
+  const loggedSquatCrossSets = () => {
+    logCrossSet({ sessionId: 1, type: 'cross', setNumber: 1, weight: 225, reps: 5, isAmrap: false, liftId: 2 })
+    logCrossSet({ sessionId: 1, type: 'cross', setNumber: 2, weight: 225, reps: 5, isAmrap: false, liftId: 2 })
+  }
+
+  it('still shows the logged sets when the block has been removed', async () => {
+    await seedSquat()          // no liftSupplementals row: the block is gone
+    startSession(BENCH)
+    loggedSquatCrossSets()
+    renderWorkout()
+
+    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
+    expect((await screen.findAllByText(/SQUAT/)).length).toBeGreaterThan(0)
+    expect(screen.getByText(/no longer prescribed/)).toBeInTheDocument()
+    // The sets themselves, not just the heading.
+    expect(screen.getAllByText('225').length).toBeGreaterThan(0)
+  })
+
+  it('still shows them when the deload setting skipped supplemental this week', async () => {
+    await seedSquat()
+    await db.liftSupplementals.add({ liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1 })
+    await updateSettings({ deloadSupplemental: 'skip' })
+    startSession({ ...BENCH, week: 4 })
+    loggedSquatCrossSets()
+    renderWorkout()
+
+    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
+    expect((await screen.findAllByText(/SQUAT/)).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('225').length).toBeGreaterThan(0)
+  })
+
+  it('a block that still exists keeps its prescription in the label', async () => {
+    await seedSquat()
+    await db.liftSupplementals.add({ liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1 })
+    startSession(BENCH)
+    loggedSquatCrossSets()
+    renderWorkout()
+
+    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
+    expect((await screen.findAllByText(/SQUAT/)).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/no longer prescribed/)).not.toBeInTheDocument()
+  })
+
+  it('renders no cross section at all when nothing is planned and nothing logged', async () => {
+    await seedSquat()
+    startSession(BENCH)
+    renderWorkout()
+
+    await screen.findByText('LOG')
+    expect(screen.queryByText(/CROSS-LIFT SUPPLEMENTAL/)).not.toBeInTheDocument()
   })
 })

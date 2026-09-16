@@ -55,6 +55,8 @@ interface LoadedCrossBlock {
   sets: number
   reps: number
   computed: CrossSet[]
+  /** No plan behind it: sets logged against a block that has since gone away. */
+  unplanned?: boolean
 }
 
 function SetSection(props: {
@@ -234,13 +236,11 @@ export default function Workout() {
     // composition reads crossBlocks(). Cross work follows the same effective
     // week as self-supplemental (deload may remap or skip it).
     const crossWeek = effectiveSupplementalWeek(session.week, settings.deloadSupplemental)
-    if (crossWeek === null) {
-      setCrossBlocks([])
-    } else {
+    const allLifts = await db.lifts.toArray()
+    const loaded: LoadedCrossBlock[] = []
+    if (crossWeek !== null) {
       const blocks = (await db.liftSupplementals.where('liftId').equals(session.liftId).toArray())
         .sort((a, b) => a.order - b.order)
-      const allLifts = await db.lifts.toArray()
-      const loaded: LoadedCrossBlock[] = []
       for (const b of blocks) {
         const mLift = allLifts.find(l => l.id === b.movementLiftId)
         if (!mLift) continue
@@ -256,8 +256,33 @@ export default function Workout() {
           computed: calcCrossSets(b, mTm, crossWeek, settings.barWeight),
         })
       }
-      setCrossBlocks(loaded)
     }
+    // Cross work that was logged and then lost its plan — the block was removed
+    // mid-session, or `deloadSupplemental` moved to `skip` during a week-4
+    // session. `composeCrossSets` restores those sets, but the page renders one
+    // section per *block*, so without a block to hang them on they would still
+    // be invisible while their rows keep counting toward History, PRs and Stats
+    // (F32). Given a block, the existing "extra sets logged beyond the plan"
+    // tail does the rest.
+    const plannedIds = new Set(loaded.map(b => b.movementLiftId))
+    for (const s of workout.loggedCrossSets) {
+      if (s.liftId == null || plannedIds.has(s.liftId)) continue
+      const mLift = allLifts.find(l => l.id === s.liftId)
+      if (!mLift) continue
+      plannedIds.add(s.liftId)
+      loaded.push({
+        movementLiftId: s.liftId,
+        movementName: mLift.name,
+        movementLoading: resolveLiftLoading(mLift, settings.barWeight),
+        weightMode: 'percent',
+        percent: null,
+        sets: 0,
+        reps: 0,
+        computed: [],
+        unplanned: true,
+      })
+    }
+    setCrossBlocks(loaded)
 
     const { all, cross, main } = composeSets(tm, session.week, template)
     setAllSets(all)
@@ -810,6 +835,14 @@ export default function Workout() {
     return i < 0 ? [label, undefined] : [label.slice(0, i), label.slice(i + 2)]
   }
 
+  // An unplanned block has no prescription to name — `getCrossLabel` would read
+  // "SQUAT  0 × 0  0% TM". Say what it actually is: work that was logged and is
+  // no longer on the plan (F32).
+  const crossLabelFor = (block: LoadedCrossBlock): string =>
+    block.unplanned
+      ? `${block.movementName.toUpperCase()}  logged · no longer prescribed`
+      : getCrossLabel(block, block.movementName)
+
   const supplementalLabel = () =>
     getSupplementalLabel(
       supplementalTemplate(),
@@ -1038,8 +1071,8 @@ export default function Workout() {
                 {section => (
                   <CrossBlockLog
                     anchor={`cross-${section().block.movementLiftId}`}
-                    label={splitLabel(getCrossLabel(section().block, section().block.movementName))[0]}
-                    labelMeta={splitLabel(getCrossLabel(section().block, section().block.movementName))[1]}
+                    label={splitLabel(crossLabelFor(section().block))[0]}
+                    labelMeta={splitLabel(crossLabelFor(section().block))[1]}
                     loading={section().block.movementLoading}
                     sets={section().sets}
                     cursor={section().cursor}

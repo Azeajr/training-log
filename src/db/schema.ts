@@ -168,6 +168,24 @@ export const ADDITIVE_MIGRATIONS = [
   `UPDATE exercises SET name = name || ' (' || id || ')'
      WHERE id NOT IN (SELECT MIN(id) FROM exercises GROUP BY TRIM(LOWER(name)))`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_exercises_name_nocase ON exercises(TRIM(LOWER(name)))`,
+  // One cross-lift block per (lift, movement). Logged cross sets carry only the
+  // movement's liftId and never a block identity, so `composeCrossSets` matches
+  // a logged set to EVERY block on that movement: two blocks on the same
+  // movement plus one logged set marked set 1 of both done and overrode the
+  // remainder of both. `LiftSetupModal` already prevents duplicates by filtering
+  // the picker, but that was a UI rule with nothing behind it — an imported
+  // backup restored duplicates verbatim (F31).
+  //
+  // The twin is deleted rather than renamed (unlike the exercise dedupe above,
+  // where the row carries logged history): a block is a prescription, and the
+  // sets logged against it reference the *movement*, so the surviving block
+  // still owns every one of them. Same placement reasoning as the two unique
+  // indexes above — SCHEMA exec is unguarded and runs on every boot, so a
+  // database already holding duplicates would fail to start.
+  `DELETE FROM liftSupplementals
+     WHERE id NOT IN (SELECT MIN(id) FROM liftSupplementals GROUP BY liftId, movementLiftId)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_liftSupplementals_lift_movement
+     ON liftSupplementals(liftId, movementLiftId)`,
 ] as const
 
 export const ALL_TABLES = [

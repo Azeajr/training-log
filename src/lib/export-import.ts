@@ -212,6 +212,21 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       if (key === 'exercises') {
         parsed = parsed.map(r => r.category === 'single_leg' ? { ...r, category: 'legs' } : r)
       }
+      // One cross-lift block per (lift, movement) — the same invariant the
+      // migration establishes. A backup taken before that index existed can
+      // carry duplicates, and restoring them verbatim is how they got in
+      // (F31). Reconciled rather than rejected: the rest of the backup is
+      // perfectly good, and the surviving block still owns every set logged
+      // against that movement.
+      if (key === 'liftSupplementals') {
+        const seen = new Set<string>()
+        parsed = parsed.filter(r => {
+          const slot = `${String(r.liftId)}:${String(r.movementLiftId)}`
+          if (seen.has(slot)) return false
+          seen.add(slot)
+          return true
+        })
+      }
       await table.bulkAdd(parsed)
     }
   })

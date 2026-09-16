@@ -157,8 +157,12 @@ describe('cross-lift supplemental CRUD', () => {
   it('adds blocks with incrementing order and round-trips fields', async () => {
     const day = await createLift(db, { name: 'Bench', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const mov = await createLift(db, { name: 'OHP', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    // Two different movements: one block per (lift, movement) is a unique index
+    // now, because a logged cross set carries only the movement and would
+    // otherwise drive both blocks at once (F31).
+    const mov2 = await createLift(db, { name: 'Row', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     const id1 = await addLiftSupplemental(db, { liftId: day, movementLiftId: mov, weightMode: 'percent', percent: 0.7, sets: 5, reps: 10 })
-    const id2 = await addLiftSupplemental(db, { liftId: day, movementLiftId: mov, weightMode: 'fsl', percent: null, sets: 3, reps: 8 })
+    const id2 = await addLiftSupplemental(db, { liftId: day, movementLiftId: mov2, weightMode: 'fsl', percent: null, sets: 3, reps: 8 })
 
     const b1 = await db.liftSupplementals.get(id1)
     expect(b1?.order).toBe(0)
