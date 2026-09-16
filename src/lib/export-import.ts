@@ -92,7 +92,7 @@ export async function importJson(db: TrainingDB, file: File): Promise<void> {
 // gives a friendlier "ignore unknown column" experience for legacy backups.
 const COLS = {
   lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived', 'usesBarbell', 'plateMode', 'implementBase'],
-  trainingMaxes: ['id', 'liftId', 'weight', 'setAt'],
+  trainingMaxes: ['id', 'liftId', 'weight', 'setAt', 'source', 'cycleId'],
   cycles: ['id', 'number', 'startDate', 'endDate', 'closedThroughWeek'],
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
   sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId'],

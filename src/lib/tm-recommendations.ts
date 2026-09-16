@@ -79,7 +79,11 @@ export async function getCycleDoublingCandidates(
     byLift.get(s.liftId)!.push(s)
   }
 
-  const lifts = await db.lifts.toArray()
+  // Active lifts only, the same population the progression itself walks. This
+  // read every lift and never filtered `archived`, so an archived lift with
+  // three qualifying weeks was offered a doubled increment it can never take —
+  // `progressTms` goes through activeLiftsOrdered and skips it (F40).
+  const lifts = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived)
   const candidates: DoublingCandidate[] = []
   const cycleStartTs = new Date(cycle.startDate).getTime()
 
@@ -98,8 +102,32 @@ export async function getCycleDoublingCandidates(
 
     const tms = await db.trainingMaxes.where('liftId').equals(liftId).sortBy('setAt')
 
-    // Feature 1 bump = any TM set well after cycle creation (>60s tolerance)
-    const hasBump = tms.some(tm => new Date(tm.setAt).getTime() > cycleStartTs + CYCLE_START_TOLERANCE_MS)
+    // A mid-cycle bump disqualifies the lift: the user has already moved this
+    // training max by hand, so the program should not also move it.
+    //
+    // This used to be inferred from a 60-second window around cycle creation,
+    // which made the answer depend on how long the user took to tap. The CYCLE
+    // COMPLETE modal opens immediately after the roll-over and writes training
+    // maxes of its own, so the same data and the same user action landed on
+    // either side of the window according to dwell time: tapped at 10s the lift
+    // stayed a candidate, tapped at 61s it was silently disqualified (F39).
+    //
+    // `source` records it instead. Only `'manual'` counts — a progression row
+    // opened this cycle and a deload lowered the max, neither of which is
+    // evidence that the lifter raised it. Rows written before the column
+    // existed carry null and keep the old inference, because for those the
+    // provenance genuinely is unknown and guessing would be worse.
+    const hasBump = tms.some(tm => {
+      const ts = new Date(tm.setAt).getTime()
+      // Legacy row, provenance genuinely unknown: keep the old inference rather
+      // than guess in either direction.
+      if (tm.source == null) return ts > cycleStartTs + CYCLE_START_TOLERANCE_MS
+      // Recorded: the timestamp only places the row relative to the cycle's own
+      // start, never inside a dwell window. A manual bump written after this
+      // cycle opened disqualifies it whether the tap came at 10 seconds or ten
+      // minutes; one written before belongs to the previous cycle.
+      return tm.source === 'manual' && ts >= cycleStartTs
+    })
     if (hasBump) continue
 
     // The TM in effect at cycle start (auto-progression entry)

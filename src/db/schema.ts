@@ -186,6 +186,19 @@ export const ADDITIVE_MIGRATIONS = [
      WHERE id NOT IN (SELECT MIN(id) FROM liftSupplementals GROUP BY liftId, movementLiftId)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_liftSupplementals_lift_movement
      ON liftSupplementals(liftId, movementLiftId)`,
+  // Provenance for training maxes, recorded instead of inferred. Whether a row
+  // came from auto-progression, the user, or a deload was worked out from a
+  // 60-second window around the cycle's creation — so a lift's eligibility for
+  // a doubled increment a whole cycle later turned on how long the user took to
+  // tap a button (F39). `cycleId` scopes it: without that, a deload cannot tell
+  // a second tap from next cycle's deload, which is why `deloadTms` could not
+  // be made idempotent (F100).
+  //
+  // Both nullable with no backfill: old rows genuinely have no recorded
+  // provenance, and claiming one would be a guess. The readers treat null as
+  // "unknown" and fall back to the old inference for those rows only.
+  `ALTER TABLE trainingMaxes ADD COLUMN source TEXT`,
+  `ALTER TABLE trainingMaxes ADD COLUMN cycleId INTEGER`,
 ] as const
 
 export const ALL_TABLES = [

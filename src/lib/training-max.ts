@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js'
 import type { TrainingDB } from '../db/index'
-import type { TrainingMax } from '../types/domain'
+import type { TrainingMax, TmSource } from '../types/domain'
 
 // "Does this install have any training maxes at all?" — the one fact the
 // onboarding redirect in AppShell needs. It used to re-derive this with a
@@ -53,8 +53,23 @@ export async function getCurrentTm(db: TrainingDB, liftId: number): Promise<numb
   return best?.weight ?? 0
 }
 
-export async function setTm(db: TrainingDB, liftId: number, weight: number): Promise<number> {
-  const id = await db.trainingMaxes.add({ liftId, weight, setAt: new Date() })
+/**
+ * Write a training max.
+ *
+ * `source` defaults to `'manual'` because every call site here is a person
+ * choosing a number — the Settings field, the post-session TM prompt, and
+ * accepting a doubled increment. Auto-progression and deloads go through
+ * `cycle.ts` and say so explicitly. Recording it is what lets the doubling
+ * check stop guessing from a wall clock (F39).
+ */
+export async function setTm(
+  db: TrainingDB,
+  liftId: number,
+  weight: number,
+  source: TmSource = 'manual',
+  cycleId?: number,
+): Promise<number> {
+  const id = await db.trainingMaxes.add({ liftId, weight, setAt: new Date(), source, cycleId: cycleId ?? null })
   noteTrainingMaxAdded()
   return id
 }
