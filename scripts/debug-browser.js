@@ -4,15 +4,26 @@
  *
  * What it does:
  *   1. Launches Chromium via Playwright (uses the bundled browser, no separate install needed)
- *   2. Optionally wipes IndexedDB so you get a true first-run experience
- *   3. Captures every JS page error and console.error call
- *   4. Walks through the setup wizard automatically
- *   5. Prints the visible page text and any captured errors
- *   6. Saves a screenshot to scripts/screenshot.png
+ *   2. Captures every JS page error and console.error call
+ *   3. Walks through the setup wizard automatically
+ *   4. Prints the visible page text and any captured errors
+ *   5. Saves a screenshot to scripts/screenshot.png
+ *
+ * Every run IS a first run, and nothing here has to make it one: each launch
+ * gets a fresh `browser.newContext()`, which is incognito-alike, so OPFS and
+ * localStorage both start empty. That is why the setup wizard walk below always
+ * has a wizard to walk.
+ *
+ * This used to open with "optionally wipes IndexedDB so you get a true
+ * first-run experience", and did `indexedDB.deleteDatabase('TrainingLog')` to
+ * deliver it. The app has used no IndexedDB since the SQLite migration —
+ * persistence is OPFS plus localStorage — so that call resolved successfully
+ * and silently against a database that never existed. The `--no-wipe` flag it
+ * advertised changed nothing either way. The step is gone rather than fixed:
+ * an ephemeral context already provides what it claimed to (F80).
  *
  * Usage:
- *   node scripts/debug-browser.js           # fresh run (clears DB)
- *   node scripts/debug-browser.js --no-wipe # keep existing DB state
+ *   node scripts/debug-browser.js
  *
  * Prerequisites:
  *   - Dev server running:  pnpm dev
@@ -30,7 +41,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const BASE_URL = 'http://localhost:5173'
 const SCREENSHOT_PATH = path.join(__dirname, 'screenshot.png')
-const WIPE_DB = !process.argv.includes('--no-wipe')
 
 // Resolve the Chromium executable: try the Playwright default first, then
 // fall back to a broader search under common PLAYWRIGHT_BROWSERS_PATH roots.
@@ -93,20 +103,7 @@ async function runSetupWizard(page) {
 const browser = await chromium.launch({ executablePath: resolveChromium() })
 const context = await browser.newContext()
 
-// ── 1. Wipe IndexedDB for a clean first-run ──────────────────────────────
-if (WIPE_DB) {
-  console.log('[debug] wiping IndexedDB (TrainingLog)...')
-  const wipePage = await context.newPage()
-  await wipePage.goto(BASE_URL)
-  await wipePage.waitForTimeout(800)
-  await wipePage.evaluate(() => indexedDB.deleteDatabase('TrainingLog'))
-  await wipePage.close()
-  console.log('[debug] DB wiped.')
-} else {
-  console.log('[debug] --no-wipe: keeping existing DB state')
-}
-
-// ── 2. Open the app and wire up error listeners ───────────────────────────
+// ── 1. Open the app and wire up error listeners ───────────────────────────
 const page = await context.newPage()
 
 const pageErrors = []
@@ -130,22 +127,22 @@ console.log(`[debug] navigating to ${BASE_URL} ...`)
 await page.goto(BASE_URL)
 await page.waitForTimeout(1500)
 
-// ── 3. Walk through setup wizard if present ───────────────────────────────
+// ── 2. Walk through setup wizard if present ───────────────────────────────
 const bodyText = await page.evaluate(() => document.body.innerText)
 if (bodyText.includes('STEP 1')) {
   console.log('[debug] setup wizard detected — running through it...')
   await runSetupWizard(page)
 }
 
-// ── 4. Wait for the app to settle, then capture state ────────────────────
+// ── 3. Wait for the app to settle, then capture state ────────────────────
 await page.waitForTimeout(1500)
 const finalText = await page.evaluate(() => document.body.innerText)
 
-// ── 5. Screenshot ─────────────────────────────────────────────────────────
+// ── 4. Screenshot ─────────────────────────────────────────────────────────
 await page.screenshot({ path: SCREENSHOT_PATH, fullPage: true })
 console.log(`[debug] screenshot saved → ${SCREENSHOT_PATH}`)
 
-// ── 6. Report ─────────────────────────────────────────────────────────────
+// ── 5. Report ─────────────────────────────────────────────────────────────
 console.log('\n══════════════════════════════════════════')
 console.log('PAGE ERRORS  :', pageErrors.length ? pageErrors : '(none)')
 console.log('CONSOLE ERRS :', consoleErrors.length ? consoleErrors : '(none)')

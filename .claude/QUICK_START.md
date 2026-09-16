@@ -33,9 +33,10 @@ Vitest aliases `/sqlite-client$/` → `src/db/sqlite-test-client.ts` so tests ru
 production. lib and db suites reset with `__resetForTest()` in their own `beforeEach`; screen suites
 clear the tables they seed. There is no autouse fixture.
 
-`pnpm debug:browser`'s wipe step deletes an IndexedDB named `TrainingLog`, unused since the SQLite
-migration — it does **not** clear OPFS. Use `pnpm test:e2e` (its `_freshDb` fixture calls
-`window.__e2eResetDb`) for a genuine first-run state.
+`pnpm debug:browser` gets a first-run state for free: each launch uses a fresh Playwright context,
+which is incognito-alike, so OPFS and localStorage both start empty. It used to advertise an
+IndexedDB wipe, which had been a no-op since the SQLite migration (F80); that step is gone. For a
+first-run state inside a suite, `pnpm test:e2e`'s `_freshDb` fixture calls `window.__e2eResetDb`.
 
 **Arch Linux**: Playwright's bundled Chromium needs system libs not installed by default:
 ```bash

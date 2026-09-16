@@ -41,7 +41,7 @@ unless explicitly asked. Keep validation strictly before the first `clear()`.
 **Check**: `src/db/seed.ts` inserts lifts via `bulkAdd` with `AUTOINCREMENT`, so IDs follow insertion
 order (OHP=1, Deadlift=2, Bench=3, Squat=4). `scripts/migrate-history.py` hardcodes the same order.
 **Fix**: Never assume lift IDs outside of seed order — look up by name.
-**Note**: an import payload may carry table keys that no longer exist (`public/demo-seed.json` and
+**Note**: an import payload may carry table keys that no longer exist (`fixtures/demo-seed.json` and
 older backups still contain `liftAccessories`). Unknown keys are ignored — `validateImportShape` and
 `importFromRawData` both iterate `COLS`/`importSpec`, never the payload — so they neither restore nor
 error.
@@ -88,7 +88,9 @@ identity is stable and whose order actually moves.
 ### 7. Demo data is a static asset, not an auto-seed
 
 **Symptom**: Expecting demo content on a fresh deploy and finding the DB empty.
-**Check**: `public/demo-seed.json` is bundled but nothing reads it; the `VITE_DEMO` declaration was
+**Check**: `fixtures/demo-seed.json` is a hand-import payload; nothing reads it and it is no longer
+published (it sat in `public/`, so 45 KB of real training history was fetchable at
+`/demo-seed.json` on the deployed site — F82). The `VITE_DEMO` declaration was
 removed.
 **Fix**: Import it manually via Settings → IMPORT JSON on a fresh DB. If automatic demo seeding is
 ever needed, wire it in `main.tsx` between `dbReady` and `seedDatabase` — don't reintroduce the env var.
