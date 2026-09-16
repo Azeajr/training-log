@@ -1,6 +1,8 @@
 /// <reference types="node" />
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { join } from 'node:path'
 
 // The fix ledger's "Remaining work, batched" section plans what is left. This
 // keeps the plan and the ledger from drifting apart: every finding still marked
@@ -9,6 +11,7 @@ import { readFileSync } from 'node:fs'
 // exist. Batch MEMBERSHIP is a judgement call and free to change; the partition
 // being complete is not.
 const LEDGER = 'docs/deep-code-review-fixes.md'
+const repoRoot = join(import.meta.dirname, '..', '..')
 
 function ledger(): string {
   return readFileSync(LEDGER, 'utf8')
@@ -93,6 +96,39 @@ describe('the ledger itself stays well formed', () => {
       expect(row, `no States row for ${state}`).not.toBeNull()
       expect(row![1], `States row for ${state} looks like a count`).not.toMatch(/^\*\*\d+\*\*/)
     }
+  })
+
+  // A `fixed` row's evidence names the commit that did the work. Those SHAs are
+  // recorded at commit time, so a later rebase of the branch they sit on leaves
+  // them pointing at nothing — which is exactly what happened when `gh stack`
+  // rebased the batch 4 branch before its PR merged, and the four SHAs written
+  // into this file were no longer the ones that reached main. Nothing said so.
+  //
+  // Skipped on a shallow clone: CI checks out with depth 1, so most of these
+  // commits are genuinely absent there and the check would mean nothing.
+  it('records commit SHAs that actually exist', () => {
+    const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'],
+      { cwd: repoRoot, encoding: 'utf8' }).trim()
+    if (shallow === 'true') return
+
+    const shas = new global.Set(
+      [...src.matchAll(/^\| F\d+ \|(?:[^|]*\|){4}\s*`fixed`\s*\|\s*`([0-9a-f]{7,40})`/gm)]
+        .map(m => m[1]),
+    )
+    expect(shas.size).toBeGreaterThan(0)
+    // Reachability from HEAD, not mere existence: a rebase leaves the old
+    // commits lying around locally, so `cat-file -e` still finds an orphan and
+    // reports nothing wrong. What the evidence column claims is that this
+    // history contains the fix.
+    const unreachable = [...shas].filter(sha => {
+      try {
+        execFileSync('git', ['merge-base', '--is-ancestor', sha, 'HEAD'], { cwd: repoRoot, stdio: 'ignore' })
+        return false
+      } catch {
+        return true
+      }
+    })
+    expect(unreachable, 'ledger names commits not reachable from HEAD').toEqual([])
   })
 
   it('reports totals that add up', () => {

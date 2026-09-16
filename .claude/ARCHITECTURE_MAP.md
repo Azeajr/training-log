@@ -140,7 +140,7 @@ src/
 public/
 ├── favicon.svg, icons.svg
 ├── _headers                      # Cloudflare: CSP + X-Frame-Options + Permissions-Policy + COOP
-└── demo-seed.json                # static demo dataset; user imports via Settings → IMPORT JSON
+└── (demo-seed.json moved to fixtures/ — see F82; nothing fetches it, so it is not published)
 
 tests/e2e/                        # Playwright specs + auto-fixtures (_noPageErrors, _freshDb)
 scripts/                          # debug-browser.js, migrate-history.py
