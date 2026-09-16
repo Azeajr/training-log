@@ -16,6 +16,8 @@ type PickerMode = { kind: 'add' } | { kind: 'swap'; accIdx: number } | null
 interface EditSet {
   id: number
   type: string
+  /** The movement a cross set trained; absent on every other type. */
+  liftId?: number | null
   setNumber: number
   weight: number
   reps: number
@@ -52,6 +54,7 @@ export default function HistoryEdit() {
   })()
 
   const [sessionInfo, setSessionInfo] = createSignal<{ liftName: string; week: number; date: string } | null>(null)
+  const [liftNames, setLiftNames] = createSignal<Map<number, string>>(new Map())
   const [liftId, setLiftId] = createSignal<number | null>(null)
   const [editSets, setEditSets] = createSignal<EditSet[]>([])
   const [editAccessories, setEditAccessories] = createSignal<EditAccessory[]>([])
@@ -89,9 +92,16 @@ export default function HistoryEdit() {
       const td = (typeOrder[a.type] ?? 99) - (typeOrder[b.type] ?? 99)
       return td !== 0 ? td : a.setNumber - b.setNumber
     })
+    // Movement names for cross sets. Two cross blocks in one session are
+    // distinguished by nothing but their liftId, so merged under a bare CROSS
+    // heading the user cannot tell which row is which — and editing the wrong
+    // one is data corruption, not just a confusing label (F10).
+    setLiftNames(new Map((await db.lifts.toArray()).map(l => [l.id!, l.name])))
+
     setEditSets(dbSets.map(s => ({
       id: s.id!,
       type: s.type,
+      liftId: s.liftId,
       setNumber: s.setNumber,
       weight: s.weight,
       reps: s.reps,
@@ -361,6 +371,13 @@ export default function HistoryEdit() {
                           <Stepper value={row().s.reps} onChange={v => updateSet(row().i, 'reps', v)} step={1} min={0} fieldLabel="reps" />
                           <Show when={row().s.isAmrap}>
                             <span class="text-warn text-xs tracking-widest">AMRAP</span>
+                          </Show>
+                          {/* Which movement this cross set trained. Without it
+                              two blocks are indistinguishable in this list. */}
+                          <Show when={row().s.type === 'cross' && row().s.liftId != null}>
+                            <span class="text-muted text-xs tracking-widest uppercase">
+                              {liftNames().get(row().s.liftId!) ?? `Lift ${row().s.liftId}`}
+                            </span>
                           </Show>
                         </div>
                       )}

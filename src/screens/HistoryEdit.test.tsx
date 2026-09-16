@@ -137,7 +137,10 @@ describe('HistoryEdit screen', () => {
       const session = await db.sessions.get(sessionId)
       expect(session?.notes).toBe('updated notes')
     })
-    expect(mockNavigate).toHaveBeenCalledWith(`/history?liftId=${liftId}`)
+    // waitFor, like the test above: the row is visible to a read as soon as the
+    // UPDATE applies, but handleSave navigates only once the transaction has
+    // committed, which is a beat later.
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(`/history?liftId=${liftId}`))
   })
 
   it('set weight Stepper + click increases displayed value', async () => {
@@ -788,5 +791,73 @@ describe('HistoryEdit — chained accessory swaps (F01)', () => {
     // Both replacements must survive: B (written by card 0) and C (by card 1).
     expect(byExercise.has(B)).toBe(true)
     expect(byExercise.has(C)).toBe(true)
+  })
+})
+
+// ─── F10: cross sets must be correctable ─────────────────────────────────────
+// `SET_TYPE_EDIT_ORDER` left `cross` out, so the editor rendered no section for
+// it. The sets were loaded and written back untouched on every save — present,
+// preserved, and impossible to correct.
+
+describe('HistoryEdit — cross sets', () => {
+  const seedWithCrossBlocks = async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const squatId = await db.lifts.add({ name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+    const rowId = await db.lifts.add({ name: 'Row', order: 3, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 2, date: new Date('2026-03-15'), notes: null, status: 'completed',
+    })
+    await db.sets.bulkAdd([
+      { sessionId, type: 'main',  setNumber: 1, weight: 185, reps: 5, isAmrap: false },
+      { sessionId, type: 'cross', setNumber: 1, weight: 225, reps: 5, isAmrap: false, liftId: squatId },
+      { sessionId, type: 'cross', setNumber: 1, weight: 135, reps: 8, isAmrap: false, liftId: rowId },
+    ])
+    return { sessionId, liftId, squatId, rowId }
+  }
+
+  it('renders a section for them at all', async () => {
+    const { sessionId } = await seedWithCrossBlocks()
+    renderHistoryEdit(sessionId)
+    await screen.findByText(/Bench/)
+    expect(await screen.findByText('CROSS')).toBeInTheDocument()
+  })
+
+  it('names the movement on each row, so two blocks are not interchangeable', async () => {
+    const { sessionId } = await seedWithCrossBlocks()
+    renderHistoryEdit(sessionId)
+    await screen.findByText('CROSS')
+    expect(screen.getByText('Squat')).toBeInTheDocument()
+    expect(screen.getByText('Row')).toBeInTheDocument()
+  })
+
+  it('saves a corrected cross set', async () => {
+    const { sessionId, squatId } = await seedWithCrossBlocks()
+    renderHistoryEdit(sessionId)
+    await screen.findByText('CROSS')
+
+    // The Squat cross row's reps stepper: bump it 5 → 6.
+    const squatRow = screen.getByText('Squat').closest('div')!
+    const plus = Array.from(squatRow.querySelectorAll('button'))
+      .filter(b => b.getAttribute('aria-label') === 'Increase reps')
+    expect(plus.length).toBeGreaterThan(0)
+    fireEvent.click(plus[0])
+
+    fireEvent.click(screen.getByText('SAVE'))
+
+    await waitFor(async () => {
+      const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
+      const squatSet = sets.find(s => s.type === 'cross' && s.liftId === squatId)
+      expect(squatSet?.reps).toBe(6)
+    })
+  })
+
+  it('leaves the other block alone', async () => {
+    const { sessionId, rowId } = await seedWithCrossBlocks()
+    renderHistoryEdit(sessionId)
+    await screen.findByText('CROSS')
+
+    const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
+    expect(sets.find(s => s.liftId === rowId)?.reps).toBe(8)
   })
 })

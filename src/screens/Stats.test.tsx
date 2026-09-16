@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, waitFor } from '@solidjs/testing-library'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@solidjs/testing-library'
 import Stats from './Stats'
 import { db } from '../db/index'
 
@@ -183,5 +183,48 @@ describe('Stats record ownership', () => {
     render(() => <Stats />)
     await waitFor(() => expect(document.body.textContent).toContain('225'))
     expect(document.body.textContent).not.toContain('500')
+  })
+})
+
+// ─── F23: a read that fails must say so ──────────────────────────────────────
+// `createEffect` fired `void load(...)` with no catch, and `setLoading(false)`
+// ran only after every await resolved. Any rejected read — lift roster,
+// sessions, sets, cross sets or training maxes — escaped as an unhandled
+// rejection and pinned /stats on "Loading…" permanently: no error text, no
+// retry, and no remount trigger short of navigating away.
+
+describe('Stats screen — a failing read', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('reports the failure instead of loading forever', async () => {
+    vi.spyOn(db.lifts, 'orderBy').mockImplementation(() => { throw new Error('disk unavailable') })
+
+    render(() => <Stats />)
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(document.body.textContent).toContain('disk unavailable')
+    expect(document.body.textContent).not.toContain('Loading…')
+  })
+
+  it('does not present an unreadable database as an empty one', async () => {
+    vi.spyOn(db.lifts, 'orderBy').mockImplementation(() => { throw new Error('disk unavailable') })
+    render(() => <Stats />)
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(document.body.textContent).not.toContain('NO SETS YET')
+  })
+
+  it('offers a retry that recovers once the read works', async () => {
+    const real = db.lifts.orderBy.bind(db.lifts)
+    const spy = vi.spyOn(db.lifts, 'orderBy')
+    spy.mockImplementationOnce(() => { throw new Error('transient') })
+
+    render(() => <Stats />)
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+    spy.mockImplementation(real)
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    await waitFor(() => expect(document.body.textContent).toContain('RECORDS'))
   })
 })

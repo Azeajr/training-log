@@ -15,6 +15,7 @@ import LiftSetsByType from '../components/forms/LiftSetsByType'
 import RecordsPanel from '../components/stats/RecordsPanel'
 import ExerciseHistoryModal from '../components/modals/ExerciseHistoryModal'
 import { gapsForSession } from '../store/save-failure-store'
+import { createAsyncRead } from '../lib/async-read'
 
 type ViewMode = 'lift' | 'date' | 'calendar' | 'records'
 
@@ -246,6 +247,8 @@ function HistorySessionRow(props: {
   detail: Detail | null
   isPr: boolean
   onExerciseClick: (exerciseId: number, name: string) => void
+  /** Movement names, so cross sets can say which lift they trained (F10). */
+  liftNames: Map<number, string>
 }) {
   const navigate = useNavigate()
   const sid = () => props.row.session.id!
@@ -318,7 +321,7 @@ function HistorySessionRow(props: {
                 EDIT →
               </button>
             </div>
-            <LiftSetsByType sets={detail().sets} e1rm={e1rm()} />
+            <LiftSetsByType sets={detail().sets} e1rm={e1rm()} liftNames={props.liftNames} />
             <Show when={detail().accessorySets.length > 0 || detail().notesByExercise.size > 0}>
               <For each={[...new Set([
                 ...detail().accessorySets.map(s => s.exerciseId),
@@ -388,12 +391,27 @@ export default function History() {
       }))
   )
 
-  createEffect(() => { void load(mode(), selectedLiftId()) })
+  // Each of these used to be `void load(...)`: unkeyed, uncaught. A late result
+  // published over a newer selection, and a rejection escaped into nothing —
+  // leaving the screen reporting "No completed sessions yet." over a database
+  // full of them, because an empty list is also what an empty log looks like
+  // (F20, F21). Separate reads because the two effects both fire when the mode
+  // changes, so one shared token would have them supersede each other.
+  const read = createAsyncRead()
+  const monthRead = createAsyncRead()
+
+  createEffect(() => {
+    const m = mode(), selId = selectedLiftId()
+    void read.run(isCurrent => load(m, selId, isCurrent))
+  })
 
   // Which sessions were a PR when they happened. Computed once over the whole
   // log rather than per view, so the calendar — which only ever loads one day —
   // gets the same answer as the by-lift list.
-  onMount(() => { void loadPrs() })
+  // Best-effort, like the mid-workout PR toast: a missing badge is a missing
+  // badge, but an unhandled rejection here used to be indistinguishable from
+  // the screen's real failures.
+  onMount(() => { void loadPrs().catch(() => {}) })
 
   const loadPrs = async () => {
     const sessions = (await db.sessions.toArray()).filter(s => s.status === 'completed')
@@ -425,7 +443,8 @@ export default function History() {
 
   createEffect(() => {
     if (mode() !== 'calendar') return
-    void loadMonth(calendarMonth())
+    const month = calendarMonth()
+    void monthRead.run(isCurrent => loadMonth(month, isCurrent))
   })
 
   createEffect(() => {
@@ -433,10 +452,17 @@ export default function History() {
     if (!day) { setSelectedDayRows([]); return }
     const k = dateKey(day)
     const ds = monthSessions().filter(s => dateKey(new Date(s.date)) === k)
-    void buildRows(ds, lifts()).then(setSelectedDayRows)
+    // Keyed on the day it was built for: a slow build for day A used to land
+    // under day B and present A's sessions as B's (F20).
+    void buildRows(ds, lifts())
+      .then(rows => {
+        const now = selectedDay()
+        if (now && dateKey(now) === k) setSelectedDayRows(rows)
+      })
+      .catch(() => setSelectedDayRows([]))
   })
 
-  const loadMonth = async (month: Date) => {
+  const loadMonth = async (month: Date, isCurrent: () => boolean) => {
     const start = startOfMonth(month)
     const end = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999)
     const all = await db.sessions
@@ -445,6 +471,9 @@ export default function History() {
         return d >= start && d <= end && s.status === 'completed'
       })
       .toArray()
+    // A late month read used to erase the selected month's badges by writing
+    // the previous month's sessions over them (F20).
+    if (!isCurrent()) return
     setMonthSessions(all)
     setSelectedDay(null)
   }
@@ -492,11 +521,16 @@ export default function History() {
     return sel != null && dateKey(sel) === dateKey(d)
   }
 
-  const load = async (m: ViewMode, selId: number | null) => {
+  const load = async (m: ViewMode, selId: number | null, isCurrent: () => boolean) => {
     const allLifts = await db.lifts.orderBy('order').toArray()
+    if (!isCurrent()) return
     setLifts(allLifts)
     if (!selId && allLifts.length > 0) {
-      const stored = localStorage.getItem(HISTORY_LIFT_KEY)
+      // Wrapped like readStoredMode above. A denied storage read used to throw
+      // straight out of here, and the remembered lift is a convenience — losing
+      // it should cost the convenience, not the screen (F21).
+      let stored: string | null = null
+      try { stored = localStorage.getItem(HISTORY_LIFT_KEY) } catch { /* private mode */ }
       const firstActive = allLifts.find(l => !l.archived) ?? allLifts[0]
       setSelectedLiftId(stored ? parseInt(stored, 10) : firstActive.id!)
       return
@@ -504,19 +538,24 @@ export default function History() {
 
     if (m === 'lift' && selId) {
       const tms = await db.trainingMaxes.where('liftId').equals(selId).sortBy('setAt')
-      setTmHistory(tms.map(t => ({ date: new Date(t.setAt), weight: t.weight })))
       const liftSessions = await db.sessions
         .where('liftId').equals(selId)
         .filter(s => s.status === 'completed')
         .toArray()
       liftSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      setSessions(await buildRows(liftSessions, allLifts))
+      const rows = await buildRows(liftSessions, allLifts)
+      // A late lift read used to replace the current lift's list wholesale (F20).
+      if (!isCurrent()) return
+      setTmHistory(tms.map(t => ({ date: new Date(t.setAt), weight: t.weight })))
+      setSessions(rows)
     } else if (m === 'date') {
       const allSessions = await db.sessions
         .filter(s => s.status === 'completed')
         .toArray()
       allSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      setSessions(await buildRows(allSessions, allLifts))
+      const rows = await buildRows(allSessions, allLifts)
+      if (!isCurrent()) return
+      setSessions(rows)
     }
   }
 
@@ -537,9 +576,19 @@ export default function History() {
     })
   }
 
+  const readError = () => read.error() ?? monthRead.error()
+
+  // Movement names for cross sets, which carry a liftId and nothing else. The
+  // roster is already loaded for the filter chips, so this costs no read.
+  const liftNames = createMemo(() => new Map(lifts().map(l => [l.id!, l.name])))
+
   const handleExpand = async (sessionId: number) => {
     if (expanded() === sessionId) { setExpanded(null); setDetail(null); return }
     setExpanded(sessionId)
+    // Cleared first. `detail` is one signal shared by every row, so opening B
+    // while A was open attached A's sets to B's panel immediately — and then a
+    // late A response could replace B's once it arrived (F19).
+    setDetail(null)
     const [sets, accSets, accNotes, session] = await Promise.all([
       db.sets.where('sessionId').equals(sessionId).toArray(),
       db.accessorySets.where('sessionId').equals(sessionId).toArray(),
@@ -553,6 +602,7 @@ export default function History() {
       const exercises = await db.exercises.where('id').anyOf(exIds).toArray()
       exerciseNames = new Map(exercises.map(e => [e.id!, e.name]))
     }
+    if (expanded() !== sessionId) return
     setDetail({ sets, accessorySets: accSets, exerciseNames, notes: session?.notes ?? null, notesByExercise })
   }
 
@@ -575,6 +625,25 @@ export default function History() {
           )}
         </For>
       </div>
+
+      {/* A screen that cannot read its data has to say so. Without this the
+          empty session list rendered "No completed sessions yet." — which
+          describes an empty log, not an unreadable one, and is the same thing
+          the user sees when everything is working (F21). The mode switcher
+          stays above it: changing view re-runs the read, which is a second way
+          out besides RETRY. */}
+      <Show when={readError()}>
+        <div role="alert" class="border border-danger px-3 py-2 mb-4">
+          <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not read your history</div>
+          <div class="text-text-dim text-sm mb-2 break-words">{readError()}</div>
+          <button
+            onClick={() => { void read.retry(); void monthRead.retry() }}
+            class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
+          >
+            RETRY
+          </button>
+        </div>
+      </Show>
 
       <Show when={mode() === 'records'}>
         <RecordsPanel />
@@ -680,6 +749,7 @@ export default function History() {
                   detail={expanded() === row.session.id ? detail() : null}
                   isPr={prSessions().has(row.session.id!)}
                   onExerciseClick={(id, name) => setHistoryExercise({ id, name })}
+                  liftNames={liftNames()}
                 />
               )}
             </For>
@@ -693,7 +763,11 @@ export default function History() {
       <Show when={mode() === 'lift' || mode() === 'date'}>
         <Show
           when={sessions().length > 0}
-          fallback={<div class="text-muted text-sm">No completed sessions yet.</div>}
+          fallback={
+            <Show when={!readError()}>
+              <div class="text-muted text-sm">No completed sessions yet.</div>
+            </Show>
+          }
         >
           <div>
             <For each={sessions()}>
@@ -705,6 +779,7 @@ export default function History() {
                   detail={expanded() === row.session.id ? detail() : null}
                   isPr={prSessions().has(row.session.id!)}
                   onExerciseClick={(id, name) => setHistoryExercise({ id, name })}
+                  liftNames={liftNames()}
                 />
               )}
             </For>
