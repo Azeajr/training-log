@@ -176,3 +176,33 @@ describe('amrapTargetsFor', () => {
     ])
   })
 })
+
+// ─── F30: the three deload modes are total across every template ─────────────
+// `deloadSupplemental: 'deload'` had no test at all, and BBS composed nothing
+// under it — silently identical to 'skip'.
+
+describe('deloadSupplemental modes on week 4', () => {
+  const TEMPLATES = ['fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs'] as const
+
+  it.each(TEMPLATES)('%s composes supplemental sets in deload mode', template => {
+    const { all } = composeAllSets(input({ week: 4, deloadSupplemental: 'deload', template }))
+    expect(all.filter(s => s.type === template).length).toBeGreaterThan(0)
+  })
+
+  it.each(TEMPLATES)('%s composes supplemental sets in normal mode', template => {
+    const { all } = composeAllSets(input({ week: 4, deloadSupplemental: 'normal', template }))
+    expect(all.filter(s => s.type === template).length).toBeGreaterThan(0)
+  })
+
+  it.each(TEMPLATES)('%s composes none in skip mode', template => {
+    const { all } = composeAllSets(input({ week: 4, deloadSupplemental: 'skip', template }))
+    expect(all.filter(s => s.type === template)).toHaveLength(0)
+  })
+
+  it('deload mode is lighter than normal mode for BBS', () => {
+    const at = (mode: 'deload' | 'normal') =>
+      composeAllSets(input({ week: 4, deloadSupplemental: mode, template: 'bbs' }))
+        .all.find(s => s.type === 'bbs')!.weight
+    expect(at('deload')).toBeLessThan(at('normal'))
+  })
+})

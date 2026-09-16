@@ -18,7 +18,19 @@ export const FSL_SETS = 5
 export const FSL_REPS = 5
 
 export const BBB_PCT = 0.50
-export const BBS_PERCENTAGES = { 1: 0.60, 2: 0.70, 3: 0.80, 4: null } as const
+// Week 4 is 0.50, not null. It used to have no percentage at all, so
+// `calcBbsSets(tm, 4)` returned [] — which made `deloadSupplemental: 'deload'`
+// byte-identical to `'skip'` for BBS while every other template composed its
+// five sets, and `getSupplementalLabel` returned null so nothing on screen
+// explained the absence. The settings copy offers three modes and promises
+// "run it at deload %"; a user who picked BBS and deliberately chose the
+// keep-it mode silently got the drop-it one (F30).
+//
+// 0.50 for two reasons: it matches BBB, BBS's sibling, which has always run at
+// a flat 50% on every week including the deload; and it continues this ladder's
+// own trend against the week's top main set (0.85→0.60, 0.90→0.70, 0.95→0.80,
+// so 0.60→0.50).
+export const BBS_PERCENTAGES = { 1: 0.60, 2: 0.70, 3: 0.80, 4: 0.50 } as const
 
 export const ACCESSORY_PERCENTAGE = 0.75
 export const ACCESSORY_SETS = 3
@@ -622,20 +634,46 @@ export const calcPlates = (
   // Copy before sorting so we never mutate the caller's plate list.
   const sorted = [...plates].sort((a, b) => b.weight - a.weight)
 
-  const result: PlateConfig[] = []
-  let remaining = load
-  for (const plate of sorted) {
-    if (remaining <= 0) break
-    // paired uses pairs (one per side); total can use a lone plate.
-    const available = mode === 'paired' ? Math.floor(plate.count / 2) : plate.count
-    const needed = Math.floor(remaining / plate.weight)
-    const use = Math.min(available, needed)
-    if (use > 0) {
-      result.push({ weight: plate.weight, count: use })
-      remaining = Math.round((remaining - use * plate.weight) * 100) / 100
+  // paired uses pairs (one per side); total can use a lone plate.
+  const available = sorted
+    .map(p => ({ weight: p.weight, count: mode === 'paired' ? Math.floor(p.count / 2) : p.count }))
+    .filter(p => p.count > 0 && p.weight > 0)
+
+  // Exact, heaviest-first. Greedy largest-first with no backtracking could
+  // strand a remainder even when an exact load existed: with 2×45 and 4×25, a
+  // 50/side load took the 45 and then had no way to make the last 5, though
+  // 25+25 works. `PlateDisplay` renders nothing on null, so the hint just
+  // disappeared — reachable because the settings stepper allows any plate count
+  // down to 0 (F27).
+  //
+  // Trying the largest count of the heaviest plate first and taking the first
+  // solution found keeps greedy's answer wherever greedy was right (which is
+  // every load the shipped DEFAULT_PLATES can make), so this only ever adds
+  // answers. The inventory is a handful of plate types with small counts, and
+  // the memo is keyed on (plate index, remainder), so the search is bounded.
+  //
+  // Hundredths throughout: plate weights go to 1.25 and repeated subtraction of
+  // floats does not stay exact.
+  const cents = (n: number) => Math.round(n * 100)
+  const memo = new Map<string, PlateConfig[] | null>()
+  const search = (i: number, remaining: number): PlateConfig[] | null => {
+    if (remaining === 0) return []
+    if (i >= available.length) return null
+    const key = `${i}:${remaining}`
+    const cached = memo.get(key)
+    if (cached !== undefined) return cached
+    const plate = available[i]
+    const w = cents(plate.weight)
+    let found: PlateConfig[] | null = null
+    for (let use = Math.min(plate.count, Math.floor(remaining / w)); use >= 0 && found === null; use--) {
+      const rest = search(i + 1, remaining - use * w)
+      if (rest !== null) found = use > 0 ? [{ weight: plate.weight, count: use }, ...rest] : rest
     }
+    memo.set(key, found)
+    return found
   }
-  return Math.abs(remaining) < 0.01 ? result : null
+
+  return search(0, cents(load))
 }
 
 // Backward-compatible barbell helper: per-side plates over a bar.

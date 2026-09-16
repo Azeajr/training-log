@@ -226,8 +226,26 @@ describe('calcBbsSets', () => {
     sets.forEach(s => expect(s.weight).toBe(240))
   })
 
-  it('week 4 (deload): returns empty array', () => {
-    expect(calcBbsSets(300, 4)).toHaveLength(0)
+  // F30. Week 4 used to have no BBS percentage at all, so `calcBbsSets` returned
+  // []. With `deloadSupplemental: 'deload'` that made BBS byte-identical to
+  // 'skip' while every other template composed five sets, and
+  // `getSupplementalLabel` returned null so nothing on screen said why. A user
+  // who picked BBS and deliberately chose the keep-it mode got the drop-it one.
+  it('week 4 (deload): 10 sets x 5 reps at 50% TM, like its sibling BBB', () => {
+    const sets = calcBbsSets(300, 4)
+    expect(sets).toHaveLength(10)
+    sets.forEach(s => expect(s.weight).toBe(150))
+  })
+
+  it('week 4 is lighter than every working week', () => {
+    const top = (w: 1 | 2 | 3 | 4) => calcBbsSets(300, w)[0].weight
+    expect(top(4)).toBeLessThan(top(1))
+    expect(top(1)).toBeLessThan(top(2))
+    expect(top(2)).toBeLessThan(top(3))
+  })
+
+  it('labels the deload percentage rather than going silent', () => {
+    expect(getSupplementalLabel('bbs', calcBbsSets(300, 4), 4)).toBe('BBS  10 × 5  50% TM')
   })
 
   it('rounds weight to nearest 5', () => {
@@ -1108,8 +1126,10 @@ describe('calcSupplementalSets', () => {
     expect(sets[0].reps).toBe(5)
   })
 
-  it('bbs week 4 (deload): returns []', () => {
-    expect(calcSupplementalSets('bbs', main, tm, 4)).toHaveLength(0)
+  it('bbs week 4 (deload): composes its ten sets like every other template (F30)', () => {
+    const sets = calcSupplementalSets('bbs', main, tm, 4)
+    expect(sets).toHaveLength(10)
+    expect(sets[0].weight).toBeLessThan(calcSupplementalSets('bbs', main, tm, 1)[0].weight)
   })
 })
 
@@ -1157,10 +1177,17 @@ describe('getSupplementalLabel', () => {
     expect(getSupplementalLabel('bbs', [], 4)).toBeNull()
   })
 
-  it('bbs week 4 with non-empty sets: still returns null (BBS_PERCENTAGES[4] is null)', () => {
-    // Guards the pct !== null check itself, not just the empty-sets early return.
+  it('bbs week 4 with non-empty sets: names the deload percentage (F30)', () => {
+    // Guards the percentage lookup itself, not just the empty-sets early return.
+    // Week 4 used to have no percentage, so this went silent and nothing on
+    // screen explained why the block had vanished.
+    const sets = calcBbsSets(200, 4)
+    expect(getSupplementalLabel('bbs', sets, 4)).toBe('BBS  10 × 5  50% TM')
+  })
+
+  it('bbs with an out-of-range week still returns null (F28)', () => {
     const sets = calcBbsSets(200, 1)
-    expect(getSupplementalLabel('bbs', sets, 4)).toBeNull()
+    expect(getSupplementalLabel('bbs', sets, 9 as unknown as 1 | 2 | 3 | 4)).toBeNull()
   })
 
   it('none with non-empty sets: returns null', () => {
@@ -1300,5 +1327,72 @@ describe('calcSupplementalSets with a short main list (F28)', () => {
     const main = calcMainSets(200, 1)
     expect(calcSupplementalSets('ssl', main, 200, 1)).toHaveLength(5)
     expect(calcSupplementalSets('ssl', main, 200, 1)[0].weight).toBe(main[1].weight)
+  })
+})
+
+// ─── F27: a restricted inventory must not strand a reachable load ────────────
+// The selection was greedy largest-first with no backtracking, so taking the
+// biggest plate that fits could leave a remainder nothing else can make — even
+// when an exact load exists. PlateDisplay renders nothing on null, so the hint
+// silently disappeared. The shipped DEFAULT_PLATES are safe; the settings
+// stepper allows any plate count down to 0, which is how you get here.
+describe('calcPlates with a restricted inventory (F27)', () => {
+  const BAR = 45
+
+  it('finds 25+25 where greedy took the 45 and stranded 5', () => {
+    const plates = [{ weight: 45, count: 2 }, { weight: 25, count: 4 }]
+    expect(calcPlatesPerSide(145, BAR, plates)).toEqual([{ weight: 25, count: 2 }])
+  })
+
+  it('backtracks more than one step when it has to', () => {
+    // 100/side. Greedy: 45, then 45 (none left), 35 → 20 stranded.
+    // Exact: 35 + 35 + 30.
+    const plates = [
+      { weight: 45, count: 2 }, { weight: 35, count: 4 }, { weight: 30, count: 2 },
+    ]
+    expect(calcPlatesPerSide(245, BAR, plates)).toEqual([
+      { weight: 35, count: 2 },
+      { weight: 30, count: 1 },
+    ])
+  })
+
+  it('still returns null when the load genuinely cannot be made', () => {
+    const plates = [{ weight: 45, count: 4 }]
+    expect(calcPlatesPerSide(100, BAR, plates)).toBeNull()
+  })
+
+  it('handles fractional plates in the exact search', () => {
+    // 51.25/side from 45 + 5 + 1.25, with no 25s to tempt greedy wrong.
+    const plates = [
+      { weight: 45, count: 2 }, { weight: 10, count: 2 },
+      { weight: 5, count: 2 }, { weight: 1.25, count: 2 },
+    ]
+    expect(calcPlatesPerSide(147.5, BAR, plates)).toEqual([
+      { weight: 45, count: 1 },
+      { weight: 5, count: 1 },
+      { weight: 1.25, count: 1 },
+    ])
+  })
+
+  it('prefers the heaviest plates among exact solutions', () => {
+    // 45/side is reachable as one 45 or as 25+10+10; the one-plate load wins.
+    const plates = [
+      { weight: 45, count: 2 }, { weight: 25, count: 2 }, { weight: 10, count: 4 },
+    ]
+    expect(calcPlatesPerSide(135, BAR, plates)).toEqual([{ weight: 45, count: 1 }])
+  })
+
+  it('total mode backtracks the same way, with single plates', () => {
+    const plates = [{ weight: 45, count: 1 }, { weight: 25, count: 2 }]
+    expect(calcPlates(100, 50, 'total', plates)).toEqual([{ weight: 25, count: 2 }])
+  })
+
+  it('leaves every default-plate load exactly as greedy found it', () => {
+    for (let w = 45; w <= 500; w += 2.5) {
+      const greedy = calcPlatesPerSide(w, BAR, DEFAULT_PLATES)
+      if (greedy === null) continue
+      const total = greedy.reduce((sum, p) => sum + p.weight * p.count, 0)
+      expect(total).toBeCloseTo((w - BAR) / 2, 5)
+    }
   })
 })

@@ -28,13 +28,17 @@ export default function PlateDisplay(props: Props) {
   const label = () => (props.loading.mode === 'paired' ? 'each side' : 'plates')
   const emptyLabel = () => (props.loading.mode === 'paired' ? 'bar only' : 'no plates')
 
+  // Three outcomes, three readouts. `null` used to render nothing at all, so a
+  // load the plate set cannot make was indistinguishable from a set with no
+  // plate hint — the line simply disappeared and the lifter was left to work
+  // out why (F27). Say it instead.
   return (
-    <Show when={result() !== null}>
-      <div class="text-faint text-xs font-mono mt-1">
+    <div class="text-faint text-xs font-mono mt-1">
+      <Show when={result() !== null} fallback={<span class="text-warn">not loadable with your plates</span>}>
         <Show when={items()!.length > 0} fallback={emptyLabel()}>
           {`${label()}: ${items()!.join(' · ')}`}
         </Show>
-      </div>
-    </Show>
+      </Show>
+    </div>
   )
 }
