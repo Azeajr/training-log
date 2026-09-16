@@ -15,10 +15,14 @@ import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
+import { createAsyncRead } from '../lib/async-read'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
+
+const message = (err: unknown): string =>
+  err instanceof Error ? err.message : 'something went wrong'
 
 interface WeekStatus {
   liftId: number
@@ -44,7 +48,13 @@ export default function Today() {
   // they're the next screen's content, and inline they pushed the assistance
   // pickers and START WORKOUT below the fold. Folded away by default.
   const [showFullSession, setShowFullSession] = createSignal(false)
-  onMount(() => { void load() })
+  // The entry screen's own load, with an identity and a failure state. This was
+  // `void load()` with no catch anywhere in the file — Today.tsx had ZERO catch
+  // statements — so a rejected read left the screen on "Loading…" permanently:
+  // no error, no retry, no way back short of navigating away. The same defect
+  // F23 had on /stats, on the screen the app opens to (F102).
+  const read = createAsyncRead()
+  onMount(() => { void read.run(() => load()) })
 
   // Everything about a lift that has to be fetched: its training max and its
   // assistance defaults. Both are async, and publishing whatever landed last
@@ -157,8 +167,20 @@ export default function Today() {
     // Seed each fixed slot from this lift's persisted default — the pick from
     // last time (or from Today), until the user swaps it mid-session. A resumed
     // session gets them too: its assistance picks were never written down.
-    for (const pick of await getAssistanceDefaultPicks(db, selId)) {
-      addAccessory(toActiveAccessory(pick, pick.section))
+    //
+    // Caught, and the navigation happens anyway. This runs AFTER startSession,
+    // so a failure here used to leave a real pending row created and the store
+    // pointing at it, with no navigation and no error — the user stranded on
+    // Today under a "SESSION IN PROGRESS" banner for a session they never
+    // entered, with that row holding the week open (F104). The session is real
+    // and valid; only a convenience failed, so entering it is the honest
+    // outcome and abandoning it would discard what the user just asked for.
+    try {
+      for (const pick of await getAssistanceDefaultPicks(db, selId)) {
+        addAccessory(toActiveAccessory(pick, pick.section))
+      }
+    } catch (err) {
+      showToast(`Could not load your assistance defaults: ${message(err)}`)
     }
     navigate('/workout')
   }
@@ -176,7 +198,7 @@ export default function Today() {
     }
     clearSession()
     showToast('That session already finished.')
-    await load()
+    await read.run(() => load())
   }
 
   const runStart = async () => {
@@ -199,7 +221,19 @@ export default function Today() {
       if (!await confirm(`Abandon ${activeLiftName} session?`, { destructive: true, confirmLabel: 'YES' })) return
       // Status-guarded: if the row already completed (stale store after a
       // killed post-complete modal), keep its data and just drop the store ref.
-      if (active.id) await discardPendingSession(db, active.id)
+      //
+      // A failed discard keeps everything, which is right for the data — but it
+      // used to say nothing, so the user believed the old session was gone when
+      // it was still there, still holding the week open (F105). Returning
+      // without clearing keeps the store naming what actually still exists.
+      if (active.id) {
+        try {
+          await discardPendingSession(db, active.id)
+        } catch (err) {
+          showToast(`Could not abandon that session: ${message(err)}`)
+          return
+        }
+      }
       clearSession()
     }
     // Awaited, not fired off: the single-flight guard below has to stay held
@@ -215,7 +249,17 @@ export default function Today() {
   // The atomicity in startOrResumePendingSession covers a second tab; this
   // covers the second tap, and disables the button while it is held.
   const { busy: starting, guard } = useSingleFlight()
-  const handleStart = guard(runStart)
+  // Wrapped: `useSingleFlight`'s guard is try/finally with no catch, so a
+  // rejection anywhere in abandon → select-or-create → seed → navigate escaped
+  // unhandled and the tap became a silent no-op — the user pressed START and
+  // the app did nothing at all (F103).
+  const handleStart = guard(async () => {
+    try {
+      await runStart()
+    } catch (err) {
+      showToast(`Could not start the session: ${message(err)}`)
+    }
+  })
 
   const selectedLift = () => lifts().find(l => l.id === selectedLiftId())
   const main = () => selectedLift() ? calcMainSets(tm(), currentWeek(), settings.barWeight) : []
@@ -260,6 +304,13 @@ export default function Today() {
     },
   )
 
+  // `?? []` guards a null, not a THROW. Reading a rejected createResource
+  // throws, and that throw came back out of `setLoading(false)` — so one
+  // optional preview failing left the entire screen stuck on "Loading…"
+  // (F106). Checking `.error` first reads the failure without re-raising it.
+  const crossPreviewSafe = (): Array<{ label: string; weight: number; reps: number }> =>
+    crossPreview.error ? [] : (crossPreview() ?? [])
+
   // Status owns the colour, permanently — selecting a finished lift must not
   // hide that it's already done, that being the cue against an accidental redo.
   // Selection is a separate channel: a filled ground plus the ▸ the glyph atlas
@@ -281,6 +332,23 @@ export default function Today() {
   }
 
   return (
+    <Show
+      when={!read.error()}
+      fallback={
+        <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
+          <div role="alert" class="border border-danger px-3 py-2">
+            <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not load today</div>
+            <div class="text-text-dim text-sm mb-2 break-words">{read.error()}</div>
+            <button
+              onClick={() => void read.retry()}
+              class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
+            >
+              RETRY
+            </button>
+          </div>
+        </div>
+      }
+    >
     <Show
       when={!loading()}
       fallback={<div class="p-4 md:p-8 font-mono text-muted text-sm tracking-widest uppercase">Loading…</div>}
@@ -398,7 +466,7 @@ export default function Today() {
                       <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={supplementalSets()[0].weight} value={`${supplementalSets()[0].reps}`} />
                     </div>
                   </Show>
-                  <For each={crossPreview() ?? []}>
+                  <For each={crossPreviewSafe()}>
                     {block => (
                       <div>
                         <SectionLabel class="mb-1">{block.label}</SectionLabel>
@@ -452,6 +520,7 @@ export default function Today() {
           />
         </Show>
       </div>
+    </Show>
     </Show>
   )
 }
