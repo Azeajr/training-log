@@ -196,10 +196,17 @@ export default function Workout() {
     // already guard it, and the post-complete modal flow legitimately still
     // holds it. Fetched in parallel with the lift so the check adds no latency
     // before setLift (the action bar is live before loadData finishes).
-    const [sessionRow, l] = await Promise.all([
+    // `exercises` is fetched up here, with the session and lift, rather than on
+    // the last await below. It depends on nothing ahead of it, and every
+    // accessory row needs it to know whether it logs reps, time or distance —
+    // `workout.activeAccessories` is hydrated synchronously from localStorage,
+    // so it renders long before a late fetch would land (F56).
+    const [sessionRow, l, exerciseRows] = await Promise.all([
       session.id ? db.sessions.get(session.id) : Promise.resolve(undefined),
       db.lifts.get(session.liftId),
+      db.exercises.toArray(),
     ])
+    setExercises(exerciseRows)
     if (session.id && !sessionRow) {
       clearSession()
       navigate('/today')
@@ -255,7 +262,6 @@ export default function Workout() {
       }
     }
 
-    setExercises(await db.exercises.toArray())
   }
 
   // One rebuild for every mutation, cross-lift included. The linear <Index>

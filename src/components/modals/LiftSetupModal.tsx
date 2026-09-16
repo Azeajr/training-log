@@ -51,6 +51,13 @@ export default function LiftSetupModal(props: Props) {
   const [plateMode, setPlateMode] = createSignal<PlateMode>('paired')
   const [implementBase, setImplementBase] = createSignal(settings.barWeight)
   const [saving, setSaving] = createSignal(false)
+  // The form renders before load() resolves, and for an existing lift load()
+  // REPLACES plateMode/implementBase with the stored values. Until that lands
+  // the controls are showing defaults, not this lift — so a choice made now
+  // would be silently undone, and a lift stored as `none` would display the
+  // wrong mode. `saving` is the existing precedent for the modal disabling its
+  // own controls (F49).
+  const [loaded, setLoaded] = createSignal(false)
 
   const [newMovementId, setNewMovementId] = createSignal<number | null>(null)
   const [newMode, setNewMode] = createSignal<'fsl' | 'percent'>('fsl')
@@ -77,6 +84,7 @@ export default function LiftSetupModal(props: Props) {
       const bs = (await db.liftSupplementals.where('liftId').equals(props.liftId).toArray()).sort((a, b) => a.order - b.order)
       setBlocks(bs.map(b => ({ id: b.id, movementLiftId: b.movementLiftId, weightMode: b.weightMode, percent: b.percent, sets: b.sets, reps: b.reps })))
     }
+    setLoaded(true)
   }
 
   // Resolve against all lifts (incl. archived) so a cross block whose movement
@@ -185,6 +193,7 @@ export default function LiftSetupModal(props: Props) {
             {m => (
               <ToggleChip
                 class="flex-1"
+                disabled={!loaded()}
                 active={plateMode() === m}
                 onClick={() => { setPlateMode(m); if (m !== 'none') setImplementBase(m === 'paired' ? settings.barWeight : 0) }}
               >
@@ -199,7 +208,7 @@ export default function LiftSetupModal(props: Props) {
         >
           <div class="flex items-center gap-2 mb-6">
             <span class="text-muted text-xs w-16">base lb</span>
-            <Stepper value={implementBase()} onChange={setImplementBase} step={5} min={0} max={200} label="implement-base" fieldLabel="implement base weight" />
+            <Stepper value={implementBase()} onChange={setImplementBase} step={5} min={0} max={200} label="implement-base" fieldLabel="implement base weight" disabled={!loaded()} />
             <span class="text-faint text-[10px]">{plateMode() === 'paired' ? 'bar weight' : '0 = belt/dip'}</span>
           </div>
         </Show>

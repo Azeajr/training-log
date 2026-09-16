@@ -12,6 +12,8 @@ interface Props {
   // "bar weight"). Names the −/+ buttons and the value announcement; without it
   // a screen reader gets "minus, button" with no indication of what it changes.
   fieldLabel?: string
+  /** Withhold interaction entirely — e.g. while the real value is still loading. */
+  disabled?: boolean
   // Marks the value as directly editable. The value has always opened a numeric
   // keypad on tap — the fastest way to enter a number far from the current one —
   // but rendered as a plain readout nobody thought to press. Set this where the
@@ -103,7 +105,7 @@ export default function Stepper(props: Props) {
         onPointerDown={() => startPress(-step())}
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
-        disabled={props.value <= min()}
+        disabled={props.disabled || props.value <= min()}
         aria-label={props.fieldLabel ? `Decrease ${props.fieldLabel}` : 'Decrease'}
         class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30 select-none touch-manipulation"
       >
@@ -116,6 +118,7 @@ export default function Stepper(props: Props) {
             type="button"
             data-testid="stepper-value"
             onClick={() => { setRaw(fmt(props.value)); setEditing(true) }}
+            disabled={props.disabled}
             aria-label={props.fieldLabel ? `Edit ${props.fieldLabel}, currently ${fmt(props.value)}` : undefined}
             class={`bg-surface border-y text-text font-mono px-3 py-3 min-w-[2.5rem] text-center select-none touch-manipulation [-webkit-touch-callout:none] ${
               props.emphasized
@@ -145,7 +148,7 @@ export default function Stepper(props: Props) {
         onPointerDown={() => startPress(step())}
         onPointerUp={clearPress}
         onPointerLeave={clearPress}
-        disabled={props.value >= max()}
+        disabled={props.disabled || props.value >= max()}
         aria-label={props.fieldLabel ? `Increase ${props.fieldLabel}` : 'Increase'}
         class="border border-border text-muted px-2 py-3 hover:text-text active:bg-surface disabled:opacity-30 select-none touch-manipulation"
       >
