@@ -28,9 +28,13 @@
      no annotations, so this buys syntax and module resolution, not inference. */
   "include": [
     "vite.config.ts",
+    /* Imported by vite.config.ts, so it belongs to this project too — the app
+       project also owns it, which is what lets the unit suite read it. */
+    "src/pwa-manifest.ts",
     "playwright.config.ts",
     "eslint.config.js",
     "stryker.config.mjs",
-    "scripts/**/*.js"
+    "scripts/**/*.js",
+    "scripts/**/*.mjs"
   ]
 }

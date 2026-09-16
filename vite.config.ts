@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config'
 import solid from 'vite-plugin-solid'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { PWA_MANIFEST } from './src/pwa-manifest'
 
 export default defineConfig(() => {
   return {
@@ -79,22 +80,19 @@ export default defineConfig(() => {
       injectManifest: {
         // index.html is precached so the SW's navigation fallback can serve
         // the shell offline (src/service-worker.ts fetch handler).
-        globPatterns: ['**/*.{html,js,css,ico,png,wasm}'],
+        // `svg` is in the list because favicon.svg is the sharpest icon the app
+        // has and PRECACHE_PATHS is derived from this manifest — without it the
+        // SW's fetch handler passed the file straight through, so the only icon
+        // that actually existed failed to load offline (F72).
+        globPatterns: ['**/*.{html,js,css,ico,png,svg,wasm}'],
         // wasm is precached via globPatterns above and served cache-first in
         // the SW fetch handler (src/service-worker.ts); no runtimeCaching here
         // because vite-plugin-pwa only supports runtimeCaching under generateSW.
       },
-      manifest: {
-        name: 'Training Log',
-        short_name: 'Training',
-        theme_color: '#000000',
-        background_color: '#09090b',
-        display: 'standalone',
-        icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' }
-        ]
-      }
+      // The manifest lives in src/pwa-manifest.ts as data, so a test can hold
+      // it against the filesystem. It named two icons that did not exist for
+      // the whole life of the project and nothing ever noticed (F70).
+      manifest: PWA_MANIFEST,
     })
   ]
   }
