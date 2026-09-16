@@ -2,7 +2,10 @@ import { beforeEach, describe, it, expect } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import type { Session } from '../types/domain'
-import { discardPendingSession, finalizePendingSession, reconcileActiveSession } from './session'
+import {
+  discardPendingSession, finalizePendingSession, reconcileActiveSession,
+  startOrResumePendingSession,
+} from './session'
 
 beforeEach(async () => { await __resetForTest() })
 
@@ -40,6 +43,69 @@ describe('reconcileActiveSession', () => {
   it('returns null when the DB row was skipped', async () => {
     const id = await addSession('skipped')
     expect(await reconcileActiveSession(db, storeSession(id))).toBeNull()
+  })
+})
+
+describe('startOrResumePendingSession', () => {
+  const SLOT = { cycleId: 1, liftId: 1, week: 1 as const }
+  const addPending = () => addSession('pending')
+
+  it('creates the pending row when the slot is empty', async () => {
+    const { session, created } = await startOrResumePendingSession(db, SLOT)
+    expect(created).toBe(true)
+    expect(session.id).toBeDefined()
+    expect(await db.sessions.toArray()).toHaveLength(1)
+  })
+
+  it('resumes the existing pending row rather than creating a second', async () => {
+    const id = await addPending()
+    const { session, created } = await startOrResumePendingSession(db, SLOT)
+    expect(created).toBe(false)
+    expect(session.id).toBe(id)
+    expect(await db.sessions.toArray()).toHaveLength(1)
+  })
+
+  it('two concurrent starts produce one pending row, and both see it', async () => {
+    const [a, b] = await Promise.all([
+      startOrResumePendingSession(db, SLOT),
+      startOrResumePendingSession(db, SLOT),
+    ])
+    expect(a.session.id).toBe(b.session.id)
+    expect((await db.sessions.toArray()).filter(s => s.status === 'pending')).toHaveLength(1)
+  })
+
+  it('leaves history alone — a completed row is not resumed', async () => {
+    const done = await addSession('completed')
+    const { session, created } = await startOrResumePendingSession(db, SLOT)
+    expect(created).toBe(true)
+    expect(session.id).not.toBe(done)
+    expect((await db.sessions.get(done))?.status).toBe('completed')
+  })
+
+  it('recovers duplicate pending rows: the one with the work wins, the rest are retired', async () => {
+    const empty = await addPending()
+    const worked = await addPending()
+    await db.sets.add({ sessionId: worked, type: 'main', setNumber: 1, weight: 185, reps: 5, isAmrap: false })
+
+    const { session, created } = await startOrResumePendingSession(db, SLOT)
+
+    expect(created).toBe(false)
+    expect(session.id).toBe(worked)
+    expect((await db.sessions.get(empty))?.status).toBe('skipped')
+    // Retired, not deleted.
+    expect(await db.sessions.get(empty)).toBeDefined()
+  })
+
+  it('breaks a tie between equally empty duplicates by age, stably', async () => {
+    const first = await addPending()
+    await addPending()
+
+    const a = await startOrResumePendingSession(db, SLOT)
+    const b = await startOrResumePendingSession(db, SLOT)
+
+    expect(a.session.id).toBe(first)
+    expect(b.session.id).toBe(first)
+    expect((await db.sessions.toArray()).filter(s => s.status === 'pending')).toHaveLength(1)
   })
 })
 
