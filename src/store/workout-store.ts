@@ -1,5 +1,5 @@
 import { createStore, produce } from 'solid-js/store'
-import { createEffect } from 'solid-js'
+import { createEffect, createSignal } from 'solid-js'
 import type { Session, Set, AccessorySet } from '../types/domain'
 import type { AssistanceSlot } from '../lib/assistance'
 
@@ -111,25 +111,50 @@ export const [workout, setWorkout] = createStore<WorkoutState>({
   ...loadFromStorage(),
 })
 
+// Whether the in-progress session is still being mirrored to localStorage.
+// Non-null means it is not, and names why.
+const [persistenceError, setPersistenceError] = createSignal<string | null>(null)
+export { persistenceError }
+
 // Must be called inside a reactive root (e.g. `render(() => { setupWorkoutPersistence(); ... })`).
 // Registers a createEffect that mirrors workout state into localStorage on every change.
 export function setupWorkoutPersistence() {
   createEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      v: STORAGE_VERSION,
-      state: {
-        activeSession:    workout.activeSession,
-        loggedSets:       workout.loggedSets,
-        loggedCrossSets:  workout.loggedCrossSets,
-        currentSetIndex:  workout.currentSetIndex,
-        isResting:        workout.isResting,
-        restStartedAt:    workout.restStartedAt,
-        restType:         workout.restType,
-        activeAccessories: workout.activeAccessories,
-        notes:            workout.notes,
-      },
-    }))
+    // Wrapped, because a quota or write failure here throws inside a reactive
+    // effect on the render path — with no catch anywhere above it. Recovery for
+    // the active workout then stops silently: logged sets are safe in the
+    // database, but the cursor, the accessory work and the session notes live
+    // only in this store until COMPLETE, so a reload after this point loses
+    // them with nothing having said so (F12).
+    try {
+      writeSnapshot()
+      setPersistenceError(null)
+    } catch (err) {
+      setPersistenceError(err instanceof Error ? err.message : 'unknown error')
+    }
   })
+}
+
+function writeSnapshot() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    v: STORAGE_VERSION,
+    state: {
+      activeSession:     workout.activeSession,
+      loggedSets:        workout.loggedSets,
+      loggedCrossSets:   workout.loggedCrossSets,
+      currentSetIndex:   workout.currentSetIndex,
+      isResting:         workout.isResting,
+      restStartedAt:     workout.restStartedAt,
+      restType:          workout.restType,
+      activeAccessories: workout.activeAccessories,
+      notes:             workout.notes,
+    },
+  }))
+}
+
+/** Test helper — clears the degraded-persistence state. */
+export function resetPersistenceError(): void {
+  setPersistenceError(null)
 }
 
 export function startSession(session: Session) {

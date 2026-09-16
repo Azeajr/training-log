@@ -125,3 +125,59 @@ describe('updateSettings', () => {
     expect(row!.supplementalTemplate).toBe(SETTINGS_DEFAULTS.supplementalTemplate)
   })
 })
+
+// ── F11 ─────────────────────────────────────────────────────────────────────
+// loadSettings returned early when there was no settings row, so an import
+// carrying no settings table left the PREVIOUS install's values live in memory
+// — bar weight, plates, cycle shape, supplemental template — over a database
+// that had none of them, until something happened to reload the page. And a
+// restored theme was written into the store without ever being painted.
+describe('loadSettings with no stored row (F11)', () => {
+  it('follows the database down to defaults instead of keeping stale values', async () => {
+    await updateSettings({ barWeight: 15, hasDeloadWeek: false, supplementalTemplate: 'bbs' })
+    expect(settings.barWeight).toBe(15)
+
+    // What a destructive import with no settings table leaves behind.
+    await db.settings.clear()
+    await loadSettings()
+
+    expect(settings.barWeight).toBe(SETTINGS_DEFAULTS.barWeight)
+    expect(settings.hasDeloadWeek).toBe(SETTINGS_DEFAULTS.hasDeloadWeek)
+    expect(settings.supplementalTemplate).toBe(SETTINGS_DEFAULTS.supplementalTemplate)
+  })
+
+  it('repaints the theme, so the screen is not left on the old palette', async () => {
+    const otherKey = (Object.keys(THEMES) as Array<keyof typeof THEMES>)
+      .find(k => k !== SETTINGS_DEFAULTS.theme)!
+    await updateSettings({ theme: otherKey })
+    const swapped = document.documentElement.style.getPropertyValue('--color-accent')
+
+    await db.settings.clear()
+    await loadSettings()
+
+    expect(settings.theme).toBe(SETTINGS_DEFAULTS.theme)
+    const painted = document.documentElement.style.getPropertyValue('--color-accent')
+    expect(painted).toBe(THEMES[SETTINGS_DEFAULTS.theme].vars['--color-accent'])
+    expect(painted).not.toBe(swapped)
+  })
+})
+
+describe('loadSettings with a stored row (F11)', () => {
+  it('paints the restored theme rather than only recording it', async () => {
+    const otherKey = (Object.keys(THEMES) as Array<keyof typeof THEMES>)
+      .find(k => k !== SETTINGS_DEFAULTS.theme)!
+    // A row straight from an import: nothing has applied its theme yet.
+    await db.settings.clear()
+    await db.settings.add({
+      restTimer1: 90, restTimer2: 180, restTimerFail: 300,
+      theme: otherKey, barWeight: 45, plates: DEFAULT_PLATES,
+    })
+    applyTheme(SETTINGS_DEFAULTS.theme)
+
+    await loadSettings()
+
+    expect(settings.theme).toBe(otherKey)
+    expect(document.documentElement.style.getPropertyValue('--color-accent'))
+      .toBe(THEMES[otherKey].vars['--color-accent'])
+  })
+})

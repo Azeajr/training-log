@@ -596,3 +596,103 @@ describe('getCycleDoublingCandidates', () => {
     expect(result[0].liftId).toBe(validLiftId)
   })
 })
+
+// ── F39 ─────────────────────────────────────────────────────────────────────
+// Whether a training max came from auto-progression or from the user was
+// inferred from a 60-second window around the cycle's creation. The CYCLE
+// COMPLETE modal opens immediately after the roll-over and writes training
+// maxes of its own, so the same data and the same user action landed on either
+// side of that window according to how long the user took to tap.
+describe('doubling eligibility is decided by provenance, not dwell time (F39)', () => {
+  const CYCLE_START = new Date('2026-01-01T12:00:00.000Z')
+  const WEEKS = [
+    { week: 1 as const, weight: 170, reps: 13 },
+    { week: 2 as const, weight: 180, reps: 11 },
+    { week: 3 as const, weight: 190, reps: 9 },
+  ]
+
+  const build = async (liftId: number, post: { source: string | null; afterMs: number } | null) => {
+    const cycleId = await db.cycles.add({ number: 1, startDate: CYCLE_START, endDate: null })
+    await db.trainingMaxes.add({
+      liftId, weight: 200, setAt: CYCLE_START, source: 'progression', cycleId,
+    } as never)
+    if (post) {
+      await db.trainingMaxes.add({
+        liftId, weight: 200, setAt: new Date(CYCLE_START.getTime() + post.afterMs),
+        source: post.source, cycleId,
+      } as never)
+    }
+    for (const { week, weight, reps } of WEEKS) {
+      const sessionId = await db.sessions.add({
+        cycleId, liftId, week,
+        date: new Date(CYCLE_START.getTime() + week * 86_400_000),
+        notes: null, status: 'completed',
+      })
+      await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+    }
+    return { id: cycleId, number: 1, startDate: CYCLE_START, endDate: null } as Cycle
+  }
+
+  // The probe that found it: same data, same action, only the tap delay varies.
+  it.each([10_000, 59_000, 61_000, 5 * 60_000])(
+    'a deload written %ims after the roll-over leaves the lift eligible',
+    async afterMs => {
+      const [ohp] = await seedLifts()
+      const cycle = await build(ohp.id!, { source: 'deload', afterMs })
+      const out = await getCycleDoublingCandidates(db, cycle)
+      expect(out.map(c => c.liftId)).toEqual([ohp.id])
+    },
+  )
+
+  it.each([10_000, 5 * 60_000])(
+    'a manual bump %ims after the roll-over disqualifies it, whenever it lands',
+    async afterMs => {
+      const [ohp] = await seedLifts()
+      const cycle = await build(ohp.id!, { source: 'manual', afterMs })
+      expect(await getCycleDoublingCandidates(db, cycle)).toEqual([])
+    },
+  )
+
+  it('still infers from the clock for rows written before the column existed', async () => {
+    const [ohp] = await seedLifts()
+    // source null: provenance genuinely unknown, so the old rule stands rather
+    // than a guess in either direction.
+    const cycle = await build(ohp.id!, { source: null, afterMs: 5 * 60_000 })
+    expect(await getCycleDoublingCandidates(db, cycle)).toEqual([])
+  })
+
+  it('offers the lift when nothing was written after the roll-over', async () => {
+    const [ohp] = await seedLifts()
+    const cycle = await build(ohp.id!, null)
+    expect((await getCycleDoublingCandidates(db, cycle)).map(c => c.liftId)).toEqual([ohp.id])
+  })
+})
+
+// ── F40 ─────────────────────────────────────────────────────────────────────
+// The candidate loop read every lift and never filtered `archived`, while the
+// progression it feeds goes through activeLiftsOrdered and skips them.
+describe('archived lifts are not offered a doubled increment (F40)', () => {
+  it('leaves an archived lift out, however well it performed', async () => {
+    const [ohp] = await seedLifts()
+    await db.lifts.update(ohp.id!, { archived: true })
+
+    const CYCLE_START = new Date('2026-01-01T12:00:00.000Z')
+    const cycleId = await db.cycles.add({ number: 1, startDate: CYCLE_START, endDate: null })
+    await db.trainingMaxes.add({ liftId: ohp.id!, weight: 200, setAt: CYCLE_START, source: 'progression', cycleId } as never)
+    for (const { week, weight, reps } of [
+      { week: 1 as const, weight: 170, reps: 13 },
+      { week: 2 as const, weight: 180, reps: 11 },
+      { week: 3 as const, weight: 190, reps: 9 },
+    ]) {
+      const sessionId = await db.sessions.add({
+        cycleId, liftId: ohp.id!, week,
+        date: new Date(CYCLE_START.getTime() + week * 86_400_000),
+        notes: null, status: 'completed',
+      })
+      await db.sets.add({ sessionId, type: 'main', setNumber: 3, weight, reps, isAmrap: true })
+    }
+
+    const cycle = { id: cycleId, number: 1, startDate: CYCLE_START, endDate: null } as Cycle
+    expect(await getCycleDoublingCandidates(db, cycle)).toEqual([])
+  })
+})

@@ -92,7 +92,7 @@ export async function importJson(db: TrainingDB, file: File): Promise<void> {
 // gives a friendlier "ignore unknown column" experience for legacy backups.
 const COLS = {
   lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived', 'usesBarbell', 'plateMode', 'implementBase'],
-  trainingMaxes: ['id', 'liftId', 'weight', 'setAt'],
+  trainingMaxes: ['id', 'liftId', 'weight', 'setAt', 'source', 'cycleId'],
   cycles: ['id', 'number', 'startDate', 'endDate', 'closedThroughWeek'],
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
   sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId'],
@@ -250,7 +250,11 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
   const exerciseMap = Object.fromEntries(exercises.map(e => [e.id!, e.name]))
 
   const rows: string[][] = [
-    ['date', 'lift', 'week', 'type', 'set_number', 'weight_lb', 'reps', 'is_amrap', 'session_notes', 'exercise_name', 'accessory_notes'],
+    // duration_s and distance_m are here because a timed or distance accessory
+    // records its performance in neither weight nor reps — a plank and a
+    // farmer's walk exported as blank columns, so the CSV silently discarded
+    // the only measurement they had (F09).
+    ['date', 'lift', 'week', 'type', 'set_number', 'weight_lb', 'reps', 'duration_s', 'distance_m', 'is_amrap', 'session_notes', 'exercise_name', 'accessory_notes'],
   ]
 
   for (const session of sessions) {
@@ -264,18 +268,20 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
     const liftName = liftMap[session.liftId] ?? String(session.liftId)
 
     if (sessionSets.length === 0 && sessionAccessorySets.length === 0 && notesByExercise.size === 0) {
-      rows.push([dateStr, liftName, String(session.week), '', '', '', '', '', session.notes ?? '', '', ''])
+      rows.push([dateStr, liftName, String(session.week), '', '', '', '', '', '', '', session.notes ?? '', '', ''])
     } else {
       for (const s of sessionSets) {
         rows.push([
           dateStr, liftName, String(session.week), s.type, String(s.setNumber),
-          String(s.weight), String(s.reps), s.isAmrap ? 'true' : 'false', session.notes ?? '', '', '',
+          String(s.weight), String(s.reps), '', '',
+          s.isAmrap ? 'true' : 'false', session.notes ?? '', '', '',
         ])
       }
       for (const a of sessionAccessorySets) {
         rows.push([
           dateStr, liftName, String(session.week), 'accessory', String(a.setNumber),
           a.weight != null ? String(a.weight) : '', a.reps != null ? String(a.reps) : '',
+          a.duration != null ? String(a.duration) : '', a.distance != null ? String(a.distance) : '',
           'false', session.notes ?? '', exerciseMap[a.exerciseId] ?? String(a.exerciseId),
           notesByExercise.get(a.exerciseId) ?? '',
         ])
@@ -285,7 +291,7 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
       for (const [exId, note] of notesByExercise) {
         if (sessionAccessorySets.some(a => a.exerciseId === exId)) continue
         rows.push([
-          dateStr, liftName, String(session.week), 'accessory', '', '', '',
+          dateStr, liftName, String(session.week), 'accessory', '', '', '', '', '',
           'false', session.notes ?? '', exerciseMap[exId] ?? String(exId), note,
         ])
       }

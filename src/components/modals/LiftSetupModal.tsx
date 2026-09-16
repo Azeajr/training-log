@@ -51,6 +51,7 @@ export default function LiftSetupModal(props: Props) {
   const [plateMode, setPlateMode] = createSignal<PlateMode>('paired')
   const [implementBase, setImplementBase] = createSignal(settings.barWeight)
   const [saving, setSaving] = createSignal(false)
+  const [saveError, setSaveError] = createSignal<string | null>(null)
   // The form renders before load() resolves, and for an existing lift load()
   // REPLACES plateMode/implementBase with the stored values. Until that lands
   // the controls are showing defaults, not this lift — so a choice made now
@@ -129,6 +130,7 @@ export default function LiftSetupModal(props: Props) {
   // ── commit: reconcile the buffer against the db in one transaction ───────
   async function handleCommit() {
     setSaving(true)
+    setSaveError(null)
     try {
       await db.transaction(async () => {
         let liftId = props.liftId
@@ -164,6 +166,14 @@ export default function LiftSetupModal(props: Props) {
         }
       })
       props.onCommit()
+    } catch (err) {
+      // There was a try/finally and no catch, and the button called this as
+      // `void handleCommit()`, so a rejected transaction went nowhere at all:
+      // onCommit never fired, SAVING… reverted to SAVE, and the dialog just sat
+      // there refusing to close with nothing explaining why (F50). The buffered
+      // edits are deliberately left untouched — the whole point of buffering is
+      // that a failed write costs the write, not the work.
+      setSaveError(err instanceof Error ? err.message : 'Could not save this lift.')
     } finally {
       setSaving(false)
     }
@@ -305,6 +315,14 @@ export default function LiftSetupModal(props: Props) {
             >
               ADD BLOCK
             </button>
+          </div>
+        </Show>
+
+        <Show when={saveError()}>
+          <div role="alert" class="border border-danger px-3 py-2 mt-6">
+            <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not save</div>
+            <div class="text-text-dim text-sm break-words">{saveError()}</div>
+            <div class="text-faint text-xs mt-1">Your changes are still here — try DONE again.</div>
           </div>
         </Show>
 

@@ -53,11 +53,27 @@ export interface LiftSupplemental {
   order: number
 }
 
+/**
+ * Where a training-max row came from.
+ *
+ * Recorded rather than inferred. It used to be worked out from a 60-second
+ * window around the cycle's creation, so whether a lift stayed eligible for a
+ * doubled increment depended on **how long the user took to tap the button** —
+ * racking a bar or answering a text between the roll-over and the tap changed
+ * the program's behaviour a cycle later, with nothing on screen to explain it
+ * (F39). Legacy rows carry `null`, which the readers still infer for.
+ */
+export type TmSource = 'progression' | 'manual' | 'deload'
+
 export interface TrainingMax {
   id?: number
   liftId: number
   weight: number
   setAt: Date
+  /** Null on rows written before the column existed. */
+  source?: TmSource | null
+  /** The cycle this row was written for; null on legacy rows. */
+  cycleId?: number | null
 }
 
 export interface Cycle {

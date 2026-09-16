@@ -285,7 +285,15 @@ export const [settings, setSettings] = createStore<SettingsState>({ ...SETTINGS_
 
 export async function loadSettings() {
   const row = await db.settings.toCollection().first()
-  if (!row) return
+  if (!row) {
+    // Follow the database down. This used to `return`, so an import carrying no
+    // settings table left the PREVIOUS install's values live in memory — bar
+    // weight, plates, cycle shape, supplemental template — over a database that
+    // had none of them, until something happened to reload the page (F11).
+    setSettings({ ...SETTINGS_DEFAULTS })
+    applyTheme(SETTINGS_DEFAULTS.theme)
+    return
+  }
   setSettings({
     restTimer1: row.restTimer1,
     restTimer2: row.restTimer2,
@@ -299,6 +307,10 @@ export async function loadSettings() {
     highRepDiscount: row.highRepDiscount ?? 'off',
     restTimerNotifications: row.restTimerNotifications ?? false,
   })
+  // Applied here, not only in updateSettings and at boot: a restored theme was
+  // written into the store and left unpainted, so the screen kept the old
+  // palette while the store already reported the new one (F11).
+  applyTheme(resolveThemeKey(row.theme))
 }
 
 export async function updateSettings(

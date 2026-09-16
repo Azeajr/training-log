@@ -60,7 +60,17 @@ export function createRestTimer(post: (tick: RestTimerTick) => void): RestTimer 
           paused = true
           break
         case 'resume':
+          // Post at once, and restart the interval so its phase resets. This
+          // only cleared the flag, and the 1 Hz interval kept its original
+          // phase — so the first `elapsed` after the tab became visible arrived
+          // up to a full second late, while the countdown on screen had already
+          // jumped to the true value. The timer visibly disagreed with itself
+          // for that second (F68).
           paused = false
+          if (restStartedAt != null) {
+            post({ elapsed: Math.floor((Date.now() - restStartedAt) / 1000) })
+            startTicking()
+          }
           break
       }
     },

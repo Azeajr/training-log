@@ -1,5 +1,5 @@
 import type { TrainingDB } from '../db/index'
-import type { Lift, TrainingMax, HighRepDiscount, Set } from '../types/domain'
+import type { Lift, TrainingMax, TmSource, HighRepDiscount, Set } from '../types/domain'
 import { roundToNearest5, SEED_WINDOW, cycleFinalWeek } from './calc'
 import { bestEstimatedPerformance, isWorkingPerformance } from './performance'
 import { getCycleDoublingCandidates } from './tm-recommendations'
@@ -124,6 +124,9 @@ export interface TmChange {
 async function progressTms(
   db: TrainingDB,
   nextWeight: (current: TrainingMax, lift: Lift) => number,
+  source: TmSource,
+  cycleId: number | null,
+  skip?: (tms: TrainingMax[]) => boolean,
 ): Promise<TmChange[]> {
   const lifts = await activeLiftsOrdered(db)
   const changes: TmChange[] = []
@@ -131,12 +134,19 @@ async function progressTms(
     const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
     const current = tms[tms.length - 1]
     if (!current) continue
+    if (skip?.(tms)) continue
     const weight = nextWeight(current, lift)
-    await db.trainingMaxes.add({ liftId: lift.id!, weight, setAt: new Date() })
+    await db.trainingMaxes.add({ liftId: lift.id!, weight, setAt: new Date(), source, cycleId })
     noteTrainingMaxAdded()
     changes.push({ liftId: lift.id!, liftName: lift.name, oldWeight: current.weight, weight })
   }
   return changes
+}
+
+/** The newest cycle's id, for stamping provenance onto the rows written now. */
+async function currentCycleId(db: TrainingDB): Promise<number | null> {
+  const cycle = await db.cycles.orderBy('number').last()
+  return cycle?.id ?? null
 }
 
 export async function advanceCycleIfComplete(db: TrainingDB, discount: HighRepDiscount = 'off'): Promise<{
@@ -196,7 +206,10 @@ export async function advanceCycleIfComplete(db: TrainingDB, discount: HighRepDi
 }
 
 export async function applyTmProgression(db: TrainingDB): Promise<TmChange[]> {
-  return progressTms(db, (current, lift) => current.weight + lift.progressionIncrement)
+  // Stamped with the cycle these rows open, which is the one that exists by the
+  // time this runs inside advanceCycleIfComplete's transaction.
+  return progressTms(db, (current, lift) => current.weight + lift.progressionIncrement,
+    'progression', await currentCycleId(db))
 }
 
 export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: number) {
@@ -224,8 +237,33 @@ export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: numbe
   }
 }
 
+/**
+ * Cut every active lift's training max, once per cycle.
+ *
+ * Idempotent now, which it could not be before. The operation is *relative* —
+ * `weight × 0.9` of whatever is current — so a second run compounds, and
+ * nothing recorded that a row had come from a deload rather than from the user,
+ * which left the library unable to tell a second tap from the next cycle's
+ * deload. Its only guard was single-flight at the modal, which protects one
+ * control on one screen and nothing else (F100).
+ *
+ * With provenance, "already deloaded for this cycle" is a fact on the row: a
+ * lift whose newest training max is a deload stamped with this cycle is skipped.
+ * A deload for a *later* cycle still applies, which is the behaviour that makes
+ * this a guard rather than a lock.
+ */
 export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<TmChange[]> {
-  return progressTms(db, current => roundToNearest5(current.weight * (1 - pct)))
+  const cycleId = await currentCycleId(db)
+  return progressTms(
+    db,
+    current => roundToNearest5(current.weight * (1 - pct)),
+    'deload',
+    cycleId,
+    tms => {
+      const newest = tms[tms.length - 1]
+      return cycleId != null && newest?.source === 'deload' && newest.cycleId === cycleId
+    },
+  )
 }
 
 // The end-of-cycle summary: what every TM moved to, plus which lifts earned the
@@ -262,7 +300,9 @@ export async function applyCycleDoubling(
   // weight but appends a second row at the same instant, which is exactly the
   // tie the two "current TM" helpers used to resolve differently (F36).
   if (await getCurrentTm(db, liftId) !== newTm) {
-    await setTm(db, liftId, newTm)
+    // 'manual': accepting a doubled increment is the user choosing a number,
+    // and the doubling check reads that as a deliberate bump.
+    await setTm(db, liftId, newTm, 'manual', (await currentCycleId(db)) ?? undefined)
   }
   if (!data) return null
   return {

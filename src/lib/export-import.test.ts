@@ -363,7 +363,7 @@ describe('exportCsv', () => {
     await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date('2026-01-06'), notes: null, status: 'completed' })
     await exportCsv(db)
     const header = (await capturedBlob!.text()).split('\n')[0]
-    for (const col of ['date', 'lift', 'week', 'type', 'set_number', 'weight_lb', 'reps', 'is_amrap', 'session_notes', 'exercise_name']) {
+    for (const col of ['date', 'lift', 'week', 'type', 'set_number', 'weight_lb', 'reps', 'duration_s', 'distance_m', 'is_amrap', 'session_notes', 'exercise_name']) {
       expect(header).toContain(`"${col}"`)
     }
   })
@@ -432,15 +432,16 @@ describe('exportCsv', () => {
     const cols = (await capturedBlob!.text()).trim().split('\n')[1].split(',')
     expect(cols[5]).toBe('""')    // weight null → ''
     expect(cols[6]).toBe('""')    // reps null → ''
-    expect(cols[9]).toBe('"999"') // exerciseMap[999] ?? '999'
+    expect(cols[11]).toBe('"999"') // exerciseMap[999] ?? '999'
   })
 })
 
 // ─── importFromRawData — optional keys & parseDates precision ────────────────
 
-// Every CSV cell is quoted, so a row is fully determined by its 11 values. The
+// Every CSV cell is quoted, so a row is fully determined by its 13 values. The
 // placeholder cells (the empty ones that keep columns aligned across the three
 // row shapes) are the part nothing pinned — asserting whole rows covers them.
+// duration_s and distance_m sit between reps and is_amrap (F09).
 const row = (...cells: string[]) => cells.map(c => `"${c}"`).join(',')
 
 describe('exportCsv — exact row shapes', () => {
@@ -458,10 +459,10 @@ describe('exportCsv — exact row shapes', () => {
     await exportCsv(db)
     const lines = (await capturedBlob!.text()).trim().split('\n')
     expect(lines[1]).toBe(
-      row(ISO, 'OHP', '2', 'main', '2', '175', '3', 'false', 'felt strong', '', ''),
+      row(ISO, 'OHP', '2', 'main', '2', '175', '3', '', '', 'false', 'felt strong', '', ''),
     )
     expect(lines[2]).toBe(
-      row(ISO, 'OHP', '2', 'main', '3', '185', '6', 'true', 'felt strong', '', ''),
+      row(ISO, 'OHP', '2', 'main', '3', '185', '6', '', '', 'true', 'felt strong', '', ''),
     )
   })
 
@@ -474,7 +475,7 @@ describe('exportCsv — exact row shapes', () => {
     await exportCsv(db)
     const lines = (await capturedBlob!.text()).trim().split('\n')
     expect(lines[1]).toBe(
-      row(ISO, 'OHP', '4', '', '', '', '', '', 'deload, skipped', '', ''),
+      row(ISO, 'OHP', '4', '', '', '', '', '', '', '', 'deload, skipped', '', ''),
     )
   })
 
@@ -494,10 +495,10 @@ describe('exportCsv — exact row shapes', () => {
     await exportCsv(db)
     const lines = (await capturedBlob!.text()).trim().split('\n')
     expect(lines).toContain(
-      row(ISO, 'OHP', '1', 'accessory', '2', '50', '8', 'false', '', 'Chinup', 'purple band'),
+      row(ISO, 'OHP', '1', 'accessory', '2', '50', '8', '', '', 'false', '', 'Chinup', 'purple band'),
     )
     expect(lines).toContain(
-      row(ISO, 'OHP', '1', 'accessory', '', '', '', 'false', '', 'Plank', 'out of time'),
+      row(ISO, 'OHP', '1', 'accessory', '', '', '', '', '', 'false', '', 'Plank', 'out of time'),
     )
   })
 
@@ -539,7 +540,7 @@ describe('exportCsv — exact row shapes', () => {
     const week1 = lines.filter(l => l.includes('"1"') && l.includes('Chinup'))
     expect(week1).toHaveLength(1)
     expect(week1[0]).toBe(
-      row(ISO, 'OHP', '1', 'accessory', '1', '50', '8', 'false', '', 'Chinup', ''),
+      row(ISO, 'OHP', '1', 'accessory', '1', '50', '8', '', '', 'false', '', 'Chinup', ''),
     )
   })
 
@@ -1000,5 +1001,61 @@ describe('import rejects a file that is not a backup (F08)', () => {
     // existed is still a backup.
     await importFromRawData(db, { lifts: [] })
     expect(await db.lifts.count()).toBe(0)
+  })
+})
+
+// ── F09 ─────────────────────────────────────────────────────────────────────
+// A timed or distance accessory records its performance in neither weight nor
+// reps. The CSV had no columns for either, so a plank and a farmer's walk
+// exported as blank rows — the JSON backup kept the measurement and the CSV
+// silently discarded it.
+describe('exportCsv — timed and distance accessories (F09)', () => {
+  const DATE = new Date(2026, 0, 6)
+  const ISO = '2026-01-06'
+
+  const seedAccessory = async (
+    name: string,
+    type: 'reps' | 'timed' | 'distance',
+    fields: { weight: number | null; reps: number | null; duration: number | null; distance: number | null },
+  ) => {
+    const cycleId = await seedBase()
+    const exerciseId = await db.exercises.add({ name, type })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: DATE, notes: null, status: 'completed',
+    })
+    await db.accessorySets.add({ sessionId, exerciseId, setNumber: 1, ...fields })
+  }
+
+  it('carries a timed accessory’s duration', async () => {
+    await seedAccessory('Plank', 'timed', { weight: null, reps: null, duration: 90, distance: null })
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    expect(lines).toContain(
+      row(ISO, 'OHP', '1', 'accessory', '1', '', '', '90', '', 'false', '', 'Plank', ''),
+    )
+  })
+
+  it('carries a distance accessory’s distance', async () => {
+    await seedAccessory('Farmer Walk', 'distance', { weight: 100, reps: null, duration: null, distance: 40 })
+    await exportCsv(db)
+    const lines = (await capturedBlob!.text()).trim().split('\n')
+    expect(lines).toContain(
+      row(ISO, 'OHP', '1', 'accessory', '1', '100', '', '', '40', 'false', '', 'Farmer Walk', ''),
+    )
+  })
+
+  it('names both measurements in the header', async () => {
+    await exportCsv(db)
+    const header = (await capturedBlob!.text()).trim().split('\n')[0]
+    expect(header).toContain('duration_s')
+    expect(header).toContain('distance_m')
+  })
+
+  it('does not lose the measurement a timed row is the only record of', async () => {
+    await seedAccessory('Plank', 'timed', { weight: null, reps: null, duration: 90, distance: null })
+    await exportCsv(db)
+    const text = await capturedBlob!.text()
+    // Before this, a plank's ONLY performance figure appeared nowhere in the file.
+    expect(text).toContain('90')
   })
 })

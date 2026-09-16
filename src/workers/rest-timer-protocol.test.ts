@@ -100,3 +100,84 @@ describe('createRestTimer', () => {
     t.terminate()
   })
 })
+
+// ── F68 ─────────────────────────────────────────────────────────────────────
+// `resume` cleared the paused flag and posted nothing, and the 1 Hz interval
+// kept its original phase — so the first `elapsed` after the tab became visible
+// arrived up to a full second late, while the countdown on screen had already
+// jumped to the true value. The timer visibly disagreed with itself for that
+// second.
+describe('resume posts at once (F68)', () => {
+  it('posts the current elapsed immediately, not on the next tick', () => {
+    vi.useFakeTimers()
+    try {
+      const ticks: number[] = []
+      const timer = createRestTimer(t => ticks.push(t.elapsed))
+      timer.handle({ type: 'start', restStartedAt: Date.now() })
+
+      vi.advanceTimersByTime(3_000)
+      timer.handle({ type: 'pause' })
+      vi.advanceTimersByTime(5_000)
+
+      const before = ticks.length
+      timer.handle({ type: 'resume' })
+
+      expect(ticks.length).toBe(before + 1)
+      expect(ticks[ticks.length - 1]).toBe(8)
+      timer.terminate()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('resets the interval phase, so the next tick is a full second later', () => {
+    vi.useFakeTimers()
+    try {
+      const ticks: number[] = []
+      const timer = createRestTimer(t => ticks.push(t.elapsed))
+      timer.handle({ type: 'start', restStartedAt: Date.now() })
+      vi.advanceTimersByTime(1_500)
+      timer.handle({ type: 'pause' })
+      vi.advanceTimersByTime(1_000)
+      timer.handle({ type: 'resume' })
+
+      const after = ticks.length
+      vi.advanceTimersByTime(999)
+      expect(ticks.length).toBe(after)
+      vi.advanceTimersByTime(1)
+      expect(ticks.length).toBe(after + 1)
+      timer.terminate()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('posts nothing on resume when no rest is running', () => {
+    vi.useFakeTimers()
+    try {
+      const ticks: number[] = []
+      const timer = createRestTimer(t => ticks.push(t.elapsed))
+      timer.handle({ type: 'resume' })
+      expect(ticks).toEqual([])
+      timer.terminate()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('posts nothing on resume after stop', () => {
+    vi.useFakeTimers()
+    try {
+      const ticks: number[] = []
+      const timer = createRestTimer(t => ticks.push(t.elapsed))
+      timer.handle({ type: 'start', restStartedAt: Date.now() })
+      timer.handle({ type: 'stop' })
+      const before = ticks.length
+      timer.handle({ type: 'resume' })
+      expect(ticks.length).toBe(before)
+      timer.terminate()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

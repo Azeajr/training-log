@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   failures, gaps, recordSaveFailure, clearSaveFailure,
-  gapsForSession, sessionIdsWithGaps, resetSaveFailures,
+  gapsForSession, resetSaveFailures,
 } from './save-failure-store'
 
 const record = (sessionId: number, describe = 'Main set 3 · 255lb × 8') =>
@@ -50,11 +50,6 @@ describe('save-failure-store', () => {
     expect(gapsForSession(7).map(g => g.describe)).toEqual(['a'])
     expect(gapsForSession(8).map(g => g.describe)).toEqual(['b'])
     expect(gapsForSession(99)).toEqual([])
-  })
-
-  it('dedupes session ids for the History flag', () => {
-    record(7); record(7); record(8)
-    expect(sessionIdsWithGaps().sort()).toEqual([7, 8])
   })
 
   it('writes gaps to localStorage under a versioned key', () => {

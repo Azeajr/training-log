@@ -663,7 +663,11 @@ describe('History — a failing read (F21)', () => {
 
   it('survives a denied localStorage read of the remembered lift', async () => {
     await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('storage denied') })
+    // The INSTANCE, not Storage.prototype: jsdom reaches localStorage through a
+    // proxy that does not consult a patched prototype method, so a prototype
+    // spy never intercepts and this test passed whether the read was guarded or
+    // not. Probed before trusting it.
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => { throw new Error('storage denied') })
 
     renderHistory()
     await drain()

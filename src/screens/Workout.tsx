@@ -2,7 +2,7 @@ import { createSignal, createEffect, on, For, Index, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, Exercise, Session } from '../types/domain'
-import { workout, logSet, editSet, advanceSet, deleteLastSet, logCrossSet, editCrossSet, deleteLastCrossSetFor, startRest, clearSession, setNotes } from '../store/workout-store'
+import { workout, logSet, editSet, advanceSet, deleteLastSet, logCrossSet, editCrossSet, deleteLastCrossSetFor, startRest, clearSession, setNotes, persistenceError } from '../store/workout-store'
 import {
   getSupplementalLabel, calcJokerSet, calcJokerIncrement, calcNextJokerWeight,
   shouldShowJokerButton, JOKER_MIN_REPS, isSupplementalType, jokerChainBaseWeight,
@@ -950,6 +950,21 @@ export default function Workout() {
             labelClass={`${workout.activeSession!.week === 4 ? 'text-info' : 'text-text'} underline underline-offset-2 decoration-faint hover:decoration-accent`}
           />
         </button>
+
+        {/* Logged sets are in the database; the cursor, the accessory work
+            and the session notes are not — they live in the workout store
+            until COMPLETE. If that store has stopped persisting, say so, since
+            the cost lands on a reload the user has no reason to expect (F12). */}
+        <Show when={persistenceError()}>
+          <div role="alert" class="border border-warn px-3 py-2 mb-4">
+            <div class="text-warn text-xs uppercase tracking-widest mb-1">Recovery is off</div>
+            <div class="text-text-dim text-sm break-words">
+              This device stopped saving your in-progress session ({persistenceError()}).
+              Logged sets are safe; assistance work and notes would be lost if the app closes.
+              Finishing the session now writes everything.
+            </div>
+          </div>
+        </Show>
 
         <SaveFailureBanner sessionId={workout.activeSession!.id} />
 

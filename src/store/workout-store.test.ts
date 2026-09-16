@@ -8,6 +8,7 @@ import {
   addAccessory, logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory,
   setAccessoryNotes,
   clearSession, setNotes, setupWorkoutPersistence,
+  persistenceError, resetPersistenceError,
 } from './workout-store'
 import type { Session } from '../types/domain'
 
@@ -521,5 +522,77 @@ describe('setupWorkoutPersistence', () => {
     const stored = JSON.parse(localStorage.getItem('workout-store')!)
     expect(stored.state.activeSession).toBeNull()
     expect(stored.state.notes).toBe('')
+  })
+})
+
+// ── F12 ─────────────────────────────────────────────────────────────────────
+// The persistence effect called localStorage.setItem with no catch, on the
+// render path. A quota or write failure threw out of a reactive effect with
+// nothing above it to handle the throw, and recovery for the active workout
+// then stopped silently: logged sets are safe in the database, but the cursor,
+// the accessory work and the session notes live only in this store until
+// COMPLETE, so a reload after that point lost them with nothing having said so.
+describe('persistence failure (F12)', () => {
+  let dispose: (() => void) | undefined
+  // createEffect is deferred, so every assertion here flushes first — the same
+  // shape the setupWorkoutPersistence tests above already use.
+  const flush = () => new Promise<void>(r => setTimeout(r, 0))
+
+  beforeEach(() => {
+    clearSession()
+    localStorage.clear()
+    resetPersistenceError()
+    dispose = undefined
+  })
+
+  afterEach(() => {
+    dispose?.()
+    vi.restoreAllMocks()
+    resetPersistenceError()
+  })
+
+  // The INSTANCE, not Storage.prototype: jsdom reaches localStorage through a
+  // proxy that does not consult a patched prototype method, so a
+  // `Storage.prototype` spy silently fails to intercept and the test passes
+  // against broken code. Verified by probe before relying on it.
+  const failWrites = (thrown: unknown = new Error('QuotaExceededError')) =>
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw thrown })
+
+  it('does not throw out of the effect when the write fails', async () => {
+    failWrites()
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await expect(flush()).resolves.toBeUndefined()
+  })
+
+  it('reports the failure so the screen can say recovery is off', async () => {
+    failWrites()
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    expect(persistenceError()).toBe('QuotaExceededError')
+  })
+
+  it('reports nothing while writes are working', async () => {
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    expect(persistenceError()).toBeNull()
+  })
+
+  it('clears the report once a write succeeds again', async () => {
+    const spy = vi.spyOn(window.localStorage, 'setItem')
+    spy.mockImplementationOnce(() => { throw new Error('QuotaExceededError') })
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    expect(persistenceError()).toBe('QuotaExceededError')
+
+    setNotes('a change that re-runs the effect')
+    await flush()
+    expect(persistenceError()).toBeNull()
+  })
+
+  it('describes a non-Error throw rather than reporting nothing', async () => {
+    failWrites('nope')
+    dispose = createRoot(d => { setupWorkoutPersistence(); return d })
+    await flush()
+    expect(persistenceError()).toBeTruthy()
   })
 })

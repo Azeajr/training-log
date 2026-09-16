@@ -13,7 +13,7 @@ import {
   getRecentWorkingSets,
   applyCycleDoubling,
 } from './cycle'
-import { getCurrentTm } from './training-max'
+import { getCurrentTm, setTm } from './training-max'
 import { archiveLift } from './lift'
 
 const mkLift = (name: string, order: number) =>
@@ -977,5 +977,71 @@ describe('applyCycleDoubling and deloadTms run twice', () => {
     // Accepting on the first Bench must not rewrite the second Bench's row.
     expect(out!.newTms.find(t => t.liftId === b.id!)!.weight).toBe(300)
     expect(out!.newTms.find(t => t.liftId === a.id!)!.weight).toBe(210)
+  })
+})
+
+// ── F100 ────────────────────────────────────────────────────────────────────
+// deloadTms is relative — weight × 0.9 of whatever is current — so a second run
+// compounds. Nothing recorded that a row had come from a deload rather than
+// from the user, so the library could not tell a second tap from the next
+// cycle's deload, and its only guard was single-flight at one modal.
+describe('deloadTms is idempotent within a cycle (F100)', () => {
+  const setup = async () => {
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    return { lifts, cycleId }
+  }
+
+  it('cuts once, and a second call changes nothing', async () => {
+    const { lifts } = await setup()
+
+    const first = await deloadTms(db)
+    expect(first).toHaveLength(lifts.length)
+    expect(await getCurrentTm(db, lifts[0].id!)).toBe(180)
+
+    const second = await deloadTms(db)
+    expect(second).toEqual([])
+    expect(await getCurrentTm(db, lifts[0].id!)).toBe(180)
+  })
+
+  it('writes no second row, so the history is not littered either', async () => {
+    const { lifts } = await setup()
+    await deloadTms(db)
+    const after = (await db.trainingMaxes.where('liftId').equals(lifts[0].id!).toArray()).length
+    await deloadTms(db)
+    expect((await db.trainingMaxes.where('liftId').equals(lifts[0].id!).toArray()).length).toBe(after)
+  })
+
+  it('stamps the row so the guard has something to read', async () => {
+    const { lifts, cycleId } = await setup()
+    await deloadTms(db)
+    const tms = await db.trainingMaxes.where('liftId').equals(lifts[0].id!).sortBy('setAt')
+    const newest = tms[tms.length - 1]
+    expect(newest.source).toBe('deload')
+    expect(newest.cycleId).toBe(cycleId)
+  })
+
+  it('deloads again for a later cycle — a guard, not a lock', async () => {
+    const { lifts } = await setup()
+    await deloadTms(db)
+    expect(await getCurrentTm(db, lifts[0].id!)).toBe(180)
+
+    await db.cycles.add({ number: 2, startDate: new Date(), endDate: null })
+    const next = await deloadTms(db)
+
+    expect(next).toHaveLength(lifts.length)
+    expect(await getCurrentTm(db, lifts[0].id!)).toBe(160)
+  })
+
+  it('a manual change after the deload re-opens it — the newest row is no longer a deload', async () => {
+    const { lifts } = await setup()
+    await deloadTms(db)
+    await setTm(db, lifts[0].id!, 190)
+
+    await deloadTms(db)
+
+    // 190 × 0.9 = 171 → 170. The user's number is what gets cut, as it should be.
+    expect(await getCurrentTm(db, lifts[0].id!)).toBe(170)
   })
 })
