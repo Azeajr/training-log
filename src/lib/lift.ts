@@ -1,4 +1,5 @@
 import type { TrainingDB } from '../db/index'
+import { discardPendingSessionRows } from './session'
 import type { Lift, LiftSupplemental } from '../types/domain'
 
 export async function createLift(
@@ -24,8 +25,12 @@ export async function archiveLift(
 ): Promise<void> {
   await db.transaction(async () => {
     await db.lifts.update(id, { archived: true })
+    // Through the shared cascade, not a re-implementation: this deleted the
+    // session ROW only and left its sets, accessorySets and accessoryNotes
+    // behind, pointing at a sessionId nothing resolves (F99). The *Rows variant
+    // because we are already inside a transaction and they do not nest.
     const pending = await db.sessions.where('liftId').equals(id).filter(s => s.status === 'pending').toArray()
-    for (const s of pending) await db.sessions.delete(s.id!)
+    for (const s of pending) await discardPendingSessionRows(db, s.id!)
     // Optionally drop cross-lift blocks on other days that use this lift as
     // their movement. Off by default: archiving is reversible, so the blocks
     // keep running off this lift's last (frozen) TM until the user opts to remove.
@@ -65,6 +70,21 @@ export async function deleteLift(db: TrainingDB, id: number): Promise<void> {
     const referencing = await db.liftSupplementals.where('movementLiftId').equals(id).toArray()
     for (const b of referencing) await db.liftSupplementals.delete(b.id!)
     await db.trainingMaxes.where('liftId').equals(id).delete()
+
+    // The cascade used to stop here, leaving this lift's sessions and all their
+    // child rows behind with a liftId nothing resolves (F44). The doc comment
+    // scopes this function to pre-history use, but nothing enforces that — and
+    // "hard-delete a lift and everything attached to it" has to mean it.
+    const sessions = await db.sessions.where('liftId').equals(id).toArray()
+    for (const session of sessions) {
+      const sessionId = session.id!
+      await db.sets.where('sessionId').equals(sessionId).delete()
+      await db.accessorySets.where('sessionId').equals(sessionId).delete()
+      await db.accessoryNotes.where('sessionId').equals(sessionId).delete()
+      await db.sessions.delete(sessionId)
+    }
+    await db.assistanceDefaults.where('liftId').equals(id).delete()
+
     await db.lifts.delete(id)
   })
 }

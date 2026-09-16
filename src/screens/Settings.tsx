@@ -274,18 +274,22 @@ export default function Settings() {
       { destructive: true, confirmLabel: 'CLEANUP' }
     )) return
 
-    const [allExercises, allAtms, allSets, allSessions] = await Promise.all([
+    const [allExercises, allAtms, allSets, allSessions, allDefaults] = await Promise.all([
       db.exercises.toArray(),
       db.accessoryTrainingMaxes.toArray(),
       db.accessorySets.toArray(),
       db.sessions.toArray(),
+      db.assistanceDefaults.toArray(),
     ])
 
     const plan = buildCleanupPlan(
-      allExercises.map(ex => ({ id: ex.id!, archived: ex.archived })),
+      allExercises.map(ex => ({ id: ex.id!, name: ex.name, archived: ex.archived })),
       allAtms.map(atm => ({ id: atm.id!, exerciseId: atm.exerciseId })),
       allSets.map(s => ({ id: s.id!, sessionId: s.sessionId, exerciseId: s.exerciseId })),
       allSessions.map(s => ({ id: s.id! })),
+      // Configuration counts as use: without these, CLEANUP archived exercises
+      // the user had just picked as a lift's assistance default (F45).
+      allDefaults.map(d => ({ exerciseId: d.exerciseId })),
     )
 
     await db.transaction(async () => {

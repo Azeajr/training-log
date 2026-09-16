@@ -209,18 +209,33 @@ export default function HistoryEdit() {
     setPicker(null)
   }
 
+  const wasSwapped = (acc: EditAccessory) =>
+    acc.originalExerciseId !== null && acc.originalExerciseId !== acc.exerciseId
+
+  /**
+   * Clear out the rows a swapped card is replacing.
+   *
+   * Split from the write below and run for EVERY card first, because these two
+   * halves interfere across cards: a chain of swaps (card A goes B→C while card
+   * B goes A→B) has one card's cleanup of its own `originalExerciseId` delete
+   * the rows another card has already written for that same exercise. Deleting
+   * everything that is going away before anything new is written removes the
+   * ordering dependence entirely (F01).
+   */
+  const clearSwappedAccessory = async (acc: EditAccessory) => {
+    if (!wasSwapped(acc)) return
+    await db.accessorySets
+      .where('sessionId').equals(sid)
+      .filter(s => s.exerciseId === acc.originalExerciseId)
+      .delete()
+    await db.accessoryNotes
+      .where('sessionId').equals(sid)
+      .filter(n => n.exerciseId === acc.originalExerciseId)
+      .delete()
+  }
+
   const persistAccessory = async (acc: EditAccessory) => {
-    const swapped = acc.originalExerciseId !== null && acc.originalExerciseId !== acc.exerciseId
-    if (swapped) {
-      await db.accessorySets
-        .where('sessionId').equals(sid)
-        .filter(s => s.exerciseId === acc.originalExerciseId)
-        .delete()
-      await db.accessoryNotes
-        .where('sessionId').equals(sid)
-        .filter(n => n.exerciseId === acc.originalExerciseId)
-        .delete()
-    }
+    const swapped = wasSwapped(acc)
     const existing = !swapped && acc.originalExerciseId === acc.exerciseId
       ? await db.accessorySets
           .where('sessionId').equals(sid)
@@ -289,6 +304,10 @@ export default function HistoryEdit() {
             .filter(n => n.exerciseId === exId)
             .delete()
         }
+        // Two passes, deliberately: every replaced original is removed before
+        // any replacement is written, so no card can delete rows another card
+        // in this same save has just written (F01).
+        for (const acc of editAccessories()) await clearSwappedAccessory(acc)
         for (const acc of editAccessories()) await persistAccessory(acc)
         await db.sessions.update(sid, { notes: notes() })
       })

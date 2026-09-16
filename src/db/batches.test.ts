@@ -49,7 +49,9 @@ describe('the remaining-work plan covers the open findings', () => {
   it('parses both the ledger table and the batch sections', () => {
     expect(state.size).toBeGreaterThan(50)
     expect(planned.size).toBe(7)
-    expect(allPlanned.length).toBeGreaterThan(50)
+    // Not a magic minimum: a closed batch legitimately empties, so the only
+    // floor that stays true is "at least enough to cover what is still open".
+    expect(allPlanned.length).toBeGreaterThanOrEqual(open.length)
   })
 
   it('places every open finding in a batch', () => {
