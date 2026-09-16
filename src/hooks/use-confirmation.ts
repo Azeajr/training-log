@@ -31,7 +31,24 @@ export function createConfirmation(): ConfirmationAPI {
   const [pending, setPending] = createSignal<ConfirmationRequest | null>(null)
 
   const confirmWithChoice = (message: string, opts: ConfirmOptions): Promise<ConfirmResult> =>
-    new Promise(resolve => setPending({ message, opts, resolve }))
+    new Promise(resolve => {
+      // Settle whatever this displaces. There is one slot and no queue, so a
+      // second confirm() while one was pending simply wrote over the first
+      // request's `resolve` — leaving that promise **permanently unsettled**.
+      // Every caller awaits it, so everything after the await never ran: a
+      // Settings handler stopped mid-way, an abandon or a skip silently did
+      // nothing. Nothing surfaced, because an unsettled promise is not an
+      // error (F48).
+      //
+      // 'cancel' rather than a rejection, and rather than a queue: it is what
+      // Escape already means, and it is the honest reading — a confirmation the
+      // user never saw has not been agreed to, so every `if (!await confirm)`
+      // bails exactly as it would have.
+      setPending(prev => {
+        prev?.resolve('cancel')
+        return { message, opts, resolve }
+      })
+    })
 
   // Binary helper: 'confirm' → true, 'cancel' → false. Keeps every existing
   // call site and the two-button dialog path unchanged.
