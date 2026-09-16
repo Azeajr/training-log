@@ -1,4 +1,5 @@
 import { createSignal, createEffect, For, Show } from 'solid-js'
+import { createAsyncRead } from '../../lib/async-read'
 import { db } from '../../db/index'
 import { estimated1RM } from '../../lib/calc'
 import { bestEstimatedPerformance, baselineWorkingSets } from '../../lib/performance'
@@ -35,25 +36,31 @@ interface Props {
 // the same numbers for the lift already on screen instead of sending the user
 // to a second destination that answers the same question.
 export default function RecordsPanel(props: Props) {
-  const [loading, setLoading] = createSignal(true)
   const [records, setRecords] = createSignal<RecordRow[]>([])
   const [tms, setTms] = createSignal<TmRow[]>([])
 
-  // Request identity. `History.tsx:612` passes a live signal, so switching the
-  // selected lift is the ordinary path — and this effect used to publish
-  // whatever settled LAST rather than whatever was asked for last, so a slow
-  // earlier load overwrote the lift the user had already moved to. It also
-  // never returned to the loading state, so a switch showed the PREVIOUS lift's
-  // numbers with nothing indicating they were stale.
-  let requestId = 0
+  // Request identity AND a failure state, both from one place.
+  //
+  // `History.tsx` passes a live signal for `liftId`, so switching the selected
+  // lift is the ordinary path — and this effect used to publish whatever
+  // settled LAST rather than whatever was asked for last, so a slow earlier
+  // load overwrote the lift the user had already moved to (F63).
+  //
+  // The half F63 left behind: `void load(...)` had no catch and `loading` only
+  // cleared after every await resolved, so ANY rejected read — roster,
+  // sessions, sets, cross sets, training maxes — escaped as an unhandled
+  // rejection and pinned the screen on "Loading…" forever. No error text, no
+  // retry, no remount short of navigating away (F23). Worse than stuck: with
+  // `records` still empty, what showed through was "NO SETS YET", which
+  // describes an empty log rather than an unreadable one.
+  const read = createAsyncRead()
 
   createEffect(() => {
     const only = props.liftId
-    setLoading(true)
-    void load(only, ++requestId)
+    void read.run(isCurrent => load(only, isCurrent))
   })
 
-  const load = async (only: number | undefined, token: number) => {
+  const load = async (only: number | undefined, isCurrent: () => boolean) => {
     const lifts = (await db.lifts.orderBy('order').toArray())
       .filter(l => !l.archived)
       .filter(l => only == null || l.id === only)
@@ -105,10 +112,9 @@ export default function RecordsPanel(props: Props) {
 
     // A newer request has superseded this one: drop the result on the floor
     // rather than publishing another lift's records under the current name.
-    if (token !== requestId) return
+    if (!isCurrent()) return
     setRecords(recRows)
     setTms(tmRows)
-    setLoading(false)
   }
 
   const recordRows = () => (
@@ -144,7 +150,22 @@ export default function RecordsPanel(props: Props) {
   )
 
   return (
-    <Show when={!loading()} fallback={<div class="text-muted text-sm tracking-widest uppercase">Loading…</div>}>
+    <Show
+      when={!read.error()}
+      fallback={
+        <div role="alert" class="border border-danger px-3 py-2">
+          <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not read your records</div>
+          <div class="text-text-dim text-sm mb-2 break-words">{read.error()}</div>
+          <button
+            onClick={() => void read.retry()}
+            class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
+          >
+            RETRY
+          </button>
+        </div>
+      }
+    >
+    <Show when={!read.loading()} fallback={<div class="text-muted text-sm tracking-widest uppercase">Loading…</div>}>
       <Show when={!props.compact} fallback={recordRows()}>
         <Rule label="RECORDS" class="text-muted mb-4" />
         {recordRows()}
@@ -188,6 +209,7 @@ export default function RecordsPanel(props: Props) {
           </For>
         </div>
       </Show>
+    </Show>
     </Show>
   )
 }

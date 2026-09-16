@@ -43,8 +43,15 @@ export const est1RMFromTm = (tm: number): number => tm / TM_PCT_OF_1RM
 
 export const DEFAULT_ACCESSORY_INCREMENT_LB = 5
 
-export const SET_TYPE_DISPLAY_ORDER = ['warmup', 'main', 'joker', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs'] as const
-export const SET_TYPE_EDIT_ORDER = ['warmup', 'main', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'joker'] as const
+// `cross` is in both lists. It was in neither, so cross-lift work — a real
+// logged set, stored in the same table, counting toward History's PR badge,
+// the records panel and the AMRAP seed — was invisible in History's expanded
+// detail and unreachable in the editor. A session could be badged PR for a
+// movement whose sets the screen then refused to show, and there was no way to
+// correct one (F10). It sorts after the self-supplemental block in both,
+// matching the order the work is actually done in.
+export const SET_TYPE_DISPLAY_ORDER = ['warmup', 'main', 'joker', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'cross'] as const
+export const SET_TYPE_EDIT_ORDER = ['warmup', 'main', 'fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs', 'cross', 'joker'] as const
 
 export const isSupplementalType = (t: string): boolean =>
   t === 'fsl' || t === 'ssl' || t === 'bbb' || t === 'fsl+bbb' || t === 'ssl+bbb' || t === 'bbs'

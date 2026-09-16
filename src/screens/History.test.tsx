@@ -630,3 +630,183 @@ describe('History — calendar', () => {
     })
   })
 })
+
+// ─── F19 / F20 / F21: async reads need an identity and a failure state ───────
+// Each async operation wrote unkeyed global result signals without checking
+// what was selected by the time it landed, and every one of them was fired as
+// `void load(...)` with no catch.
+
+describe('History — a failing read (F21)', () => {
+  beforeEach(async () => {
+    localStorage.clear()
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(),
+      db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
+    ])
+    mockNavigate.mockClear()
+  })
+
+  afterEach(async () => { vi.restoreAllMocks(); await drain() })
+
+  it('does not present an unreadable database as an empty log', async () => {
+    // The worst version of this bug. `sessions()` starts empty and an empty log
+    // renders the same way, so a rejected roster query showed the user "No
+    // completed sessions yet." over a database full of sessions.
+    vi.spyOn(db.lifts, 'orderBy').mockImplementation(() => { throw new Error('disk unavailable') })
+
+    renderHistory()
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(screen.queryByText('No completed sessions yet.')).not.toBeInTheDocument()
+    expect(document.body.textContent).toContain('disk unavailable')
+  })
+
+  it('survives a denied localStorage read of the remembered lift', async () => {
+    await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('storage denied') })
+
+    renderHistory()
+    await drain()
+
+    // A blocked preference read must not take the screen down with it: the
+    // remembered lift is a convenience, not the data.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(document.body.textContent).toContain('OHP')
+  })
+
+  it('offers a retry that recovers', async () => {
+    const real = db.lifts.orderBy.bind(db.lifts)
+    const spy = vi.spyOn(db.lifts, 'orderBy')
+    spy.mockImplementationOnce(() => { throw new Error('transient') })
+
+    renderHistory()
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+    spy.mockImplementation(real)
+    await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    await waitFor(() => expect(document.body.textContent).toContain('OHP'))
+  })
+})
+
+describe('History — stale detail (F19)', () => {
+  beforeEach(async () => {
+    localStorage.clear()
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.sets.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
+    ])
+    mockNavigate.mockClear()
+  })
+
+  afterEach(async () => { vi.restoreAllMocks(); await drain() })
+
+  it('never shows one session’s sets under another session’s row', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const older = await seedSession(liftId, cycleId, 2_000_000)
+    const newer = await seedSession(liftId, cycleId, 1_000_000)
+    await db.sets.add({ sessionId: older, type: 'main', setNumber: 1, weight: 111, reps: 5, isAmrap: false })
+    await db.sets.add({ sessionId: newer, type: 'main', setNumber: 1, weight: 222, reps: 5, isAmrap: false })
+
+    renderHistory()
+    await waitFor(() => expect(screen.getAllByRole('button', { expanded: false }).length).toBeGreaterThan(1))
+
+    // Hold the first row's sets read open, expand the second, then let the
+    // first land. It must not publish into the row now on screen.
+    // handleExpand awaits a Promise.all of four reads, so holding any one of
+    // them holds the whole detail load.
+    const realGet = db.sessions.get.bind(db.sessions)
+    let release!: () => void
+    const held = new Promise<void>(r => { release = r })
+    vi.spyOn(db.sessions, 'get').mockImplementationOnce(async (id: number) => {
+      await held
+      return realGet(id)
+    })
+
+    const rows = screen.getAllByRole('button', { expanded: false })
+    fireEvent.click(rows[0])
+    await drain()
+    fireEvent.click(screen.getAllByRole('button', { expanded: false })[0])
+    await drain()
+    release()
+    await drain()
+
+    // Rows are newest-first, so the held expand is the 222 session and the one
+    // left open is the 111 session. When the held read finally lands it must be
+    // dropped: without the guard it published into whatever panel was open, so
+    // the 111 row started showing 222.
+    const open = screen.getAllByRole('button', { expanded: true })
+    expect(open).toHaveLength(1)
+    const panel = document.getElementById(open[0].getAttribute('aria-controls')!)
+    expect(panel).not.toBeNull()
+    expect(panel!.textContent).toContain('111')
+    expect(panel!.textContent).not.toContain('222')
+  })
+})
+
+// ─── F10: cross sets are logged work, so History must show and edit them ─────
+// Both the display and the edit type lists left `cross` out, so History could
+// badge a session for a cross-movement PR and then hide that very work in its
+// expanded detail — and the editor offered no way to correct it.
+
+describe('History — cross sets in the session detail (F10)', () => {
+  beforeEach(async () => {
+    localStorage.clear()
+    await Promise.all([
+      db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear(),
+      db.sessions.clear(), db.sets.clear(), db.accessorySets.clear(), db.accessoryNotes.clear(),
+    ])
+    mockNavigate.mockClear()
+  })
+
+  afterEach(async () => { vi.restoreAllMocks(); await drain() })
+
+  const seedWithCross = async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const squatId = await db.lifts.add({ name: 'Squat', order: 1, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await seedSession(liftId, cycleId, 1_000_000)
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 185, reps: 5, isAmrap: false })
+    await db.sets.add({ sessionId, type: 'cross', setNumber: 1, weight: 225, reps: 5, isAmrap: false, liftId: squatId })
+    await db.sets.add({ sessionId, type: 'cross', setNumber: 2, weight: 225, reps: 5, isAmrap: false, liftId: squatId })
+    return { sessionId, squatId }
+  }
+
+  it('shows the cross sets, not just the session lift’s own', async () => {
+    await seedWithCross()
+    renderHistory()
+    fireEvent.click(await screen.findByRole('button', { expanded: false, name: /Bench/ }))
+    await drain()
+
+    const panel = document.getElementById(
+      screen.getByRole('button', { expanded: true }).getAttribute('aria-controls')!,
+    )!
+    expect(panel.textContent).toContain('185')
+    expect(panel.textContent).toContain('225')
+  })
+
+  it('names the movement the cross work trained, not just "Cross"', async () => {
+    await seedWithCross()
+    renderHistory()
+    fireEvent.click(await screen.findByRole('button', { expanded: false, name: /Bench/ }))
+    await drain()
+
+    const panel = document.getElementById(
+      screen.getByRole('button', { expanded: true }).getAttribute('aria-controls')!,
+    )!
+    expect(panel.textContent).toMatch(/Squat/i)
+  })
+})
+
+// F20's third leg — a late lift read replacing the current lift's list — has
+// NO component test here, deliberately. Every seam available for holding one
+// read open (trainingMaxes, sessions, sets) is also read by the RecordsPanel
+// embedded in this screen, so the mock intercepts the panel's query instead of
+// History's and the test passes whether the guard is present or not. A test
+// that cannot fail is worse than no test, so the supersession contract is
+// pinned where it is actually decidable: `async-read.test.ts` covers it
+// directly, and the guards here are one-line `if (!isCurrent()) return`
+// against it.
