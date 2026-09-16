@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **23** |
+| `open` | **17** |
 | `wip` | 0 |
-| `fixed` | **75** — F01, F02, F03, F04, F05, F06, F07, F08, F13, F14, F15, F16, F17, F18, F22, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F71, F73, F74, F75, F76, F77, F78, F79, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
+| `fixed` | **81** — F01, F02, F03, F04, F05, F06, F07, F08, F13, F14, F15, F16, F17, F18, F22, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F81, F82, F83, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
 | `fixed-by` | **3** — F43, F62, F98 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -158,9 +158,9 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F67 | Medium <br><sub>needs device</sub> | B09 | C6 | `src/lib/notifications.ts` | `fixed` | `fe36572` · `notifications.test.ts` ×2 — **platform claim still unverified** | `firePage` wraps the constructor and falls back to `ServiceWorkerRegistration.showNotification`. Unwrapped, the `TypeError` escaped the timer tick uncaught: no notification, and nothing reporting that none fired — while this module designates the page as the **reliable** path. An explicit permission denial is still respected rather than routed around. **What is NOT settled:** whether the constructor actually is unavailable on Android Chrome or in an iOS PWA. That needs a real device (installed PWA, permission granted, tab hidden, one rest bell) and this machine cannot answer it, per the project rule on mobile claims. The fallback is correct either way; the severity is not established. |
 | F68 | Low | B09 | — | `src/workers/timer.worker.ts` | `open` | — | — |
 | F69 | Medium | B10 | — | `vite.config.ts` | `fixed` | `bc77574` · `pnpm test:coverage` green on ratcheted thresholds | `include` widened from three directories to `src/**`. `components`, `db`, `hooks`, `service-worker.ts` and `workers` were **not measured at all** — 22 of the 23 findings this review opened in those areas lived where the gate could not see. Measured over the whole tree the real figures are **88.79 / 78.27 / 88.18 / 91.17**, so thresholds are re-baselined to **85 / 76 / 85 / 88** — just under actual, so the gate bites on every metric instead of leaving three with ~9 points of slack. |
-| F70 | Medium <br><sub>needs Lighthouse</sub> | B10 | — | `vite.config.ts` | `open` | — | Conditional severity; installability impact worth a Lighthouse check. |
+| F70 | Medium <br><sub>needs Lighthouse</sub> | B10 | — | `vite.config.ts` | `fixed` | `afd4d23` · `pwa-manifest.test.ts` ×7 | **The delivery mechanism, failing silently.** The manifest declared `icon-192.png` and `icon-512.png` and neither file existed, so Chrome's installability criteria — a manifest icon of at least 144×144 that actually loads — were never met and the install prompt never appeared; `index.html` had no `apple-touch-icon`, so iOS had no home-screen icon either. The build succeeded and CI passed the whole time, because nothing held the declaration against the filesystem. New PNGs generated from the SVG, an apple-touch-icon link, and the manifest moved to `src/pwa-manifest.ts` as data so a test can read it: every declared icon must be a real non-empty file, one must be ≥144px, one must be maskable, and each PNG's **IHDR dimensions must match its declared `sizes`** — a regenerated icon at the wrong size would otherwise still "exist". PNGs committed rather than built, so CI needs no image toolchain; `scripts/generate-icons.mjs` reproduces them through Playwright's bundled Chromium. Adding the module to `tsconfig.node.json` is **F71's gate working** — the typecheck refused the import until the file belonged to a project. Lighthouse not run: the assertion that the icons resolve is the thing that was missing. |
 | F71 | Medium | B10 | — | `tsconfig.json` | `fixed` | `bc77574` · deliberate type errors caught in both projects | `tsconfig.e2e.json` added to the solution file's `references`, and `tsconfig.node.json` widened to `playwright.config.ts`, `eslint.config.js`, `stryker.config.mjs` and `scripts/**`. Verified rather than assumed: a deliberate type error in `tests/e2e/app.spec.ts` and another in `playwright.config.ts` are both now caught by `tsc -b`, and neither was before. |
-| F72 | Low | B10 | — | `vite.config.ts` | `open` | — | — |
+| F72 | Low | B10 | — | `vite.config.ts` | `fixed` | `afd4d23`, `86f4f78` · `precache.test.ts` ×9 | **(a)** `globPatterns` omitted `svg`, so favicon.svg — the only icon that existed — was not precached and failed offline. `PRECACHE_PATHS` derives from that manifest, so one entry fixes it rather than special-casing the path in the SW. **(b)** The orphaned `icons.svg` sprite is deleted. **The follow-up is the interesting part:** vite-plugin-pwa also adds the manifest's icons to the precache list, so an icon matching both sources was listed twice — and `cache.addAll()` rejects with `InvalidStateError` on a repeated URL. The service worker then failed to **install**: no page controlled, no offline shell, all seven hardening legs red at once. Caught by `pnpm verify:sw` while the unit suite, the build and the E2E suite were all green — exactly that job's purpose. `dedupePrecacheUrls`/`toPrecachePaths` extracted to `lib/precache.ts` so the SW's one piece of list logic is testable in milliseconds. |
 | F73 | Medium <br><sub>supply chain</sub> | B10 | — | `.github/workflows/deploy.yml` | `fixed` | `9daa584` · rule 1(b) | `wrangler` is now a lockfile-pinned devDependency (4.131.2) invoked via `pnpm exec`. `allowBuilds` for `esbuild`/`workerd` set to **false** — verified unnecessary, so this removes two lifecycle-script executions the old `--allow-build` flags permitted. |
 | F74 | Medium | B10 | — | `.github/workflows/ci.yml` | `fixed` | `bc77574` · new `e2e` CI job | A third CI job runs `test:e2e` on every PR and every push to main, uploading the Playwright report on failure. Landed **with** F85 and F78 — wiring a failing suite into CI, or one that tests the dev server, returns it to exactly the state that produced these findings. |
 | F75 | Low | B10 | — | `.github/workflows/ci.yml` | `fixed` | `bc77574` · `push` trigger added | `push: branches: [main]` added, with the concurrency group falling back to `github.ref` since `pull_request.number` is empty on a push. Committing on main is an accepted workflow here, and it previously got **no** checks unless the commit happened to touch a deploy path. |
@@ -168,10 +168,10 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F77 | Low | B10 | — | `eslint.config.js` | `fixed` | `bc77574` · 0 → 64 rules on `scripts/*.js` | A `**/*.{js,mjs}` block extending `js.configs.recommended` with node globals. `eslint --print-config scripts/debug-browser.js` resolved **0** rules before and **64** now; ~400 lines of Playwright-driving Node were checked by nothing. Passes clean. |
 | F78 | Medium | B10 | — | `playwright.config.ts` | `fixed` | `bc77574` · 32/32 against a production build | `webServer` is `pnpm build && vite preview` on 5175, not `pnpm dev`. **`freshStart` no longer needs `__e2eResetDb`** — Playwright gives every test its own context, and a context has its own storage partition, which is already a clean install and is exactly what `verify-notify-hardening.js` relies on. Exposing the reset hook in production was the alternative and was rejected: it is a destructive global. |
 | F79 | Medium | B10 | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · rule 1(b) | `verify:sw` script added; new `verify-sw` CI job on every PR. Two harness defects had to be fixed first — **F96** and **F97**. |
-| F80 | Low | B10 | — | `scripts/debug-browser.js` | `open` | — | B12: documented at `.claude/QUICK_START.md:36-38`. Known state — decide fix vs wontfix. |
-| F81 | Medium | B10 | — | `public/favicon.svg` | `open` | — | — |
-| F82 | Low | B10 | — | `public/demo-seed.json` | `open` | — | Decided in B12d; documented as `.claude/COMMON_MISTAKES.md` #7. Known state — decide fix vs wontfix. |
-| F83 | Low | B10 | — | `.gitignore` | `open` | — | — |
+| F80 | Low | B10 | — | `scripts/debug-browser.js` | `fixed` | `321f88e` · `pnpm debug:browser` header + QUICK_START reconciled | **Removed, not repaired.** The header promised "optionally wipes IndexedDB so you get a true first-run experience" and delivered `indexedDB.deleteDatabase('TrainingLog')`. The app has used no IndexedDB since the SQLite migration, so that resolved successfully and silently against a database that never existed, and the advertised `--no-wipe` flag changed nothing. B12 noted QUICK_START already documented the no-op — but the script's own header is what a reader hits first. The step is gone because it was also **redundant**: every run gets a fresh `browser.newContext()`, which is incognito-alike, so OPFS and localStorage start empty by construction. That is why the setup-wizard walk below it has always had a wizard to walk. |
+| F81 | Medium | B10 | — | `public/favicon.svg` | `fixed` | `afd4d23` · `pwa-manifest.test.ts` ×2 | **The icon set was another project's.** `icons.svg` was a social-link sprite (`bluesky-icon`, `discord-icon`, `github-icon`, `x-icon`) for links this app does not have, referenced by nothing and shipping to production anyway; `favicon.svg` was drawn in purple and blue against an app whose tokens are `#4ade80` on `#000000`, and it was the only icon the document referenced. Replaced with a loaded bar drawn from those tokens — thin shaft, two graduated plates a side. The graduation is load-bearing: an even plate pair reads as the letter **H** at small sizes, which the first attempt did. Geometry sits inside the maskable safe circle, so one file serves `any` and `maskable`. The test reads the accent and background values **out of `index.css`** and asserts the SVG uses exactly those two, so a future token change surfaces here rather than drifting silently. |
+| F82 | Low | B10 | — | `fixtures/demo-seed.json` | `fixed` | `321f88e` · `repo-hygiene.test.ts` ×3 | **Decision taken: moved, not deleted or wired up.** `public/` is published verbatim, so a 44.8 KB export of real training history (23 sessions, 184 sets) was fetchable at `/demo-seed.json` on the deployed site while nothing in the app read it. Its documented purpose — a hand import through Settings → IMPORT JSON — is served just as well by the repository, so it moves to `fixtures/` and the three doc references follow. Deleting it would lose a real payload; wiring it to a demo path would reintroduce the `VITE_DEMO` idea COMMON_MISTAKES #7 explicitly records as removed. One `git mv` to reverse. |
+| F83 | Low | B10 | — | `.gitignore` | `fixed` | `321f88e` · `repo-hygiene.test.ts` ×5 | **A trap for the next contributor, not a present fault.** `.claude/` was ignored wholesale while five files under it are tracked, three of which CLAUDE.md names as the project's key documents. An ignore rule cannot untrack what is already tracked, so those five kept working and nothing looked wrong — but anything **new** written beside them was invisible to `git status` and would never have reached the repo. The local scratch is named specifically instead. Tested via `git check-ignore`: a new document there is visible, every tracked file stays un-ignored, the scratch stays ignored, and the documents CLAUDE.md names are tracked. |
 | F84 | Low | B10 | C7 | `scripts/migrate-history.py` | `fixed` | `04cc34a` · `seed-migration-parity.test.ts` ×3 | **Structural, not a re-sync.** `migrate-history.py` now reads `src/db/seed.ts` instead of restating it, so the two cannot drift. Drift was worse than recorded: the script had **18** exercises against seed's **27**, and id 3 was `"Curls"` vs `'Bicep Curls'` — a migration would import a duplicate that **F41** shows cannot then be renamed. The script hard-fails if parsing yields too few rows; the test re-introduces the original drift and catches it. |
 | F85 | Medium | B11 | — | `tests/e2e/app.spec.ts` | `fixed` | `bc77574` · 32/32 passing | Was 6 failed / 26 passed. Four causes, not the three recorded: the wizard went 3 steps → 2; `SessionBar` splits FINISH from COMPLETE SESSION; `Stepper` gained `fieldLabel` so `+` is no longer the accessible name; and **`getByText('MAIN')` now matches two elements** (the session bar lists segments by the same labels) — a strict-mode violation F85 did not record. One spec also asserted a finish control that cannot exist in its state: after logging a set the rest timer owns the strip it shares with the session bar. |
 | F86 | Low | B11 | — | `test-results/.last-run.json` | `fixed` | `bc77574` · untracked + ignored | `test-results/` and `playwright-report/` ignored, and `test-results/.last-run.json` untracked. The committed copy read `{"status":"passed"}` — a stale green receipt in a repo where the suite did not pass and nothing ran it. |
@@ -208,10 +208,15 @@ being *complete* is not.
 | 3 | Session lifecycle | 0 | 0 | **Closed** — was 7, four High |
 | 4 | calc numerics | 0 | 0 | **Closed** — was 9 |
 | 5 | Async read identity | 5 | 0 | The same shape as F63, already solved once |
-| 6 | Config and assets | 6 | 0 | Build, PWA and repo hygiene |
+| 6 | Config and assets | 0 | 0 | **Closed** — was 6 |
 | 7 | Remainder | 12 | 0 | Genuinely individual |
 
-**Order: 2 → 1 → 3 → 4 → 5 → 6 → 7.** Batches 1, 2, 3 and 4 are closed.
+**Order: 2 → 1 → 3 → 4 → 6 → 5 → 7.** Batches 1, 2, 3, 4 and 6 are closed.
+
+6 was pulled ahead of 5: F70 was the only finding left that broke something for
+every user every time — the app could not be installed at all — and it was also
+the cheapest batch, so it cleared six findings while 5 and 7 remain the work
+that deserves real time.
 
 Not 1 first, despite the case for it. F01 and F07 destroy user data *today* and
 are small and isolated — putting a nine-finding infrastructure batch ahead of
@@ -309,7 +314,29 @@ the same defect `F63` had. `RecordsPanel`'s request-token fix is the template.
 
 ### 6 — Config and assets
 
-`F70` `F72` `F80` `F81` `F82` `F83`
+*(all closed)*
+
+Billed as repo hygiene; three of the six were the app's entire icon and
+installability story, and it did not work. The manifest named two icons that
+had never existed, so Chrome's install prompt could not appear on an app whose
+whole distribution story is "install it"; the favicon was another project's,
+in another project's colours; and the one icon that did exist was not precached,
+so it failed offline. The README promised "PWA — installable, works offline"
+throughout.
+
+The other three were each a place the repository said one thing and did
+another: a debug script advertising a wipe that had been a no-op since the
+SQLite migration, 45 KB of real training history published at a URL nothing
+fetched, and an ignore rule that would have silently swallowed the next
+document written beside the ones CLAUDE.md points at.
+
+**The batch's own lesson was a bug it introduced.** Adding `svg` to
+`globPatterns` made three icons appear twice in the precache list — once from
+the glob, once from the manifest — and `cache.addAll()` rejects outright on a
+repeated URL, so the service worker stopped installing altogether: no page
+controlled, no offline shell, all seven hardening legs red. The unit suite, the
+build and the E2E suite were all green. `pnpm verify:sw` is the only thing that
+saw it, which is the argument for keeping that job.
 
 ### 7 — Remainder
 
