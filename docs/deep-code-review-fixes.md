@@ -30,10 +30,10 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | State | Means |
 |---|---|
-| `open` | **39** |
+| `open` | Untouched. |
 | `wip` | Being worked now. Not a claim of anything. |
-| `fixed` | **59** — F01, F02, F03, F04, F05, F06, F07, F08, F22, F33, F34, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F71, F73, F74, F75, F76, F77, F78, F79, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
-| `fixed-by` | **3** — F43, F62, F98 |
+| `fixed` | Code changed **and** a named regression test exists **and** a commit SHA is recorded. All three, or the state is not `fixed`. |
+| `fixed-by` | Closed by another finding's fix. Evidence column names the owning ID. |
 | `wontfix` | Deliberate. The decision and its reason are written in Notes. |
 | `blocked` | The exact missing dependency is named in Notes. |
 
