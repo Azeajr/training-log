@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render } from '@solidjs/testing-library'
+import { render, screen } from '@solidjs/testing-library'
 import RestTimer from './RestTimer'
 import { startRest, stopRest, startSession, clearSession } from '../../store/workout-store'
 import { updateSettings } from '../../store/settings-store'
@@ -318,5 +318,66 @@ describe('RestTimer — SW notification scheduling', () => {
     const cancels = postMessage.mock.calls.map(c => c[0]).filter(c => c.type === 'cancel')
     expect(cancels).toContainEqual({ type: 'cancel', tag: 'rest-timer' })
     expect(cancels.some(c => c.tag === 'stalled-session')).toBe(false)
+  })
+})
+
+// ── F57 ─────────────────────────────────────────────────────────────────────
+// The sentinel lived in one mutable variable that two effects assigned to and
+// one async function cleared, so sentinels were dropped without being released.
+// The existing wake-lock cases above cannot catch this: wakeLockRequest returns
+// ONE shared mockSentinel, so "release was called" is true even when two other
+// sentinels leaked. Here every request gets its own.
+describe('RestTimer wake lock accounting', () => {
+  function distinctSentinels() {
+    const granted: Array<{ id: number; release: ReturnType<typeof vi.fn> }> = []
+    let next = 0
+    const request = vi.fn(async () => {
+      const s = { id: ++next, release: vi.fn().mockResolvedValue(undefined) }
+      granted.push(s)
+      return s
+    })
+    Object.defineProperty(navigator, 'wakeLock', {
+      value: { request }, writable: true, configurable: true,
+    })
+    return {
+      granted,
+      unreleased: () => granted.filter(s => s.release.mock.calls.length === 0),
+    }
+  }
+
+  it('never holds more than one sentinel at a time (F57)', async () => {
+    const w = distinctSentinels()
+    render(() => <RestTimer />)
+    startRest('normal')
+    await drain()
+    // Both the scheduling effect and the visibility effect request on one rest
+    // start, and the second assignment overwrote the first without releasing.
+    expect(w.unreleased().length).toBeLessThanOrEqual(1)
+  })
+
+  it('releases every sentinel it took once rest stops (F57)', async () => {
+    const w = distinctSentinels()
+    render(() => <RestTimer />)
+    startRest('normal')
+    await drain()
+    stopRest()
+    await drain()
+    // The screen must not stay awake after the session ends.
+    expect(w.unreleased()).toHaveLength(0)
+  })
+
+  it('does not strand a sentinel when the rest is extended (F57)', async () => {
+    const w = distinctSentinels()
+    render(() => <RestTimer />)
+    startRest('normal')
+    await drain()
+    // +30s re-runs the scheduling effect: it cleans up and re-requests, and the
+    // release nulled the variable only AFTER its own await, so a sentinel
+    // assigned meanwhile was clobbered and became unreachable.
+    screen.getByRole('button', { name: 'Add 30 seconds to this rest' }).click()
+    await drain()
+    stopRest()
+    await drain()
+    expect(w.unreleased()).toHaveLength(0)
   })
 })

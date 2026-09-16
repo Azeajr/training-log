@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **78** |
+| `open` | **74** |
 | `wip` | 0 |
-| `fixed` | **22** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F41, F42, F47, F51, F55, F65, F66, F73, F79, F95, F96, F97 |
+| `fixed` | **26** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F41, F42, F47, F51, F52, F54, F55, F57, F63, F65, F66, F73, F79, F95, F96, F97 |
 | `fixed-by` | **1** — F43 (reader half; F99 carries the rest) |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -63,9 +63,9 @@ Seven root-cause patterns from `deep-code-review.md:38-53`. A finding can sit in
 | ID | Pattern | Members | Owner |
 |---|---|---|---|
 | C1 | No single-flight guard on an async `onClick` | F33 ✅, F34 ✅, F41 ✅, F51 ✅, F55 ✅ — **cluster closed** | **F33** (done) — the guard belongs in `Modal` as `busy?: boolean` (settled in B08a; a per-call-site guard cannot close the Escape path) |
-| C2 | Single-slot or snapshotted state standing in for per-item state | F51, F52, F54, F55, F57, F63 | None — per-file fixes |
-| C3 | State seeded once and never re-synced, or re-synced over the user | F49, F54, F56, F63 | None — `DurationInput.tsx:18-23` is the counter-example done right |
-| C4 | Cleanup or a default bound to something that can stop existing | F57, F58, F62 | None — per-file fixes |
+| C2 | Single-slot or snapshotted state standing in for per-item state | F51 ✅, F52 ✅, F54 ✅, F55 ✅, F57 ✅, F63 ✅ — **cluster closed** | None — per-file fixes |
+| C3 | State seeded once and never re-synced, or re-synced over the user | F49, F54 ✅, F56, F63 ✅ | None — `DurationInput.tsx:18-23` is the counter-example done right |
+| C4 | Cleanup or a default bound to something that can stop existing | F57 ✅, F58, F62 | None — per-file fixes |
 | C5 | Uneven keyboard and screen-reader access | F59, F60, F61, F64 | None — in each case a neighbouring file does it correctly |
 | C6 | Unvalidated external data written to durable storage or trusted as control flow | F03, F08, F65, F66, F67 | **F65** for the service-worker half (F65/F66 are the same `response.ok` gate) |
 | C7 | A change made and its description not updated | F76, F84, F89, F90, F91, F92, F93 | None — independent doc edits |
@@ -140,18 +140,18 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F49 | Low | B08 | C3 | `src/components/modals/LiftSetupModal.tsx` | `open` | — | — |
 | F50 | Medium | B08 | — | `src/components/modals/LiftSetupModal.tsx` | `open` | — | — |
 | F51 | Medium | B08 | C1,C2 | `src/components/workout/SaveFailureBanner.tsx` | `fixed` | `da34448` · `SaveFailureBanner.test.tsx` ×3 | `retrying` is a set of ids, not one `number | null` slot. It tracked in-flight state for a **list**, so retrying B re-enabled A while A was still in flight, and whichever settled first cleared the marker for both — on the one path whose purpose is recovering a set already lost once. |
-| F52 | Medium | B08 | C2 | `src/screens/Workout.tsx` | `open` | — | B12: `.claude/COMMON_MISTAKES.md` #6 states this defect exactly and prescribes the fix. Known state — decide fix vs wontfix. |
+| F52 | Medium | B08 | C2 | `src/screens/Workout.tsx` | `fixed` | `<pending>` · `Workout.test.tsx` cross-identity case | **The documented rule applied.** `<Index>` for the cross-block list, per `COMMON_MISTAKES.md` #6 — `crossSections()` rebuilds its wrappers every evaluation and `<For>` keys by reference, so each re-derive remounted every block. Logging a set in one block reverted a weight dialled into another (202.5lb → 195lb in the test). Closes the **wontfix-vs-fix question**: it was a documented hazard that one site escaped, so the docs were right and the code was wrong — fixed, not excused. |
 | F53 | Low <br><sub>cosmetic</sub> | B08 | — | `src/components/workout/AmrapTargets.tsx` | `open` | — | — |
-| F54 | Medium | B08 | C2,C3 | `src/components/workout/AccessoryPicker.tsx` | `open` | — | — |
+| F54 | Medium | B08 | C2,C3 | `src/components/workout/AccessoryPicker.tsx` | `fixed` | `<pending>` · `AccessoryPicker.test.tsx` F54 case | The SET TRAINING MAX buffer is seeded on every open via `openTmSheet`. It was component state outliving the sheet, and Escape returns to the list rather than closing the picker, so SAVE wrote the previous exercise's dialled number as the new one's TM — and an accessory TM drives every prescribed weight for that exercise from then on. |
 | F55 | Medium | B08 | C1,C2 | `src/components/workout/AccessoryPicker.tsx` | `fixed` | `da34448` · `AccessoryPicker.test.tsx` ×2 | Both commit paths single-flight via `useSingleFlight`, and `alreadyAdded` is now derived **live** from `workout.activeAccessories` rather than snapshotted into `rows()` at load time, so the guard can see an add made by the previous tap. |
 | F56 | Low | B08 | C3 | `src/components/workout/AccessoryLog.tsx` | `open` | — | — |
-| F57 | Medium | B08 | C2,C4 | `src/components/workout/RestTimer.tsx` | `open` | — | — |
+| F57 | Medium | B08 | C2,C4 | `src/components/workout/RestTimer.tsx` | `fixed` | `<pending>` · `RestTimer.test.tsx` ×3 | Single owner for the sentinel: an in-flight `pending` promise so a concurrent caller joins rather than requesting a second, and a release that nulls **before** awaiting. Visibility handling is now symmetric — release on hide, request on show — rather than requesting on show while trusting the browser's own release. The existing five wake-lock tests could not catch this: they shared **one** `mockSentinel`, so "release was called" was true even when two others leaked. |
 | F58 | Medium | B08 | C4 | `src/components/forms/Stepper.tsx` | `open` | — | — |
 | F59 | Low | B08 | C5 | `src/components/forms/DurationInput.tsx` | `open` | — | — |
 | F60 | Medium <br><sub>WCAG 2.1.2, Level A</sub> | B08 | C5 | `src/components/forms/NotesField.tsx` | `open` | — | — |
 | F61 | Medium <br><sub>WCAG 2.1.1, Level A</sub> | B08 | C5 | `src/components/forms/SetReadout.tsx` | `open` | — | — |
 | F62 | Medium | B08 | C4 | `src/components/workout/AccessoryLog.tsx` | `open` | — | — |
-| F63 | Medium | B08 | C2,C3 | `src/components/stats/RecordsPanel.tsx` | `open` | — | — |
+| F63 | Medium | B08 | C2,C3 | `src/components/stats/RecordsPanel.tsx` | `fixed` | `<pending>` · `RecordsPanel.test.tsx` ×2 | Request identity: a token per load, results dropped when superseded, and `setLoading(true)` on entry. `History.tsx:612` passes a live signal, so switching lift is the ordinary path — the panel published whatever settled **last** rather than what was asked for last, and never returned to the loading state. `RecordsPanel` had no test file at all. |
 | F64 | Low | B08 | C5 | `src/components/layout/Rule.tsx` | `open` | — | — |
 | F65 | **High** | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg F | **Amended — the stated impact never reproduced.** The missing `ok` check was real but masked by **F95**: the cache write never ran, so no 503 could poison anything. Repairing F95 alone would have activated this for real, so both landed in one change. Leg F asserts both halves. |
 | F66 | Medium | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg G | **The live half of the pair.** Reproduced exactly as written: a 502 enters the cache-first precache and is served from it thereafter. Cache-first, so it is never re-fetched. |

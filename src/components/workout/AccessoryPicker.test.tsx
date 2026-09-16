@@ -131,3 +131,45 @@ describe('AccessoryPicker single flight', () => {
     expect(rows).toHaveLength(1)
   })
 })
+
+// ── F54 ─────────────────────────────────────────────────────────────────────
+// The SET TRAINING MAX sub-sheet's buffer is component-level state that was
+// never reset when `settingTm` changed, and the sheet's documented way out —
+// Escape, which returns to the list rather than closing the picker — left it
+// dirty. SAVE then wrote the carried-over number as the new exercise's TM, and
+// an accessory TM drives every prescribed weight for that exercise from then
+// on, so a wrong one is not self-correcting.
+describe('AccessoryPicker TM sub-sheet buffer', () => {
+  it('does not carry a dialled TM over to a different exercise (F54)', async () => {
+    const { chinups, barbell } = await seedPullExercises()
+    render(() => (
+      <AccessoryPicker
+        liftId={LIFT_ID} slot="pull" mode="session"
+        onClose={() => {}} onSelected={() => {}}
+      />
+    ))
+
+    // Pick one with no TM — opens the sub-sheet — and dial its weight up.
+    ;(await screen.findByRole('button', { name: /Chinups/ })).click()
+    const bump = await screen.findByRole('button', { name: 'Increase training max' })
+    bump.click(); bump.click()
+    await new Promise(r => setTimeout(r, 10))
+
+    // Back out to the list and pick a DIFFERENT exercise.
+    const back = await screen.findByRole('button', { name: '← BACK' })
+    back.click()
+    ;(await screen.findByRole('button', { name: /Barbell Row/ })).click()
+    await new Promise(r => setTimeout(r, 10))
+
+    // A fresh pick starts at 0, which is what makes a carried-over non-zero
+    // value look like a real suggestion.
+    const save = await screen.findByRole('button', { name: /^SAVE$/i })
+    save.click()
+    await new Promise(r => setTimeout(r, 30))
+
+    const rows = await db.accessoryTrainingMaxes.where('exerciseId').equals(barbell).toArray()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].weight).toBe(0)
+    expect(await db.accessoryTrainingMaxes.where('exerciseId').equals(chinups).toArray()).toHaveLength(0)
+  })
+})

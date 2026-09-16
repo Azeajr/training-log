@@ -26,20 +26,46 @@ export default function RestTimer() {
   let prevElapsed = -1
   let wakeLock: WakeLockSentinel | null = null
 
-  const requestWakeLock = async () => {
+  // One sentinel, one owner. Two effects request on a single rest start and one
+  // async function cleared them, so sentinels were dropped without being
+  // released: the second request overwrote the first, and a release that nulled
+  // the variable only AFTER its own await clobbered anything assigned meanwhile
+  // (which is what tapping +30s produces, since the scheduling effect re-runs).
+  // The screen then stayed awake after the session ended, on a phone, for as
+  // long as the page lived.
+  //
+  // `pending` makes a concurrent caller await the in-flight request rather than
+  // start a second one; the release nulls both BEFORE awaiting, so a request
+  // that lands during a release cannot be stranded.
+  let pending: Promise<void> | null = null
+
+  const requestWakeLock = async (): Promise<void> => {
     if (!('wakeLock' in navigator)) return
-    try {
-      wakeLock = await navigator.wakeLock.request('screen')
-    } catch {
-      // denied or not supported
-    }
+    // `released` is set by the browser when it drops the lock on its own.
+    if (wakeLock !== null && wakeLock.released !== true) return
+    wakeLock = null
+    if (pending) return pending
+    pending = (async () => {
+      try {
+        const sentinel = await navigator.wakeLock.request('screen')
+        // Released while this was in flight: let it go rather than hold a
+        // sentinel nothing will ever release.
+        if (pending === null) await sentinel.release().catch(() => {})
+        else wakeLock = sentinel
+      } catch {
+        // denied or not supported
+      } finally {
+        pending = null
+      }
+    })()
+    return pending
   }
 
-  const releaseWakeLock = async () => {
-    if (wakeLock !== null) {
-      await wakeLock.release()
-      wakeLock = null
-    }
+  const releaseWakeLock = async (): Promise<void> => {
+    const held = wakeLock
+    wakeLock = null
+    pending = null
+    if (held !== null) await held.release().catch(() => {})
   }
 
   document.addEventListener('touchstart', unlockAudio, { passive: true })
@@ -101,7 +127,12 @@ export default function RestTimer() {
   createEffect(() => {
     if (!workout.isResting) return
     getTimerWorker().postMessage({ type: isVisible() ? 'resume' : 'pause' })
+    // Symmetric on purpose. A hidden page does not need the screen kept awake,
+    // and the browser releases the sentinel itself when the page hides — so
+    // holding our reference past that point means believing we still own a lock
+    // we do not, and never re-requesting on the way back.
     if (isVisible()) void requestWakeLock()
+    else void releaseWakeLock()
   })
 
   createEffect(() => {
