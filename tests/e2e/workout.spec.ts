@@ -112,17 +112,19 @@ test.describe('rest timer persistence across refresh', () => {
   })
 })
 
+// The resume banner is a button, not a link: it runs the same reconciliation
+// START does, so it cannot be a plain href (F13).
 test.describe('resume banner and abandon dialog', () => {
   test('Today shows resume banner when session is active', async ({ page }) => {
     await startWorkout(page)
     await page.goto('/today')
-    await expect(page.getByRole('link', { name: /SESSION IN PROGRESS/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /SESSION IN PROGRESS/ })).toBeVisible()
   })
 
   test('resume banner navigates to workout', async ({ page }) => {
     await startWorkout(page)
     await page.goto('/today')
-    await page.getByRole('link', { name: /SESSION IN PROGRESS/ }).click()
+    await page.getByRole('button', { name: /SESSION IN PROGRESS/ }).click()
     await expect(page.getByRole('button', { name: /^(FINISH|COMPLETE SESSION)$/ })).toBeVisible()
   })
 
@@ -144,7 +146,7 @@ test.describe('resume banner and abandon dialog', () => {
     await page.getByRole('button', { name: 'CANCEL' }).click()
     await expect(page.getByText('Abandon OHP session?')).not.toBeVisible()
     // Original session still active
-    await expect(page.getByRole('link', { name: /SESSION IN PROGRESS/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /SESSION IN PROGRESS/ })).toBeVisible()
   })
 
   test('START WORKOUT for the same lift resumes without wiping logged sets', async ({ page }) => {
