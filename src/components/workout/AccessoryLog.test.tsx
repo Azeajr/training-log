@@ -2,7 +2,8 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@solidjs/testing-library'
 import AccessoryLog from './AccessoryLog'
-import type { ActiveAccessory, Exercise } from '../../types/domain'
+import type { Exercise } from '../../types/domain'
+import type { ActiveAccessory } from '../../store/workout-store'
 
 const TIMED: Exercise = { id: 1, name: 'Plank', type: 'timed', category: 'core' }
 
@@ -10,7 +11,7 @@ const accessory = (loggedSets: ActiveAccessory['loggedSets']): ActiveAccessory =
   exerciseId: 1,
   exerciseName: 'Plank',
   slot: 'extra',
-  tm: null,
+  tm: 0,
   calculatedWeight: 0,
   loggedSets,
 })
@@ -33,8 +34,6 @@ describe('AccessoryLog duration inputs (F59)', () => {
 
     // Open the editor on the logged set: now both duration inputs are live.
     // The row is a real button since F61, so it is reachable by role.
-    // eslint-disable-next-line no-console
-    console.log('[probe] buttons:', screen.getAllByRole('button').map(b => b.textContent))
     const row = screen.getAllByRole('button').find(b => /1:00/.test(b.textContent ?? ''))
     expect(row).toBeDefined()
     fireEvent.click(row!)
