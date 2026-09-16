@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **32** |
+| `open` | **23** |
 | `wip` | 0 |
-| `fixed` | **66** — F01, F02, F03, F04, F05, F06, F07, F08, F13, F14, F15, F16, F17, F18, F22, F33, F34, F35, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F71, F73, F74, F75, F76, F77, F78, F79, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
+| `fixed` | **75** — F01, F02, F03, F04, F05, F06, F07, F08, F13, F14, F15, F16, F17, F18, F22, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F71, F73, F74, F75, F76, F77, F78, F79, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
 | `fixed-by` | **3** — F43, F62, F98 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -112,15 +112,15 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F21 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
 | F22 | **High** | B06 | — | `src/components/stats/RecordsPanel.tsx` | `fixed` | `013e0f9` · `Stats.test.tsx` ×3 | **Ownership rule settled: completed sessions, plus the one being logged.** Stats filtered nothing but `liftId`, so skipped and abandoned work set permanent records History would never show. Now reads `baselineWorkingSets`. |
 | F23 | Medium | B06 | — | `src/components/stats/RecordsPanel.tsx` | `open` | — | — |
-| F24 | Medium | B07 | — | `src/lib/calc.ts` | `open` | — | Notification-layer tail confirmed in B09b (P26). |
-| F25 | Medium | B07 | — | `src/lib/calc.ts` | `open` | — | — |
-| F26 | Low | B07 | — | `src/lib/calc.ts` | `open` | — | — |
-| F27 | Low | B07 | — | `src/lib/calc.ts` | `open` | — | — |
-| F28 | Low | B07 | — | `src/lib/calc.ts` | `open` | — | — |
-| F29 | Low <br><sub>test quality</sub> | B07 | — | `src/lib/calc.ts` | `open` | — | — |
-| F30 | Medium | B07 | — | `src/lib/calc.ts` | `open` | — | — |
-| F31 | Low | B07 | — | `src/lib/workout-compose.ts` | `open` | — | — |
-| F32 | Low | B07 | — | `src/lib/workout-compose.ts` | `open` | — | — |
+| F24 | Medium | B07 | — | `src/lib/calc.ts` | `fixed` | `ef4ca49` · `calc.test.ts` ×6, `Settings.test.tsx` ×2 | **Ordering made an invariant at the domain edge.** Nothing enforced `firstBell <= secondBell` and the steppers clamped each field independently at `>= 30`. Inverted, it broke the timer twice: `restStatus` tests `secondBell` first, so the first bell never fired and the screen read "SECOND BELL" at 60s while the countdown ran toward 240; and `restNotificationTargets` armed both at absolute times under one `tag`, so the tray showed the second bell first and the later first bell *replaced* it — the surviving notification was the earlier checkpoint's (B09b/P26). `restThresholds` now **sorts** rather than clamps: the user configured two durations and got the fields the wrong way round, so both are kept. The steppers carry the other bell along instead of refusing the step, so every setting stays reachable and the inversion cannot be entered at all. |
+| F25 | Medium | B07 | — | `src/lib/calc.ts` | `fixed` | `b585a09` · `calc.test.ts` ×6 | **The fallback made it worse, not safer.** The Wathan inverse is unbounded and a discount expands it by `1/scale`: recent 225×12 against a 185 TM asked for 95 / 155 / 345 reps, tapped straight into the reps field. Because the value was non-null, the documented "callers fall back to the TM-implied goal" never fired — `off` returned null and degraded, the three discount settings did not. `amrapTargetReps` caps at 30 and both readouts go through it. A wrapper, not a change to `targetReps`: that stays the honest answer to "how many reps reach this e1RM"; what is worth *showing* is the readout's call. The TM path is capped too — it looks bounded by construction, but the AMRAP weight is user-editable. |
+| F26 | Low | B07 | — | `src/lib/calc.ts` | `fixed` | `b585a09` · `calc.test.ts` ×3 | `roundToNearest5` rounded the float a percentage multiply produced rather than the value it meant. `0.70` is the only multiplier that lands short of a .5 boundary — 175 × 0.70 is 122.49999999999999 — so week 2 set 1 gave **120** while the identical 122.5 via `0.50` gave **125**. TM 325 week 2 → 225 instead of 230, across all ten BBS sets too. Snapped to 6dp before the half-up step: orders of magnitude below the smallest plate, orders above the ~1e-14 multiply error. |
+| F27 | Low | B07 | — | `src/lib/calc.ts` | `fixed` | `d499c98` · `calc.test.ts` ×7, `PlateDisplay.test.tsx` ×6 | **Greedy replaced with an exact search.** Largest-first with no backtracking stranded a remainder even when an exact load existed: with 2×45 and 4×25, a 50/side load took the 45 and could not make the last 5, though 25+25 works. Reachable because the plate stepper allows any count down to 0. Memoized on (plate index, remainder) over a handful of types — heaviest-first with the first solution taken, so greedy's answer is preserved wherever greedy was right (a 45–500lb sweep over `DEFAULT_PLATES` pins it) and this only ever *adds* answers. Arithmetic moved to hundredths. `PlateDisplay` now distinguishes all three outcomes — `null` rendered nothing, so an unmakeable load looked identical to a set with no plate hint. |
+| F28 | Low | B07 | — | `src/lib/calc.ts` | `fixed` | `ef4ca49` · `calc.test.ts` ×9, `export-import.test.ts` ×3 | **Three lookups, three different failures.** `week` is typed `1|2|3|4` but read straight off session rows, which come from imports and hand-edited backups. `calcMainSets` threw a `TypeError` (blank Workout screen — no route error boundary); `calcBbsSets` returned ten NaN sets, loggable and persistable, because the guard was `=== null` and an unknown week looks up `undefined`; `calcSupplementalSets` guarded `main.length === 0` then indexed `main[1]` unguarded. All total now, and `getSupplementalLabel` stops emitting `BBS 10 × 5 NaN% TM`. Also rejected at the import edge **before** the destructive clear, so a bad row never lands and the user keeps what they had. |
+| F29 | Low <br><sub>test quality</sub> | B07 | — | `src/lib/calc.ts` | `fixed` | `b585a09` · `calc.test.ts` seed case | The test asserted `reps` by round-tripping through `est1RM`, which is rounded to 2dp for display while `reps` derives from the unrounded seed. Wathan can round the reported figure just *above* the value that produced the reps (847 such pairs over a 60–400lb sweep) — cosmetic in the product, load-bearing in a test that would have stopped meaning anything the moment its inputs changed. Now a literal, plus the same value re-derived from the seed itself. No product change. |
+| F30 | Medium | B07 | — | `src/lib/calc.ts` | `fixed` | `d499c98` · `calc.test.ts` ×3, `workout-compose.test.ts` ×19 | **A mode that silently did nothing.** `BBS_PERCENTAGES[4]` was `null`, so week 4 composed **0** supplemental sets under `deloadSupplemental: 'deload'` — byte-identical to `'skip'` — while every other template composed five, and the label went null so nothing on screen explained it. Settings offers three modes and promises "run it at deload %". Week 4 is **0.50**: BBS's sibling BBB has always run a flat 50% on every week including the deload, and it continues this ladder's own trend against the week's top main set (0.85→0.60, 0.90→0.70, 0.95→0.80, so 0.60→0.50). The alternative — making `deload` mean `skip` for BBS and saying so — keeps a mode that does nothing, which is harder to explain than a percentage. `'deload'` had **no test at all**; all three modes are now covered across all six templates. |
+| F31 | Low | B07 | — | `src/lib/workout-compose.ts` | `fixed` | `95fda65` · `dedupe-cross-blocks.test.ts` ×6, `lift.test.ts` | **A UI rule with nothing behind it.** Logged cross sets carry only the movement's `liftId`, never a block identity, so one logged set marked set 1 of *every* block on that movement done and overrode the remainder of both. `LiftSetupModal` filtered the picker; `liftSupplementals` had only `idx_liftSupplementals_liftId`, so an imported backup restored duplicates verbatim. Unique index on `(liftId, movementLiftId)` preceded by a reconcile, in `ADDITIVE_MIGRATIONS` for the same reason as the two unique indexes above it. The twin is **deleted**, not renamed as in the exercise dedupe: a block is a prescription, and the sets reference the movement, so the survivor still owns all of them. Import reconciles rather than rejects. |
+| F32 | Low | B07 | — | `src/lib/workout-compose.ts` | `fixed` | `95fda65` · `workout-compose.test.ts` ×6, `Workout.test.tsx` ×4 | **The two restore tails made symmetric.** Logged self-supplemental sets survive their plan disappearing (`extraFsl` restores them even when `effectiveSupplementalWeek` is null); `composeCrossSets` was a `flatMap` over the blocks, so with no block there was no output. Removing a cross block mid-session, or switching to `skip` during a week-4 session, made logged cross work vanish from the screen while its rows kept counting toward History, PRs and Stats. Orphaned sets are now appended, renumbered from 1 so the block cursor still reads — and because the page renders one section *per block*, `loadData` synthesizes a block for each orphaned movement, labelled "logged · no longer prescribed" rather than `getCrossLabel`'s "SQUAT 0 × 0 0% TM". |
 | F33 | **High** | B07 | C1 | `src/screens/Workout.tsx` | `fixed` | `10967b6` · `cycle.test.ts` ×3, `Modal.test.tsx` ×4, `TmRecommendationModal.test.tsx` ×2 | **C1 owner.** Two halves. UI: `Modal` gained `busy`, suppressing Escape and `← BACK` — the paths no call site can gate — and the three post-session modals single-flight their handlers via `useSingleFlight`. DB: `advanceCycleIfComplete` now re-reads the cycle **inside** its transaction and aborts if another caller already advanced. That guard only holds because **F05** serialized transactions first. |
 | F34 | Medium | B07 | C1 | `src/lib/cycle.ts` | `fixed` | `10967b6` · `cycle.test.ts` ×2, `CycleCompleteModal.test.tsx` ×4 | `applyCycleDoubling` now derives its target from the **summary row** instead of re-reading the live TM, so repeating it is idempotent (205→210 however many taps), and skips a write that would be a no-op. Fold-back keyed on `liftId`: `TmChange` carries the id, because `lifts.name` has no UNIQUE constraint and two lifts named "Bench" rewrote each other. `deloadTms` is **deliberately not** made idempotent — see note. |
 | F35 | Medium | B07 | — | `src/lib/cycle.ts` | `fixed` | `96c4493` · `cycle.test.ts` ×4 | **The invariant has to hold however the shape changes.** Retiring the sessions a cycle shrink orphans lived only in `Settings.handleCycleShapeChange`; a backup import changes `hasDeloadWeek` too, and its envelope is the weakest one we have. `retireWeeksPastFinalWeek` is now called from `advanceCycleIfComplete` and from `getNextSessionAdvancingIfDone` before either reads the cycle's sessions — the latter because a stranded row is stranded whether or not the cycle is finishable. Retired as `skipped`, consistent with what Settings already chose: the sets were still lifted. Completed deload days are untouched. |
@@ -206,12 +206,12 @@ being *complete* is not.
 | 1 | The gate | 0 | 0 | **Closed** — was 9 |
 | 2 | Destructive paths | 0 | 0 | **Closed** — was 8, two High |
 | 3 | Session lifecycle | 0 | 0 | **Closed** — was 7, four High |
-| 4 | calc numerics | 9 | 0 | Pure functions, one file |
+| 4 | calc numerics | 0 | 0 | **Closed** — was 9 |
 | 5 | Async read identity | 5 | 0 | The same shape as F63, already solved once |
 | 6 | Config and assets | 6 | 0 | Build, PWA and repo hygiene |
 | 7 | Remainder | 12 | 0 | Genuinely individual |
 
-**Order: 2 → 1 → 3 → 4 → 5 → 6 → 7.** Batches 1, 2 and 3 are closed.
+**Order: 2 → 1 → 3 → 4 → 5 → 6 → 7.** Batches 1, 2, 3 and 4 are closed.
 
 Not 1 first, despite the case for it. F01 and F07 destroy user data *today* and
 are small and isolated — putting a nine-finding infrastructure batch ahead of
@@ -275,9 +275,30 @@ none.
 
 ### 4 — calc numerics
 
-`F24` `F25` `F26` `F27` `F28` `F29` `F30` `F31` `F32`
+*(all closed)*
 
-Nine findings, pure functions, no UI. The cheapest per finding in the ledger.
+Nine findings, billed as pure functions and no UI. Seven of them were; two were
+not, and the batch was the cheaper for knowing which.
+
+The through-line is **totality**. Five of the nine were a lookup or a formula
+that had no answer for some input it could actually receive — an out-of-range
+`week`, a bell pair in the wrong order, a BBS deload with no percentage, a plate
+load greedy could not reach, a rep target with no ceiling — and in every case
+the missing answer surfaced as something worse than an error: a blank screen,
+NaN weights that persist, a mode that silently does nothing, a readout that
+vanishes, a 345-rep target tapped straight into the reps field.
+
+Two reached past `calc.ts` as predicted by their own findings. **F31** needed a
+unique index and a reconcile migration, because the UI rule it depended on had
+nothing behind it. **F32** needed the Workout screen as well as the composer:
+restoring orphaned cross sets is useless while the page renders one section per
+*block*, so a block has to be synthesized for them.
+
+Three product decisions taken here rather than deferred, each recorded on its
+row: BBS deloads at **0.50** (matching BBB, and continuing the ladder's trend)
+rather than `deload` quietly meaning `skip`; the AMRAP target caps at **30
+reps**; and a duplicate cross block is **deleted** rather than renamed, because
+unlike a duplicate exercise it carries no history of its own.
 
 ### 5 — Async read identity
 
