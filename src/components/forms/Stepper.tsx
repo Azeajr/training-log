@@ -44,6 +44,12 @@ export default function Stepper(props: Props) {
   let pressStart = 0
 
   const clearPress = () => {
+    // Release is listened for on the WINDOW, not just on the button: the button
+    // disables itself the moment the value reaches its bound, and a disabled
+    // button dispatches no pointer events — so the press that pinned it could
+    // never be ended from the button itself (F58).
+    window.removeEventListener('pointerup', clearPress)
+    window.removeEventListener('pointercancel', clearPress)
     if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
     // Only a press that actually reached the repeat phase owes an announcement;
     // a short tap is announced by applyStep on click instead.
@@ -54,9 +60,15 @@ export default function Stepper(props: Props) {
 
   const startPress = (delta: number) => {
     pressStart = Date.now()
+    window.addEventListener('pointerup', clearPress)
+    window.addEventListener('pointercancel', clearPress)
     pressTimer = setTimeout(() => {
       pressInterval = setInterval(() => {
         const next = Math.min(max(), Math.max(min(), safeAdd(props.value, delta)))
+        // Pinned at a bound: there is nothing left to apply, and the button has
+        // already disabled itself, so nothing else will stop this. Stop from
+        // inside rather than firing onChange with the same value for ever.
+        if (next === props.value) { clearPress(); return }
         props.onChange(next)
       }, REPEAT_MS)
     }, LONG_PRESS_MS)
