@@ -11,16 +11,18 @@ test.beforeEach(async ({ page }) => {
 test.describe('workout flow', () => {
   test('START WORKOUT navigates to workout screen', async ({ page }) => {
     await page.getByRole('button', { name: 'START WORKOUT' }).click()
-    await expect(page.getByRole('button', { name: 'COMPLETE SESSION' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^(FINISH|COMPLETE SESSION)$/ })).toBeVisible()
     await expect(page.getByText('WARM UP')).toBeVisible()
-    await expect(page.getByText('MAIN')).toBeVisible()
+    // `.first()`: the session bar lists its segments by the same labels as the
+    // section headings, so a bare getByText is a strict-mode violation now.
+    await expect(page.getByText('MAIN').first()).toBeVisible()
   })
 
   test('active set shows weight and reps steppers and a LOG button', async ({ page }) => {
     await startWorkout(page)
     await expect(page.getByRole('button', { name: 'LOG' })).toBeVisible()
     await expect(
-      page.getByTestId('stepper-reps').getByRole('button', { name: '+' })
+      page.getByTestId('stepper-reps').getByRole('button', { name: /Increase/ })
     ).toBeVisible()
   })
 
@@ -50,8 +52,13 @@ test.describe('session persistence across refresh', () => {
     await startWorkout(page)
     await logSet(page, 10)
     await page.reload()
-    await expect(page.getByRole('button', { name: 'COMPLETE SESSION' })).toBeVisible()
+    // Not the finish control: logging a set starts the rest timer, and the
+    // timer owns the bottom strip it shares with the session bar, so there is
+    // no FINISH button on screen in this state at all. What this test is
+    // actually about is that the session survived — the screen and the set.
+    await expect(page).toHaveURL(/\/workout/)
     await expect(page.getByText('WARM UP')).toBeVisible()
+    await expect(page.getByRole('button', { name: /45lb × 10/ })).toBeVisible()
   })
 
   test('logged sets are still shown after reload', async ({ page }) => {
@@ -116,7 +123,7 @@ test.describe('resume banner and abandon dialog', () => {
     await startWorkout(page)
     await page.goto('/today')
     await page.getByRole('link', { name: /SESSION IN PROGRESS/ }).click()
-    await expect(page.getByRole('button', { name: 'COMPLETE SESSION' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^(FINISH|COMPLETE SESSION)$/ })).toBeVisible()
   })
 
   test('starting a different lift shows abandon confirm dialog', async ({ page }) => {
@@ -149,7 +156,7 @@ test.describe('resume banner and abandon dialog', () => {
     await page.getByRole('button', { name: 'START WORKOUT' }).click()
 
     // Should be back on the workout screen with the logged set still there
-    await expect(page.getByRole('button', { name: 'COMPLETE SESSION' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^(FINISH|COMPLETE SESSION)$/ })).toBeVisible()
     await expect(page.getByText('× 8')).toBeVisible()
     await expect(page.getByText('done')).toBeVisible()
   })

@@ -1,50 +1,28 @@
 import '@testing-library/jest-dom'
 import { afterEach } from 'vitest'
+import { createRestTimer, type RestTimerMessage } from './workers/rest-timer-protocol'
 
 // jsdom has no Worker. The only Worker the app constructs under test is the
 // rest timer (workers/timer.worker.ts) — the SQLite worker is aliased away by
-// the /sqlite-client$/ → sqlite-test-client swap. So this stub only needs to
-// speak the timer protocol.
+// the /sqlite-client$/ → sqlite-test-client swap.
+//
+// This drives the REAL protocol rather than re-implementing it. It used to be a
+// second implementation, and it was the only one any test exercised, so the two
+// had silently diverged on `pause` and on `start` without restStartedAt (F87).
+// Only message DELIVERY differs now: this calls onmessage synchronously, where
+// a real Worker delivers through a port.
 class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null
-  private intervalId: ReturnType<typeof setInterval> | null = null
-  private startTime: number | null = null
-
-  constructor() {}
+  private timer = createRestTimer((tick) => {
+    this.onmessage?.(new MessageEvent('message', { data: tick }))
+  })
 
   postMessage(data: unknown) {
-    const msg = data as Record<string, unknown>
-
-    if (msg.type === 'start') {
-      this.startTime = (msg.restStartedAt as number) ?? Date.now()
-      if (this.intervalId) clearInterval(this.intervalId)
-      this.intervalId = setInterval(() => {
-        if (this.startTime != null && this.onmessage) {
-          this.onmessage(new MessageEvent('message', {
-            data: { elapsed: Math.floor((Date.now() - this.startTime!) / 1000) },
-          }))
-        }
-      }, 1000)
-    } else if (msg.type === 'stop') {
-      if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null }
-      this.startTime = null
-    } else if (msg.type === 'pause') {
-      if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null }
-    } else if (msg.type === 'resume') {
-      if (this.startTime != null && !this.intervalId) {
-        this.intervalId = setInterval(() => {
-          if (this.startTime != null && this.onmessage) {
-            this.onmessage(new MessageEvent('message', {
-              data: { elapsed: Math.floor((Date.now() - this.startTime!) / 1000) },
-            }))
-          }
-        }, 1000)
-      }
-    }
+    this.timer.handle(data as RestTimerMessage)
   }
 
   terminate() {
-    if (this.intervalId) clearInterval(this.intervalId)
+    this.timer.terminate()
   }
 }
 

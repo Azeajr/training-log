@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **48** |
+| `open` | **39** |
 | `wip` | 0 |
-| `fixed` | **50** — F01, F02, F03, F04, F05, F06, F07, F08, F22, F33, F34, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F73, F76, F79, F84, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
+| `fixed` | **59** — F01, F02, F03, F04, F05, F06, F07, F08, F22, F33, F34, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F71, F73, F74, F75, F76, F77, F78, F79, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
 | `fixed-by` | **3** — F43, F62, F98 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -30,9 +30,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | State | Means |
 |---|---|
-| `open` | **48** |
+| `open` | **39** |
 | `wip` | Being worked now. Not a claim of anything. |
-| `fixed` | **50** — F01, F02, F03, F04, F05, F06, F07, F08, F22, F33, F34, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F73, F76, F79, F84, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
+| `fixed` | **59** — F01, F02, F03, F04, F05, F06, F07, F08, F22, F33, F34, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F71, F73, F74, F75, F76, F77, F78, F79, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
 | `fixed-by` | **3** — F43, F62, F98 |
 | `wontfix` | Deliberate. The decision and its reason are written in Notes. |
 | `blocked` | The exact missing dependency is named in Notes. |
@@ -157,25 +157,25 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F66 | Medium | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg G | **The live half of the pair.** Reproduced exactly as written: a 502 enters the cache-first precache and is served from it thereafter. Cache-first, so it is never re-fetched. |
 | F67 | Medium <br><sub>needs device</sub> | B09 | C6 | `src/lib/notifications.ts` | `fixed` | `fe36572` · `notifications.test.ts` ×2 — **platform claim still unverified** | `firePage` wraps the constructor and falls back to `ServiceWorkerRegistration.showNotification`. Unwrapped, the `TypeError` escaped the timer tick uncaught: no notification, and nothing reporting that none fired — while this module designates the page as the **reliable** path. An explicit permission denial is still respected rather than routed around. **What is NOT settled:** whether the constructor actually is unavailable on Android Chrome or in an iOS PWA. That needs a real device (installed PWA, permission granted, tab hidden, one rest bell) and this machine cannot answer it, per the project rule on mobile claims. The fallback is correct either way; the severity is not established. |
 | F68 | Low | B09 | — | `src/workers/timer.worker.ts` | `open` | — | — |
-| F69 | Medium | B10 | — | `vite.config.ts` | `open` | — | B12: scope is documented at `.claude/QUICK_START.md:22`. Known state — decide fix vs wontfix. |
+| F69 | Medium | B10 | — | `vite.config.ts` | `fixed` | `<pending>` · `pnpm test:coverage` green on ratcheted thresholds | `include` widened from three directories to `src/**`. `components`, `db`, `hooks`, `service-worker.ts` and `workers` were **not measured at all** — 22 of the 23 findings this review opened in those areas lived where the gate could not see. Measured over the whole tree the real figures are **88.79 / 78.27 / 88.18 / 91.17**, so thresholds are re-baselined to **85 / 76 / 85 / 88** — just under actual, so the gate bites on every metric instead of leaving three with ~9 points of slack. |
 | F70 | Medium <br><sub>needs Lighthouse</sub> | B10 | — | `vite.config.ts` | `open` | — | Conditional severity; installability impact worth a Lighthouse check. |
-| F71 | Medium | B10 | — | `tsconfig.json` | `open` | — | — |
+| F71 | Medium | B10 | — | `tsconfig.json` | `fixed` | `<pending>` · deliberate type errors caught in both projects | `tsconfig.e2e.json` added to the solution file's `references`, and `tsconfig.node.json` widened to `playwright.config.ts`, `eslint.config.js`, `stryker.config.mjs` and `scripts/**`. Verified rather than assumed: a deliberate type error in `tests/e2e/app.spec.ts` and another in `playwright.config.ts` are both now caught by `tsc -b`, and neither was before. |
 | F72 | Low | B10 | — | `vite.config.ts` | `open` | — | — |
 | F73 | Medium <br><sub>supply chain</sub> | B10 | — | `.github/workflows/deploy.yml` | `fixed` | `9daa584` · rule 1(b) | `wrangler` is now a lockfile-pinned devDependency (4.131.2) invoked via `pnpm exec`. `allowBuilds` for `esbuild`/`workerd` set to **false** — verified unnecessary, so this removes two lifecycle-script executions the old `--allow-build` flags permitted. |
-| F74 | Medium | B10 | — | `.github/workflows/ci.yml` | `open` | — | Fix with F85 — assertions without CI wiring returns to the state that produced the finding. |
-| F75 | Low | B10 | — | `.github/workflows/ci.yml` | `open` | — | — |
+| F74 | Medium | B10 | — | `.github/workflows/ci.yml` | `fixed` | `<pending>` · new `e2e` CI job | A third CI job runs `test:e2e` on every PR and every push to main, uploading the Playwright report on failure. Landed **with** F85 and F78 — wiring a failing suite into CI, or one that tests the dev server, returns it to exactly the state that produced these findings. |
+| F75 | Low | B10 | — | `.github/workflows/ci.yml` | `fixed` | `<pending>` · `push` trigger added | `push: branches: [main]` added, with the concurrency group falling back to `github.ref` since `pull_request.number` is empty on a push. Committing on main is an accepted workflow here, and it previously got **no** checks unless the commit happened to touch a deploy path. |
 | F76 | Low <br><sub>docs</sub> | B10 | C7 | `CLAUDE.md` | `fixed` | `04cc34a` · rule 1(b) — claims re-checked against the workflows | `CLAUDE.md` and `QUICK_START.md` said "CI never runs lint or tests". `deploy.yml` runs `check:ci` **before** deploying and `ci.yml` runs it on every PR, plus the `verify-sw` job. Both now say what the workflows do, and call out that `test:coverage` — not plain `test` — is what gates, which is why **F69**'s `include` scope matters at the gate. |
-| F77 | Low | B10 | — | `eslint.config.js` | `open` | — | — |
-| F78 | Medium | B10 | — | `playwright.config.ts` | `open` | — | Precondition for F79/F65. |
+| F77 | Low | B10 | — | `eslint.config.js` | `fixed` | `<pending>` · 0 → 64 rules on `scripts/*.js` | A `**/*.{js,mjs}` block extending `js.configs.recommended` with node globals. `eslint --print-config scripts/debug-browser.js` resolved **0** rules before and **64** now; ~400 lines of Playwright-driving Node were checked by nothing. Passes clean. |
+| F78 | Medium | B10 | — | `playwright.config.ts` | `fixed` | `<pending>` · 32/32 against a production build | `webServer` is `pnpm build && vite preview` on 5175, not `pnpm dev`. **`freshStart` no longer needs `__e2eResetDb`** — Playwright gives every test its own context, and a context has its own storage partition, which is already a clean install and is exactly what `verify-notify-hardening.js` relies on. Exposing the reset hook in production was the alternative and was rejected: it is a destructive global. |
 | F79 | Medium | B10 | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · rule 1(b) | `verify:sw` script added; new `verify-sw` CI job on every PR. Two harness defects had to be fixed first — **F96** and **F97**. |
 | F80 | Low | B10 | — | `scripts/debug-browser.js` | `open` | — | B12: documented at `.claude/QUICK_START.md:36-38`. Known state — decide fix vs wontfix. |
 | F81 | Medium | B10 | — | `public/favicon.svg` | `open` | — | — |
 | F82 | Low | B10 | — | `public/demo-seed.json` | `open` | — | Decided in B12d; documented as `.claude/COMMON_MISTAKES.md` #7. Known state — decide fix vs wontfix. |
 | F83 | Low | B10 | — | `.gitignore` | `open` | — | — |
 | F84 | Low | B10 | C7 | `scripts/migrate-history.py` | `fixed` | `04cc34a` · `seed-migration-parity.test.ts` ×3 | **Structural, not a re-sync.** `migrate-history.py` now reads `src/db/seed.ts` instead of restating it, so the two cannot drift. Drift was worse than recorded: the script had **18** exercises against seed's **27**, and id 3 was `"Curls"` vs `'Bicep Curls'` — a migration would import a duplicate that **F41** shows cannot then be renamed. The script hard-fails if parsing yields too few rows; the test re-introduces the original drift and catches it. |
-| F85 | Medium | B11 | — | `tests/e2e/app.spec.ts` | `open` | — | 6 of 32 E2E tests fail. Fix with F74. |
-| F86 | Low | B11 | — | `test-results/.last-run.json` | `open` | — | — |
-| F87 | Medium | B11 | — | `src/test-setup.ts` | `open` | — | — |
+| F85 | Medium | B11 | — | `tests/e2e/app.spec.ts` | `fixed` | `<pending>` · 32/32 passing | Was 6 failed / 26 passed. Four causes, not the three recorded: the wizard went 3 steps → 2; `SessionBar` splits FINISH from COMPLETE SESSION; `Stepper` gained `fieldLabel` so `+` is no longer the accessible name; and **`getByText('MAIN')` now matches two elements** (the session bar lists segments by the same labels) — a strict-mode violation F85 did not record. One spec also asserted a finish control that cannot exist in its state: after logging a set the rest timer owns the strip it shares with the session bar. |
+| F86 | Low | B11 | — | `test-results/.last-run.json` | `fixed` | `<pending>` · untracked + ignored | `test-results/` and `playwright-report/` ignored, and `test-results/.last-run.json` untracked. The committed copy read `{"status":"passed"}` — a stale green receipt in a repo where the suite did not pass and nothing ran it. |
+| F87 | Medium | B11 | — | `src/test-setup.ts` | `fixed` | `<pending>` · `rest-timer-protocol.test.ts` ×7 | **One implementation, not two.** The protocol moved to `workers/rest-timer-protocol.ts` and both the Worker entry point and `test-setup.ts`'s stub drive it — same shape as `createNotifyTimers`, which the page and service worker already share. The stub was the only implementation any test exercised, so the two had diverged on `pause` and on `start` without `restStartedAt`, and the stub would have blocked **F68**'s fix. The protocol now has the test file B09c asked for, including cases pinning both former divergences. |
 | F88 | Low | B11 | — | `src/store/save-failure-store.ts` | `open` | — | — |
 | F89 | Medium | B12 | C7 | `.claude/ARCHITECTURE_MAP.md` | `fixed` | `04cc34a` · rule 1(b) — inventories diffed against `ls` | Component and `lib/` inventories regenerated from the tree and verified complete by script (every file in `src/components/*/` and `src/lib/` now appears). `detectAmrapPRs` → `detectPRs`; the **Rest** pattern corrected from the replaced `{ normal, transition, failNudge, failMax }` / `FAIL_NUDGE_RATIO` model to the real `{ firstBell, secondBell, failedBell }`; the `icon-192/512.png` lines dropped (they never existed). `hooks/use-single-flight.ts` added. |
 | F90 | Medium | B12 | C7 | `README.md` | `fixed` | `04cc34a` · rule 1(b) — checked against `pr.ts` | All four descriptions corrected. The in-code one mattered most: `RecordsPanel` claimed to be "intentionally broader than the AMRAP-only PR toast", a distinction that stopped existing when the toast widened — and both readers now share `baselineWorkingSets`, which is **F38**. Landed after F38, so the docs describe post-F38 behaviour. |
@@ -203,7 +203,7 @@ being *complete* is not.
 
 | # | Batch | n | High | Groups because |
 |---|---|---|---|---|
-| 1 | The gate | 9 | 0 | The things that cannot currently see the code |
+| 1 | The gate | 0 | 0 | **Closed** — was 9 |
 | 2 | Destructive paths | 0 | 0 | **Closed** — was 8, two High |
 | 3 | Session lifecycle | 7 | **4** | The interlocking Today↔Workout story |
 | 4 | calc numerics | 9 | 0 | Pure functions, one file |
@@ -227,7 +227,7 @@ coverage gate are worth having first.
 
 ### 1 — The gate
 
-`F69` `F71` `F74` `F75` `F77` `F78` `F85` `F86` `F87`
+*(all closed)*
 
 Coverage measures a third of the codebase; `tests/e2e/**` is type-checked by
 nothing; the E2E suite runs in no workflow and 6 of its 32 specs fail; the test

@@ -1,33 +1,8 @@
-let intervalId: ReturnType<typeof setInterval> | null = null
-let restStartedAt: number | null = null
-let paused = false
+import { createRestTimer, type RestTimerMessage } from './rest-timer-protocol'
 
-function startTicking() {
-  if (intervalId) clearInterval(intervalId)
-  intervalId = setInterval(() => {
-    if (restStartedAt != null && !paused) {
-      self.postMessage({ elapsed: Math.floor((Date.now() - restStartedAt) / 1000) })
-    }
-  }, 1000)
-}
+// Entry point only: the protocol lives in rest-timer-protocol.ts so the test
+// stub in test-setup.ts can drive the SAME implementation instead of its own
+// (F87). Everything here is the Worker plumbing around it.
+const timer = createRestTimer((tick) => self.postMessage(tick))
 
-self.onmessage = (e: MessageEvent<{ type: 'start'; restStartedAt: number } | { type: 'stop' } | { type: 'pause' } | { type: 'resume' }>) => {
-  const msg = e.data
-  switch (msg.type) {
-    case 'start':
-      restStartedAt = msg.restStartedAt
-      paused = false
-      startTicking()
-      break
-    case 'stop':
-      if (intervalId) { clearInterval(intervalId); intervalId = null }
-      restStartedAt = null
-      break
-    case 'pause':
-      paused = true
-      break
-    case 'resume':
-      paused = false
-      break
-  }
-}
+self.onmessage = (e: MessageEvent<RestTimerMessage>) => timer.handle(e.data)

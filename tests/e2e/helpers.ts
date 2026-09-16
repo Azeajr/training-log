@@ -1,16 +1,23 @@
 import { type Locator, type Page, expect } from 'playwright/test'
 
-type E2EWindow = Window & { __e2eResetDb?: () => Promise<void> }
-
+/**
+ * A clean install for this test.
+ *
+ * This used to call `window.__e2eResetDb`, which is defined behind
+ * `import.meta.env.DEV` — so the suite was structurally bound to the dev server
+ * and hung against a production build. Exposing that hook in production was not
+ * the answer either: it is a destructive global.
+ *
+ * Playwright gives every test its own browser context, and a context has its own
+ * storage partition — fresh OPFS, fresh localStorage, fresh service worker. That
+ * is already a clean install, and it is what `scripts/verify-notify-hardening.js`
+ * relies on for exactly the same reason. All this has to do is clear anything a
+ * previous navigation in THIS context left behind.
+ */
 export async function freshStart(page: Page) {
   await page.goto('/')
-  await page.waitForFunction(() => typeof (window as E2EWindow).__e2eResetDb === 'function')
-  await page.evaluate(async () => {
-    await (window as E2EWindow).__e2eResetDb!()
-    localStorage.clear()
-  })
+  await page.evaluate(() => { localStorage.clear() })
   await page.reload()
-  await page.waitForFunction(() => typeof (window as E2EWindow).__e2eResetDb === 'function')
 }
 
 async function fillStepper(locator: Locator, value: number) {
