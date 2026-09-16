@@ -87,3 +87,44 @@ describe('AccessoryLog undo control (F62)', () => {
     expect(screen.getByRole('button', { name: /Undo last Plank set/ })).toBeInTheDocument()
   })
 })
+
+// ── F56 ─────────────────────────────────────────────────────────────────────
+// type() falls back to 'reps' whenever props.exercise is undefined, and the
+// exercise row is looked up from exercises(), which Workout fills on the LAST
+// await of its load. workout.activeAccessories, by contrast, is hydrated
+// synchronously from localStorage — so after a reload mid-session the accessory
+// renders before its exercise row exists. Logging inside that window writes
+// `reps: n, duration: null` for a timed exercise, which accessorySetValue then
+// renders as a rep count.
+describe('AccessoryLog before its exercise resolves (F56)', () => {
+  it('withholds the log controls until the exercise is known', () => {
+    render(() => (
+      <AccessoryLog accessory={accessory([])} exercise={undefined} />
+    ))
+    // No control may be offered while the type is a guess.
+    expect(screen.queryByRole('button', { name: /^LOG$/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Increase reps/ })).toBeNull()
+  })
+
+  it('offers the reps control once a reps exercise resolves', () => {
+    render(() => (
+      <AccessoryLog
+        accessory={accessory([])}
+        exercise={{ id: 1, name: 'Plank', type: 'reps', category: 'core' }}
+      />
+    ))
+    expect(screen.getByRole('button', { name: /^LOG$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Increase reps/ })).toBeInTheDocument()
+  })
+
+  it('offers the time control, not reps, once a timed exercise resolves', () => {
+    render(() => (
+      <AccessoryLog
+        accessory={accessory([])}
+        exercise={{ id: 1, name: 'Plank', type: 'timed', category: 'core' }}
+      />
+    ))
+    expect(screen.queryByRole('button', { name: /Increase reps/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /Increase .*minutes/ })).toBeInTheDocument()
+  })
+})

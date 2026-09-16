@@ -5,6 +5,10 @@ interface Props {
   onClick: () => void
   children: JSX.Element
   class?: string
+  // Set while the chip's own value is not yet known — a group seeded with
+  // defaults and then overwritten by an awaited load must not accept a choice
+  // it is about to undo (F49).
+  disabled?: boolean
   // Accessible name, for chips whose visible content is a bare glyph (the
   // list-indent arrows). Text chips carry their own name and leave this unset.
   ariaLabel?: string
@@ -19,9 +23,10 @@ export default function ToggleChip(props: Props) {
   return (
     <button
       onClick={props.onClick}
+      disabled={props.disabled}
       aria-label={props.ariaLabel}
       aria-pressed={props.active}
-      class={`border px-2 py-1 text-xs font-mono tracking-widest transition-colors ${
+      class={`border px-2 py-1 text-xs font-mono tracking-widest transition-colors disabled:opacity-40 ${
         props.active
           ? 'border-accent text-accent'
           : 'border-border text-muted hover:border-accent hover:text-accent'

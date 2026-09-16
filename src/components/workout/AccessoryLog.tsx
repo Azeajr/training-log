@@ -210,7 +210,14 @@ export default function AccessoryLog(props: Props) {
           )
         }}
       </For>
-      <Show when={!done()}>
+      {/* `props.exercise` decides whether this logs reps, time or distance.
+          It is looked up from Workout's `exercises()`, which is filled on the
+          LAST await of its load, while `workout.activeAccessories` is hydrated
+          synchronously from localStorage — so after a reload mid-session the
+          accessory renders first. type() falls back to 'reps', and logging in
+          that window wrote `reps: n, duration: null` for a timed exercise.
+          Offer nothing until the type is known rather than guess it (F56). */}
+      <Show when={!done() && props.exercise}>
         <div class="mt-2 pl-2">
           <SetReadout
             weight={weight()}
