@@ -244,3 +244,55 @@ describe('notifications — SW present (production)', () => {
     expect(notifCalls).toHaveLength(0)
   })
 })
+
+// ── F67 ─────────────────────────────────────────────────────────────────────
+// firePage called `new Notification(...)` behind a permission check only — no
+// try/catch and no fallback. On an engine that rejects the constructor the
+// TypeError escapes the timer tick uncaught, no notification appears, and
+// nothing in the module reports it. This module designates the PAGE path as the
+// reliable one and the service worker as best-effort, so if the constructor is
+// unavailable the reliability story inverts — on exactly the platform this PWA
+// targets.
+//
+// The existing cases cannot observe this: they stub Notification as a spy that
+// always succeeds.
+describe('firePage on an engine that rejects the constructor (F67)', () => {
+  function installThrowingNotification() {
+    const ctor = function () {
+      throw new TypeError("Failed to construct 'Notification': Illegal constructor.")
+    } as unknown as NotifCtor
+    Object.defineProperty(ctor, 'permission', { value: 'granted', configurable: true })
+    globalThis.Notification = ctor
+  }
+
+  /** A registration whose showNotification we can observe. */
+  function installRegistration() {
+    const showNotification = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: { controller: null, ready: Promise.resolve({ showNotification }) },
+      writable: true,
+      configurable: true,
+    })
+    return showNotification
+  }
+
+  it('does not let the constructor throw out of the timer tick', async () => {
+    installThrowingNotification()
+    installRegistration()
+    setPageHidden(true)
+    scheduleRest(Date.now() - 200_000, 'normal', { firstBell: 1, secondBell: 2, failedBell: 3 })
+    await vi.advanceTimersByTimeAsync(50)
+    // Reaching here without an unhandled TypeError is the assertion.
+    expect(true).toBe(true)
+  })
+
+  it('falls back to the service-worker registration', async () => {
+    installThrowingNotification()
+    const showNotification = installRegistration()
+    setPageHidden(true)
+    scheduleRest(Date.now() - 200_000, 'normal', { firstBell: 1, secondBell: 2, failedBell: 3 })
+    await vi.advanceTimersByTimeAsync(50)
+    await Promise.resolve()
+    expect(showNotification).toHaveBeenCalled()
+  })
+})

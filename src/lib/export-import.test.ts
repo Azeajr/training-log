@@ -896,3 +896,80 @@ describe('importFromRawData — training-max presence', () => {
     expect(hasTrainingMaxes()).toBe(false)
   })
 })
+
+// ── F03 ─────────────────────────────────────────────────────────────────────
+// The settings column allowlist omitted hasDeloadWeek entirely, so it survived
+// neither export nor import. An imported null then defaults to enabled, which
+// silently turns a three-week cycle into a four-week one — and cycle length is
+// the setting the whole program shape hangs off.
+describe('settings round trip keeps the cycle shape (F03)', () => {
+  const SETTINGS_ROW = { restTimer1: 90, restTimer2: 180, restTimerFail: 300 }
+
+  /** Run the real export and read back the JSON it produced. */
+  async function rawExport(): Promise<Record<string, unknown[]>> {
+    capturedBlob = null
+    await exportJson(db)
+    return JSON.parse(await capturedBlob!.text()) as Record<string, unknown[]>
+  }
+
+  it('preserves hasDeloadWeek: false through an import', async () => {
+    await db.settings.add({ id: 1, ...SETTINGS_ROW, hasDeloadWeek: false } as never)
+    const raw = await rawExport()
+    expect(raw.settings?.[0]).toHaveProperty('hasDeloadWeek')
+
+    await __resetForTest()
+    await importFromRawData(db, raw)
+    const restored = await db.settings.get(1)
+    expect(restored?.hasDeloadWeek).toBe(false)
+  })
+
+  it('preserves hasDeloadWeek: true through an import', async () => {
+    await db.settings.add({ id: 1, ...SETTINGS_ROW, hasDeloadWeek: true } as never)
+    const raw = await rawExport()
+    await __resetForTest()
+    await importFromRawData(db, raw)
+    expect((await db.settings.get(1))?.hasDeloadWeek).toBe(true)
+  })
+})
+
+// ── F08 ─────────────────────────────────────────────────────────────────────
+// validateImportShape only checks tables that are PRESENT, so a JSON document
+// carrying none of them passed validation completely — and the import then
+// cleared every table before restoring nothing. Settings asks the user to
+// confirm an overwrite, but the file was never established to be a backup at
+// all, so "yes" meant yes to erasing everything for an unrelated document.
+describe('import rejects a file that is not a backup (F08)', () => {
+  async function seedSomething() {
+    await db.lifts.add({
+      name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper',
+    } as never)
+  }
+
+  it('refuses an unrelated JSON object', async () => {
+    await seedSomething()
+    await expect(importFromRawData(db, { title: 'grocery list', items: [1, 2] }))
+      .rejects.toThrow(/backup/i)
+    expect(await db.lifts.count()).toBe(1)
+  })
+
+  it('refuses an empty object', async () => {
+    await seedSomething()
+    await expect(importFromRawData(db, {})).rejects.toThrow(/backup/i)
+    expect(await db.lifts.count()).toBe(1)
+  })
+
+  it('refuses a document whose only keys are unrecognised', async () => {
+    await seedSomething()
+    await expect(importFromRawData(db, { exportedAt: '2026-01-01', notes: 'hi' }))
+      .rejects.toThrow(/backup/i)
+    expect(await db.lifts.count()).toBe(1)
+  })
+
+  it('still accepts a real backup that happens to be sparse', async () => {
+    await seedSomething()
+    // One recognised table is enough — a backup taken before other tables
+    // existed is still a backup.
+    await importFromRawData(db, { lifts: [] })
+    expect(await db.lifts.count()).toBe(0)
+  })
+})
