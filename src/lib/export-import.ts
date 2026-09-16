@@ -144,7 +144,20 @@ function validateImportShape(d: Record<string, unknown>): void {
       if (row == null || typeof row !== 'object' || Array.isArray(row)) {
         throw new Error(`Invalid backup: "${name}" contains a non-object entry`)
       }
-      const id = (row as Record<string, unknown>).id
+      const r = row as Record<string, unknown>
+      // `week` is the one column the whole program hangs percentage lookups
+      // off, and it is read straight back out of these rows. Out of range it
+      // used to reach `calcMainSets` and blank the Workout screen (F28). The
+      // calc lookups are total now, but a session in a week the cycle does not
+      // have is still corrupt — and rejecting here, before the destructive
+      // clear, leaves the user's existing data untouched.
+      if (name === 'sessions' && r.week != null) {
+        const week = Number(r.week)
+        if (!Number.isInteger(week) || week < 1 || week > 4) {
+          throw new Error(`Invalid backup: "sessions" has a week of ${String(r.week)}; expected 1-4`)
+        }
+      }
+      const id = r.id
       if (id == null) continue
       const key = String(id)
       if (seen.has(key)) throw new Error(`Invalid backup: duplicate id ${key} in "${name}"`)

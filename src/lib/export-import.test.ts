@@ -742,7 +742,36 @@ describe('importFromRawData — malformed table payloads', () => {
     })).rejects.toThrow(/duplicate id 3 in "exercises"/)
   })
 
-  it('rejects a non-array table value instead of silently wiping the table', async () => {
+  // F28. `week` drives every percentage lookup and is read straight back out of
+// these rows; out of range it used to blank the Workout screen. Rejected before
+// the destructive clear, so the user keeps what they already had.
+it('rejects a session week outside 1-4, before clearing anything', async () => {
+  await db.lifts.add({ id: 1, name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+
+  await expect(importFromRawData(db, {
+    sessions: [{ id: 1, cycleId: 1, liftId: 1, week: 9, date: '2026-01-06', notes: null, status: 'completed' }],
+  })).rejects.toThrow(/"sessions" has a week of 9; expected 1-4/)
+
+  // Nothing was wiped on the way to that error.
+  expect(await db.lifts.toArray()).toHaveLength(1)
+})
+
+it('rejects a non-integer week too', async () => {
+  await expect(importFromRawData(db, {
+    sessions: [{ id: 1, cycleId: 1, liftId: 1, week: 2.5, date: '2026-01-06', notes: null, status: 'completed' }],
+  })).rejects.toThrow(/expected 1-4/)
+})
+
+it('accepts every real week', async () => {
+  await expect(importFromRawData(db, {
+    sessions: [1, 2, 3, 4].map(w => ({
+      id: w, cycleId: 1, liftId: 1, week: w, date: '2026-01-06', notes: null, status: 'completed',
+    })),
+  })).resolves.not.toThrow()
+  expect(await db.sessions.toArray()).toHaveLength(4)
+})
+
+it('rejects a non-array table value instead of silently wiping the table', async () => {
     await seedBase()
     // Previously { lifts: 5 } skipped the bulkAdd (no .length) but still ran clear() —
     // a malformed backup silently erased the table while the import "succeeded".

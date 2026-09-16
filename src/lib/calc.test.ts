@@ -843,6 +843,48 @@ describe('applySupplementalOverride', () => {
   })
 })
 
+// F24. Nothing enforced firstBell <= secondBell, and the settings steppers
+// clamped each field independently at >= 30. With restTimer1=240/restTimer2=60,
+// restStatus tests secondBell first, so the first bell never fired: the timer
+// showed "SECOND BELL — GO IF READY" at 60s while the countdown still read
+// toward 240. restNotificationTargets armed both at absolute times, so the tray
+// showed the second bell first and — same `tag` — the later first bell replaced
+// it, leaving the notification for the EARLIER checkpoint as the survivor.
+describe('restThresholds ordering (F24)', () => {
+  it('passes a well-ordered config straight through', () => {
+    expect(restThresholds({ restTimer1: 90, restTimer2: 180, restTimerFail: 300 }))
+      .toEqual({ firstBell: 90, secondBell: 180, failedBell: 300 })
+  })
+
+  it('orders an inverted config instead of letting the first bell go unreachable', () => {
+    expect(restThresholds({ restTimer1: 240, restTimer2: 60, restTimerFail: 300 }))
+      .toEqual({ firstBell: 60, secondBell: 240, failedBell: 300 })
+  })
+
+  it('keeps both configured lengths — it sorts them, it does not discard one', () => {
+    const t = restThresholds({ restTimer1: 240, restTimer2: 60, restTimerFail: 300 })
+    expect([t.firstBell, t.secondBell].sort((a, b) => a - b)).toEqual([60, 240])
+  })
+
+  it('leaves equal bells equal', () => {
+    expect(restThresholds({ restTimer1: 120, restTimer2: 120, restTimerFail: 300 }))
+      .toMatchObject({ firstBell: 120, secondBell: 120 })
+  })
+
+  it('both bells fire in order once normalized', () => {
+    const t = restThresholds({ restTimer1: 240, restTimer2: 60, restTimerFail: 300 })
+    expect(restStatus(59, 'normal', t).phase).toBe('idle')
+    expect(restStatus(60, 'normal', t).phase).toBe('nudge')
+    expect(restStatus(239, 'normal', t).phase).toBe('nudge')
+    expect(restStatus(240, 'normal', t).phase).toBe('warning')
+  })
+
+  it('the countdown leads to the earlier bell, not the later one', () => {
+    const t = restThresholds({ restTimer1: 240, restTimer2: 60, restTimerFail: 300 })
+    expect(restTarget('normal', t)).toBe(60)
+  })
+})
+
 describe('restStatus', () => {
   describe('completed-set rest', () => {
     it('is idle before the first bell', () => {
@@ -1200,5 +1242,63 @@ describe('effectiveSupplementalWeek', () => {
 
   it('week 4 normal → week 1 (~65% percentages)', () => {
     expect(effectiveSupplementalWeek(4, 'normal')).toBe(1)
+  })
+})
+
+// ─── F28: a corrupt `week` degrades, it does not crash ───────────────────────
+// `week` is typed 1|2|3|4 but never validated when rows are read or imported,
+// and the three percentage lookups handled an out-of-range value three
+// different ways: calcMainSets threw a TypeError (blank Workout screen — the
+// app has no route error boundary), calcBbsSets silently returned ten sets of
+// NaN that could be logged and persisted, and calcSupplementalSets guarded
+// main.length === 0 yet indexed main[1] unguarded for the SSL variants.
+describe('out-of-range week (F28)', () => {
+  const badWeek = 9 as unknown as 1 | 2 | 3 | 4
+
+  it('calcMainSets returns no sets rather than throwing', () => {
+    expect(() => calcMainSets(200, badWeek)).not.toThrow()
+    expect(calcMainSets(200, badWeek)).toEqual([])
+  })
+
+  it('calcBbsSets returns no sets rather than ten NaN weights', () => {
+    const sets = calcBbsSets(200, badWeek)
+    expect(sets).toEqual([])
+    expect(sets.some(s => Number.isNaN(s.weight))).toBe(false)
+  })
+
+  it('getSupplementalLabel has no label for a week with no sets', () => {
+    expect(getSupplementalLabel('bbs', calcBbsSets(200, badWeek), badWeek)).toBeNull()
+  })
+
+  it('every real week still composes', () => {
+    for (const w of [1, 2, 3, 4] as const) {
+      expect(calcMainSets(200, w)).toHaveLength(3)
+    }
+    for (const w of [1, 2, 3] as const) {
+      expect(calcBbsSets(200, w)).toHaveLength(10)
+    }
+  })
+})
+
+describe('calcSupplementalSets with a short main list (F28)', () => {
+  const oneMainSet = calcMainSets(200, 1).slice(0, 1)
+
+  it.each(['ssl', 'ssl+bbb'] as const)(
+    '%s returns no sets rather than reading main[1] off the end',
+    template => {
+      expect(() => calcSupplementalSets(template, oneMainSet, 200, 1)).not.toThrow()
+      expect(calcSupplementalSets(template, oneMainSet, 200, 1)).toEqual([])
+    },
+  )
+
+  it('the FSL variants only need main[0], so they still compose', () => {
+    expect(calcSupplementalSets('fsl', oneMainSet, 200, 1)).toHaveLength(5)
+    expect(calcSupplementalSets('fsl+bbb', oneMainSet, 200, 1)).toHaveLength(5)
+  })
+
+  it('a full main list is unaffected', () => {
+    const main = calcMainSets(200, 1)
+    expect(calcSupplementalSets('ssl', main, 200, 1)).toHaveLength(5)
+    expect(calcSupplementalSets('ssl', main, 200, 1)[0].weight).toBe(main[1].weight)
   })
 })

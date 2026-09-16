@@ -477,7 +477,18 @@ export default function Settings() {
 
   const timerStep = (field: 'restTimer1' | 'restTimer2' | 'restTimerFail', delta: number) => {
     const next = Math.max(30, settings[field] + delta)
-    void updateSettings({ [field]: next })
+    const updates: Record<string, number> = { [field]: next }
+    // The two completed-set checkpoints are ordered by definition — a first
+    // bell after the second is not a configuration, it is a contradiction, and
+    // it made the first bell unreachable (F24). Each stepper clamped only its
+    // own floor, so nothing stopped it being entered.
+    //
+    // The other bell is carried along rather than the step being refused: a
+    // clamp would leave one of them stuck at the other's value with no way to
+    // move it, and pushing keeps every setting reachable from either field.
+    if (field === 'restTimer1' && next > settings.restTimer2) updates.restTimer2 = next
+    if (field === 'restTimer2' && next < settings.restTimer1) updates.restTimer1 = next
+    void updateSettings(updates)
   }
 
 

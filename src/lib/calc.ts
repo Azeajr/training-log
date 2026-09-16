@@ -99,14 +99,28 @@ export const DEFAULT_REST_THRESHOLDS: RestThresholds = {
 
 // The stored column names predate the checkpoint behavior. Keep the schema
 // stable and translate them once at the edge of the timer domain.
+//
+// That edge is also where the ordering becomes true. Nothing enforced
+// `firstBell <= secondBell` — the settings steppers clamped each field
+// independently at `>= 30` — and an inverted pair broke the timer in two ways
+// at once: `restStatus` tests `secondBell` first, so the first bell never
+// fired and the screen read "SECOND BELL — GO IF READY" at 60s while the
+// countdown still ran toward 240; and `restNotificationTargets` armed both at
+// absolute times under one `tag`, so the tray showed the second bell first and
+// the later first bell then *replaced* it, leaving the earlier checkpoint's
+// notification as the survivor (F24).
+//
+// Sorted rather than clamped: the user configured two durations and got the
+// fields the wrong way round, so both lengths are kept and simply put in the
+// order the domain requires. Clamping would have thrown one of them away.
 export function restThresholds(s: {
   restTimer1: number
   restTimer2: number
   restTimerFail: number
 }): RestThresholds {
   return {
-    firstBell: s.restTimer1,
-    secondBell: s.restTimer2,
+    firstBell: Math.min(s.restTimer1, s.restTimer2),
+    secondBell: Math.max(s.restTimer1, s.restTimer2),
     failedBell: s.restTimerFail,
   }
 }
@@ -169,9 +183,16 @@ export interface MainSet {
   type: 'main'
 }
 
+// Total in `week`, despite the type. `week` is read straight off session rows
+// and those come from imports and hand-edited backups as well as from the app,
+// so an out-of-range value is reachable at runtime. It used to throw here —
+// `percentages.map` on undefined — which blanks the Workout screen, because the
+// app has no route error boundary (F28). No sets is a legible degradation; a
+// TypeError is not.
 export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): MainSet[] => {
-  const percentages = MAIN_PERCENTAGES[week]
-  const reps = MAIN_REPS[week]
+  const percentages = MAIN_PERCENTAGES[week] as readonly number[] | undefined
+  const reps = MAIN_REPS[week] as readonly number[] | undefined
+  if (!percentages || !reps) return []
   return percentages.map((pct, i) => ({
     setNumber: i + 1,
     weight: Math.max(barWeight, roundToNearest5(tm * pct)),
@@ -256,8 +277,11 @@ export const calcBbbSets = (tm: number, barWeight = BAR_WEIGHT): FslSet[] =>
   buildFixedSets(Math.max(barWeight, roundToNearest5(tm * BBB_PCT)), 10, 'bbb')
 
 export const calcBbsSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): FslSet[] => {
-  const pct = BBS_PERCENTAGES[week]
-  if (pct === null) return []
+  const pct = BBS_PERCENTAGES[week] as number | null | undefined
+  // `== null`, not `=== null`: an out-of-range week looks up `undefined`, which
+  // the strict check let through and turned into ten sets of NaN — loggable and
+  // persistable (F28).
+  if (pct == null) return []
   return buildFixedSets(Math.max(barWeight, roundToNearest5(tm * pct)), 5, 'bbs', 10)
 }
 
@@ -491,12 +515,17 @@ export function calcSupplementalSets(
   barWeight = BAR_WEIGHT,
 ): FslSet[] {
   if (main.length === 0) return []
+  // The SSL variants derive from main set 2, so they need a second set to
+  // exist. The length check above only established the first — `main[1].weight`
+  // threw whenever the main list was short, which an out-of-range week now
+  // makes reachable (F28).
+  const secondSet = main[1]
   switch (template) {
     case 'fsl':     return calcFslSets(main[0].weight)
-    case 'ssl':     return calcSslSets(main[1].weight)
+    case 'ssl':     return secondSet ? calcSslSets(secondSet.weight) : []
     case 'bbb':     return calcBbbSets(tm, barWeight)
     case 'fsl+bbb': return calcFslBbbSets(main[0].weight)
-    case 'ssl+bbb': return calcSslBbbSets(main[1].weight)
+    case 'ssl+bbb': return secondSet ? calcSslBbbSets(secondSet.weight) : []
     case 'bbs':     return calcBbsSets(tm, week, barWeight)
     case 'none':    return []
   }
@@ -516,8 +545,8 @@ export function getSupplementalLabel(
     case 'fsl+bbb': return `FSL+BBB  ${count}`
     case 'ssl+bbb': return `SSL+BBB  ${count}`
     case 'bbs': {
-      const pct = BBS_PERCENTAGES[week]
-      return pct !== null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
+      const pct = BBS_PERCENTAGES[week] as number | null | undefined
+      return pct != null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
     }
     case 'none':    return null
   }
