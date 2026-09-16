@@ -20,7 +20,7 @@ export default function AmrapTargets(props: Props) {
               when={props.onPick}
               fallback={
                 <div class="text-xs text-warn font-mono">
-                  -&gt; {t.label.toUpperCase().padEnd(14)} {t.reps} reps{' '}
+                  -&gt; <span class="whitespace-pre">{t.label.toUpperCase().padEnd(14)}</span> {t.reps} reps{' '}
                   <span class="text-muted">({t.est1RM}lb est. 1RM)</span>
                 </div>
               }
@@ -30,7 +30,7 @@ export default function AmrapTargets(props: Props) {
                 aria-label={`Set reps to ${t.reps} — ${t.label}`}
                 class="block w-full text-left text-xs text-warn font-mono hover:text-accent"
               >
-                -&gt; {t.label.toUpperCase().padEnd(14)}{' '}
+                -&gt; <span class="whitespace-pre">{t.label.toUpperCase().padEnd(14)}</span>{' '}
                 <span class="underline underline-offset-2 decoration-faint">{t.reps} reps</span>{' '}
                 <span class="text-muted">({t.est1RM}lb est. 1RM)</span>
               </button>

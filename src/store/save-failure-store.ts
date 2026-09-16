@@ -126,9 +126,6 @@ export const failuresForSession = (sessionId: number | undefined): SaveFailure[]
 export const gapsForSession = (sessionId: number): SessionGap[] =>
   gaps().filter(g => g.sessionId === sessionId)
 
-/** Sessions with at least one unresolved gap, for History's flag. */
-export const sessionIdsWithGaps = (): number[] => [...new Set(gaps().map(g => g.sessionId))]
-
 /** Test helper — drops both halves. */
 export function resetSaveFailures(): void {
   setFailures([])
