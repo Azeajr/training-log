@@ -11,6 +11,7 @@ import { getCurrentTm } from '../lib/training-max'
 import { getAssistanceDefaults, getAssistanceDefaultPicks, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSection } from '../lib/assistance'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
+import { showToast } from '../store/toast-store'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
@@ -122,6 +123,22 @@ export default function Today() {
     navigate('/workout')
   }
 
+  // The RESUME banner's handler. Same reconciliation as START, because it is
+  // the same act: a stored session is only resumable while its row is still the
+  // live pending one. When it isn't, drop the dead ref and re-read the week —
+  // the banner disappears with it, so say why.
+  const handleResume = async () => {
+    const active = workout.activeSession
+    if (!active) return
+    if (await reconcileActiveSession(db, active)) {
+      navigate('/workout')
+      return
+    }
+    clearSession()
+    showToast('That session already finished.')
+    await load()
+  }
+
   const handleStart = async () => {
     const selId = selectedLiftId()
     if (!selId) return
@@ -217,13 +234,17 @@ export default function Today() {
       fallback={<div class="p-4 md:p-8 font-mono text-muted text-sm tracking-widest uppercase">Loading…</div>}
     >
       <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
+        {/* A button, not a link: this is the second entry into a live session,
+            so it goes through the same reconciliation START does. As an <A> it
+            walked past that check straight into live workout controls over a
+            session the database had already finished (F13). */}
         <Show when={workout.activeSession}>
-          <A
-            href="/workout"
-            class="block border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-6"
+          <button
+            onClick={() => void handleResume()}
+            class="block w-full text-left border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-6"
           >
             &#9654; SESSION IN PROGRESS — RESUME
-          </A>
+          </button>
         </Show>
 
         <div class="md:grid md:grid-cols-2 md:gap-12 md:items-start">

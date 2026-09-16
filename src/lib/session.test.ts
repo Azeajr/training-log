@@ -2,7 +2,7 @@ import { beforeEach, describe, it, expect } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import type { Session } from '../types/domain'
-import { discardPendingSession, reconcileActiveSession } from './session'
+import { discardPendingSession, finalizePendingSession, reconcileActiveSession } from './session'
 
 beforeEach(async () => { await __resetForTest() })
 
@@ -40,6 +40,57 @@ describe('reconcileActiveSession', () => {
   it('returns null when the DB row was skipped', async () => {
     const id = await addSession('skipped')
     expect(await reconcileActiveSession(db, storeSession(id))).toBeNull()
+  })
+})
+
+describe('finalizePendingSession', () => {
+  it('applies the terminal status to a pending row and reports it did', async () => {
+    const id = await addSession('pending')
+    expect(await finalizePendingSession(db, id, { status: 'completed', notes: 'felt strong' })).toBe(true)
+    const row = await db.sessions.get(id)
+    expect(row?.status).toBe('completed')
+    expect(row?.notes).toBe('felt strong')
+  })
+
+  it('refuses to rewrite a completed row as skipped, and keeps its saved fields', async () => {
+    const id = await addSession('completed')
+    await db.sessions.update(id, { notes: 'the real workout' })
+
+    expect(await finalizePendingSession(db, id, { status: 'skipped' })).toBe(false)
+
+    const row = await db.sessions.get(id)
+    expect(row?.status).toBe('completed')
+    expect(row?.notes).toBe('the real workout')
+  })
+
+  it('is idempotent — a second completion neither rewrites the row nor re-runs the child writes', async () => {
+    const id = await addSession('pending')
+    const saved = new Date('2026-01-06')
+    const writeChildRows = async () => {
+      await db.accessorySets.add({
+        sessionId: id, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null,
+      })
+    }
+
+    expect(await finalizePendingSession(db, id, { status: 'completed', date: saved }, writeChildRows)).toBe(true)
+    expect(await finalizePendingSession(db, id, { status: 'completed', date: new Date('2026-02-01') }, writeChildRows)).toBe(false)
+
+    const row = await db.sessions.get(id)
+    expect(new Date(row!.date).getTime()).toBe(saved.getTime())
+    expect(await db.accessorySets.where('sessionId').equals(id).toArray()).toHaveLength(1)
+  })
+
+  it('returns false when the row is gone', async () => {
+    const id = await addSession('pending')
+    await db.sessions.delete(id)
+    expect(await finalizePendingSession(db, id, { status: 'completed' })).toBe(false)
+  })
+
+  it('does not write the child rows when the status write is refused', async () => {
+    const id = await addSession('skipped')
+    let ran = false
+    expect(await finalizePendingSession(db, id, { status: 'completed' }, async () => { ran = true })).toBe(false)
+    expect(ran).toBe(false)
   })
 })
 

@@ -4,7 +4,7 @@ import { Router, Route } from '@solidjs/router'
 import Workout from './Workout'
 import { db } from '../db/index'
 import {
-  clearSession, startSession, addAccessory, logAccessorySet, workout,
+  clearSession, startSession, addAccessory, logAccessorySet, setNotes, workout,
 } from '../store/workout-store'
 import { loadSettings, updateSettings } from '../store/settings-store'
 import { toast } from '../store/toast-store'
@@ -1835,5 +1835,75 @@ describe('Workout screen — cross block identity', () => {
 
     // Squat's uncommitted weight must survive — it is not this block's business.
     expect(screen.getAllByTestId('active-weight')[1].textContent).toBe(dialled)
+  })
+})
+
+// ─── F13: a stale store must not rewrite a finished session ───────────────────
+// The persisted workout store outlives its row. Kill the app while a
+// post-complete modal is open and it comes back holding a session the database
+// already finished — and every session-ending path used to write its status
+// unconditionally.
+
+describe('Workout screen — stale active session', () => {
+  const completedRow = async (fields: Partial<Session> = {}) => {
+    await db.sessions.update(1, { status: 'completed', notes: 'the real workout', date: new Date('2026-01-06'), ...fields })
+  }
+
+  it('SKIP does not rewrite a session the database already completed', async () => {
+    await completedRow()
+    startSession(BENCH)          // store still says 'pending'
+    renderWorkout()
+
+    fireEvent.click(await findSessionOption('SKIP LIFT'))
+    await screen.findByText('Skip this lift?')
+    fireEvent.click(screen.getByText('SKIP'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    const row = await db.sessions.get(1)
+    expect(row?.status).toBe('completed')
+    expect(row?.notes).toBe('the real workout')
+    expect(workout.activeSession).toBeNull()
+  })
+
+  it('COMPLETE does not duplicate accessory sets or overwrite the saved date and notes', async () => {
+    await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+    // What the first, real completion wrote.
+    await completedRow()
+    await db.accessorySets.add({
+      sessionId: 1, exerciseId: 10, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null,
+    })
+
+    // The resurrected store still holds the accessory work and a new note.
+    startSession(BENCH)
+    addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 50, loggedSets: [] })
+    logAccessorySet(10, { setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    setNotes('typed again after the reload')
+
+    renderWorkout()
+    fireEvent.click(await findFinishButton())
+    await drain()
+
+    expect(await db.accessorySets.where('sessionId').equals(1).toArray()).toHaveLength(1)
+    const row = await db.sessions.get(1)
+    expect(row?.notes).toBe('the real workout')
+    expect(new Date(row!.date).getTime()).toBe(new Date('2026-01-06').getTime())
+  })
+
+  it('entering the screen on a completed row drops the dead session and leaves', async () => {
+    await completedRow()
+    startSession(BENCH)
+    renderWorkout()
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    expect(workout.activeSession).toBeNull()
+  })
+
+  it('a skipped row is not resumable either', async () => {
+    await db.sessions.update(1, { status: 'skipped' })
+    startSession(BENCH)
+    renderWorkout()
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    expect(workout.activeSession).toBeNull()
   })
 })

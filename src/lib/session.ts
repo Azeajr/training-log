@@ -39,6 +39,40 @@ export async function discardPendingSession(db: TrainingDB, sessionId: number): 
   })
 }
 
+/**
+ * End a session, but only if it is still the pending attempt.
+ *
+ * Both ways a session ends — COMPLETE and SKIP — used to write their status
+ * unconditionally, which made them destructive against a stale store. The
+ * persisted workout store outlives its row: kill the app while a post-complete
+ * modal is open and it comes back holding a session the database already
+ * finished. SKIP then rewrote a completed workout as `skipped`, and COMPLETE
+ * appended a second copy of every accessory set while overwriting the date and
+ * notes that were saved the first time.
+ *
+ * So the status check and the writes are one transaction, and the answer comes
+ * back to the caller: `true` means this call is the one that ended the session,
+ * `false` means it was already over and nothing was written. `writeChildRows`
+ * runs inside the same transaction, so the accessory rows and the status flip
+ * commit together or not at all.
+ */
+export async function finalizePendingSession(
+  db: TrainingDB,
+  sessionId: number,
+  update: Partial<Omit<Session, 'id' | 'status'>> & { status: 'completed' | 'skipped' },
+  writeChildRows?: () => Promise<void>,
+): Promise<boolean> {
+  let applied = false
+  await db.transaction(async () => {
+    const row = await db.sessions.get(sessionId)
+    if (!row || row.status !== 'pending') return
+    await db.sessions.update(sessionId, update)
+    if (writeChildRows) await writeChildRows()
+    applied = true
+  })
+  return applied
+}
+
 // The persisted workout store can drift from its DB row. Two ways: the app is
 // killed while a post-complete modal is open (store still 'pending', DB row
 // 'completed'), or an exit deleted the row out from under a store that a crash

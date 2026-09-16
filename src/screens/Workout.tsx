@@ -14,7 +14,7 @@ import { composeAllSets, amrapTargetsFor } from '../lib/workout-compose'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
 import { advanceCycleIfComplete, getRecentWorkingSets, deloadTms, applyCycleDoubling } from '../lib/cycle'
-import { discardPendingSession } from '../lib/session'
+import { discardPendingSession, finalizePendingSession, reconcileActiveSession } from '../lib/session'
 import { detectPRs } from '../lib/pr'
 import { getCurrentTm, setTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
@@ -189,25 +189,33 @@ export default function Workout() {
   const loadData = async () => {
     const session = workout.activeSession
     if (!session) return
-    // Guard the dangling-row case: an exit that deleted the session but crashed
-    // before clearSession ran leaves the store pointing at a gone id. Logging
-    // into it would insert child rows with no parent (no FK), silently orphaned.
-    // A completed-but-present row is left alone — the EXIT/COMPLETE handlers
-    // already guard it, and the post-complete modal flow legitimately still
-    // holds it. Fetched in parallel with the lift so the check adds no latency
-    // before setLift (the action bar is live before loadData finishes).
+    // Reconcile on route entry. Two ways the store outlives its row: an exit
+    // that deleted the session but crashed before clearSession ran leaves it
+    // pointing at a gone id (logging into that would insert child rows with no
+    // parent — no FK, silently orphaned), and a kill during the post-complete
+    // modal chain leaves it pointing at a row the database already finished.
+    // Neither is resumable, so drop the dead ref rather than render live
+    // controls over it (F13).
+    //
+    // This does not disturb the live post-complete flow: that chain never
+    // reassigns `workout.activeSession`, so this effect does not re-run while
+    // the modals are up. It fires on a genuine mount — which is exactly the
+    // moment the session is over and there is nothing here to resume.
+    //
+    // Fetched in parallel with the lift so the check adds no latency before
+    // setLift (the action bar is live before loadData finishes).
     // `exercises` is fetched up here, with the session and lift, rather than on
     // the last await below. It depends on nothing ahead of it, and every
     // accessory row needs it to know whether it logs reps, time or distance —
     // `workout.activeAccessories` is hydrated synchronously from localStorage,
     // so it renders long before a late fetch would land (F56).
-    const [sessionRow, l, exerciseRows] = await Promise.all([
-      session.id ? db.sessions.get(session.id) : Promise.resolve(undefined),
+    const [liveRow, l, exerciseRows] = await Promise.all([
+      session.id ? reconcileActiveSession(db, session) : Promise.resolve(null),
       db.lifts.get(session.liftId),
       db.exercises.toArray(),
     ])
     setExercises(exerciseRows)
-    if (session.id && !sessionRow) {
+    if (session.id && !liveRow) {
       clearSession()
       navigate('/today')
       return
@@ -603,11 +611,31 @@ export default function Workout() {
     const notesToSave = workout.activeAccessories
       .filter(acc => acc.notes?.trim())
       .map(acc => ({ sessionId, exerciseId: acc.exerciseId, notes: acc.notes!.trim() }))
-    await db.transaction(async () => {
-      await db.sessions.update(sessionId, { status: 'completed', notes: workout.notes, date: new Date() })
-      if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
-      if (notesToSave.length > 0) await db.accessoryNotes.bulkAdd(notesToSave)
-    })
+    // Status-conditional, so a resurrected store cannot complete a session the
+    // database already finished: that appended a second copy of every accessory
+    // set and overwrote the date and notes saved the first time (F13).
+    const applied = await finalizePendingSession(
+      db, sessionId,
+      { status: 'completed', notes: workout.notes, date: new Date() },
+      async () => {
+        if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
+        if (notesToSave.length > 0) await db.accessoryNotes.bulkAdd(notesToSave)
+      },
+    )
+    if (!applied) {
+      const row = await db.sessions.get(sessionId)
+      if (row?.status !== 'completed') {
+        // Gone, or skipped out from under us. Nothing to finish.
+        showToast('That session is no longer active.')
+        clearSession()
+        navigate('/today')
+        return
+      }
+      // Already completed. The save is done and must not be replayed, but the
+      // phase that follows it — the accessory and lift TM prompts, the cycle
+      // roll-up — is exactly what a kill during the modal chain interrupts.
+      // Fall through and offer it again; each of those steps guards itself.
+    }
     // Accessory training maxes are asked about, not assumed — a weight dialled
     // in mid-set is a per-set decision until the whole slate says otherwise.
     const accRecs = getAccessoryTmRecommendations(workout.activeAccessories)
@@ -634,7 +662,16 @@ export default function Workout() {
     if (!await confirm('Skip this lift?', { destructive: true, confirmLabel: 'SKIP' })) return
     const session = workout.activeSession
     if (!session?.id) return
-    await db.sessions.update(session.id, { status: 'skipped' })
+    // Only a pending attempt can be skipped. Rewriting a completed row as
+    // 'skipped' would drop a finished workout out of History — the store says
+    // 'pending' for the whole post-complete modal chain, so a kill there is all
+    // it takes to arrive holding one (F13).
+    if (!await finalizePendingSession(db, session.id, { status: 'skipped' })) {
+      showToast('That session already finished — nothing to skip.')
+      clearSession()
+      navigate('/today')
+      return
+    }
     await finishSession()
   })
 

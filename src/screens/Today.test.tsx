@@ -366,3 +366,46 @@ describe('Today screen', () => {
     clearSession()
   })
 })
+
+// ─── F13: the RESUME banner is an entry point, so it reconciles too ───────────
+// START runs reconcileActiveSession before it resumes. The banner was a plain
+// <A href="/workout">, which walked straight past that check and into live
+// workout controls over a session the database had already finished.
+
+describe('Today screen — RESUME banner', () => {
+  const activeOn = async (status: Session['status']) => {
+    const cycleId = (await db.cycles.toArray())[0].id!
+    const id = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status,
+    })
+    startSession({ id, cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending' })
+    return id
+  }
+
+  it('resumes into the workout when the row is still pending', async () => {
+    await activeOn('pending')
+    renderToday()
+    fireEvent.click(await screen.findByText(/SESSION IN PROGRESS/))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
+  })
+
+  it('does not resume a session the database already completed', async () => {
+    await activeOn('completed')
+    renderToday()
+    fireEvent.click(await screen.findByText(/SESSION IN PROGRESS/))
+
+    await waitFor(() => expect(workout.activeSession).toBeNull())
+    expect(mockNavigate).not.toHaveBeenCalledWith('/workout')
+    await waitFor(() => expect(screen.queryByText(/SESSION IN PROGRESS/)).not.toBeInTheDocument())
+  })
+
+  it('does not resume a session whose row was deleted out from under it', async () => {
+    const id = await activeOn('pending')
+    await db.sessions.delete(id)
+    renderToday()
+    fireEvent.click(await screen.findByText(/SESSION IN PROGRESS/))
+
+    await waitFor(() => expect(workout.activeSession).toBeNull())
+    expect(mockNavigate).not.toHaveBeenCalledWith('/workout')
+  })
+})
