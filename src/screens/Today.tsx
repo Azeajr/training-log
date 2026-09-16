@@ -2,11 +2,13 @@ import { createSignal, createResource, onMount, Show, For } from 'solid-js'
 import { useNavigate, A } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift } from '../types/domain'
-import { workout, startSession, clearSession, addAccessory, toActiveAccessory } from '../store/workout-store'
+import { workout, startSession, resumeSession, clearSession, addAccessory, toActiveAccessory } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, calcCrossSets, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSessionAdvancingIfDone } from '../lib/cycle'
-import { discardPendingSession, reconcileActiveSession, startOrResumePendingSession } from '../lib/session'
+import {
+  discardPendingSession, hydrateSessionState, reconcileActiveSession, startOrResumePendingSession,
+} from '../lib/session'
 import { getCurrentTm } from '../lib/training-max'
 import { getAssistanceDefaults, getAssistanceDefaultPicks, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSection } from '../lib/assistance'
 import { settings } from '../store/settings-store'
@@ -132,14 +134,29 @@ export default function Today() {
       )) return
     }
 
-    const { session } = await startOrResumePendingSession(db, {
+    const { session, created } = await startOrResumePendingSession(db, {
       cycleId: currentCycleId(),
       liftId: selId,
       week: currentWeek(),
     })
-    startSession(session)
+
+    if (created) {
+      startSession(session)
+    } else {
+      // Resuming a row the local store knows nothing about — a backup restore
+      // reaches this every time. Rebuild its saved sets and cursor rather than
+      // resetting to empty, which made a half-finished session look untouched
+      // and duplicated the sets already in the database (F18).
+      const state = await hydrateSessionState(db, session)
+      resumeSession(session, state)
+      if (state.restored) {
+        showToast('Picked up the sets already saved for this session. Assistance work is only saved once a session is completed.')
+      }
+    }
+
     // Seed each fixed slot from this lift's persisted default — the pick from
-    // last time (or from Today), until the user swaps it mid-session.
+    // last time (or from Today), until the user swaps it mid-session. A resumed
+    // session gets them too: its assistance picks were never written down.
     for (const pick of await getAssistanceDefaultPicks(db, selId)) {
       addAccessory(toActiveAccessory(pick, pick.section))
     }

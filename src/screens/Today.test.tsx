@@ -513,3 +513,73 @@ describe('Today screen — stale selection results', () => {
     expect(mockNavigate).not.toHaveBeenCalledWith('/workout')
   })
 })
+
+// ─── F18: resuming is not starting ───────────────────────────────────────────
+// A backup restore leaves database rows and no local workout state. START used
+// to run those through startSession, which resets the store to empty — so a
+// half-finished session looked untouched and the next LOG wrote a duplicate of
+// a set already saved.
+
+describe('Today screen — resuming a session the local store never saw', () => {
+  const seedPendingWithWork = async () => {
+    const cycleId = (await db.cycles.toArray())[0].id!
+    const sessionId = await db.sessions.add({
+      cycleId, liftId: 1, week: 1, date: new Date(), notes: 'tweaked shoulder', status: 'pending',
+    })
+    for (const [type, setNumber, weight] of [
+      ['warmup', 1, 80], ['warmup', 2, 100], ['warmup', 3, 120], ['main', 1, 130],
+    ] as const) {
+      await db.sets.add({ sessionId, type, setNumber, weight, reps: 5, isAmrap: false })
+    }
+    return sessionId
+  }
+
+  it('restores the saved sets, the cursor and the notes instead of resetting them', async () => {
+    const sessionId = await seedPendingWithWork()
+    renderToday()
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
+    expect(workout.activeSession?.id).toBe(sessionId)
+    expect(workout.loggedSets.map(s => `${s.type}${s.setNumber}`))
+      .toEqual(['warmup1', 'warmup2', 'warmup3', 'main1'])
+    expect(workout.currentSetIndex).toBe(4)
+    expect(workout.notes).toBe('tweaked shoulder')
+    clearSession()
+  })
+
+  it('restores the database ids, so the next edit or undo addresses the saved rows', async () => {
+    const sessionId = await seedPendingWithWork()
+    const savedIds = (await db.sets.where('sessionId').equals(sessionId).toArray()).map(s => s.id)
+    renderToday()
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+
+    await waitFor(() => expect(workout.loggedSets).toHaveLength(4))
+    expect(workout.loggedSets.map(s => s.id).sort()).toEqual(savedIds.sort())
+    clearSession()
+  })
+
+  it('still seeds the assistance defaults, which were never saved', async () => {
+    await seedPendingWithWork()
+    await db.exercises.add({ id: 60, name: 'Chinup', type: 'reps' })
+    await db.accessoryTrainingMaxes.add({ exerciseId: 60, weight: 100, incrementLb: 5, setAt: new Date() })
+    await db.assistanceDefaults.add({ liftId: 1, section: 'pull', exerciseId: 60 })
+
+    renderToday()
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+
+    await waitFor(() => expect(workout.activeAccessories).toHaveLength(1))
+    expect(workout.activeAccessories[0].exerciseName).toBe('Chinup')
+    clearSession()
+  })
+
+  it('a genuinely fresh session still starts empty', async () => {
+    renderToday()
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
+    expect(workout.loggedSets).toHaveLength(0)
+    expect(workout.currentSetIndex).toBe(0)
+    clearSession()
+  })
+})

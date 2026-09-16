@@ -1,10 +1,10 @@
 import { beforeEach, describe, it, expect } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
-import type { Session } from '../types/domain'
+import type { Session, Set } from '../types/domain'
 import {
-  discardPendingSession, finalizePendingSession, reconcileActiveSession,
-  startOrResumePendingSession,
+  discardPendingSession, finalizePendingSession, hydrateSessionState,
+  reconcileActiveSession, startOrResumePendingSession,
 } from './session'
 
 beforeEach(async () => { await __resetForTest() })
@@ -189,5 +189,71 @@ describe('discardPendingSession', () => {
     expect(await db.sets.where('sessionId').equals(id).toArray()).toHaveLength(1)
     expect(await db.accessorySets.where('sessionId').equals(id).toArray()).toHaveLength(1)
     expect(await db.accessoryNotes.where('sessionId').equals(id).toArray()).toHaveLength(1)
+  })
+})
+
+describe('hydrateSessionState', () => {
+  const pending = (): Session => ({ id: 1, cycleId: 1, liftId: 1, week: 1, date: new Date(), notes: 'left knee', status: 'pending' })
+
+  const addSet = (type: Set['type'], setNumber: number, weight: number, liftId?: number) =>
+    db.sets.add({ sessionId: 1, type, setNumber, weight, reps: 5, isAmrap: false, ...(liftId ? { liftId } : {}) })
+
+  it('rebuilds the linear list in plan order, whatever order the rows come back in', async () => {
+    await addSession('pending')
+    // Inserted out of plan order on purpose: the store list is positional, so
+    // supplemental rows sorting before main rows would point every logged set
+    // at the wrong plan row.
+    await addSet('fsl+bbb', 1, 130)
+    await addSet('warmup', 2, 100)
+    await addSet('main', 1, 130)
+    await addSet('warmup', 1, 80)
+    await addSet('joker', 1, 190)
+
+    const state = await hydrateSessionState(db, pending())
+
+    expect(state.loggedSets.map(s => `${s.type}${s.setNumber}`))
+      .toEqual(['warmup1', 'warmup2', 'main1', 'joker1', 'fsl+bbb1'])
+    expect(state.currentSetIndex).toBe(5)
+    expect(state.restored).toBe(true)
+  })
+
+  it('keeps the database ids, so an edit addresses the saved row', async () => {
+    await addSession('pending')
+    const id = await addSet('warmup', 1, 80)
+    const state = await hydrateSessionState(db, pending())
+    expect(state.loggedSets[0].id).toBe(id)
+  })
+
+  it('splits cross sets out and leaves them off the linear cursor', async () => {
+    await addSession('pending')
+    await addSet('warmup', 1, 80)
+    await addSet('cross', 1, 225, 2)
+    await addSet('cross', 2, 225, 2)
+
+    const state = await hydrateSessionState(db, pending())
+
+    expect(state.loggedSets).toHaveLength(1)
+    expect(state.loggedCrossSets.map(s => s.setNumber)).toEqual([1, 2])
+    expect(state.currentSetIndex).toBe(1)
+  })
+
+  it('groups cross sets by their movement lift', async () => {
+    await addSession('pending')
+    await addSet('cross', 1, 225, 3)
+    await addSet('cross', 1, 135, 2)
+    await addSet('cross', 2, 135, 2)
+
+    const state = await hydrateSessionState(db, pending())
+
+    expect(state.loggedCrossSets.map(s => [s.liftId, s.setNumber]))
+      .toEqual([[2, 1], [2, 2], [3, 1]])
+  })
+
+  it('restores the session notes and reports nothing to restore when there are no sets', async () => {
+    await addSession('pending')
+    const state = await hydrateSessionState(db, pending())
+    expect(state.notes).toBe('left knee')
+    expect(state.restored).toBe(false)
+    expect(state.currentSetIndex).toBe(0)
   })
 })

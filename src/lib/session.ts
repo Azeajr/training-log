@@ -1,5 +1,5 @@
 import type { TrainingDB } from '../db/index'
-import type { Session } from '../types/domain'
+import type { Session, Set } from '../types/domain'
 
 // Discard an in-progress attempt: delete its logged rows and the pending
 // session row itself, so no empty husk is left to hold the week open
@@ -106,6 +106,73 @@ export async function startOrResumePendingSession(
     out = { session: { ...draft, id }, created: true }
   })
   return out
+}
+
+/**
+ * The workout store's view of a session, rebuilt from what the database kept.
+ */
+export interface HydratedSession {
+  loggedSets: Set[]
+  loggedCrossSets: Set[]
+  currentSetIndex: number
+  notes: string
+  /** True when there was saved work to restore, so the caller can say so. */
+  restored: boolean
+}
+
+// The linear set list is positional: index i of `loggedSets` is the set at
+// position i of the composed plan, which runs warmup → main → joker →
+// supplemental. Rebuilding it in any other order would point every logged set
+// at the wrong row. Anything unrecognised sorts with the supplemental tail,
+// where extra logged sets already live.
+const LINEAR_RANK: Record<string, number> = { warmup: 0, main: 1, joker: 2 }
+const linearRank = (type: string): number => LINEAR_RANK[type] ?? 3
+
+/**
+ * Rebuild the workout store's state for a session from its saved rows.
+ *
+ * Resuming a pending session used to run through `startSession`, which resets
+ * the store to empty. Workout then derives all its progress from those empty
+ * arrays, so a session with four sets already in the database looked untouched:
+ * the cursor sat at zero and the next LOG inserted a second warmup set 1
+ * alongside the row already there. A backup restore reaches this every time,
+ * since a restored install has database rows and no local workout state at all.
+ *
+ * Sets come back with their database ids, so an edit or an undo addresses the
+ * row it means rather than inserting a new one. The cursor is the count of
+ * linear sets — cross sets carry their own per-block cursors and never move it.
+ *
+ * Assistance work is deliberately not rebuilt: it is held in the local store and
+ * only written at COMPLETE, so for a pending session there is nothing saved to
+ * rebuild. The caller seeds the lift's defaults and says so, rather than letting
+ * an empty assistance section imply the earlier attempt logged none.
+ */
+export async function hydrateSessionState(
+  db: TrainingDB,
+  session: Session,
+): Promise<HydratedSession> {
+  if (session.id == null) {
+    return { loggedSets: [], loggedCrossSets: [], currentSetIndex: 0, notes: session.notes ?? '', restored: false }
+  }
+  const sets = await db.sets.where('sessionId').equals(session.id).toArray()
+
+  const byId = (a: Set, b: Set) => (a.id ?? 0) - (b.id ?? 0)
+  const loggedSets = sets
+    .filter(s => s.type !== 'cross')
+    .sort((a, b) => linearRank(a.type) - linearRank(b.type) || a.setNumber - b.setNumber || byId(a, b))
+  // Grouped by movement lift, because every cross consumer filters by liftId and
+  // then reads the list positionally within that group.
+  const loggedCrossSets = sets
+    .filter(s => s.type === 'cross')
+    .sort((a, b) => (a.liftId ?? 0) - (b.liftId ?? 0) || a.setNumber - b.setNumber || byId(a, b))
+
+  return {
+    loggedSets,
+    loggedCrossSets,
+    currentSetIndex: loggedSets.length,
+    notes: session.notes ?? '',
+    restored: sets.length > 0,
+  }
 }
 
 /**
