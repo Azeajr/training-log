@@ -3,7 +3,7 @@ import { beforeEach, describe, it, expect } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import {
-  createLift, updateLift, archiveLift, unarchiveLift, moveLift,
+  createLift, updateLift, archiveLift, unarchiveLift, moveLift, deleteLift,
   addLiftSupplemental, updateLiftSupplemental, removeLiftSupplemental,
   liftsCrossReferencing,
 } from './lift'
@@ -178,5 +178,81 @@ describe('cross-lift supplemental CRUD', () => {
 
     await removeLiftSupplemental(db, id)
     expect(await db.liftSupplementals.get(id)).toBeUndefined()
+  })
+})
+
+// ── F99 / F44 ───────────────────────────────────────────────────────────────
+// Two paths delete a session's parent and only one is a complete cascade.
+// discardPendingSession deletes sets, accessorySets, accessoryNotes AND the row;
+// archiveLift deleted only the row, and deleteLift deleted neither the sessions
+// nor their children. The orphans then had a sessionId nothing resolves — and
+// until F43's reader fix they scored permanent records no screen could display.
+describe('deleting a lift leaves no orphaned child rows', () => {
+  async function liftWithPendingWork() {
+    const liftId = await db.lifts.add({
+      name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper',
+    } as never)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exId = await db.exercises.add({ name: 'Dips', type: 'reps' } as never)
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'pending',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+    await db.sets.add({
+      sessionId, type: 'cross', setNumber: 1, weight: 200, reps: 5, isAmrap: false, liftId,
+    })
+    await db.accessorySets.add({
+      sessionId, exerciseId: exId, setNumber: 1, weight: 20, reps: 10, duration: null, distance: null,
+    })
+    await db.accessoryNotes.add({ sessionId, exerciseId: exId, notes: 'felt ok' })
+    return { liftId, sessionId }
+  }
+
+  const orphanCounts = async (sessionId: number) => ({
+    sets: (await db.sets.where('sessionId').equals(sessionId).toArray()).length,
+    accessorySets: (await db.accessorySets.where('sessionId').equals(sessionId).toArray()).length,
+    accessoryNotes: (await db.accessoryNotes.where('sessionId').equals(sessionId).toArray()).length,
+  })
+
+  it('archiveLift removes a pending session AND its children (F99)', async () => {
+    const { liftId, sessionId } = await liftWithPendingWork()
+    await archiveLift(db, liftId)
+    expect(await db.sessions.get(sessionId)).toBeFalsy()
+    expect(await orphanCounts(sessionId)).toEqual({ sets: 0, accessorySets: 0, accessoryNotes: 0 })
+  })
+
+  it('archiveLift leaves a COMPLETED session and its sets alone (F99)', async () => {
+    const liftId = await db.lifts.add({
+      name: 'Squat', order: 1, progressionIncrement: 10, baseWeight: 135, liftType: 'lower',
+    } as never)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed',
+    })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+
+    await archiveLift(db, liftId)
+    // Archiving is reversible and must not touch history.
+    expect(await db.sessions.get(sessionId)).toBeTruthy()
+    expect((await db.sets.where('sessionId').equals(sessionId).toArray())).toHaveLength(1)
+  })
+
+  it('deleteLift removes the lift\'s sessions and their children (F44)', async () => {
+    const { liftId, sessionId } = await liftWithPendingWork()
+    await deleteLift(db, liftId)
+    expect(await db.lifts.get(liftId)).toBeFalsy()
+    expect(await db.sessions.get(sessionId)).toBeFalsy()
+    expect(await orphanCounts(sessionId)).toEqual({ sets: 0, accessorySets: 0, accessoryNotes: 0 })
+  })
+
+  it('deleteLift removes the lift\'s assistanceDefaults (F44)', async () => {
+    const liftId = await db.lifts.add({
+      name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper',
+    } as never)
+    const exId = await db.exercises.add({ name: 'Dips', type: 'reps' } as never)
+    await db.assistanceDefaults.add({ liftId, section: 'push', exerciseId: exId } as never)
+
+    await deleteLift(db, liftId)
+    expect(await db.assistanceDefaults.where('liftId').equals(liftId).toArray()).toHaveLength(0)
   })
 })

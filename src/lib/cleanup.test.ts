@@ -12,6 +12,7 @@ describe('buildCleanupPlan', () => {
       orphanAtmIds: [],
       orphanSetIds: [],
       exercisesToArchive: [],
+      exerciseNamesToArchive: [],
     })
   })
 
@@ -56,5 +57,53 @@ describe('buildCleanupPlan', () => {
     const plan = buildCleanupPlan([ex(1)], [], [aset(30, 999, 1)], [])
     expect(plan.exercisesToArchive).toEqual([1])
     expect(plan.orphanSetIds).toEqual([30])
+  })
+})
+
+// ── F45 ─────────────────────────────────────────────────────────────────────
+// "In use" was defined as "has a surviving logged accessorySet", so CLEANUP
+// archived every never-logged exercise — including one the user had just
+// configured as a lift's assistance default and given an accessory training max.
+// After archiving, getAssistanceDefaults returns {} for that slot and Today's
+// push slot is empty. Recovery works (the assistanceDefaults row survives), but
+// nothing on screen says so: the toast reports a bare count.
+describe('buildCleanupPlan respects configuration, not just logged sets (F45)', () => {
+  it('keeps an exercise that is a live assistance default', () => {
+    const plan = buildCleanupPlan(
+      [{ id: 1 }],
+      [],
+      [],
+      [],
+      [{ exerciseId: 1 }],
+    )
+    expect(plan.exercisesToArchive).toEqual([])
+  })
+
+  it('keeps an exercise that has an accessory training max', () => {
+    const plan = buildCleanupPlan(
+      [{ id: 1 }],
+      [{ id: 5, exerciseId: 1 }],
+      [],
+      [],
+      [],
+    )
+    expect(plan.exercisesToArchive).toEqual([])
+  })
+
+  it('still archives an exercise that is neither logged nor configured', () => {
+    const plan = buildCleanupPlan([{ id: 1 }], [], [], [], [])
+    expect(plan.exercisesToArchive).toEqual([1])
+  })
+
+  it('names what it will archive so the dialog can list it', () => {
+    const plan = buildCleanupPlan(
+      [{ id: 1, name: 'Dips' }, { id: 2, name: 'Plank' }],
+      [],
+      [],
+      [],
+      [{ exerciseId: 1 }],
+    )
+    expect(plan.exercisesToArchive).toEqual([2])
+    expect(plan.exerciseNamesToArchive).toEqual(['Plank'])
   })
 })

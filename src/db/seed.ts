@@ -47,10 +47,17 @@ export function seedDatabase(): Promise<void> {
 }
 
 async function _seedDatabase() {
-  // Seed lifts — re-seed if count is less than expected (handles partial-seed recovery)
-  const liftCount = await db.lifts.count()
-  if (liftCount < LIFTS.length) {
-    if (liftCount > 0) await db.lifts.clear()
+  // Seed lifts only into a genuinely EMPTY table. This used to re-seed whenever
+  // the count was below LIFTS.length, treating a short roster as a partial
+  // seed — but a smaller roster is a supported onboarding choice, so for those
+  // users every startup deleted the survivors and re-created the defaults with
+  // NEW ids, orphaning the training maxes and session history that referenced
+  // the old ones and undoing any customisation (F07).
+  //
+  // Removing the `clear()` also removes the window F98 describes: there is no
+  // longer a clear-then-bulkAdd pair that could leave the roster empty if it
+  // failed in between. A non-empty lifts table is the user's roster, full stop.
+  if ((await db.lifts.count()) === 0) {
     await db.lifts.bulkAdd(LIFTS)
   }
 

@@ -14,14 +14,28 @@ import type { Session } from '../types/domain'
 // The status check lives *inside* the transaction so it and the deletes are
 // one BEGIN/COMMIT — no await gap between reading the status and acting on it
 // where a concurrent completeSession could flip the row to 'completed'.
+/**
+ * The cascade itself, WITHOUT a transaction of its own.
+ *
+ * Callers that are already inside a transaction use this one. Transactions are
+ * serialized (see `db/transaction.ts`), so a nested `db.transaction` would wait
+ * on a lock its own caller is holding — `archiveLift` calling the wrapper below
+ * from inside its transaction deadlocked exactly that way.
+ *
+ * One definition of "discard an attempt", so the callers cannot drift.
+ */
+export async function discardPendingSessionRows(db: TrainingDB, sessionId: number): Promise<void> {
+  const row = await db.sessions.get(sessionId)
+  if (!row || row.status !== 'pending') return
+  await db.sets.where('sessionId').equals(sessionId).delete()
+  await db.accessorySets.where('sessionId').equals(sessionId).delete()
+  await db.accessoryNotes.where('sessionId').equals(sessionId).delete()
+  await db.sessions.delete(sessionId)
+}
+
 export async function discardPendingSession(db: TrainingDB, sessionId: number): Promise<void> {
   await db.transaction(async () => {
-    const row = await db.sessions.get(sessionId)
-    if (!row || row.status !== 'pending') return
-    await db.sets.where('sessionId').equals(sessionId).delete()
-    await db.accessorySets.where('sessionId').equals(sessionId).delete()
-    await db.accessoryNotes.where('sessionId').equals(sessionId).delete()
-    await db.sessions.delete(sessionId)
+    await discardPendingSessionRows(db, sessionId)
   })
 }
 

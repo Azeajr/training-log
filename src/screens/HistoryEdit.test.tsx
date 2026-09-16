@@ -724,3 +724,69 @@ describe('HistoryEdit — accessory exercise types', () => {
     })
   })
 })
+
+// ── F01 ─────────────────────────────────────────────────────────────────────
+// persistAccessory deletes the rows of its own `originalExerciseId` and then
+// writes its replacements, and the save loop runs it per card in order. So a
+// chain of swaps destroys data: swap card A from B→C and card B from A→B, and
+// whichever card writes exercise B's sets first has them deleted by the other
+// card's cleanup of its own original. The delete has to happen for every card
+// before any card writes.
+describe('HistoryEdit — chained accessory swaps (F01)', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
+      db.sets.clear(), db.exercises.clear(),
+      db.accessorySets.clear(), db.accessoryNotes.clear(),
+    ])
+    mockNavigate.mockClear()
+  })
+
+  afterEach(drain)
+
+  async function seedTwoAccessories() {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const A = await db.exercises.add({ name: 'Aaa Dips', type: 'reps' })
+    const B = await db.exercises.add({ name: 'Bbb Rows', type: 'reps' })
+    const C = await db.exercises.add({ name: 'Ccc Flyes', type: 'reps' })
+    const sessionId = await db.sessions.add({
+      cycleId, liftId, week: 1, date: new Date('2026-03-15'), notes: null, status: 'completed',
+    })
+    await db.accessorySets.bulkAdd([
+      { sessionId, exerciseId: A, setNumber: 1, weight: 10, reps: 10, duration: null, distance: null },
+      { sessionId, exerciseId: B, setNumber: 1, weight: 20, reps: 10, duration: null, distance: null },
+    ])
+    return { sessionId, A, B, C }
+  }
+
+  /** Swap the card at `accIdx` onto `name` via the picker. */
+  async function swapCard(accIdx: number, name: string) {
+    const swaps = screen.getAllByText('swap')
+    fireEvent.click(swaps[accIdx])
+    await waitFor(() => expect(document.body.textContent).toContain('SELECT EXERCISE'))
+    fireEvent.click(await screen.findByText(name))
+    await waitFor(() => expect(document.body.textContent).not.toContain('SELECT EXERCISE'))
+  }
+
+  it('does not let one card delete another card the same save just wrote', async () => {
+    const { sessionId, B, C } = await seedTwoAccessories()
+    renderHistoryEdit(sessionId)
+    await screen.findByText(/Bench/)
+    await screen.findByText('Aaa Dips')
+
+    // Card 0 is Aaa Dips, card 1 is Bbb Rows (alphabetical by exercise).
+    // Chain: card 1 goes B -> C, card 0 goes A -> B.
+    await swapCard(1, 'Ccc Flyes')
+    await swapCard(0, 'Bbb Rows')
+
+    fireEvent.click(screen.getByText('SAVE'))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
+
+    const rows = await db.accessorySets.where('sessionId').equals(sessionId).toArray()
+    const byExercise = new Set(rows.map(r => r.exerciseId))
+    // Both replacements must survive: B (written by card 0) and C (by card 1).
+    expect(byExercise.has(B)).toBe(true)
+    expect(byExercise.has(C)).toBe(true)
+  })
+})

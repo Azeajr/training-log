@@ -145,6 +145,29 @@ export const ADDITIVE_MIGRATIONS = [
   // already holds duplicates would fail to start; as a migration the error is
   // swallowed and that DB simply skips the index.
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_exercises_name_nocase ON exercises(TRIM(LOWER(name)))`,
+  // Cross sets are attributed by their own liftId, so every record reader scans
+  // `sets` by liftId — detectPRs (the mid-set toast, on the logging path),
+  // baselineSets, and getRecentWorkingSets. There was an index on sessionId and
+  // none on liftId, so those were full scans growing with total history (F94).
+  //
+  // HERE ONLY, not in SCHEMA: `sets.liftId` is itself an additive column, so
+  // SCHEMA runs before it exists and an index on it fails with "no such column".
+  // Non-unique, so it cannot fail against existing rows.
+  `CREATE INDEX IF NOT EXISTS idx_sets_liftId ON sets(liftId)`,
+  // Reconcile duplicate exercise names, then (re)create the unique index.
+  //
+  // `idx_exercises_name_nocase` above is an additive migration, and migrations
+  // run inside a swallowed try/catch — deliberately, so a database that already
+  // held duplicates still boots. The consequence was that exactly those installs
+  // silently kept NO uniqueness guarantee, and nothing told them (F101).
+  //
+  // Suffix the later twins with their id rather than merging or deleting: the
+  // rows carry logged history through accessorySets, so dropping one loses work.
+  // The earliest id keeps the plain name. Idempotent — once names are unique the
+  // UPDATE matches nothing, and the index below already exists on healthy DBs.
+  `UPDATE exercises SET name = name || ' (' || id || ')'
+     WHERE id NOT IN (SELECT MIN(id) FROM exercises GROUP BY TRIM(LOWER(name)))`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_exercises_name_nocase ON exercises(TRIM(LOWER(name)))`,
 ] as const
 
 export const ALL_TABLES = [
