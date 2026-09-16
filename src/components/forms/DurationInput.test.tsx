@@ -64,3 +64,33 @@ describe('DurationInput — interactions', () => {
     expect(getAllByRole('button')[0]).toBeDisabled()
   })
 })
+
+// ── F59 ─────────────────────────────────────────────────────────────────────
+// fieldLabel exists, per its own comment, "so two duration inputs on one screen
+// don't both announce as bare 'minutes'/'seconds'" — and none of its three call
+// sites passed it. In AccessoryLog the two are simultaneously on screen in the
+// ordinary case: editing a logged timed set renders one while the active-set
+// form renders the other.
+describe('DurationInput fieldLabel (F59)', () => {
+  it('prefixes the stepper names so two inputs are distinguishable', () => {
+    const { container } = render(() => (
+      <>
+        <DurationInput value={90} onChange={() => {}} fieldLabel="set 1" />
+        <DurationInput value={30} onChange={() => {}} fieldLabel="this set" />
+      </>
+    ))
+    const names = [...container.querySelectorAll('[aria-label]')]
+      .map(el => el.getAttribute('aria-label')!)
+    expect(names).toContain('Increase set 1 minutes')
+    expect(names).toContain('Increase this set minutes')
+    // No two controls may share an accessible name.
+    expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('falls back to bare names when no fieldLabel is given', () => {
+    const { container } = render(() => <DurationInput value={90} onChange={() => {}} />)
+    const names = [...container.querySelectorAll('[aria-label]')]
+      .map(el => el.getAttribute('aria-label')!)
+    expect(names).toContain('Increase minutes')
+  })
+})

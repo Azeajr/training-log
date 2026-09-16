@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **74** |
+| `open` | **70** |
 | `wip` | 0 |
-| `fixed` | **26** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F41, F42, F47, F51, F52, F54, F55, F57, F63, F65, F66, F73, F79, F95, F96, F97 |
+| `fixed` | **30** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F41, F42, F47, F51, F52, F54, F55, F57, F63, F59, F60, F61, F64, F65, F66, F73, F79, F95, F96, F97 |
 | `fixed-by` | **1** — F43 (reader half; F99 carries the rest) |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -66,7 +66,7 @@ Seven root-cause patterns from `deep-code-review.md:38-53`. A finding can sit in
 | C2 | Single-slot or snapshotted state standing in for per-item state | F51 ✅, F52 ✅, F54 ✅, F55 ✅, F57 ✅, F63 ✅ — **cluster closed** | None — per-file fixes |
 | C3 | State seeded once and never re-synced, or re-synced over the user | F49, F54 ✅, F56, F63 ✅ | None — `DurationInput.tsx:18-23` is the counter-example done right |
 | C4 | Cleanup or a default bound to something that can stop existing | F57 ✅, F58, F62 | None — per-file fixes |
-| C5 | Uneven keyboard and screen-reader access | F59, F60, F61, F64 | None — in each case a neighbouring file does it correctly |
+| C5 | Uneven keyboard and screen-reader access | F59 ✅, F60 ✅, F61 ✅, F64 ✅ — **cluster closed** | None — in each case a neighbouring file did it correctly |
 | C6 | Unvalidated external data written to durable storage or trusted as control flow | F03, F08, F65, F66, F67 | **F65** for the service-worker half (F65/F66 are the same `response.ok` gate) |
 | C7 | A change made and its description not updated | F76, F84, F89, F90, F91, F92, F93 | None — independent doc edits |
 
@@ -147,12 +147,12 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F56 | Low | B08 | C3 | `src/components/workout/AccessoryLog.tsx` | `open` | — | — |
 | F57 | Medium | B08 | C2,C4 | `src/components/workout/RestTimer.tsx` | `fixed` | `92e93aa` · `RestTimer.test.tsx` ×3 | Single owner for the sentinel: an in-flight `pending` promise so a concurrent caller joins rather than requesting a second, and a release that nulls **before** awaiting. Visibility handling is now symmetric — release on hide, request on show — rather than requesting on show while trusting the browser's own release. The existing five wake-lock tests could not catch this: they shared **one** `mockSentinel`, so "release was called" was true even when two others leaked. |
 | F58 | Medium | B08 | C4 | `src/components/forms/Stepper.tsx` | `open` | — | — |
-| F59 | Low | B08 | C5 | `src/components/forms/DurationInput.tsx` | `open` | — | — |
-| F60 | Medium <br><sub>WCAG 2.1.2, Level A</sub> | B08 | C5 | `src/components/forms/NotesField.tsx` | `open` | — | — |
-| F61 | Medium <br><sub>WCAG 2.1.1, Level A</sub> | B08 | C5 | `src/components/forms/SetReadout.tsx` | `open` | — | — |
+| F59 | Low | B08 | C5 | `src/components/forms/DurationInput.tsx` | `fixed` | `<pending>` · `AccessoryLog.test.tsx`, `DurationInput.test.tsx` ×2 | `fieldLabel` passed at all three call sites. It existed for exactly this — "so two duration inputs on one screen don't both announce as bare minutes/seconds" — and none of them used it. Tested at the **call site**, not just the component: a component-level test passes whatever the call sites do. |
+| F60 | Medium <br><sub>WCAG 2.1.2, Level A</sub> | B08 | C5 | `src/components/forms/NotesField.tsx` | `fixed` | `<pending>` · `NotesField.test.tsx` ×4 | Tab interception gated on `listMode()`, as the Enter handler already was. **Behaviour change, taken deliberately:** Tab re-tabbing is now a list-mode feature, so three existing tests were updated to enable list mode. WCAG 2.1.2 permits a non-standard exit only if the user is advised of it, and the ←/→ escape chips render only in list mode — so outside it there was no advice and no exit. |
+| F61 | Medium <br><sub>WCAG 2.1.1, Level A</sub> | B08 | C5 | `src/components/forms/SetReadout.tsx` | `fixed` | `<pending>` · `SetReadout.test.tsx` ×7 | A real `<button>` when the row is tappable. This is the app's only affordance for editing an already logged set, so as a bare `div` correcting a mislogged set was pointer-only. The trailing slot stays **outside** the button — it holds an `InlineConfirm`, and nesting interactive content makes the inner control unreachable. `SetReadout` had no test file. |
 | F62 | Medium | B08 | C4 | `src/components/workout/AccessoryLog.tsx` | `open` | — | — |
 | F63 | Medium | B08 | C2,C3 | `src/components/stats/RecordsPanel.tsx` | `fixed` | `92e93aa` · `RecordsPanel.test.tsx` ×2 | Request identity: a token per load, results dropped when superseded, and `setLoading(true)` on entry. `History.tsx:612` passes a live signal, so switching lift is the ordinary path — the panel published whatever settled **last** rather than what was asked for last, and never returned to the loading state. `RecordsPanel` had no test file at all. |
-| F64 | Low | B08 | C5 | `src/components/layout/Rule.tsx` | `open` | — | — |
+| F64 | Low | B08 | C5 | `src/components/layout/Rule.tsx` | `fixed` | `<pending>` · `Rule.test.tsx` ×5 | The dash fill is wrapped in `aria-hidden` inside `Rule`, so all 16 call sites get it — the fix that had been applied once at a call site now lives in the component. `Modal` keeps its own `aria-hidden`, but for a different reason now: its `sr-only` heading is the `aria-labelledby` target, so without it the title is announced twice. |
 | F65 | **High** | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg F | **Amended — the stated impact never reproduced.** The missing `ok` check was real but masked by **F95**: the cache write never ran, so no 503 could poison anything. Repairing F95 alone would have activated this for real, so both landed in one change. Leg F asserts both halves. |
 | F66 | Medium | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg G | **The live half of the pair.** Reproduced exactly as written: a 502 enters the cache-first precache and is served from it thereafter. Cache-first, so it is never re-fetched. |
 | F67 | Medium <br><sub>needs device</sub> | B09 | C6 | `src/lib/notifications.ts` | `open` | — | Platform impact **needs a real iOS device**. Per project rule, do not claim verified without one. |
