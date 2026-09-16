@@ -694,6 +694,49 @@ describe('Settings — rest timers', () => {
     })
   })
 
+  // F24. Each stepper clamped only its own floor, so first bell > second bell
+  // was reachable — and it made the first bell unfireable, because restStatus
+  // tests the second checkpoint first.
+  it('raising the first bell past the second carries the second along', async () => {
+    renderSettings()
+    await screen.findByText('1:30')
+
+    // 90 → 120 → 150 → 180 → 210, which is past the second bell at 180.
+    // Addressed by label, not by the displayed time: once the first bell
+    // reaches 3:00 both rows read the same thing.
+    for (let i = 0; i < 4; i++) {
+      // Re-queried each time: the row re-renders on every update, so a cached
+      // element reference is detached by the next click.
+      fireEvent.click(screen.getByRole('button', { name: 'Increase first bell rest timer' }))
+      await drain()
+    }
+
+    const saved = await db.settings.toCollection().first()
+    expect(saved?.restTimer1).toBe(210)
+    expect(saved?.restTimer2).toBe(210)
+    expect(saved!.restTimer1).toBeLessThanOrEqual(saved!.restTimer2)
+  })
+
+  it('lowering the second bell below the first carries the first down', async () => {
+    await db.settings.clear()
+    // Both at 150: one step down on the second bell puts it BELOW the first,
+    // which is the case the push exists for. Seeding them apart would let this
+    // pass without the fix.
+    await db.settings.add({
+      restTimer1: 150, restTimer2: 150, restTimerFail: 300,
+      theme: 'dark', barWeight: 45, plates: DEFAULT_PLATES,
+    })
+    await loadSettings()
+    renderSettings()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Decrease second bell rest timer' }))
+    await drain()
+
+    const saved = await db.settings.toCollection().first()
+    expect(saved?.restTimer2).toBe(120)
+    expect(saved?.restTimer1).toBe(120)
+  })
+
   it('timer - button clamps at 30 s minimum', async () => {
     // Set timer to 30 (minimum)
     await db.settings.clear()

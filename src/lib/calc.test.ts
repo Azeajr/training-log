@@ -12,6 +12,8 @@ import {
   calcWarmup,
   estimated1RM,
   targetReps,
+  amrapTargetReps,
+  AMRAP_TARGET_MAX_REPS,
   calcAmrapTarget,
   median,
   seedE1Rm,
@@ -51,6 +53,29 @@ describe('roundToNearest5', () => {
   it('rounds down at 162', () => expect(roundToNearest5(162)).toBe(160))
   it('rounds up at 163', () => expect(roundToNearest5(163)).toBe(165))
   it('leaves exact multiples unchanged', () => expect(roundToNearest5(175)).toBe(175))
+
+  // F26. A .5 boundary reached through a float multiply is still a .5 boundary.
+  // `0.70` is the only percentage in the program that lands short of one:
+  // 175 * 0.70 is 122.49999999999999, so the half-up step rounded it DOWN while
+  // the identical 122.5 reached via `0.50` rounded up. Same weight, two answers,
+  // depending on which code path produced it.
+  it('rounds a .5 boundary up however the float got there', () => {
+    expect(roundToNearest5(175 * 0.70)).toBe(125)
+    expect(roundToNearest5(245 * 0.50)).toBe(125)
+    expect(roundToNearest5(175 * 0.70)).toBe(roundToNearest5(245 * 0.50))
+  })
+
+  it('agrees with itself at 227.5 from either source', () => {
+    expect(roundToNearest5(325 * 0.70)).toBe(230)
+    expect(roundToNearest5(455 * 0.50)).toBe(230)
+  })
+
+  // The precision guard must not swallow a genuine value just below the
+  // boundary — 122.4 is not 122.5 and still rounds down.
+  it('still rounds down just below the boundary', () => {
+    expect(roundToNearest5(122.4)).toBe(120)
+    expect(roundToNearest5(122.5)).toBe(125)
+  })
 })
 
 describe('calcMainSets', () => {
@@ -201,8 +226,26 @@ describe('calcBbsSets', () => {
     sets.forEach(s => expect(s.weight).toBe(240))
   })
 
-  it('week 4 (deload): returns empty array', () => {
-    expect(calcBbsSets(300, 4)).toHaveLength(0)
+  // F30. Week 4 used to have no BBS percentage at all, so `calcBbsSets` returned
+  // []. With `deloadSupplemental: 'deload'` that made BBS byte-identical to
+  // 'skip' while every other template composed five sets, and
+  // `getSupplementalLabel` returned null so nothing on screen said why. A user
+  // who picked BBS and deliberately chose the keep-it mode got the drop-it one.
+  it('week 4 (deload): 10 sets x 5 reps at 50% TM, like its sibling BBB', () => {
+    const sets = calcBbsSets(300, 4)
+    expect(sets).toHaveLength(10)
+    sets.forEach(s => expect(s.weight).toBe(150))
+  })
+
+  it('week 4 is lighter than every working week', () => {
+    const top = (w: 1 | 2 | 3 | 4) => calcBbsSets(300, w)[0].weight
+    expect(top(4)).toBeLessThan(top(1))
+    expect(top(1)).toBeLessThan(top(2))
+    expect(top(2)).toBeLessThan(top(3))
+  })
+
+  it('labels the deload percentage rather than going silent', () => {
+    expect(getSupplementalLabel('bbs', calcBbsSets(300, 4), 4)).toBe('BBS  10 × 5  50% TM')
   })
 
   it('rounds weight to nearest 5', () => {
@@ -351,6 +394,46 @@ describe('targetReps', () => {
   })
 })
 
+// F25. The raw inverse is unbounded, and under a discount setting a seed well
+// above today's weight expanded it by 1/scale. Recent 225x12 against a 185 TM
+// produced targets of 95 / 155 / 345 reps for mild / moderate / aggressive,
+// tappable straight into the reps field — and because the value was non-null,
+// the documented "callers fall back to the TM-implied goal" never happened.
+describe('amrapTargetReps', () => {
+  it('passes through a plausible target unchanged', () => {
+    expect(amrapTargetReps(250.65, 170)).toBe(14)
+    expect(amrapTargetReps(250.65, 170)).toBe(targetReps(250.65, 170))
+  })
+
+  it('returns the ceiling itself, and nothing above it', () => {
+    expect(targetReps(200, 109)).toBe(AMRAP_TARGET_MAX_REPS)
+    expect(amrapTargetReps(200, 109)).toBe(AMRAP_TARGET_MAX_REPS)
+    expect(targetReps(200, 108.9)).toBe(AMRAP_TARGET_MAX_REPS + 1)
+    expect(amrapTargetReps(200, 108.9)).toBeNull()
+  })
+
+  it('still returns null where the inverse never resolves at all', () => {
+    expect(amrapTargetReps(500, 200)).toBeNull()
+  })
+})
+
+describe('calcAmrapTarget \u2014 implausible targets fall back (F25)', () => {
+  // 225x12 recent work against a 185 TM: week-1 AMRAP weight is 155.
+  const HISTORY = [{ weight: 225, reps: 12 }]
+
+  it.each(['mild', 'moderate', 'aggressive'] as const)(
+    'returns null under the %s discount instead of a three-figure rep target',
+    discount => {
+      expect(calcAmrapTarget(HISTORY, 155, discount)).toBeNull()
+    },
+  )
+
+  it('is unchanged where the target was already plausible', () => {
+    const target = calcAmrapTarget([{ weight: 200, reps: 5 }], 170)!
+    expect(target.reps).toBe(11)
+  })
+})
+
 describe('median', () => {
   it('empty -> 0', () => expect(median([])).toBe(0))
   it('odd count picks middle', () => expect(median([3, 1, 2])).toBe(2))
@@ -401,7 +484,19 @@ describe('calcAmrapTarget', () => {
     )!
     expect(target.label).toBe('target')
     expect(target.est1RM).toBeCloseTo(233.90, 1)
-    expect(target.reps).toBe(targetReps(target.est1RM, 170))
+    // F25/F29. A literal, not `targetReps(target.est1RM, 170)`. `reps` is
+    // derived from the UNROUNDED seed while `est1RM` is rounded to 2dp for
+    // display, so a round trip through the reported figure asserts a coupling
+    // that holds only for these inputs — and would quietly stop meaning
+    // anything if they changed. Wathan can round the displayed e1RM just above
+    // the value that produced the reps (847 such pairs across a 60-400lb
+    // sweep), which is cosmetic in the product and load-bearing in a test.
+    expect(target.reps).toBe(11)
+    expect(target.reps).toBe(amrapTargetReps(seedE1Rm([
+      { weight: 160, reps: 17 },
+      { weight: 155, reps: 15 },
+      { weight: 150, reps: 14 },
+    ]), 170))
   })
 
   it('null when the seed e1RM is 0 \u2014 callers fall back to the TM goal instead of \u201Ctarget 1 @ est. 0\u201D', () => {
@@ -766,6 +861,48 @@ describe('applySupplementalOverride', () => {
   })
 })
 
+// F24. Nothing enforced firstBell <= secondBell, and the settings steppers
+// clamped each field independently at >= 30. With restTimer1=240/restTimer2=60,
+// restStatus tests secondBell first, so the first bell never fired: the timer
+// showed "SECOND BELL — GO IF READY" at 60s while the countdown still read
+// toward 240. restNotificationTargets armed both at absolute times, so the tray
+// showed the second bell first and — same `tag` — the later first bell replaced
+// it, leaving the notification for the EARLIER checkpoint as the survivor.
+describe('restThresholds ordering (F24)', () => {
+  it('passes a well-ordered config straight through', () => {
+    expect(restThresholds({ restTimer1: 90, restTimer2: 180, restTimerFail: 300 }))
+      .toEqual({ firstBell: 90, secondBell: 180, failedBell: 300 })
+  })
+
+  it('orders an inverted config instead of letting the first bell go unreachable', () => {
+    expect(restThresholds({ restTimer1: 240, restTimer2: 60, restTimerFail: 300 }))
+      .toEqual({ firstBell: 60, secondBell: 240, failedBell: 300 })
+  })
+
+  it('keeps both configured lengths — it sorts them, it does not discard one', () => {
+    const t = restThresholds({ restTimer1: 240, restTimer2: 60, restTimerFail: 300 })
+    expect([t.firstBell, t.secondBell].sort((a, b) => a - b)).toEqual([60, 240])
+  })
+
+  it('leaves equal bells equal', () => {
+    expect(restThresholds({ restTimer1: 120, restTimer2: 120, restTimerFail: 300 }))
+      .toMatchObject({ firstBell: 120, secondBell: 120 })
+  })
+
+  it('both bells fire in order once normalized', () => {
+    const t = restThresholds({ restTimer1: 240, restTimer2: 60, restTimerFail: 300 })
+    expect(restStatus(59, 'normal', t).phase).toBe('idle')
+    expect(restStatus(60, 'normal', t).phase).toBe('nudge')
+    expect(restStatus(239, 'normal', t).phase).toBe('nudge')
+    expect(restStatus(240, 'normal', t).phase).toBe('warning')
+  })
+
+  it('the countdown leads to the earlier bell, not the later one', () => {
+    const t = restThresholds({ restTimer1: 240, restTimer2: 60, restTimerFail: 300 })
+    expect(restTarget('normal', t)).toBe(60)
+  })
+})
+
 describe('restStatus', () => {
   describe('completed-set rest', () => {
     it('is idle before the first bell', () => {
@@ -989,8 +1126,10 @@ describe('calcSupplementalSets', () => {
     expect(sets[0].reps).toBe(5)
   })
 
-  it('bbs week 4 (deload): returns []', () => {
-    expect(calcSupplementalSets('bbs', main, tm, 4)).toHaveLength(0)
+  it('bbs week 4 (deload): composes its ten sets like every other template (F30)', () => {
+    const sets = calcSupplementalSets('bbs', main, tm, 4)
+    expect(sets).toHaveLength(10)
+    expect(sets[0].weight).toBeLessThan(calcSupplementalSets('bbs', main, tm, 1)[0].weight)
   })
 })
 
@@ -1038,10 +1177,17 @@ describe('getSupplementalLabel', () => {
     expect(getSupplementalLabel('bbs', [], 4)).toBeNull()
   })
 
-  it('bbs week 4 with non-empty sets: still returns null (BBS_PERCENTAGES[4] is null)', () => {
-    // Guards the pct !== null check itself, not just the empty-sets early return.
+  it('bbs week 4 with non-empty sets: names the deload percentage (F30)', () => {
+    // Guards the percentage lookup itself, not just the empty-sets early return.
+    // Week 4 used to have no percentage, so this went silent and nothing on
+    // screen explained why the block had vanished.
+    const sets = calcBbsSets(200, 4)
+    expect(getSupplementalLabel('bbs', sets, 4)).toBe('BBS  10 × 5  50% TM')
+  })
+
+  it('bbs with an out-of-range week still returns null (F28)', () => {
     const sets = calcBbsSets(200, 1)
-    expect(getSupplementalLabel('bbs', sets, 4)).toBeNull()
+    expect(getSupplementalLabel('bbs', sets, 9 as unknown as 1 | 2 | 3 | 4)).toBeNull()
   })
 
   it('none with non-empty sets: returns null', () => {
@@ -1123,5 +1269,130 @@ describe('effectiveSupplementalWeek', () => {
 
   it('week 4 normal → week 1 (~65% percentages)', () => {
     expect(effectiveSupplementalWeek(4, 'normal')).toBe(1)
+  })
+})
+
+// ─── F28: a corrupt `week` degrades, it does not crash ───────────────────────
+// `week` is typed 1|2|3|4 but never validated when rows are read or imported,
+// and the three percentage lookups handled an out-of-range value three
+// different ways: calcMainSets threw a TypeError (blank Workout screen — the
+// app has no route error boundary), calcBbsSets silently returned ten sets of
+// NaN that could be logged and persisted, and calcSupplementalSets guarded
+// main.length === 0 yet indexed main[1] unguarded for the SSL variants.
+describe('out-of-range week (F28)', () => {
+  const badWeek = 9 as unknown as 1 | 2 | 3 | 4
+
+  it('calcMainSets returns no sets rather than throwing', () => {
+    expect(() => calcMainSets(200, badWeek)).not.toThrow()
+    expect(calcMainSets(200, badWeek)).toEqual([])
+  })
+
+  it('calcBbsSets returns no sets rather than ten NaN weights', () => {
+    const sets = calcBbsSets(200, badWeek)
+    expect(sets).toEqual([])
+    expect(sets.some(s => Number.isNaN(s.weight))).toBe(false)
+  })
+
+  it('getSupplementalLabel has no label for a week with no sets', () => {
+    expect(getSupplementalLabel('bbs', calcBbsSets(200, badWeek), badWeek)).toBeNull()
+  })
+
+  it('every real week still composes', () => {
+    for (const w of [1, 2, 3, 4] as const) {
+      expect(calcMainSets(200, w)).toHaveLength(3)
+    }
+    for (const w of [1, 2, 3] as const) {
+      expect(calcBbsSets(200, w)).toHaveLength(10)
+    }
+  })
+})
+
+describe('calcSupplementalSets with a short main list (F28)', () => {
+  const oneMainSet = calcMainSets(200, 1).slice(0, 1)
+
+  it.each(['ssl', 'ssl+bbb'] as const)(
+    '%s returns no sets rather than reading main[1] off the end',
+    template => {
+      expect(() => calcSupplementalSets(template, oneMainSet, 200, 1)).not.toThrow()
+      expect(calcSupplementalSets(template, oneMainSet, 200, 1)).toEqual([])
+    },
+  )
+
+  it('the FSL variants only need main[0], so they still compose', () => {
+    expect(calcSupplementalSets('fsl', oneMainSet, 200, 1)).toHaveLength(5)
+    expect(calcSupplementalSets('fsl+bbb', oneMainSet, 200, 1)).toHaveLength(5)
+  })
+
+  it('a full main list is unaffected', () => {
+    const main = calcMainSets(200, 1)
+    expect(calcSupplementalSets('ssl', main, 200, 1)).toHaveLength(5)
+    expect(calcSupplementalSets('ssl', main, 200, 1)[0].weight).toBe(main[1].weight)
+  })
+})
+
+// ─── F27: a restricted inventory must not strand a reachable load ────────────
+// The selection was greedy largest-first with no backtracking, so taking the
+// biggest plate that fits could leave a remainder nothing else can make — even
+// when an exact load exists. PlateDisplay renders nothing on null, so the hint
+// silently disappeared. The shipped DEFAULT_PLATES are safe; the settings
+// stepper allows any plate count down to 0, which is how you get here.
+describe('calcPlates with a restricted inventory (F27)', () => {
+  const BAR = 45
+
+  it('finds 25+25 where greedy took the 45 and stranded 5', () => {
+    const plates = [{ weight: 45, count: 2 }, { weight: 25, count: 4 }]
+    expect(calcPlatesPerSide(145, BAR, plates)).toEqual([{ weight: 25, count: 2 }])
+  })
+
+  it('backtracks more than one step when it has to', () => {
+    // 100/side. Greedy: 45, then 45 (none left), 35 → 20 stranded.
+    // Exact: 35 + 35 + 30.
+    const plates = [
+      { weight: 45, count: 2 }, { weight: 35, count: 4 }, { weight: 30, count: 2 },
+    ]
+    expect(calcPlatesPerSide(245, BAR, plates)).toEqual([
+      { weight: 35, count: 2 },
+      { weight: 30, count: 1 },
+    ])
+  })
+
+  it('still returns null when the load genuinely cannot be made', () => {
+    const plates = [{ weight: 45, count: 4 }]
+    expect(calcPlatesPerSide(100, BAR, plates)).toBeNull()
+  })
+
+  it('handles fractional plates in the exact search', () => {
+    // 51.25/side from 45 + 5 + 1.25, with no 25s to tempt greedy wrong.
+    const plates = [
+      { weight: 45, count: 2 }, { weight: 10, count: 2 },
+      { weight: 5, count: 2 }, { weight: 1.25, count: 2 },
+    ]
+    expect(calcPlatesPerSide(147.5, BAR, plates)).toEqual([
+      { weight: 45, count: 1 },
+      { weight: 5, count: 1 },
+      { weight: 1.25, count: 1 },
+    ])
+  })
+
+  it('prefers the heaviest plates among exact solutions', () => {
+    // 45/side is reachable as one 45 or as 25+10+10; the one-plate load wins.
+    const plates = [
+      { weight: 45, count: 2 }, { weight: 25, count: 2 }, { weight: 10, count: 4 },
+    ]
+    expect(calcPlatesPerSide(135, BAR, plates)).toEqual([{ weight: 45, count: 1 }])
+  })
+
+  it('total mode backtracks the same way, with single plates', () => {
+    const plates = [{ weight: 45, count: 1 }, { weight: 25, count: 2 }]
+    expect(calcPlates(100, 50, 'total', plates)).toEqual([{ weight: 25, count: 2 }])
+  })
+
+  it('leaves every default-plate load exactly as greedy found it', () => {
+    for (let w = 45; w <= 500; w += 2.5) {
+      const greedy = calcPlatesPerSide(w, BAR, DEFAULT_PLATES)
+      if (greedy === null) continue
+      const total = greedy.reduce((sum, p) => sum + p.weight * p.count, 0)
+      expect(total).toBeCloseTo((w - BAR) / 2, 5)
+    }
   })
 })

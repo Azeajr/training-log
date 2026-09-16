@@ -1,6 +1,6 @@
 import {
   calcMainSets, calcWarmup, calcAmrapTarget, calcSupplementalSets,
-  targetReps, est1RMFromTm, applyMainCascadeToSupplemental, applySupplementalOverride,
+  amrapTargetReps, est1RMFromTm, applyMainCascadeToSupplemental, applySupplementalOverride,
   supplementalSourceSetNumber, effectiveSupplementalWeek,
 } from './calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from './calc'
@@ -42,7 +42,7 @@ export function composeCrossSets(
   blocks: CrossBlockPlan[],
   loggedCrossSets: Set[],
 ): CrossSet[] {
-  return blocks.flatMap(block => {
+  const planned = blocks.flatMap(block => {
     const logged = loggedCrossSets.filter(s => s.liftId === block.movementLiftId)
     let sets: CrossSet[] = block.computed
     if (logged.length > 0) {
@@ -54,6 +54,33 @@ export function composeCrossSets(
     }))
     return [...sets, ...extra]
   })
+
+  // Cross work that no longer has a plan. The two tails were asymmetric: logged
+  // *self*-supplemental sets survive their plan disappearing — `extraFsl` below
+  // restores them even when `effectiveSupplementalWeek` returns null — but this
+  // was a flatMap over the blocks, so with no block there was no output at all.
+  // Removing a cross block mid-session, or switching `deloadSupplemental` to
+  // `skip` during a week-4 session, made already-logged cross work vanish from
+  // the screen while its rows stayed in the database and kept counting toward
+  // History, PRs and Stats (F32).
+  //
+  // Renumbered from 1 per movement: the block's cursor is "how many of its sets
+  // are logged", so the restored list has to start where that counts from.
+  const plannedIds = new Set(blocks.map(b => b.movementLiftId))
+  const orphanIds: number[] = []
+  for (const s of loggedCrossSets) {
+    if (s.liftId == null || plannedIds.has(s.liftId) || orphanIds.includes(s.liftId)) continue
+    orphanIds.push(s.liftId)
+  }
+  const orphans = orphanIds.flatMap(liftId =>
+    loggedCrossSets
+      .filter(s => s.liftId === liftId)
+      .map((s, i) => ({
+        setNumber: i + 1, weight: s.weight, reps: s.reps, type: 'cross' as const, liftId,
+      })),
+  )
+
+  return [...planned, ...orphans]
 }
 
 // The single derivation of the rendered set list. Planned sets come from the TM;
@@ -110,7 +137,9 @@ export function amrapTargetsFor(
   if (target) return [target]
   if (tm <= 0) return []
   const est1RM = est1RMFromTm(tm)
-  const reps = targetReps(est1RM, weight, discount)
+  // Capped like the seeded path above: dialling the AMRAP weight far down makes
+  // the raw inverse climb without bound here too (F25).
+  const reps = amrapTargetReps(est1RM, weight, discount)
   if (reps === null) return []
   return [{ label: 'goal', reps, est1RM: Math.round(est1RM) }]
 }

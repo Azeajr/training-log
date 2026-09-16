@@ -18,7 +18,19 @@ export const FSL_SETS = 5
 export const FSL_REPS = 5
 
 export const BBB_PCT = 0.50
-export const BBS_PERCENTAGES = { 1: 0.60, 2: 0.70, 3: 0.80, 4: null } as const
+// Week 4 is 0.50, not null. It used to have no percentage at all, so
+// `calcBbsSets(tm, 4)` returned [] — which made `deloadSupplemental: 'deload'`
+// byte-identical to `'skip'` for BBS while every other template composed its
+// five sets, and `getSupplementalLabel` returned null so nothing on screen
+// explained the absence. The settings copy offers three modes and promises
+// "run it at deload %"; a user who picked BBS and deliberately chose the
+// keep-it mode silently got the drop-it one (F30).
+//
+// 0.50 for two reasons: it matches BBB, BBS's sibling, which has always run at
+// a flat 50% on every week including the deload; and it continues this ladder's
+// own trend against the week's top main set (0.85→0.60, 0.90→0.70, 0.95→0.80,
+// so 0.60→0.50).
+export const BBS_PERCENTAGES = { 1: 0.60, 2: 0.70, 3: 0.80, 4: 0.50 } as const
 
 export const ACCESSORY_PERCENTAGE = 0.75
 export const ACCESSORY_SETS = 3
@@ -99,14 +111,28 @@ export const DEFAULT_REST_THRESHOLDS: RestThresholds = {
 
 // The stored column names predate the checkpoint behavior. Keep the schema
 // stable and translate them once at the edge of the timer domain.
+//
+// That edge is also where the ordering becomes true. Nothing enforced
+// `firstBell <= secondBell` — the settings steppers clamped each field
+// independently at `>= 30` — and an inverted pair broke the timer in two ways
+// at once: `restStatus` tests `secondBell` first, so the first bell never
+// fired and the screen read "SECOND BELL — GO IF READY" at 60s while the
+// countdown still ran toward 240; and `restNotificationTargets` armed both at
+// absolute times under one `tag`, so the tray showed the second bell first and
+// the later first bell then *replaced* it, leaving the earlier checkpoint's
+// notification as the survivor (F24).
+//
+// Sorted rather than clamped: the user configured two durations and got the
+// fields the wrong way round, so both lengths are kept and simply put in the
+// order the domain requires. Clamping would have thrown one of them away.
 export function restThresholds(s: {
   restTimer1: number
   restTimer2: number
   restTimerFail: number
 }): RestThresholds {
   return {
-    firstBell: s.restTimer1,
-    secondBell: s.restTimer2,
+    firstBell: Math.min(s.restTimer1, s.restTimer2),
+    secondBell: Math.max(s.restTimer1, s.restTimer2),
     failedBell: s.restTimerFail,
   }
 }
@@ -143,8 +169,18 @@ export function restTypeAfterSet(actualReps: number, targetReps: number): 'norma
   return actualReps < targetReps ? 'fail' : 'normal'
 }
 
+// Half-up to the nearest 5, but on the *intended* value rather than on the
+// float that a percentage multiply happened to produce. `0.70` is the one
+// percentage in the program that lands just short of a .5 boundary — 175 × 0.70
+// is 122.49999999999999 — so the naive half-up rounded it down to 120 while the
+// identical 122.5 reached through `0.50` rounded up to 125. Same weight, two
+// answers, decided by which code path asked (F26).
+//
+// Snapping to 6 decimal places first is far below any weight the app deals in
+// (plates stop at 1.25 lb) and far above the ~1e-14 error a percentage multiply
+// introduces, so it corrects the artefact without moving a real value.
 export const roundToNearest5 = (weight: number): number =>
-  Math.round(weight / 5) * 5
+  Math.round(Math.round(weight * 1e6) / 1e6 / 5) * 5
 
 // The working weight for an accessory from its training max. One definition so
 // the picker preview, the seeded slot, and calcAccessorySets can't drift.
@@ -159,9 +195,16 @@ export interface MainSet {
   type: 'main'
 }
 
+// Total in `week`, despite the type. `week` is read straight off session rows
+// and those come from imports and hand-edited backups as well as from the app,
+// so an out-of-range value is reachable at runtime. It used to throw here —
+// `percentages.map` on undefined — which blanks the Workout screen, because the
+// app has no route error boundary (F28). No sets is a legible degradation; a
+// TypeError is not.
 export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): MainSet[] => {
-  const percentages = MAIN_PERCENTAGES[week]
-  const reps = MAIN_REPS[week]
+  const percentages = MAIN_PERCENTAGES[week] as readonly number[] | undefined
+  const reps = MAIN_REPS[week] as readonly number[] | undefined
+  if (!percentages || !reps) return []
   return percentages.map((pct, i) => ({
     setNumber: i + 1,
     weight: Math.max(barWeight, roundToNearest5(tm * pct)),
@@ -246,8 +289,11 @@ export const calcBbbSets = (tm: number, barWeight = BAR_WEIGHT): FslSet[] =>
   buildFixedSets(Math.max(barWeight, roundToNearest5(tm * BBB_PCT)), 10, 'bbb')
 
 export const calcBbsSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): FslSet[] => {
-  const pct = BBS_PERCENTAGES[week]
-  if (pct === null) return []
+  const pct = BBS_PERCENTAGES[week] as number | null | undefined
+  // `== null`, not `=== null`: an out-of-range week looks up `undefined`, which
+  // the strict check let through and turned into ten sets of NaN — loggable and
+  // persistable (F28).
+  if (pct == null) return []
   return buildFixedSets(Math.max(barWeight, roundToNearest5(tm * pct)), 5, 'bbs', 10)
 }
 
@@ -353,6 +399,37 @@ export const targetReps = (prev1RM: number, todayWeight: number, discount: HighR
   return Math.max(2, Math.ceil(reps))
 }
 
+// Above this, a rep target has stopped being a training instruction. 5/3/1
+// prescribes AMRAPs at 1, 3 and 5 reps; a very good day on a light week reaches
+// the high teens. 30 is well past anything a lifter would chase and still
+// permits an unusually strong set.
+export const AMRAP_TARGET_MAX_REPS = 30
+
+/**
+ * `targetReps`, bounded to something a lifter could actually attempt.
+ *
+ * The raw inverse is unbounded, and a discount setting expands it by `1/scale`.
+ * With a seed well above today's weight — a conservative training max, or one
+ * that `deloadTms` has just cut — recent 225×12 work against a 185 TM asked for
+ * 95, 155 and 345 reps under mild, moderate and aggressive. `AmrapTargets`
+ * renders that number and taps it straight into the reps field. Worse, because
+ * the value was non-null, `calcAmrapTarget`'s documented "callers fall back to
+ * the TM-implied goal" never happened: `off` returned null and degraded
+ * gracefully, the three discount settings did not (F25).
+ *
+ * The cap lives here rather than in `targetReps` because that function is the
+ * Wathan inverse and should stay the honest answer to "how many reps reach this
+ * e1RM" — the judgement about what is worth showing belongs to the readout.
+ */
+export const amrapTargetReps = (
+  prev1RM: number,
+  todayWeight: number,
+  discount: HighRepDiscount = 'off',
+): number | null => {
+  const reps = targetReps(prev1RM, todayWeight, discount)
+  return reps === null || reps > AMRAP_TARGET_MAX_REPS ? null : reps
+}
+
 export interface AmrapTarget {
   label: string
   reps: number
@@ -396,7 +473,7 @@ export const calcAmrapTarget = (
   // (any weight already clears a 0 e1RM) — a "target 1 @ est. 0" readout. Null
   // instead, so callers fall back to the TM-implied goal.
   if (est <= 0) return null
-  const reps = targetReps(est, todayAmrapWeight, discount)
+  const reps = amrapTargetReps(est, todayAmrapWeight, discount)
   if (reps === null) return null
   return {
     label: 'target',
@@ -450,12 +527,17 @@ export function calcSupplementalSets(
   barWeight = BAR_WEIGHT,
 ): FslSet[] {
   if (main.length === 0) return []
+  // The SSL variants derive from main set 2, so they need a second set to
+  // exist. The length check above only established the first — `main[1].weight`
+  // threw whenever the main list was short, which an out-of-range week now
+  // makes reachable (F28).
+  const secondSet = main[1]
   switch (template) {
     case 'fsl':     return calcFslSets(main[0].weight)
-    case 'ssl':     return calcSslSets(main[1].weight)
+    case 'ssl':     return secondSet ? calcSslSets(secondSet.weight) : []
     case 'bbb':     return calcBbbSets(tm, barWeight)
     case 'fsl+bbb': return calcFslBbbSets(main[0].weight)
-    case 'ssl+bbb': return calcSslBbbSets(main[1].weight)
+    case 'ssl+bbb': return secondSet ? calcSslBbbSets(secondSet.weight) : []
     case 'bbs':     return calcBbsSets(tm, week, barWeight)
     case 'none':    return []
   }
@@ -475,8 +557,8 @@ export function getSupplementalLabel(
     case 'fsl+bbb': return `FSL+BBB  ${count}`
     case 'ssl+bbb': return `SSL+BBB  ${count}`
     case 'bbs': {
-      const pct = BBS_PERCENTAGES[week]
-      return pct !== null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
+      const pct = BBS_PERCENTAGES[week] as number | null | undefined
+      return pct != null ? `BBS  ${count}  ${Math.round(pct * 100)}% TM` : null
     }
     case 'none':    return null
   }
@@ -552,20 +634,46 @@ export const calcPlates = (
   // Copy before sorting so we never mutate the caller's plate list.
   const sorted = [...plates].sort((a, b) => b.weight - a.weight)
 
-  const result: PlateConfig[] = []
-  let remaining = load
-  for (const plate of sorted) {
-    if (remaining <= 0) break
-    // paired uses pairs (one per side); total can use a lone plate.
-    const available = mode === 'paired' ? Math.floor(plate.count / 2) : plate.count
-    const needed = Math.floor(remaining / plate.weight)
-    const use = Math.min(available, needed)
-    if (use > 0) {
-      result.push({ weight: plate.weight, count: use })
-      remaining = Math.round((remaining - use * plate.weight) * 100) / 100
+  // paired uses pairs (one per side); total can use a lone plate.
+  const available = sorted
+    .map(p => ({ weight: p.weight, count: mode === 'paired' ? Math.floor(p.count / 2) : p.count }))
+    .filter(p => p.count > 0 && p.weight > 0)
+
+  // Exact, heaviest-first. Greedy largest-first with no backtracking could
+  // strand a remainder even when an exact load existed: with 2×45 and 4×25, a
+  // 50/side load took the 45 and then had no way to make the last 5, though
+  // 25+25 works. `PlateDisplay` renders nothing on null, so the hint just
+  // disappeared — reachable because the settings stepper allows any plate count
+  // down to 0 (F27).
+  //
+  // Trying the largest count of the heaviest plate first and taking the first
+  // solution found keeps greedy's answer wherever greedy was right (which is
+  // every load the shipped DEFAULT_PLATES can make), so this only ever adds
+  // answers. The inventory is a handful of plate types with small counts, and
+  // the memo is keyed on (plate index, remainder), so the search is bounded.
+  //
+  // Hundredths throughout: plate weights go to 1.25 and repeated subtraction of
+  // floats does not stay exact.
+  const cents = (n: number) => Math.round(n * 100)
+  const memo = new Map<string, PlateConfig[] | null>()
+  const search = (i: number, remaining: number): PlateConfig[] | null => {
+    if (remaining === 0) return []
+    if (i >= available.length) return null
+    const key = `${i}:${remaining}`
+    const cached = memo.get(key)
+    if (cached !== undefined) return cached
+    const plate = available[i]
+    const w = cents(plate.weight)
+    let found: PlateConfig[] | null = null
+    for (let use = Math.min(plate.count, Math.floor(remaining / w)); use >= 0 && found === null; use--) {
+      const rest = search(i + 1, remaining - use * w)
+      if (rest !== null) found = use > 0 ? [{ weight: plate.weight, count: use }, ...rest] : rest
     }
+    memo.set(key, found)
+    return found
   }
-  return Math.abs(remaining) < 0.01 ? result : null
+
+  return search(0, cents(load))
 }
 
 // Backward-compatible barbell helper: per-side plates over a bar.

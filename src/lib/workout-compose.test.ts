@@ -176,3 +176,92 @@ describe('amrapTargetsFor', () => {
     ])
   })
 })
+
+// ─── F30: the three deload modes are total across every template ─────────────
+// `deloadSupplemental: 'deload'` had no test at all, and BBS composed nothing
+// under it — silently identical to 'skip'.
+
+describe('deloadSupplemental modes on week 4', () => {
+  const TEMPLATES = ['fsl', 'ssl', 'bbb', 'fsl+bbb', 'ssl+bbb', 'bbs'] as const
+
+  it.each(TEMPLATES)('%s composes supplemental sets in deload mode', template => {
+    const { all } = composeAllSets(input({ week: 4, deloadSupplemental: 'deload', template }))
+    expect(all.filter(s => s.type === template).length).toBeGreaterThan(0)
+  })
+
+  it.each(TEMPLATES)('%s composes supplemental sets in normal mode', template => {
+    const { all } = composeAllSets(input({ week: 4, deloadSupplemental: 'normal', template }))
+    expect(all.filter(s => s.type === template).length).toBeGreaterThan(0)
+  })
+
+  it.each(TEMPLATES)('%s composes none in skip mode', template => {
+    const { all } = composeAllSets(input({ week: 4, deloadSupplemental: 'skip', template }))
+    expect(all.filter(s => s.type === template)).toHaveLength(0)
+  })
+
+  it('deload mode is lighter than normal mode for BBS', () => {
+    const at = (mode: 'deload' | 'normal') =>
+      composeAllSets(input({ week: 4, deloadSupplemental: mode, template: 'bbs' }))
+        .all.find(s => s.type === 'bbs')!.weight
+    expect(at('deload')).toBeLessThan(at('normal'))
+  })
+})
+
+// ─── F31 / F32: cross sets carry a movement, not a block ─────────────────────
+
+describe('composeCrossSets — orphaned logged sets (F32)', () => {
+  const block = (movementLiftId: number, sets: number, weight: number): CrossBlockPlan => ({
+    movementLiftId,
+    computed: calcCrossSets(
+      { movementLiftId, weightMode: 'percent', percent: weight / 100, sets, reps: 5 },
+      100, 1, BAR,
+    ),
+  })
+
+  // Self-supplemental sets survive their plan disappearing — `extraFsl` restores
+  // them even when effectiveSupplementalWeek returns null. Cross sets had no
+  // such path: composeCrossSets is a flatMap over the plan, so with no block
+  // there was no output, and already-logged cross work vanished from the screen
+  // while its rows stayed in the database and kept counting toward History, PRs
+  // and Stats.
+  it('restores logged sets whose block has gone away', () => {
+    const out = composeCrossSets([], [
+      logged('cross', 1, 135, 5, 7),
+      logged('cross', 2, 135, 5, 7),
+    ])
+    expect(out).toHaveLength(2)
+    expect(out.map(s => s.weight)).toEqual([135, 135])
+    expect(out.every(s => s.liftId === 7)).toBe(true)
+  })
+
+  it('renumbers an orphaned block from 1 so its own cursor still reads', () => {
+    const out = composeCrossSets([], [logged('cross', 4, 135, 5, 7)])
+    expect(out[0].setNumber).toBe(1)
+  })
+
+  it('keeps orphans separate from the blocks that do exist', () => {
+    const b = block(9, 2, 300)
+    const out = composeCrossSets([b], [logged('cross', 1, 135, 5, 7)])
+    expect(out.filter(s => s.liftId === 9)).toHaveLength(2)
+    expect(out.filter(s => s.liftId === 7)).toHaveLength(1)
+  })
+
+  it('groups several orphaned movements separately', () => {
+    const out = composeCrossSets([], [
+      logged('cross', 1, 135, 5, 7),
+      logged('cross', 1, 225, 5, 9),
+      logged('cross', 2, 135, 5, 7),
+    ])
+    expect(out.map(s => s.liftId)).toEqual([7, 7, 9])
+  })
+
+  it('adds nothing when every logged set has a block', () => {
+    const b = block(7, 2, 200)
+    const out = composeCrossSets([b], [logged('cross', 1, 100, 5, 7)])
+    expect(out).toHaveLength(2)
+  })
+
+  it('ignores logged sets with no movement at all', () => {
+    expect(composeCrossSets([], [logged('cross', 1, 135, 5, undefined)])).toEqual([])
+  })
+})

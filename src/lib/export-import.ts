@@ -144,7 +144,20 @@ function validateImportShape(d: Record<string, unknown>): void {
       if (row == null || typeof row !== 'object' || Array.isArray(row)) {
         throw new Error(`Invalid backup: "${name}" contains a non-object entry`)
       }
-      const id = (row as Record<string, unknown>).id
+      const r = row as Record<string, unknown>
+      // `week` is the one column the whole program hangs percentage lookups
+      // off, and it is read straight back out of these rows. Out of range it
+      // used to reach `calcMainSets` and blank the Workout screen (F28). The
+      // calc lookups are total now, but a session in a week the cycle does not
+      // have is still corrupt — and rejecting here, before the destructive
+      // clear, leaves the user's existing data untouched.
+      if (name === 'sessions' && r.week != null) {
+        const week = Number(r.week)
+        if (!Number.isInteger(week) || week < 1 || week > 4) {
+          throw new Error(`Invalid backup: "sessions" has a week of ${String(r.week)}; expected 1-4`)
+        }
+      }
+      const id = r.id
       if (id == null) continue
       const key = String(id)
       if (seen.has(key)) throw new Error(`Invalid backup: duplicate id ${key} in "${name}"`)
@@ -198,6 +211,21 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       // backup lands on the current tag set (mirrors the boot-time seed migration).
       if (key === 'exercises') {
         parsed = parsed.map(r => r.category === 'single_leg' ? { ...r, category: 'legs' } : r)
+      }
+      // One cross-lift block per (lift, movement) — the same invariant the
+      // migration establishes. A backup taken before that index existed can
+      // carry duplicates, and restoring them verbatim is how they got in
+      // (F31). Reconciled rather than rejected: the rest of the backup is
+      // perfectly good, and the surviving block still owns every set logged
+      // against that movement.
+      if (key === 'liftSupplementals') {
+        const seen = new Set<string>()
+        parsed = parsed.filter(r => {
+          const slot = `${String(r.liftId)}:${String(r.movementLiftId)}`
+          if (seen.has(slot)) return false
+          seen.add(slot)
+          return true
+        })
       }
       await table.bulkAdd(parsed)
     }
