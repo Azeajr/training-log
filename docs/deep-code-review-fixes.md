@@ -9,15 +9,15 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | | Count |
 |---|---|
-| Findings | **101** (F01–F101; F95–F101 opened during fix work) |
+| Findings | **106** (F01–F106; F95–F101 opened during fix work, F102–F106 by the L06 failure-injection pass) |
 | `open` | **0** |
 | `wip` | 0 |
-| `fixed` | **98** — F01, F02, F03, F04, F05, F06, F07, F08, F09, F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F39, F40, F41, F42, F44, F45, F46, F47, F48, F49, F50, F51, F52, F53, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F68, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F81, F82, F83, F84, F85, F86, F87, F88, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F100, F101 |
+| `fixed` | **103** — F01, F02, F03, F04, F05, F06, F07, F08, F09, F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F39, F40, F41, F42, F44, F45, F46, F47, F48, F49, F50, F51, F52, F53, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F68, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F81, F82, F83, F84, F85, F86, F87, F88, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F100, F101, F102, F103, F104, F105, F106 |
 | `fixed-by` | **3** — F43, F62, F98 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
 
-**By severity: 14 High / 52 Medium / 35 Low.**
+**By severity: 14 High / 57 Medium / 35 Low.**
 
 > **Count correction.** `deep-code-review.md:34` says "12 high". Counted directly
 > from its own findings table, **13** rows carry High: F01, F02, F04, F05, F07,
@@ -190,6 +190,11 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F99 | Medium | — | — | `src/lib/lift.ts` | `fixed` | `c979b65` · `lift.test.ts` ×2 | `archiveLift` routes through the shared cascade instead of re-implementing it — it deleted the session **row** only, leaving sets, accessorySets and accessoryNotes pointing at a sessionId nothing resolves. Completed sessions are still untouched, since archiving is reversible. |
 | F100 | Low | — | — | `src/lib/cycle.ts` | `fixed` | `f68a39e` · `cycle.test.ts` ×5 | **Closed by F39's provenance column, as predicted.** `deloadTms` is relative — `weight × 0.9` of whatever is current — so a second run compounds, and nothing recorded that a row came from a deload rather than the user, leaving the library unable to tell a second tap from the next cycle's deload. Its only guard was single-flight at one modal, which protects one control on one screen. A lift whose newest training max is a deload stamped with **this** cycle is now skipped; a deload for a later cycle still applies, and a manual change after the deload re-opens it — a guard, not a lock. |
 | F101 | Low | — | C1 | `src/db/schema.ts` | `fixed` | `c979b65` · `dedupe-exercise-names.test.ts` ×3 | Duplicate names are reconciled **before** the unique index is re-attempted, so the installs that silently kept no guarantee now get one. Later twins are suffixed with their id rather than merged or deleted — they carry logged history through `accessorySets`. Idempotent: on a healthy database the UPDATE matches nothing. |
+| F102 | Medium | L06 | — | `src/screens/Today.tsx` | `fixed` | `dcdd24f` · `Today.test.tsx` ×2 | **The entry screen, stuck.** A rejected initial load left Today on "Loading…" permanently — no error, no retry, no way back short of navigating away. `Today.tsx` had **zero** catch statements. The same defect F23 had on `/stats`, on the screen the app opens to. Now `createAsyncRead`, with an alert and a RETRY. |
+| F103 | Medium | L06 | — | `src/screens/Today.tsx` | `fixed` | `dcdd24f` · `Today.test.tsx` insert case | START with a failing session insert was a **silent no-op**. `useSingleFlight`'s guard is try/finally with no catch, so a rejection anywhere in abandon → select-or-create → seed → navigate escaped unhandled: no session, no navigation, no message. The user pressed START and the app did nothing. |
+| F104 | Medium | L06 | — | `src/screens/Today.tsx` | `fixed` | `dcdd24f` · `Today.test.tsx` ×2 | **Half-started.** Assistance defaults are seeded *after* `startSession`, so a failure there left a real pending row created and the store pointing at it, with no navigation and no error — the user stranded on Today under a "SESSION IN PROGRESS" banner for a session they never entered, and that row holds the week open (the F16 harm, reached a different way). It navigates anyway now and reports the missing defaults: the session is real and valid, only a convenience failed, and abandoning it would discard what the user just asked for. |
+| F105 | Medium | L06 | — | `src/screens/Today.tsx` | `fixed` | `dcdd24f` · `Today.test.tsx` abandon case | Abandoning with a failing discard kept everything — right for the data — but said nothing, so the user believed the old session was gone when it was still there, still holding the week open. It now reports **which** action failed: the outer catch would say "could not start the session", which is true but names the wrong thing. That distinction is why the test asserts the specific wording — the looser version passed either way. |
+| F106 | Medium | L06 | — | `src/screens/Today.tsx` | `fixed` | `dcdd24f` · `Today.test.tsx` ×2 | **`?? []` guards a null, not a throw.** `crossPreview` is a `createResource` read as `crossPreview() ?? []`, and reading a *rejected* resource throws — so the throw came back out of `setLoading(false)` and one optional preview failing left the entire screen on "Loading…". Probed in isolation to confirm the mechanism rather than infer it: a rejecting resource does not break its owner, but reading it does. Checking `.error` first reads the failure without re-raising it. |
 
 ## Remaining work, batched
 
@@ -402,7 +407,7 @@ Leads L01–L05 and L07 resolved into findings; see `deep-code-review.md:245`.
 
 | ID | State | Blocker |
 |---|---|---|
-| L06 | `blocked` | **Authorization.** Needs a failure-injection pass across Today's load/start/abandon paths — different work from reading code, never authorized. Source inspection only (B06a). |
+| L06 | `resolved` | **Authorized and run** (2026-09-16). The failure-injection pass across Today's load, abandon, session insert, default seeding, cross-preview and default-picker persistence. Five of the six points produced a distinct defect — **F102–F106**, all now `fixed`. The sixth, default-picker persistence, was already best-effort with a recorded reason and the probe confirmed it behaves as documented. |
 
 ---
 
