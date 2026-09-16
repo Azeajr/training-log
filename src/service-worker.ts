@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { createNotifyTimers } from './lib/notify-timers'
+import { dedupePrecacheUrls, toPrecachePaths, type PrecacheEntry } from './lib/precache'
 // Custom SW for rest-timer notifications. vite-plugin-pwa runs injectManifest:
 // it rewrites `sw.__WB_MANIFEST` into the precache list built from globPatterns
 // in vite.config.ts. Precaching + wasm caching are handled inline via the native
@@ -24,15 +25,14 @@ import { createNotifyTimers } from './lib/notify-timers'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sw = (self as any) as ServiceWorkerGlobalScope
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const PRECACHE_MANIFEST = ((self as any).__WB_MANIFEST ?? []) as Array<{ url: string; revision?: string }>
-const PRECACHE_URLS = PRECACHE_MANIFEST.map((e) => e.url)
+const PRECACHE_MANIFEST = ((self as any).__WB_MANIFEST ?? []) as PrecacheEntry[]
+// Deduplicated: `cache.addAll()` rejects with InvalidStateError on a repeated
+// URL, and the injected manifest can repeat one — see lib/precache.ts for what
+// that cost when it happened.
+const PRECACHE_URLS = dedupePrecacheUrls(PRECACHE_MANIFEST)
 const CACHE_NAME = 'precache-v1'
 
-// Precache entries may be relative or rooted (e.g. "assets/x.js" or "/x.js");
-// normalize to a pathname for fetch matching.
-const PRECACHE_PATHS = PRECACHE_URLS.map((u) =>
-  u.startsWith('http') ? new URL(u).pathname : u.startsWith('/') ? u : `/${u}`,
-)
+const PRECACHE_PATHS = toPrecachePaths(PRECACHE_URLS)
 
 sw.addEventListener('install', (event: ExtendableEvent) => {
   if (!PRECACHE_URLS.length) return
