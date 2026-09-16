@@ -39,9 +39,21 @@ export default function RecordsPanel(props: Props) {
   const [records, setRecords] = createSignal<RecordRow[]>([])
   const [tms, setTms] = createSignal<TmRow[]>([])
 
-  createEffect(() => { void load(props.liftId) })
+  // Request identity. `History.tsx:612` passes a live signal, so switching the
+  // selected lift is the ordinary path — and this effect used to publish
+  // whatever settled LAST rather than whatever was asked for last, so a slow
+  // earlier load overwrote the lift the user had already moved to. It also
+  // never returned to the loading state, so a switch showed the PREVIOUS lift's
+  // numbers with nothing indicating they were stale.
+  let requestId = 0
 
-  const load = async (only?: number) => {
+  createEffect(() => {
+    const only = props.liftId
+    setLoading(true)
+    void load(only, ++requestId)
+  })
+
+  const load = async (only: number | undefined, token: number) => {
     const lifts = (await db.lifts.orderBy('order').toArray())
       .filter(l => !l.archived)
       .filter(l => only == null || l.id === only)
@@ -87,6 +99,9 @@ export default function RecordsPanel(props: Props) {
       tmRows.push({ name: l.name, current, delta: current - first, sequence })
     }
 
+    // A newer request has superseded this one: drop the result on the floor
+    // rather than publishing another lift's records under the current name.
+    if (token !== requestId) return
     setRecords(recRows)
     setTms(tmRows)
     setLoading(false)

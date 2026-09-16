@@ -914,23 +914,31 @@ export default function Workout() {
           <div class="mb-6">
             <Rule label="CROSS-LIFT SUPPLEMENTAL" class="text-muted mb-4" />
             <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start">
-              <For each={crossSections()}>
+              {/* <Index>, not <For>: crossSections() rebuilds its wrapper
+                  objects on every evaluation and <For> keys by reference, so
+                  each re-derive remounted every block and destroyed SetRow's
+                  uncommitted weight and reps. Logging a set in one block wiped
+                  a weight dialled into another — exactly what the independent
+                  cursors exist to allow. COMMON_MISTAKES #6. The order of
+                  cross blocks is fixed by `order`, which is what makes a
+                  positional list the right shape here. */}
+              <Index each={crossSections()}>
                 {section => (
                   <CrossBlockLog
-                    anchor={`cross-${section.block.movementLiftId}`}
-                    label={splitLabel(getCrossLabel(section.block, section.block.movementName))[0]}
-                    labelMeta={splitLabel(getCrossLabel(section.block, section.block.movementName))[1]}
-                    loading={section.block.movementLoading}
-                    sets={section.sets}
-                    cursor={section.cursor}
-                    logged={section.logged}
-                    onLog={(li, reps, weight) => void handleLogCross(section, li, reps, weight)}
-                    onEdit={(li, reps, weight) => void handleEditCross(section, li, reps, weight)}
-                    onDelete={() => void handleDeleteCross(section)}
-                    onLabelClick={() => setLiftHistoryId(section.block.movementLiftId)}
+                    anchor={`cross-${section().block.movementLiftId}`}
+                    label={splitLabel(getCrossLabel(section().block, section().block.movementName))[0]}
+                    labelMeta={splitLabel(getCrossLabel(section().block, section().block.movementName))[1]}
+                    loading={section().block.movementLoading}
+                    sets={section().sets}
+                    cursor={section().cursor}
+                    logged={section().logged}
+                    onLog={(li, reps, weight) => void handleLogCross(section(), li, reps, weight)}
+                    onEdit={(li, reps, weight) => void handleEditCross(section(), li, reps, weight)}
+                    onDelete={() => void handleDeleteCross(section())}
+                    onLabelClick={() => setLiftHistoryId(section().block.movementLiftId)}
                   />
                 )}
-              </For>
+              </Index>
             </div>
           </div>
         </Show>

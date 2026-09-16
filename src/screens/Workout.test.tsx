@@ -1793,3 +1793,47 @@ describe('Workout screen — AMRAP PR toast', () => {
     await waitFor(() => expect(toast()).toContain('e1RM'))
   })
 })
+
+// ── F52 ──────────────────────────────────────────────────────────────────────
+// crossSections() rebuilds its wrapper objects on every evaluation, and <For>
+// keys items by reference — so each re-derive remounts every cross block and
+// destroys SetRow's uncommitted local state with it. crossSections() depends on
+// workout.loggedCrossSets, so logging a set in ONE block wipes a weight the user
+// has dialled into ANOTHER — the case the independent-cursor design exists to
+// support. COMMON_MISTAKES #6 names this exact hazard and prescribes <Index>.
+describe('Workout screen — cross block identity', () => {
+  async function twoCrossBlocks() {
+    await db.lifts.add({ id: 2, name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
+    await db.lifts.add({ id: 3, name: 'Deadlift', order: 3, progressionIncrement: 10, baseWeight: 155, liftType: 'lower' })
+    await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
+    await db.trainingMaxes.add({ liftId: 3, weight: 400, setAt: new Date() })
+    await db.liftSupplementals.add({ liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1 })
+    await db.liftSupplementals.add({ liftId: 1, movementLiftId: 3, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 2 })
+  }
+
+  it('keeps a weight dialled in one block when another block logs a set (F52)', async () => {
+    await twoCrossBlocks()
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
+    await screen.findAllByText('SQUAT')
+
+    // Two cross blocks, each with an active set: [0] = Squat, [1] = Deadlift.
+    const bumps = () => screen.getAllByRole('button', { name: 'Increase weight' })
+    const readouts = () => screen.getAllByTestId('active-weight')
+    const squatBefore = readouts()[1].textContent
+
+    // Dial Squat's weight up three times.
+    fireEvent.click(bumps()[1]); fireEvent.click(bumps()[1]); fireEvent.click(bumps()[1])
+    const dialled = readouts()[1].textContent
+    expect(dialled).not.toBe(squatBefore)
+
+    // Log a set in the OTHER block. That re-derives crossSections().
+    const logs = screen.getAllByRole('button', { name: /^LOG$/ })
+    fireEvent.click(logs[logs.length - 1])
+    await new Promise(r => setTimeout(r, 50))
+
+    // Squat's uncommitted weight must survive — it is not this block's business.
+    expect(screen.getAllByTestId('active-weight')[1].textContent).toBe(dialled)
+  })
+})

@@ -134,10 +134,24 @@ export default function AccessoryPicker(props: Props) {
     }
   }
 
+  /**
+   * Always seed the sub-sheet's buffer when opening it. These are component
+   * signals that outlive the sheet, and the documented way out — Escape, which
+   * returns to the list rather than closing the picker — left them dirty. SAVE
+   * then wrote the previous exercise's dialled number as the new one's training
+   * max, and an accessory TM drives every prescribed weight for that exercise
+   * from then on, so a wrong one does not correct itself (F54).
+   */
+  const openTmSheet = (exercise: Exercise) => {
+    setTmWeight(0)
+    setTmIncrement(DEFAULT_ACCESSORY_INCREMENT_LB)
+    setSettingTm(exercise)
+  }
+
   const handleSelect = async (row: PickerRow) => {
     if (alreadyAdded(row.exercise.id!)) return
     if (row.tm == null) {
-      setSettingTm(row.exercise)
+      openTmSheet(row.exercise)
       return
     }
     await persistDefault(row.exercise.id!)
