@@ -12,6 +12,8 @@ import {
   calcWarmup,
   estimated1RM,
   targetReps,
+  amrapTargetReps,
+  AMRAP_TARGET_MAX_REPS,
   calcAmrapTarget,
   median,
   seedE1Rm,
@@ -51,6 +53,29 @@ describe('roundToNearest5', () => {
   it('rounds down at 162', () => expect(roundToNearest5(162)).toBe(160))
   it('rounds up at 163', () => expect(roundToNearest5(163)).toBe(165))
   it('leaves exact multiples unchanged', () => expect(roundToNearest5(175)).toBe(175))
+
+  // F26. A .5 boundary reached through a float multiply is still a .5 boundary.
+  // `0.70` is the only percentage in the program that lands short of one:
+  // 175 * 0.70 is 122.49999999999999, so the half-up step rounded it DOWN while
+  // the identical 122.5 reached via `0.50` rounded up. Same weight, two answers,
+  // depending on which code path produced it.
+  it('rounds a .5 boundary up however the float got there', () => {
+    expect(roundToNearest5(175 * 0.70)).toBe(125)
+    expect(roundToNearest5(245 * 0.50)).toBe(125)
+    expect(roundToNearest5(175 * 0.70)).toBe(roundToNearest5(245 * 0.50))
+  })
+
+  it('agrees with itself at 227.5 from either source', () => {
+    expect(roundToNearest5(325 * 0.70)).toBe(230)
+    expect(roundToNearest5(455 * 0.50)).toBe(230)
+  })
+
+  // The precision guard must not swallow a genuine value just below the
+  // boundary — 122.4 is not 122.5 and still rounds down.
+  it('still rounds down just below the boundary', () => {
+    expect(roundToNearest5(122.4)).toBe(120)
+    expect(roundToNearest5(122.5)).toBe(125)
+  })
 })
 
 describe('calcMainSets', () => {
@@ -351,6 +376,46 @@ describe('targetReps', () => {
   })
 })
 
+// F25. The raw inverse is unbounded, and under a discount setting a seed well
+// above today's weight expanded it by 1/scale. Recent 225x12 against a 185 TM
+// produced targets of 95 / 155 / 345 reps for mild / moderate / aggressive,
+// tappable straight into the reps field — and because the value was non-null,
+// the documented "callers fall back to the TM-implied goal" never happened.
+describe('amrapTargetReps', () => {
+  it('passes through a plausible target unchanged', () => {
+    expect(amrapTargetReps(250.65, 170)).toBe(14)
+    expect(amrapTargetReps(250.65, 170)).toBe(targetReps(250.65, 170))
+  })
+
+  it('returns the ceiling itself, and nothing above it', () => {
+    expect(targetReps(200, 109)).toBe(AMRAP_TARGET_MAX_REPS)
+    expect(amrapTargetReps(200, 109)).toBe(AMRAP_TARGET_MAX_REPS)
+    expect(targetReps(200, 108.9)).toBe(AMRAP_TARGET_MAX_REPS + 1)
+    expect(amrapTargetReps(200, 108.9)).toBeNull()
+  })
+
+  it('still returns null where the inverse never resolves at all', () => {
+    expect(amrapTargetReps(500, 200)).toBeNull()
+  })
+})
+
+describe('calcAmrapTarget \u2014 implausible targets fall back (F25)', () => {
+  // 225x12 recent work against a 185 TM: week-1 AMRAP weight is 155.
+  const HISTORY = [{ weight: 225, reps: 12 }]
+
+  it.each(['mild', 'moderate', 'aggressive'] as const)(
+    'returns null under the %s discount instead of a three-figure rep target',
+    discount => {
+      expect(calcAmrapTarget(HISTORY, 155, discount)).toBeNull()
+    },
+  )
+
+  it('is unchanged where the target was already plausible', () => {
+    const target = calcAmrapTarget([{ weight: 200, reps: 5 }], 170)!
+    expect(target.reps).toBe(11)
+  })
+})
+
 describe('median', () => {
   it('empty -> 0', () => expect(median([])).toBe(0))
   it('odd count picks middle', () => expect(median([3, 1, 2])).toBe(2))
@@ -401,7 +466,19 @@ describe('calcAmrapTarget', () => {
     )!
     expect(target.label).toBe('target')
     expect(target.est1RM).toBeCloseTo(233.90, 1)
-    expect(target.reps).toBe(targetReps(target.est1RM, 170))
+    // F25/F29. A literal, not `targetReps(target.est1RM, 170)`. `reps` is
+    // derived from the UNROUNDED seed while `est1RM` is rounded to 2dp for
+    // display, so a round trip through the reported figure asserts a coupling
+    // that holds only for these inputs — and would quietly stop meaning
+    // anything if they changed. Wathan can round the displayed e1RM just above
+    // the value that produced the reps (847 such pairs across a 60-400lb
+    // sweep), which is cosmetic in the product and load-bearing in a test.
+    expect(target.reps).toBe(11)
+    expect(target.reps).toBe(amrapTargetReps(seedE1Rm([
+      { weight: 160, reps: 17 },
+      { weight: 155, reps: 15 },
+      { weight: 150, reps: 14 },
+    ]), 170))
   })
 
   it('null when the seed e1RM is 0 \u2014 callers fall back to the TM goal instead of \u201Ctarget 1 @ est. 0\u201D', () => {

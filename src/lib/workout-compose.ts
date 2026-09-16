@@ -1,6 +1,6 @@
 import {
   calcMainSets, calcWarmup, calcAmrapTarget, calcSupplementalSets,
-  targetReps, est1RMFromTm, applyMainCascadeToSupplemental, applySupplementalOverride,
+  amrapTargetReps, est1RMFromTm, applyMainCascadeToSupplemental, applySupplementalOverride,
   supplementalSourceSetNumber, effectiveSupplementalWeek,
 } from './calc'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from './calc'
@@ -110,7 +110,9 @@ export function amrapTargetsFor(
   if (target) return [target]
   if (tm <= 0) return []
   const est1RM = est1RMFromTm(tm)
-  const reps = targetReps(est1RM, weight, discount)
+  // Capped like the seeded path above: dialling the AMRAP weight far down makes
+  // the raw inverse climb without bound here too (F25).
+  const reps = amrapTargetReps(est1RM, weight, discount)
   if (reps === null) return []
   return [{ label: 'goal', reps, est1RM: Math.round(est1RM) }]
 }

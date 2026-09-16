@@ -143,8 +143,18 @@ export function restTypeAfterSet(actualReps: number, targetReps: number): 'norma
   return actualReps < targetReps ? 'fail' : 'normal'
 }
 
+// Half-up to the nearest 5, but on the *intended* value rather than on the
+// float that a percentage multiply happened to produce. `0.70` is the one
+// percentage in the program that lands just short of a .5 boundary — 175 × 0.70
+// is 122.49999999999999 — so the naive half-up rounded it down to 120 while the
+// identical 122.5 reached through `0.50` rounded up to 125. Same weight, two
+// answers, decided by which code path asked (F26).
+//
+// Snapping to 6 decimal places first is far below any weight the app deals in
+// (plates stop at 1.25 lb) and far above the ~1e-14 error a percentage multiply
+// introduces, so it corrects the artefact without moving a real value.
 export const roundToNearest5 = (weight: number): number =>
-  Math.round(weight / 5) * 5
+  Math.round(Math.round(weight * 1e6) / 1e6 / 5) * 5
 
 // The working weight for an accessory from its training max. One definition so
 // the picker preview, the seeded slot, and calcAccessorySets can't drift.
@@ -353,6 +363,37 @@ export const targetReps = (prev1RM: number, todayWeight: number, discount: HighR
   return Math.max(2, Math.ceil(reps))
 }
 
+// Above this, a rep target has stopped being a training instruction. 5/3/1
+// prescribes AMRAPs at 1, 3 and 5 reps; a very good day on a light week reaches
+// the high teens. 30 is well past anything a lifter would chase and still
+// permits an unusually strong set.
+export const AMRAP_TARGET_MAX_REPS = 30
+
+/**
+ * `targetReps`, bounded to something a lifter could actually attempt.
+ *
+ * The raw inverse is unbounded, and a discount setting expands it by `1/scale`.
+ * With a seed well above today's weight — a conservative training max, or one
+ * that `deloadTms` has just cut — recent 225×12 work against a 185 TM asked for
+ * 95, 155 and 345 reps under mild, moderate and aggressive. `AmrapTargets`
+ * renders that number and taps it straight into the reps field. Worse, because
+ * the value was non-null, `calcAmrapTarget`'s documented "callers fall back to
+ * the TM-implied goal" never happened: `off` returned null and degraded
+ * gracefully, the three discount settings did not (F25).
+ *
+ * The cap lives here rather than in `targetReps` because that function is the
+ * Wathan inverse and should stay the honest answer to "how many reps reach this
+ * e1RM" — the judgement about what is worth showing belongs to the readout.
+ */
+export const amrapTargetReps = (
+  prev1RM: number,
+  todayWeight: number,
+  discount: HighRepDiscount = 'off',
+): number | null => {
+  const reps = targetReps(prev1RM, todayWeight, discount)
+  return reps === null || reps > AMRAP_TARGET_MAX_REPS ? null : reps
+}
+
 export interface AmrapTarget {
   label: string
   reps: number
@@ -396,7 +437,7 @@ export const calcAmrapTarget = (
   // (any weight already clears a 0 e1RM) — a "target 1 @ est. 0" readout. Null
   // instead, so callers fall back to the TM-implied goal.
   if (est <= 0) return null
-  const reps = targetReps(est, todayAmrapWeight, discount)
+  const reps = amrapTargetReps(est, todayAmrapWeight, discount)
   if (reps === null) return null
   return {
     label: 'target',
