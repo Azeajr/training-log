@@ -4,6 +4,7 @@ import { Router, Route } from '@solidjs/router'
 import Today from './Today'
 import { db } from '../db/index'
 import { clearSession, startSession, workout } from '../store/workout-store'
+import { toast } from '../store/toast-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import type { Session } from '../types/domain'
@@ -580,6 +581,163 @@ describe('Today screen — resuming a session the local store never saw', () => 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
     expect(workout.loggedSets).toHaveLength(0)
     expect(workout.currentSetIndex).toBe(0)
+    clearSession()
+  })
+})
+
+// ─── L06: the failure-injection pass Today never had ─────────────────────────
+// The review recorded L06 as the one cross-file question it did not resolve —
+// deferred by scope, because injecting failures is different work from reading
+// code. Today.tsx had ZERO catch statements. Every probe below found the same
+// class of defect the rest of this pass kept finding: a screen that cannot do
+// what it was asked, and says nothing at all.
+
+describe('Today — a failing read or write (L06)', () => {
+  afterEach(async () => { vi.restoreAllMocks(); await drain() })
+
+  // F102. The entry screen's own load. Same shape as F23 on /stats: no catch,
+  // and `setLoading(false)` only after every await resolves.
+  it('does not sit on "Loading…" forever when the initial load fails', async () => {
+    vi.spyOn(db.lifts, 'orderBy').mockImplementation(() => { throw new Error('disk unavailable') })
+
+    renderToday()
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(document.body.textContent).toContain('disk unavailable')
+    expect(document.body.textContent).not.toContain('Loading…')
+  })
+
+  it('offers a retry that recovers', async () => {
+    const real = db.lifts.orderBy.bind(db.lifts)
+    const spy = vi.spyOn(db.lifts, 'orderBy')
+    spy.mockImplementationOnce(() => { throw new Error('transient') })
+
+    renderToday()
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+    spy.mockImplementation(real)
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('START WORKOUT')).toBeInTheDocument())
+  })
+
+  // F103. START with a failing insert was a silent no-op: no session, no
+  // navigation, no error. The user taps and the app does nothing.
+  it('says so when the session insert fails, rather than doing nothing', async () => {
+    renderToday()
+    await screen.findByText('START WORKOUT')
+    vi.spyOn(db.sessions, 'add').mockRejectedValue(new Error('disk full'))
+
+    fireEvent.click(screen.getByText('START WORKOUT'))
+    await drain()
+
+    expect(toast()).toMatch(/could not start|disk full/i)
+    expect(mockNavigate).not.toHaveBeenCalledWith('/workout')
+    expect(await db.sessions.toArray()).toHaveLength(0)
+    expect(workout.activeSession).toBeNull()
+  })
+
+  // F104. The sharp one. Assistance defaults are seeded AFTER startSession, so
+  // a failure there left a real pending row created and the store pointing at
+  // it — with no navigation and no error. The user was left on Today with a
+  // phantom "SESSION IN PROGRESS" banner over a session they never entered,
+  // and that row holds the week open.
+  it('still enters a session whose assistance defaults failed to load', async () => {
+    renderToday()
+    await screen.findByText('START WORKOUT')
+    vi.spyOn(db.assistanceDefaults, 'where').mockImplementation(() => { throw new Error('defaults unavailable') })
+
+    fireEvent.click(screen.getByText('START WORKOUT'))
+    await drain()
+
+    // The session is real and valid; only a convenience failed. Entering it is
+    // the honest outcome — abandoning it would discard work the user asked for.
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
+    expect(workout.activeSession).not.toBeNull()
+    expect(toast()).toMatch(/assistance/i)
+  })
+
+  it('leaves no half-started session behind either way', async () => {
+    renderToday()
+    await screen.findByText('START WORKOUT')
+    vi.spyOn(db.assistanceDefaults, 'where').mockImplementation(() => { throw new Error('defaults unavailable') })
+
+    fireEvent.click(screen.getByText('START WORKOUT'))
+    await drain()
+
+    // Exactly one pending row, and the store points at it — not a row with no
+    // store, nor a store with no row.
+    const pending = (await db.sessions.toArray()).filter(s => s.status === 'pending')
+    expect(pending).toHaveLength(1)
+    expect(workout.activeSession?.id).toBe(pending[0].id)
+  })
+
+  // F105. Abandoning with a failing discard kept everything — which is the
+  // right outcome for the data — but said nothing, so the user believed the
+  // old session was gone when it was not.
+  it('says so when abandoning fails, and keeps the session intact', async () => {
+    await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
+    const cycleId = (await db.cycles.toArray())[0].id!
+    const id = await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending' })
+    await db.sets.add({ sessionId: id, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+    startSession({ id, cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'pending' })
+
+    renderToday()
+    await screen.findByText('START WORKOUT')
+    fireEvent.click(await selectLiftAndWaitForStart('Deadlift'))
+    await screen.findByText(/Abandon OHP session\?/)
+
+    vi.spyOn(db, 'transaction').mockRejectedValue(new Error('disk full'))
+    fireEvent.click(screen.getByText('YES'))
+    await drain()
+
+    // The specific message matters: the outer catch on the start path would
+    // report "could not start the session", which is true but names the wrong
+    // thing. The user asked to abandon, and that is what failed.
+    expect(toast()).toMatch(/could not abandon/i)
+    expect(toast()).toContain('disk full')
+    // Nothing destroyed, and the store still names what is still there.
+    expect(await db.sessions.get(id)).toBeDefined()
+    expect(await db.sets.where('sessionId').equals(id).toArray()).toHaveLength(1)
+    expect(workout.activeSession?.id).toBe(id)
+    expect(mockNavigate).not.toHaveBeenCalledWith('/workout')
+    clearSession()
+  })
+
+  // F106. `crossPreview` is a createResource read as `crossPreview() ?? []`.
+  // `?? []` guards a null, not a THROW — reading a rejected resource throws,
+  // and that throw came back out of `setLoading(false)`, so the whole screen
+  // stayed on "Loading…" because one optional preview could not be read.
+  it('renders the screen when the cross-lift preview cannot be read', async () => {
+    const real = db.liftSupplementals.where.bind(db.liftSupplementals)
+    vi.spyOn(db.liftSupplementals, 'where').mockImplementation((field: string) => {
+      const q = real(field)
+      return Object.assign(q, {
+        equals: () => ({ toArray: () => Promise.reject(new Error('preview unavailable')) }),
+      }) as never
+    })
+
+    renderToday()
+
+    await screen.findByText('START WORKOUT')
+    expect(document.body.textContent).not.toContain('Loading…')
+    expect((screen.getByText('START WORKOUT') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('an unreadable preview does not block starting a session', async () => {
+    const real = db.liftSupplementals.where.bind(db.liftSupplementals)
+    vi.spyOn(db.liftSupplementals, 'where').mockImplementation((field: string) => {
+      const q = real(field)
+      return Object.assign(q, {
+        equals: () => ({ toArray: () => Promise.reject(new Error('preview unavailable')) }),
+      }) as never
+    })
+
+    renderToday()
+    fireEvent.click(await screen.findByText('START WORKOUT'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/workout'))
     clearSession()
   })
 })
