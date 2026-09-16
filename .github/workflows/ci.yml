@@ -1,13 +1,59 @@
 name: CI
 
+# paths-ignore, NOT a paths allowlist. An allowlist is what produced F75: the
+# deploy workflow's filter left eslint.config.js, scripts/**, tests/e2e/** and
+# .github/** with no workflow at all. Listing what to SKIP keeps "everything
+# else runs" as the default, so a new directory is covered by not being here.
+#
+# Only prose that no test reads is listed. `docs/deep-code-review-fixes.md` is
+# deliberately ABSENT: src/db/batches.test.ts parses it, so an edit there can
+# break the suite and has to be checked like code.
 on:
   pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'ROADMAP.md'
+      - 'CLAUDE.md'
+      - 'ENGINEERING_PASSES.md'
+      - 'AMRAP_TARGET_REPS_ANALYSIS.md'
+      - '.claude/**'
+      - 'docs/INDEX.md'
+      - 'docs/deep-code-review.md'
+      - 'docs/ui-consistency-review.md'
+      - 'docs/archive/**'
+      - 'docs/design/**'
+      - 'docs/verification/**'
+  # Also on pushes to main. Without this, CI ran on PRs only, and the deploy
+  # workflow is path-filtered — so a commit pushed straight to main (an accepted
+  # workflow here) got NO checks at all unless it happened to touch a deploy
+  # path. The sharpest case was the deploy filter's own '!src/**/*.test.*': a
+  # broken test committed to main triggered nothing, then surfaced later by
+  # failing check:ci inside an unrelated deploy (F75).
+  push:
+    branches: [main]
+    # Duplicated rather than a YAML anchor: the Actions parser does not
+    # support anchors. Keep the two lists in step.
+    paths-ignore:
+      - 'README.md'
+      - 'ROADMAP.md'
+      - 'CLAUDE.md'
+      - 'ENGINEERING_PASSES.md'
+      - 'AMRAP_TARGET_REPS_ANALYSIS.md'
+      - '.claude/**'
+      - 'docs/INDEX.md'
+      - 'docs/deep-code-review.md'
+      - 'docs/ui-consistency-review.md'
+      - 'docs/archive/**'
+      - 'docs/design/**'
+      - 'docs/verification/**'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  # pull_request.number is empty on a push event, which would collapse every
+  # main push into one shared group; fall back to the ref.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -49,3 +95,34 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run verify:sw
+
+  # Separate job, like verify-sw: it needs a Chromium download and a production
+  # build. The suite ran in NO workflow at all before this, and 6 of its 32
+  # specs were failing — dormant is the worst of the options (F74, F85).
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:e2e
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

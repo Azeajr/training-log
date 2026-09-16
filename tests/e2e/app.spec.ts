@@ -10,12 +10,14 @@ test.describe('first run', () => {
     await expect(page.getByText('DEADLIFT')).toBeVisible()
   })
 
-  test('setup wizard navigates through all three steps', async ({ page }) => {
+  // Two steps, not three: the roster step and the training-max step, and the
+  // latter carries START TRAINING itself. The spec still clicked a second NEXT
+  // and waited for a STEP 3 heading that has not existed since the wizard was
+  // reshaped — the helper was updated and this was not (F85).
+  test('setup wizard navigates through both steps', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /STEP 1/ })).toBeVisible()
     await page.getByRole('button', { name: 'NEXT' }).click()
     await expect(page.getByRole('heading', { name: /STEP 2/ })).toBeVisible()
-    await page.getByRole('button', { name: 'NEXT' }).click()
-    await expect(page.getByRole('heading', { name: /STEP 3/ })).toBeVisible()
     await expect(page.getByRole('button', { name: 'START TRAINING' })).toBeVisible()
   })
 

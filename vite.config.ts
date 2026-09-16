@@ -21,9 +21,30 @@ export default defineConfig(() => {
     coverage: {
       provider: 'v8' as const,
       reporter: ['text', 'html', 'lcov'],
-      include: ['src/lib/**/*.ts', 'src/screens/**/*.tsx', 'src/store/**/*.ts'],
-      exclude: ['**/*.test.*', '**/seed.ts'],
-      thresholds: { statements: 80, branches: 80, functions: 80, lines: 80 },
+      // Everything under src/, not three directories. The old include was
+      // lib + screens + store, so src/components, src/db, src/hooks,
+      // service-worker.ts and src/workers were not measured AT ALL — of the 23
+      // findings this review opened in those areas, 22 lived where the gate
+      // could not see them, and eleven component files with no test file cost
+      // it nothing (F69).
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        '**/*.test.*',
+        '**/seed.ts',
+        // Entry points and test scaffolding: no logic worth a denominator.
+        'src/main.tsx',
+        'src/test-setup.ts',
+        'src/db/sqlite-test-client.ts',
+        'src/vite-env.d.ts',
+        'src/types/**',
+      ],
+      // Re-baselined against the wider scope rather than kept at a number that
+      // only ever held for a third of the tree. Measured over all of src/ the
+      // real figures are 88.79 / 78.27 / 88.18 / 91.17, so each threshold sits
+      // just under its actual value: the gate now bites on every metric instead
+      // of leaving three of them with ~9 points of slack. Ratchet these UP as
+      // coverage improves; do not widen the gap, and do not narrow the scope.
+      thresholds: { statements: 85, branches: 76, functions: 85, lines: 88 },
     },
   },
   optimizeDeps: {

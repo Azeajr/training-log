@@ -1,11 +1,13 @@
 {
   "compilerOptions": {
+    "composite": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "es2023",
     "lib": ["ES2023"],
     "module": "esnext",
     "types": ["node"],
     "skipLibCheck": true,
+    "allowJs": true,
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -20,5 +22,15 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  /* Was ["vite.config.ts"] alone, so playwright.config.ts, eslint.config.js,
+     stryker.config.mjs and scripts/** belonged to no project and were
+     type-checked by nothing (F71). checkJs stays off: these are plain JS with
+     no annotations, so this buys syntax and module resolution, not inference. */
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "eslint.config.js",
+    "stryker.config.mjs",
+    "scripts/**/*.js"
+  ]
 }

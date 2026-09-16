@@ -36,5 +36,12 @@ coverage/
 reports/
 stryker-setup-*.js
 
+# Playwright run artifacts — per-failure screenshots, videos and traces, plus a
+# .last-run.json receipt. `.last-run.json` used to be TRACKED, and its committed
+# copy read {"status":"passed"} in a repo where the suite did not pass and
+# nothing ran it: a stale green receipt anyone could read and believe.
+test-results/
+playwright-report/
+
 # Hermes agent worktrees — worker checkouts, never committed
 .worktrees/
