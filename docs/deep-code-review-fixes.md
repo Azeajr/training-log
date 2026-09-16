@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **17** |
+| `open` | **12** |
 | `wip` | 0 |
-| `fixed` | **81** — F01, F02, F03, F04, F05, F06, F07, F08, F13, F14, F15, F16, F17, F18, F22, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F81, F82, F83, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
+| `fixed` | **86** — F01, F02, F03, F04, F05, F06, F07, F08, F10, F13, F14, F15, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F81, F82, F83, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
 | `fixed-by` | **3** — F43, F62, F98 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -98,7 +98,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F07 | **High** | B02 | — | `src/db/seed.ts` | `fixed` | `c979b65` · `seed.test.ts` ×5 | Lifts are seeded only into a genuinely **empty** table. Re-seeding whenever the count was below `LIFTS.length` treated a short roster as a partial seed — but a smaller roster is a supported onboarding choice, so those users had their survivors deleted and the defaults re-created with **new ids** on every startup, orphaning the training maxes and sessions that referenced them. An existing test pinned the old behaviour and was deliberately inverted. |
 | F08 | **High** | B04 | C6 | `src/lib/export-import.ts` | `fixed` | `985fb2a` · `export-import.test.ts` ×4 | `validateImportShape` now establishes the file **is** a backup before anything destructive runs. It only inspected tables that were present, so a document carrying none of them passed completely and the import then cleared every table and restored nothing. Settings did ask for overwrite confirmation — about a file never established to be a backup. **One** recognised table is the bar, deliberately: a sparse or legacy backup still imports; a file with no recognised table at all does not. |
 | F09 | Medium | B04 | — | `src/lib/export-import.ts` | `open` | — | — |
-| F10 | Medium | B03 | — | `src/screens/HistoryEdit.tsx` | `open` | — | — |
+| F10 | Medium | B03 | — | `src/screens/HistoryEdit.tsx` | `fixed` | `862d3a3` · `History.test.tsx` ×2, `HistoryEdit.test.tsx` ×4 | **A screen refusing to show work it had just badged.** `cross` was in neither `SET_TYPE_DISPLAY_ORDER` nor `SET_TYPE_EDIT_ORDER`, so cross-lift sets — real rows in the same table, counting toward History's own PR badge, the records panel and the AMRAP seed — were invisible in the expanded detail and unreachable in the editor. Both lists include it now, sorted after the self-supplemental block to match the order the work is done in. Both surfaces also **name the movement**: a cross set is distinguished by nothing but its `liftId`, so under a bare "Cross" heading two blocks merge into one list that says nothing about what was trained — and in the editor, picking the wrong row is data corruption rather than a confusing label. |
 | F11 | Medium | B04 | — | `src/store/settings-store.ts` | `open` | — | — |
 | F12 | Medium | B05 | — | `src/store/workout-store.ts` | `open` | — | — |
 | F13 | **High** | B05 | — | `src/screens/Today.tsx` | `fixed` | `1b793dc` · `session.test.ts` ×5, `Workout.test.tsx` ×4, `Today.test.tsx` ×3 | **The store outlives its row, so every path that acts on it has to ask the row.** A kill during the post-complete modal chain leaves the store saying `pending` over a finished session — the chain never reassigns `activeSession`, so that is what it says throughout. SKIP rewrote a completed workout as `skipped`; COMPLETE appended a second copy of every accessory set and overwrote the saved date and notes; Today's RESUME banner was a plain `<A href>` that walked past the reconciliation START already did. `finalizePendingSession` holds the status check and the writes in one transaction and reports whether this call ended the session. COMPLETE keeps its post-commit phase resumable: on an already-completed row it skips the save and still offers the TM prompts and the cycle roll-up, which is exactly what a killed chain interrupts. |
@@ -107,11 +107,11 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F16 | Medium | B06 | — | `src/screens/Today.tsx` | `fixed` | `7ef055f` · `session.test.ts` ×6, `Today.test.tsx` ×2 | **Both halves, because a component flag only covers one.** `startOrResumePendingSession` does the read and the create in one transaction, so a second tab loses the race instead of creating a second row; `useSingleFlight` covers the second tap and disables the button while held. `launchSession` is awaited rather than `void`-ed — that `void` was the window. Existing installs already carry duplicates, so the helper recovers them: the attempt with the most logged sets wins, ties break on oldest id so the choice is stable, losers are retired as `skipped` rather than deleted. |
 | F17 | Medium | B06 | — | `src/screens/Today.tsx` | `fixed` | `7ef055f` · `Today.test.tsx` ×3 | **Selection generation.** TM and assistance defaults were published by whoever landed last, so a slow zero-TM Deadlift result could overwrite a valid Bench TM — disabling START and warning about a missing training max under Bench's name. `loadLiftDetail` takes a generation and publishes only while current, clears the outgoing lift's numbers instead of leaving them under a new name, and START is disabled until the selection resolves. `launchSession` re-reads the TM inside the operation. Four existing tests raced that read deliberately and now wait for it. |
 | F18 | **High** | B06 | — | `src/screens/Today.tsx` | `fixed` | `ac0c73b` · `session.test.ts` ×5, `Today.test.tsx` ×4 | **Resuming is not starting.** Every resume went through `startSession`, which resets the store to empty; Workout derives all progress from those arrays, so a session with four saved sets looked untouched and the next LOG inserted a duplicate warmup set 1. A backup restore reaches this every time. `hydrateSessionState` rebuilds the store from the saved rows in plan order (the list is positional, so any other order points every logged set at the wrong row), keeps the database ids so a later edit or undo addresses the saved row, and splits cross sets out of the linear cursor. **Assistance work is deliberately not rebuilt** — it lives in the store and is only written at COMPLETE, so for a pending session there is nothing saved; the fix seeds the lift's defaults and says so rather than implying the earlier attempt logged none. |
-| F19 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
-| F20 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
-| F21 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
+| F19 | Medium | B06 | — | `src/screens/History.tsx` | `fixed` | `862d3a3` · `History.test.tsx` stale-detail case | `detail` is one signal shared by every row. Opening A then B attached A's sets to B's panel **immediately**, and a late A response could then replace B's once it arrived. Cleared on expand and keyed on the session id at publish time. The test holds one row's detail read open, expands another, and pins that the late result is dropped rather than published into whatever panel is on screen. |
+| F20 | Medium | B06 | — | `src/screens/History.tsx` | `fixed` | `862d3a3` · `async-read.test.ts` ×4 (see note) | Late lift reads replaced the current lift's list, late month reads erased the selected month's badges, late day-row builds put A's sessions under day B. Every publish in `load`, `loadMonth` and the day-rows effect is now behind an `isCurrent()` check, with separate `createAsyncRead` tokens for the list and the month because both effects fire on a mode change and one shared token would have them supersede each other. **No component test, deliberately** — every seam for holding one read open (`trainingMaxes`, `sessions`, `sets`) is also read by the `RecordsPanel` embedded in this screen, so the mock intercepts the panel's query and the test passes with or without the guard. A test that cannot fail is worse than none; the contract is pinned in `async-read.test.ts` where it is decidable, and the note is in the test file. |
+| F21 | Medium | B06 | — | `src/screens/History.tsx` | `fixed` | `862d3a3` · `History.test.tsx` ×3 | **The worst shape this defect takes.** A rejected roster query escaped as an unhandled rejection and the screen reported "No completed sessions yet." over a database full of them — because the empty list it starts with is also what an empty log looks like, so the failure was indistinguishable from the ordinary case. Now an alert with the message and a RETRY, and the empty-list line is suppressed while a read has failed. The remembered-lift `localStorage` read is wrapped like `readStoredMode` already was: losing a convenience should cost the convenience, not the screen. `loadPrs` stays best-effort, like the mid-workout PR toast, but no longer rejects into the void. |
 | F22 | **High** | B06 | — | `src/components/stats/RecordsPanel.tsx` | `fixed` | `5e51256` · `Stats.test.tsx` ×3 | **Ownership rule settled: completed sessions, plus the one being logged.** Stats filtered nothing but `liftId`, so skipped and abandoned work set permanent records History would never show. Now reads `baselineWorkingSets`. |
-| F23 | Medium | B06 | — | `src/components/stats/RecordsPanel.tsx` | `open` | — | — |
+| F23 | Medium | B06 | — | `src/components/stats/RecordsPanel.tsx` | `fixed` | `862d3a3` · `Stats.test.tsx` ×3, `async-read.test.ts` ×12 | **The half F63 left behind.** F63 gave this effect a request token; it still had no `catch`, and `loading` cleared only after every await resolved, so any rejected read pinned `/stats` on "Loading…" permanently with no error, no retry and no remount short of navigating away. Worse than stuck: with `records` still empty, what showed through was "NO SETS YET" — an empty log, not an unreadable one. `createAsyncRead` now carries identity and failure together, and `retry` re-runs the last task so the error state is actionable rather than terminal. |
 | F24 | Medium | B07 | — | `src/lib/calc.ts` | `fixed` | `c927449` · `calc.test.ts` ×6, `Settings.test.tsx` ×2 | **Ordering made an invariant at the domain edge.** Nothing enforced `firstBell <= secondBell` and the steppers clamped each field independently at `>= 30`. Inverted, it broke the timer twice: `restStatus` tests `secondBell` first, so the first bell never fired and the screen read "SECOND BELL" at 60s while the countdown ran toward 240; and `restNotificationTargets` armed both at absolute times under one `tag`, so the tray showed the second bell first and the later first bell *replaced* it — the surviving notification was the earlier checkpoint's (B09b/P26). `restThresholds` now **sorts** rather than clamps: the user configured two durations and got the fields the wrong way round, so both are kept. The steppers carry the other bell along instead of refusing the step, so every setting stays reachable and the inversion cannot be entered at all. |
 | F25 | Medium | B07 | — | `src/lib/calc.ts` | `fixed` | `49dd14c` · `calc.test.ts` ×6 | **The fallback made it worse, not safer.** The Wathan inverse is unbounded and a discount expands it by `1/scale`: recent 225×12 against a 185 TM asked for 95 / 155 / 345 reps, tapped straight into the reps field. Because the value was non-null, the documented "callers fall back to the TM-implied goal" never fired — `off` returned null and degraded, the three discount settings did not. `amrapTargetReps` caps at 30 and both readouts go through it. A wrapper, not a change to `targetReps`: that stays the honest answer to "how many reps reach this e1RM"; what is worth *showing* is the readout's call. The TM path is capped too — it looks bounded by construction, but the AMRAP weight is user-editable. |
 | F26 | Low | B07 | — | `src/lib/calc.ts` | `fixed` | `49dd14c` · `calc.test.ts` ×3 | `roundToNearest5` rounded the float a percentage multiply produced rather than the value it meant. `0.70` is the only multiplier that lands short of a .5 boundary — 175 × 0.70 is 122.49999999999999 — so week 2 set 1 gave **120** while the identical 122.5 via `0.50` gave **125**. TM 325 week 2 → 225 instead of 230, across all ten BBS sets too. Snapped to 6dp before the half-up step: orders of magnitude below the smallest plate, orders above the ~1e-14 multiply error. |
@@ -207,11 +207,11 @@ being *complete* is not.
 | 2 | Destructive paths | 0 | 0 | **Closed** — was 8, two High |
 | 3 | Session lifecycle | 0 | 0 | **Closed** — was 7, four High |
 | 4 | calc numerics | 0 | 0 | **Closed** — was 9 |
-| 5 | Async read identity | 5 | 0 | The same shape as F63, already solved once |
+| 5 | Async read identity | 0 | 0 | **Closed** — was 5 |
 | 6 | Config and assets | 0 | 0 | **Closed** — was 6 |
 | 7 | Remainder | 12 | 0 | Genuinely individual |
 
-**Order: 2 → 1 → 3 → 4 → 6 → 5 → 7.** Batches 1, 2, 3, 4 and 6 are closed.
+**Order: 2 → 1 → 3 → 4 → 6 → 5 → 7.** Only batch 7 is left.
 
 6 was pulled ahead of 5: F70 was the only finding left that broke something for
 every user every time — the app could not be installed at all — and it was also
@@ -307,10 +307,34 @@ unlike a duplicate exercise it carries no history of its own.
 
 ### 5 — Async read identity
 
-`F10` `F19` `F20` `F21` `F23`
+*(all closed)*
 
-Late results published over newer ones, and loading states never re-entered —
-the same defect `F63` had. `RecordsPanel`'s request-token fix is the template.
+Four of the five were one defect in four places: `void load(...)` from an
+effect, several awaits, then a write to unkeyed global signals. That shape
+fails twice over. Late results publish over newer ones — A's rows under B's
+name. And a rejection escapes into nothing, so the screen never leaves the
+state it was in.
+
+The second half is the one worth remembering. A screen that cannot read its
+data was **indistinguishable from a screen whose data is absent**: `/stats`
+sat on "Loading…" forever, and History said "No completed sessions yet." over
+a full database, because the empty list it starts with is exactly what an
+empty log looks like. Neither told the user anything was wrong, and neither
+offered a way to try again.
+
+`createAsyncRead` carries identity and failure together and adds a retry,
+generalising the request token F63 gave `RecordsPanel` — and supplying the
+half F63 left behind, since that same effect still had no `catch` (F23).
+
+F10 was separate and simpler: `cross` was in neither set-type list, so History
+could badge a session PR for a movement and then refuse to show its sets.
+
+**One finding has no component test and says so.** F20's late-lift-read leg is
+untestable at that level here: every seam for holding one read open is also
+read by the `RecordsPanel` embedded in the same screen, so the mock intercepts
+the panel's query and the test passes whether the guard is there or not. A test
+that cannot fail is worse than no test, so the contract is pinned in
+`async-read.test.ts` instead and the reasoning is left in the test file.
 
 ### 6 — Config and assets
 
