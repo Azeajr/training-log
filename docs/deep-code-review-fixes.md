@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **39** |
+| `open` | **32** |
 | `wip` | 0 |
-| `fixed` | **59** — F01, F02, F03, F04, F05, F06, F07, F08, F22, F33, F34, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F71, F73, F74, F75, F76, F77, F78, F79, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
+| `fixed` | **66** — F01, F02, F03, F04, F05, F06, F07, F08, F13, F14, F15, F16, F17, F18, F22, F33, F34, F35, F36, F37, F38, F41, F42, F44, F45, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F69, F71, F73, F74, F75, F76, F77, F78, F79, F84, F85, F86, F87, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F101 |
 | `fixed-by` | **3** — F43, F62, F98 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -101,12 +101,12 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F10 | Medium | B03 | — | `src/screens/HistoryEdit.tsx` | `open` | — | — |
 | F11 | Medium | B04 | — | `src/store/settings-store.ts` | `open` | — | — |
 | F12 | Medium | B05 | — | `src/store/workout-store.ts` | `open` | — | — |
-| F13 | **High** | B05 | — | `src/screens/Today.tsx` | `open` | — | — |
-| F14 | **High** | B05 | — | `src/screens/Workout.tsx` | `open` | — | — |
-| F15 | **High** | B05 | — | `src/screens/Workout.tsx` | `open` | — | — |
-| F16 | Medium | B06 | — | `src/screens/Today.tsx` | `open` | — | — |
-| F17 | Medium | B06 | — | `src/screens/Today.tsx` | `open` | — | — |
-| F18 | **High** | B06 | — | `src/screens/Today.tsx` | `open` | — | — |
+| F13 | **High** | B05 | — | `src/screens/Today.tsx` | `fixed` | `1b793dc` · `session.test.ts` ×5, `Workout.test.tsx` ×4, `Today.test.tsx` ×3 | **The store outlives its row, so every path that acts on it has to ask the row.** A kill during the post-complete modal chain leaves the store saying `pending` over a finished session — the chain never reassigns `activeSession`, so that is what it says throughout. SKIP rewrote a completed workout as `skipped`; COMPLETE appended a second copy of every accessory set and overwrote the saved date and notes; Today's RESUME banner was a plain `<A href>` that walked past the reconciliation START already did. `finalizePendingSession` holds the status check and the writes in one transaction and reports whether this call ended the session. COMPLETE keeps its post-commit phase resumable: on an already-completed row it skips the save and still offers the TM prompts and the cycle roll-up, which is exactly what a killed chain interrupts. |
+| F14 | **High** | B05 | — | `src/screens/Workout.tsx` | `fixed` | `34188d4` · `serial-queue.test.ts` ×6, `Workout.test.tsx` ×3 | **Serialized rather than identified.** Log, edit and undo share a positional model — `loggedSets[i]` is plan position `i`, and a rollback means "remove the last one" — which is only true with one mutation in flight. A failed earlier LOG popped a *later* successful set; an undo racing an insert ran before the row id came back, deleting nothing and orphaning the row. All set mutations now run through one `createSerialQueue`, and `runFinishing` drains it before COMPLETE reads the store or flips the status. Per-operation ids were the alternative; serializing wins because a hole in a positional list has no honest representation, and these are single-row local writes. |
+| F15 | **High** | B05 | — | `src/screens/Workout.tsx` | `fixed` | `34188d4` · `Workout.test.tsx` ×3, `SaveFailureBanner.test.tsx` ×3 | **A retry is bound to what it meant, not to where it sat.** RETRY replayed a positional handler against live state: after a manual LOG it duplicated the slot and misassigned the row id, and after an EXIT it wrote the old set into the new session, because the closure read `workout.activeSession` at replay time. Each retry now captures its session; a log retry applies only while the cursor is still on its slot, an edit retry re-finds its row by database id. The banner is scoped to the session on screen and withdraws a superseded retry, saying so. The gap records stay unscoped on purpose — they outlive the session so History can flag it. |
+| F16 | Medium | B06 | — | `src/screens/Today.tsx` | `fixed` | `7ef055f` · `session.test.ts` ×6, `Today.test.tsx` ×2 | **Both halves, because a component flag only covers one.** `startOrResumePendingSession` does the read and the create in one transaction, so a second tab loses the race instead of creating a second row; `useSingleFlight` covers the second tap and disables the button while held. `launchSession` is awaited rather than `void`-ed — that `void` was the window. Existing installs already carry duplicates, so the helper recovers them: the attempt with the most logged sets wins, ties break on oldest id so the choice is stable, losers are retired as `skipped` rather than deleted. |
+| F17 | Medium | B06 | — | `src/screens/Today.tsx` | `fixed` | `7ef055f` · `Today.test.tsx` ×3 | **Selection generation.** TM and assistance defaults were published by whoever landed last, so a slow zero-TM Deadlift result could overwrite a valid Bench TM — disabling START and warning about a missing training max under Bench's name. `loadLiftDetail` takes a generation and publishes only while current, clears the outgoing lift's numbers instead of leaving them under a new name, and START is disabled until the selection resolves. `launchSession` re-reads the TM inside the operation. Four existing tests raced that read deliberately and now wait for it. |
+| F18 | **High** | B06 | — | `src/screens/Today.tsx` | `fixed` | `ac0c73b` · `session.test.ts` ×5, `Today.test.tsx` ×4 | **Resuming is not starting.** Every resume went through `startSession`, which resets the store to empty; Workout derives all progress from those arrays, so a session with four saved sets looked untouched and the next LOG inserted a duplicate warmup set 1. A backup restore reaches this every time. `hydrateSessionState` rebuilds the store from the saved rows in plan order (the list is positional, so any other order points every logged set at the wrong row), keeps the database ids so a later edit or undo addresses the saved row, and splits cross sets out of the linear cursor. **Assistance work is deliberately not rebuilt** — it lives in the store and is only written at COMPLETE, so for a pending session there is nothing saved; the fix seeds the lift's defaults and says so rather than implying the earlier attempt logged none. |
 | F19 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
 | F20 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
 | F21 | Medium | B06 | — | `src/screens/History.tsx` | `open` | — | — |
@@ -123,7 +123,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F32 | Low | B07 | — | `src/lib/workout-compose.ts` | `open` | — | — |
 | F33 | **High** | B07 | C1 | `src/screens/Workout.tsx` | `fixed` | `10967b6` · `cycle.test.ts` ×3, `Modal.test.tsx` ×4, `TmRecommendationModal.test.tsx` ×2 | **C1 owner.** Two halves. UI: `Modal` gained `busy`, suppressing Escape and `← BACK` — the paths no call site can gate — and the three post-session modals single-flight their handlers via `useSingleFlight`. DB: `advanceCycleIfComplete` now re-reads the cycle **inside** its transaction and aborts if another caller already advanced. That guard only holds because **F05** serialized transactions first. |
 | F34 | Medium | B07 | C1 | `src/lib/cycle.ts` | `fixed` | `10967b6` · `cycle.test.ts` ×2, `CycleCompleteModal.test.tsx` ×4 | `applyCycleDoubling` now derives its target from the **summary row** instead of re-reading the live TM, so repeating it is idempotent (205→210 however many taps), and skips a write that would be a no-op. Fold-back keyed on `liftId`: `TmChange` carries the id, because `lifts.name` has no UNIQUE constraint and two lifts named "Bench" rewrote each other. `deloadTms` is **deliberately not** made idempotent — see note. |
-| F35 | Medium | B07 | — | `src/lib/cycle.ts` | `open` | — | — |
+| F35 | Medium | B07 | — | `src/lib/cycle.ts` | `fixed` | `96c4493` · `cycle.test.ts` ×4 | **The invariant has to hold however the shape changes.** Retiring the sessions a cycle shrink orphans lived only in `Settings.handleCycleShapeChange`; a backup import changes `hasDeloadWeek` too, and its envelope is the weakest one we have. `retireWeeksPastFinalWeek` is now called from `advanceCycleIfComplete` and from `getNextSessionAdvancingIfDone` before either reads the cycle's sessions — the latter because a stranded row is stranded whether or not the cycle is finishable. Retired as `skipped`, consistent with what Settings already chose: the sets were still lifted. Completed deload days are untouched. |
 | F36 | Low | B07 | — | `src/lib/training-max.ts` | `fixed` | `10967b6` · `training-max.test.ts` ×2 | B12d decision applied: highest `id` wins at equal `setAt`. One `isNewer` helper shared by `getCurrentTm` and `getAllCurrentTms`, which previously resolved the same tie to opposite rows. |
 | F37 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `013e0f9` · `pr.test.ts` cross-history case | Not in the planned chunk — fixed as a consequence of the shared reader. The "no history at all" guard tested the lift's **own** session rows and returned before the cross query ran, so a movement trained entirely as cross work was scored against nothing. It is now decided on every qualifying session, cross-only included. Both previously pinned behaviours preserved. |
 | F38 | Medium | B07 | — | `src/lib/pr.ts` | `fixed` | `013e0f9` · `pr.test.ts` ×4 | The three readers now share one rule via `lib/performance.ts`. The live-session clause is what lets the toast and the History badge agree while the toast still works mid-workout — `pr.ts:78-84` asserted that invariant and did not hold it. |
@@ -205,13 +205,13 @@ being *complete* is not.
 |---|---|---|---|---|
 | 1 | The gate | 0 | 0 | **Closed** — was 9 |
 | 2 | Destructive paths | 0 | 0 | **Closed** — was 8, two High |
-| 3 | Session lifecycle | 7 | **4** | The interlocking Today↔Workout story |
+| 3 | Session lifecycle | 0 | 0 | **Closed** — was 7, four High |
 | 4 | calc numerics | 9 | 0 | Pure functions, one file |
 | 5 | Async read identity | 5 | 0 | The same shape as F63, already solved once |
 | 6 | Config and assets | 6 | 0 | Build, PWA and repo hygiene |
 | 7 | Remainder | 12 | 0 | Genuinely individual |
 
-**Order: 2 → 1 → 3 → 4 → 5 → 6 → 7.**
+**Order: 2 → 1 → 3 → 4 → 5 → 6 → 7.** Batches 1, 2 and 3 are closed.
 
 Not 1 first, despite the case for it. F01 and F07 destroy user data *today* and
 are small and isolated — putting a nine-finding infrastructure batch ahead of
@@ -254,13 +254,24 @@ duplicate-name reconcile that `idx_exercises_name_nocase` still needs (`F101`).
 
 ### 3 — Session lifecycle
 
-`F13` `F14` `F15` `F16` `F17` `F18` `F35`
+*(all closed)*
 
-Four High, and they interlock: resume reconciliation, session hydration, save
+Four High, and they interlocked: resume reconciliation, session hydration, save
 ordering, retry identity, start single-flight, selection generation. The one
-batch that has to be a single coherent pass rather than scattered fixes.
+batch that had to be a single coherent pass rather than scattered fixes.
 
-Depends on **F05** (transactions serialized), which has landed.
+Two things it turned on. **F05** (transactions serialized) had to land first —
+`finalizePendingSession` and `startOrResumePendingSession` are both
+read-then-write guards that only hold because a second caller cannot interleave.
+And the store/row split runs through all of it: the persisted workout store
+outlives its database row, and every finding here is a place that trusted the
+store without asking the row.
+
+One deliberate non-fix, recorded rather than skipped: **assistance work is not
+rehydrated on resume** (F18). It lives in the local store and is only written at
+COMPLETE, so a pending session has nothing saved to rebuild. The fix seeds the
+lift's defaults and discloses it instead of implying the earlier attempt logged
+none.
 
 ### 4 — calc numerics
 

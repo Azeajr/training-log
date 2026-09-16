@@ -136,6 +136,25 @@ export function startSession(session: Session) {
   setWorkout({ ...emptyState(), activeSession: session })
 }
 
+// Resuming is not starting. `startSession` resets to empty, which is right for a
+// fresh session and wrong for a pending one that already has rows in the
+// database — Workout derives every bit of its progress from these arrays, so an
+// empty one made a half-finished session look untouched and the next LOG
+// inserted a duplicate of a set already saved (F18).
+export function resumeSession(
+  session: Session,
+  state: { loggedSets: Set[]; loggedCrossSets: Set[]; currentSetIndex: number; notes: string },
+) {
+  setWorkout({
+    ...emptyState(),
+    activeSession: session,
+    loggedSets: state.loggedSets,
+    loggedCrossSets: state.loggedCrossSets,
+    currentSetIndex: state.currentSetIndex,
+    notes: state.notes,
+  })
+}
+
 export function logSet(set: Set) {
   setWorkout('loggedSets', (prev) => [...prev, set])
 }

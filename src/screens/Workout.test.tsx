@@ -4,11 +4,11 @@ import { Router, Route } from '@solidjs/router'
 import Workout from './Workout'
 import { db } from '../db/index'
 import {
-  clearSession, startSession, addAccessory, logAccessorySet, workout,
+  clearSession, startSession, addAccessory, logAccessorySet, setNotes, workout,
 } from '../store/workout-store'
 import { loadSettings, updateSettings } from '../store/settings-store'
 import { toast } from '../store/toast-store'
-import { gaps, resetSaveFailures } from '../store/save-failure-store'
+import { failures, gaps, resetSaveFailures } from '../store/save-failure-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import type { Session } from '../types/domain'
@@ -1835,5 +1835,233 @@ describe('Workout screen — cross block identity', () => {
 
     // Squat's uncommitted weight must survive — it is not this block's business.
     expect(screen.getAllByTestId('active-weight')[1].textContent).toBe(dialled)
+  })
+})
+
+// ─── F13: a stale store must not rewrite a finished session ───────────────────
+// The persisted workout store outlives its row. Kill the app while a
+// post-complete modal is open and it comes back holding a session the database
+// already finished — and every session-ending path used to write its status
+// unconditionally.
+
+describe('Workout screen — stale active session', () => {
+  const completedRow = async (fields: Partial<Session> = {}) => {
+    await db.sessions.update(1, { status: 'completed', notes: 'the real workout', date: new Date('2026-01-06'), ...fields })
+  }
+
+  it('SKIP does not rewrite a session the database already completed', async () => {
+    await completedRow()
+    startSession(BENCH)          // store still says 'pending'
+    renderWorkout()
+
+    fireEvent.click(await findSessionOption('SKIP LIFT'))
+    await screen.findByText('Skip this lift?')
+    fireEvent.click(screen.getByText('SKIP'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    const row = await db.sessions.get(1)
+    expect(row?.status).toBe('completed')
+    expect(row?.notes).toBe('the real workout')
+    expect(workout.activeSession).toBeNull()
+  })
+
+  it('COMPLETE does not duplicate accessory sets or overwrite the saved date and notes', async () => {
+    await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+    // What the first, real completion wrote.
+    await completedRow()
+    await db.accessorySets.add({
+      sessionId: 1, exerciseId: 10, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null,
+    })
+
+    // The resurrected store still holds the accessory work and a new note.
+    startSession(BENCH)
+    addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 50, loggedSets: [] })
+    logAccessorySet(10, { setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    setNotes('typed again after the reload')
+
+    renderWorkout()
+    fireEvent.click(await findFinishButton())
+    await drain()
+
+    expect(await db.accessorySets.where('sessionId').equals(1).toArray()).toHaveLength(1)
+    const row = await db.sessions.get(1)
+    expect(row?.notes).toBe('the real workout')
+    expect(new Date(row!.date).getTime()).toBe(new Date('2026-01-06').getTime())
+  })
+
+  it('entering the screen on a completed row drops the dead session and leaves', async () => {
+    await completedRow()
+    startSession(BENCH)
+    renderWorkout()
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    expect(workout.activeSession).toBeNull()
+  })
+
+  it('a skipped row is not resumable either', async () => {
+    await db.sessions.update(1, { status: 'skipped' })
+    startSession(BENCH)
+    renderWorkout()
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    expect(workout.activeSession).toBeNull()
+  })
+})
+
+// ─── F14 / F15: set mutations share a positional model ───────────────────────
+// `loggedSets[i]` is the set at position i of the plan, and a rollback says
+// "remove the last one". That is only true while one mutation is in flight.
+
+describe('Workout screen — overlapping set mutations', () => {
+  beforeEach(() => resetSaveFailures())
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    clearSession()
+    await drain()
+  })
+
+  const logButton = () => screen.getAllByRole('button', { name: /^LOG$/ })[0]
+
+  // Every logged set in the store claims a database row. One without an id is a
+  // set the database refused, which the rollback is supposed to have removed.
+  const assertStoreMatchesDb = async () => {
+    const rows = await db.sets.toArray()
+    expect(workout.loggedSets.every(s => s.id != null)).toBe(true)
+    expect(rows.map(r => r.setNumber).sort()).toEqual(workout.loggedSets.map(s => s.setNumber).sort())
+    expect(workout.currentSetIndex).toBe(workout.loggedSets.length)
+  }
+
+  it('a failed save does not pop a later successful one', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText('LOG')
+
+    vi.spyOn(db.sets, 'add').mockRejectedValueOnce(new Error('disk full'))
+    fireEvent.click(logButton())
+    fireEvent.click(logButton())
+    await drain()
+
+    await assertStoreMatchesDb()
+    expect(await db.sets.toArray()).toHaveLength(1)
+    expect(gaps()).toHaveLength(1)
+  })
+
+  it('an undo before the insert settles deletes the row it wrote', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText('LOG')
+
+    const realAdd = db.sets.add.bind(db.sets)
+    let release!: () => void
+    const held = new Promise<void>(r => { release = r })
+    vi.spyOn(db.sets, 'add').mockImplementationOnce(async (data) => {
+      await held
+      return realAdd(data)
+    })
+
+    fireEvent.click(logButton())
+    await waitFor(() => expect(workout.loggedSets).toHaveLength(1))
+
+    fireEvent.click(await screen.findByText('undo'))
+    await screen.findByText('undo set?')
+    fireEvent.click(screen.getByText('yes'))
+    release()
+    await drain()
+
+    expect(await db.sets.toArray()).toHaveLength(0)
+    expect(workout.loggedSets).toHaveLength(0)
+    expect(workout.currentSetIndex).toBe(0)
+  })
+
+  it('finishing waits for a set still being written', async () => {
+    startSession(BENCH)
+    renderWorkout()
+    await screen.findByText('LOG')
+
+    const realAdd = db.sets.add.bind(db.sets)
+    let release!: () => void
+    const held = new Promise<void>(r => { release = r })
+    vi.spyOn(db.sets, 'add').mockImplementationOnce(async (data) => {
+      await held
+      return realAdd(data)
+    })
+
+    fireEvent.click(logButton())
+    await waitFor(() => expect(workout.loggedSets).toHaveLength(1))
+    fireEvent.click(getFinishButton())
+
+    // The session must not be marked completed while the set is still in flight.
+    await drain()
+    expect((await db.sessions.get(1))?.status).toBe('pending')
+
+    release()
+    await waitFor(async () => expect((await db.sessions.get(1))?.status).toBe('completed'))
+    expect(await db.sets.toArray()).toHaveLength(1)
+  })
+})
+
+describe('Workout screen — a retry belongs to the session that produced it', () => {
+  beforeEach(() => resetSaveFailures())
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    clearSession()
+    await drain()
+  })
+
+  const failOneLog = async () => {
+    renderWorkout()
+    await screen.findByText('LOG')
+    vi.spyOn(db.sets, 'add').mockRejectedValueOnce(new Error('disk full'))
+    fireEvent.click(screen.getAllByRole('button', { name: /^LOG$/ })[0])
+    await screen.findByRole('alert')
+  }
+
+  it('a failure from another session is not offered for retry here', async () => {
+    startSession(BENCH)
+    await failOneLog()
+    expect(gaps()).toHaveLength(1)
+
+    // Move to a different session — the gap record outlives it, the banner does not.
+    const other = await db.sessions.add({
+      cycleId: 1, liftId: 1, week: 2, date: new Date(), notes: null, status: 'pending',
+    })
+    startSession({ ...BENCH, id: other, week: 2 })
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(gaps()).toHaveLength(1)
+  })
+
+  it('the retry itself refuses to write into a session other than its own', async () => {
+    startSession(BENCH)
+    await failOneLog()
+    const failure = failures()[0]
+    expect(failure.retry).toBeDefined()
+
+    const other = await db.sessions.add({
+      cycleId: 1, liftId: 1, week: 2, date: new Date(), notes: null, status: 'pending',
+    })
+    startSession({ ...BENCH, id: other, week: 2 })
+
+    // Held from before the switch, the way the banner holds it. Replaying the
+    // positional handler used to read the live session and write the old set
+    // into the new one.
+    await failure.retry!()
+
+    expect(await db.sets.toArray()).toHaveLength(0)
+  })
+
+  it('withdraws RETRY once the slot it refers to has been logged by hand', async () => {
+    startSession(BENCH)
+    await failOneLog()
+    expect(screen.queryByRole('button', { name: 'RETRY' })).toBeTruthy()
+
+    // The user logs the set again themselves. Replaying the old handler now
+    // would duplicate that slot and misassign its database id.
+    fireEvent.click(screen.getAllByRole('button', { name: /^LOG$/ })[0])
+    await waitFor(() => expect(workout.loggedSets).toHaveLength(1))
+
+    expect(screen.queryByRole('button', { name: 'RETRY' })).toBeNull()
+    await drain()
+    expect(await db.sets.toArray()).toHaveLength(1)
   })
 })

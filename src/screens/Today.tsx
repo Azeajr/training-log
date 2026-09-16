@@ -1,16 +1,20 @@
 import { createSignal, createResource, onMount, Show, For } from 'solid-js'
 import { useNavigate, A } from '@solidjs/router'
 import { db } from '../db/index'
-import type { Lift, Session } from '../types/domain'
-import { workout, startSession, clearSession, addAccessory, toActiveAccessory } from '../store/workout-store'
+import type { Lift } from '../types/domain'
+import { workout, startSession, resumeSession, clearSession, addAccessory, toActiveAccessory } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, calcCrossSets, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSessionAdvancingIfDone } from '../lib/cycle'
-import { discardPendingSession, reconcileActiveSession } from '../lib/session'
+import {
+  discardPendingSession, hydrateSessionState, reconcileActiveSession, startOrResumePendingSession,
+} from '../lib/session'
 import { getCurrentTm } from '../lib/training-max'
 import { getAssistanceDefaults, getAssistanceDefaultPicks, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSection } from '../lib/assistance'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
+import { useSingleFlight } from '../hooks/use-single-flight'
+import { showToast } from '../store/toast-store'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
@@ -42,8 +46,30 @@ export default function Today() {
   const [showFullSession, setShowFullSession] = createSignal(false)
   onMount(() => { void load() })
 
-  const loadAssistanceDefaults = async (liftId: number) => {
-    setAssistanceDefaults(await getAssistanceDefaults(db, liftId))
+  // Everything about a lift that has to be fetched: its training max and its
+  // assistance defaults. Both are async, and publishing whatever landed last
+  // let a slow earlier selection overwrite a newer one — a zero-TM Deadlift
+  // result arriving after Bench was chosen disabled Bench and showed Deadlift's
+  // assistance under Bench's name (F17). Each call takes a generation and
+  // publishes only while it is still the current one.
+  let selectionGeneration = 0
+  const [liftDetail, setLiftDetail] = createSignal<'loading' | 'ready'>('loading')
+
+  const loadLiftDetail = async (liftId: number) => {
+    const generation = ++selectionGeneration
+    setLiftDetail('loading')
+    // Cleared, not left standing: the previous lift's training max under the new
+    // lift's name is a wrong number, which is worse than no number.
+    setTm(0)
+    setAssistanceDefaults({})
+    const [weight, defaults] = await Promise.all([
+      getCurrentTm(db, liftId),
+      getAssistanceDefaults(db, liftId),
+    ])
+    if (generation !== selectionGeneration) return
+    setTm(weight)
+    setAssistanceDefaults(defaults)
+    setLiftDetail('ready')
   }
 
   const load = async () => {
@@ -65,64 +91,95 @@ export default function Today() {
     })
     setWeekStatuses(statuses)
 
-    setTm(await getCurrentTm(db, next.liftId))
-    await loadAssistanceDefaults(next.liftId)
+    await loadLiftDetail(next.liftId)
 
     setLoading(false)
   }
 
   const handleSelectLift = async (liftId: number) => {
     setSelectedLiftId(liftId)
-    setTm(await getCurrentTm(db, liftId))
-    await loadAssistanceDefaults(liftId)
+    await loadLiftDetail(liftId)
   }
 
   const launchSession = async () => {
     const selId = selectedLiftId()
     if (!selId) return
+    // Validate the captured target inside the operation. START is enabled from
+    // a training max read when the lift was selected, and another tab — or a
+    // destructive import — can take it away in between. Starting anyway would
+    // build the whole session off a TM of 0 (F17).
+    if (await getCurrentTm(db, selId) <= 0) {
+      showToast('No training max for that lift — set one in Settings first.')
+      await loadLiftDetail(selId)
+      return
+    }
+
     const existing = await db.sessions
       .where('cycleId').equals(currentCycleId())
       .filter(s => s.liftId === selId && s.week === currentWeek())
       .toArray()
-    const pending = existing.find(s => s.status === 'pending')
 
-    let session: Session
-    if (pending) {
-      session = pending
-    } else {
-      // No pending row but the lift already has history this week: starting
-      // again is a redo. The new pending row reopens the lift's week
-      // (weekComplete counts any pending row as work owed), so confirm instead
-      // of silently un-completing the day.
-      if (existing.length > 0) {
-        const name = lifts().find(l => l.id === selId)?.name ?? 'This lift'
-        const done = existing.some(s => s.status === 'completed')
-        if (!await confirm(
-          `${name} ${done ? 'is already completed' : 'was skipped'} this week. Redo it as a new session?`,
-          { confirmLabel: 'REDO' }
-        )) return
-      }
-      const draft: Omit<Session, 'id'> = {
-        cycleId: currentCycleId(),
-        liftId: selId,
-        week: currentWeek(),
-        date: new Date(),
-        notes: null,
-        status: 'pending',
-      }
-      const id = await db.sessions.add(draft)
-      session = { ...draft, id }
+    // No pending row but the lift already has history this week: starting again
+    // is a redo. The new pending row reopens the lift's week (weekComplete
+    // counts any pending row as work owed), so confirm instead of silently
+    // un-completing the day. Asked before the transaction below, which is where
+    // the decision to create actually gets made — a concurrent start that lands
+    // first simply turns this into a resume.
+    if (existing.length > 0 && !existing.some(s => s.status === 'pending')) {
+      const name = lifts().find(l => l.id === selId)?.name ?? 'This lift'
+      const done = existing.some(s => s.status === 'completed')
+      if (!await confirm(
+        `${name} ${done ? 'is already completed' : 'was skipped'} this week. Redo it as a new session?`,
+        { confirmLabel: 'REDO' }
+      )) return
     }
-    startSession(session)
+
+    const { session, created } = await startOrResumePendingSession(db, {
+      cycleId: currentCycleId(),
+      liftId: selId,
+      week: currentWeek(),
+    })
+
+    if (created) {
+      startSession(session)
+    } else {
+      // Resuming a row the local store knows nothing about — a backup restore
+      // reaches this every time. Rebuild its saved sets and cursor rather than
+      // resetting to empty, which made a half-finished session look untouched
+      // and duplicated the sets already in the database (F18).
+      const state = await hydrateSessionState(db, session)
+      resumeSession(session, state)
+      if (state.restored) {
+        showToast('Picked up the sets already saved for this session. Assistance work is only saved once a session is completed.')
+      }
+    }
+
     // Seed each fixed slot from this lift's persisted default — the pick from
-    // last time (or from Today), until the user swaps it mid-session.
+    // last time (or from Today), until the user swaps it mid-session. A resumed
+    // session gets them too: its assistance picks were never written down.
     for (const pick of await getAssistanceDefaultPicks(db, selId)) {
       addAccessory(toActiveAccessory(pick, pick.section))
     }
     navigate('/workout')
   }
 
-  const handleStart = async () => {
+  // The RESUME banner's handler. Same reconciliation as START, because it is
+  // the same act: a stored session is only resumable while its row is still the
+  // live pending one. When it isn't, drop the dead ref and re-read the week —
+  // the banner disappears with it, so say why.
+  const handleResume = async () => {
+    const active = workout.activeSession
+    if (!active) return
+    if (await reconcileActiveSession(db, active)) {
+      navigate('/workout')
+      return
+    }
+    clearSession()
+    showToast('That session already finished.')
+    await load()
+  }
+
+  const runStart = async () => {
     const selId = selectedLiftId()
     if (!selId) return
     const active = workout.activeSession
@@ -145,8 +202,20 @@ export default function Today() {
       if (active.id) await discardPendingSession(db, active.id)
       clearSession()
     }
-    void launchSession()
+    // Awaited, not fired off: the single-flight guard below has to stay held
+    // until the session row actually exists, which is the whole window the
+    // second tap used to slip through.
+    await launchSession()
   }
+
+  // START is one operation from tap to navigation — abandon, redo confirmation,
+  // select-or-create, accessory seeding and all. Two taps before the insert
+  // settled both saw no pending session and both created one, and completing
+  // the active one left the hidden second attempt holding the week open (F16).
+  // The atomicity in startOrResumePendingSession covers a second tab; this
+  // covers the second tap, and disables the button while it is held.
+  const { busy: starting, guard } = useSingleFlight()
+  const handleStart = guard(runStart)
 
   const selectedLift = () => lifts().find(l => l.id === selectedLiftId())
   const main = () => selectedLift() ? calcMainSets(tm(), currentWeek(), settings.barWeight) : []
@@ -217,13 +286,17 @@ export default function Today() {
       fallback={<div class="p-4 md:p-8 font-mono text-muted text-sm tracking-widest uppercase">Loading…</div>}
     >
       <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
+        {/* A button, not a link: this is the second entry into a live session,
+            so it goes through the same reconciliation START does. As an <A> it
+            walked past that check straight into live workout controls over a
+            session the database had already finished (F13). */}
         <Show when={workout.activeSession}>
-          <A
-            href="/workout"
-            class="block border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-6"
+          <button
+            onClick={() => void handleResume()}
+            class="block w-full text-left border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-6"
           >
             &#9654; SESSION IN PROGRESS — RESUME
-          </A>
+          </button>
         </Show>
 
         <div class="md:grid md:grid-cols-2 md:gap-12 md:items-start">
@@ -253,13 +326,20 @@ export default function Today() {
           <div>
             <Show when={selectedLift()}>
               <Rule label={`${selectedLift()!.name} . TODAY`} class="text-muted mb-4" />
-              <Show when={tm() === 0}>
+              {/* Both branches wait for the selection to resolve. Neither "no
+                  training max" nor a set of numbers is true while the answer is
+                  still in flight, and the warning is the one that misleads —
+                  it names the lift it is wrong about. */}
+              <Show when={liftDetail() === 'loading'}>
+                <p class="text-muted text-xs uppercase tracking-widest mb-4">Loading…</p>
+              </Show>
+              <Show when={liftDetail() === 'ready' && tm() === 0}>
                 <p class="text-warn text-xs uppercase tracking-widest mb-4">
                   No training max set for {selectedLift()!.name} —{' '}
                   <A href="/settings" class="underline">add one in Settings</A> before starting.
                 </p>
               </Show>
-              <Show when={tm() > 0}>
+              <Show when={liftDetail() === 'ready' && tm() > 0}>
                 <Show when={topMain()}>
                   {top => (
                     <div class="mb-6">
@@ -351,7 +431,7 @@ export default function Today() {
               </Show>
               <button
                 onClick={() => void handleStart()}
-                disabled={tm() === 0}
+                disabled={liftDetail() === 'loading' || tm() === 0 || starting()}
                 class="mt-6 border border-accent text-accent px-6 py-4 font-mono w-full tracking-widest text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 START WORKOUT

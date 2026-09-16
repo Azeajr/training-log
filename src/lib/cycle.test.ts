@@ -791,6 +791,70 @@ describe('3-week cycle (hasDeloadWeek = false)', () => {
     const { advanced } = await advanceCycleIfComplete(db)
     expect(advanced).toBe(false)
   })
+
+  // F35. Retiring the sessions a cycle shrink orphans used to live only in
+  // Settings.handleCycleShapeChange, so `hasDeloadWeek: false` arriving by any
+  // other route (a backup import) left a live week-4 row stranded: never
+  // resumable (Today queries only the current cycle's next week), never shown
+  // (History drops non-completed rows), but still feeding the records panel.
+  const strandWeek4 = async () => {
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (let w = 1; w <= 3; w++) await addSessions(cycleId, w as 1 | 2 | 3, lifts)
+    const strandedId = await db.sessions.add({
+      cycleId, liftId: lifts[0].id!, week: 4, date: new Date(), notes: null, status: 'pending',
+    })
+    await db.sets.add({ sessionId: strandedId, type: 'main', setNumber: 1, weight: 185, reps: 5, isAmrap: false })
+    return { cycleId, strandedId }
+  }
+
+  it('advanceCycleIfComplete retires a week-4 row stranded by the 3-week setting', async () => {
+    await setNoDeload()
+    const { strandedId } = await strandWeek4()
+
+    const { advanced } = await advanceCycleIfComplete(db)
+
+    expect(advanced).toBe(true)
+    // Retired, not deleted: the sets the user actually lifted stay on the row.
+    expect((await db.sessions.get(strandedId))?.status).toBe('skipped')
+    expect(await db.sets.where('sessionId').equals(strandedId).toArray()).toHaveLength(1)
+  })
+
+  it('getNextSessionAdvancingIfDone retires the stranded row on the way through', async () => {
+    await setNoDeload()
+    const { strandedId } = await strandWeek4()
+
+    const next = await getNextSessionAdvancingIfDone(db)
+
+    expect(next.week).toBe(1)
+    expect((await db.sessions.get(strandedId))?.status).toBe('skipped')
+  })
+
+  it('retires a stranded row even when the cycle is nowhere near finishable', async () => {
+    // The cycle-advance path is not the only way here: week 3 is still owed, so
+    // nothing rolls over, and the week-4 row would sit pending indefinitely.
+    await setNoDeload()
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    for (let w = 1; w <= 2; w++) await addSessions(cycleId, w as 1 | 2, lifts)
+    const strandedId = await db.sessions.add({
+      cycleId, liftId: lifts[0].id!, week: 4, date: new Date(), notes: null, status: 'pending',
+    })
+
+    const next = await getNextSessionAdvancingIfDone(db)
+
+    expect(next.week).toBe(3)
+    expect(await db.cycles.toArray()).toHaveLength(1)
+    expect((await db.sessions.get(strandedId))?.status).toBe('skipped')
+  })
+
+  it('leaves the week-4 row alone while the deload week still exists', async () => {
+    const { strandedId } = await strandWeek4()   // deload ON — week 4 is real work
+    await advanceCycleIfComplete(db)
+    expect((await db.sessions.get(strandedId))?.status).toBe('pending')
+  })
 })
 
 // ─── advanceCycleIfComplete — doublingCandidates ──────────────────────────────

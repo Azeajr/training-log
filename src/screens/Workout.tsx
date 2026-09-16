@@ -14,7 +14,8 @@ import { composeAllSets, amrapTargetsFor } from '../lib/workout-compose'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
 import { advanceCycleIfComplete, getRecentWorkingSets, deloadTms, applyCycleDoubling } from '../lib/cycle'
-import { discardPendingSession } from '../lib/session'
+import { discardPendingSession, finalizePendingSession, reconcileActiveSession } from '../lib/session'
+import { createSerialQueue } from '../lib/serial-queue'
 import { detectPRs } from '../lib/pr'
 import { getCurrentTm, setTm } from '../lib/training-max'
 import { settings } from '../store/settings-store'
@@ -189,25 +190,33 @@ export default function Workout() {
   const loadData = async () => {
     const session = workout.activeSession
     if (!session) return
-    // Guard the dangling-row case: an exit that deleted the session but crashed
-    // before clearSession ran leaves the store pointing at a gone id. Logging
-    // into it would insert child rows with no parent (no FK), silently orphaned.
-    // A completed-but-present row is left alone — the EXIT/COMPLETE handlers
-    // already guard it, and the post-complete modal flow legitimately still
-    // holds it. Fetched in parallel with the lift so the check adds no latency
-    // before setLift (the action bar is live before loadData finishes).
+    // Reconcile on route entry. Two ways the store outlives its row: an exit
+    // that deleted the session but crashed before clearSession ran leaves it
+    // pointing at a gone id (logging into that would insert child rows with no
+    // parent — no FK, silently orphaned), and a kill during the post-complete
+    // modal chain leaves it pointing at a row the database already finished.
+    // Neither is resumable, so drop the dead ref rather than render live
+    // controls over it (F13).
+    //
+    // This does not disturb the live post-complete flow: that chain never
+    // reassigns `workout.activeSession`, so this effect does not re-run while
+    // the modals are up. It fires on a genuine mount — which is exactly the
+    // moment the session is over and there is nothing here to resume.
+    //
+    // Fetched in parallel with the lift so the check adds no latency before
+    // setLift (the action bar is live before loadData finishes).
     // `exercises` is fetched up here, with the session and lift, rather than on
     // the last await below. It depends on nothing ahead of it, and every
     // accessory row needs it to know whether it logs reps, time or distance —
     // `workout.activeAccessories` is hydrated synchronously from localStorage,
     // so it renders long before a late fetch would land (F56).
-    const [sessionRow, l, exerciseRows] = await Promise.all([
-      session.id ? db.sessions.get(session.id) : Promise.resolve(undefined),
+    const [liveRow, l, exerciseRows] = await Promise.all([
+      session.id ? reconcileActiveSession(db, session) : Promise.resolve(null),
       db.lifts.get(session.liftId),
       db.exercises.toArray(),
     ])
     setExercises(exerciseRows)
-    if (session.id && !sessionRow) {
+    if (session.id && !liveRow) {
       clearSession()
       navigate('/today')
       return
@@ -297,22 +306,36 @@ export default function Workout() {
     noun: 'set' | 'edit',
     describe: string,
     retry: () => Promise<void>,
+    // Whether replaying `retry` would still mean what it meant here. Bound to
+    // the session that produced the failure, and to the set — both can be
+    // superseded while the banner is up.
+    retryApplies: () => boolean,
   ) => {
     const message = err instanceof Error ? err.message : 'unknown error'
     showToast(`Failed to save ${noun}: ${message}`)
     const sessionId = workout.activeSession?.id
     if (sessionId == null) return
-    recordSaveFailure({ sessionId, describe, message, retry })
+    recordSaveFailure({ sessionId, describe, message, retry, retryApplies })
   }
 
-  const handleDeleteSet = async () => {
+  // Every set mutation — log, edit, undo, on the linear list and on the cross
+  // blocks alike — runs through one queue, in tap order. These share a
+  // positional model: `loggedSets[i]` is the set at position i of the plan, and
+  // a rollback says "remove the last one", which is only true while one
+  // mutation is in flight. Overlapping them let a failed earlier save pop a
+  // later successful one, and let an undo run against a row whose insert had
+  // not returned its id yet — removing nothing from the database and leaving
+  // the row behind with no store entry (F14).
+  const setMutations = createSerialQueue()
+
+  const handleDeleteSet = () => setMutations.run(async () => {
     const sets = workout.loggedSets
     const lastSet = sets[sets.length - 1]
     if (!lastSet) return
     if (lastSet.id) await db.sets.delete(lastSet.id)
     deleteLastSet()
     rebuildAllSets()
-  }
+  })
 
   const isPrCandidate = (type: string, weight: number, reps: number): boolean =>
     type !== 'warmup' && reps >= 1 && weight > 0
@@ -343,10 +366,14 @@ export default function Workout() {
     }
   }
 
-  const handleLog = async (setIndex: number, reps: number, weight: number) => {
+  const handleLog = (setIndex: number, reps: number, weight: number) =>
+    setMutations.run(() => logSetAt(setIndex, reps, weight))
+
+  const logSetAt = async (setIndex: number, reps: number, weight: number) => {
     const s = allSets()[setIndex]
+    const sessionId = workout.activeSession!.id!
     const setData = {
-      sessionId: workout.activeSession!.id!,
+      sessionId,
       type: s.type,
       setNumber: s.setNumber,
       weight,
@@ -370,8 +397,20 @@ export default function Workout() {
       // Toast for the glance, banner for the record. Retry replays the same
       // handler, so a success walks the full path (advance, PR check, rest)
       // exactly as if the first attempt had worked.
+      //
+      // It is bound to this session and this slot, though. The rollback puts
+      // the cursor back to `setIndex`, so while it is still there the slot is
+      // the same one. Once the user exits into another session, or logs that
+      // set by hand, replaying the positional handler would duplicate the slot,
+      // advance the cursor wrongly and misassign the row's id (F15).
+      const applies = () =>
+        workout.activeSession?.id === sessionId && workout.currentSetIndex === setIndex
       reportSaveFailure(err, 'set', `${setLabel(s.type)} set ${s.setNumber} · ${weight}lb × ${reps}`,
-        () => handleLog(setIndex, reps, weight))
+        // Guarded inside the closure as well as outside it: the banner hides an
+        // inapplicable retry, but the callback is held by whoever recorded it
+        // and must refuse on its own terms.
+        async () => { if (applies()) await handleLog(setIndex, reps, weight) },
+        applies)
       return
     }
 
@@ -386,7 +425,11 @@ export default function Workout() {
     startRest(restTypeAfterSet(reps, s.reps))
   }
 
-  const handleEdit = async (setIndex: number, reps: number, weight: number) => {
+  const handleEdit = (setIndex: number, reps: number, weight: number) =>
+    setMutations.run(() => editSetAt(setIndex, reps, weight))
+
+  const editSetAt = async (setIndex: number, reps: number, weight: number) => {
+    const sessionId = workout.activeSession?.id
     const prev = workout.loggedSets[setIndex]
     if (!prev) return
     // Snapshot before editSet: `prev` is a store proxy, so it reflects the
@@ -398,8 +441,14 @@ export default function Workout() {
       await db.sets.update(id, { reps, weight })
     } catch (err) {
       editSet(setIndex, { reps: prevReps, weight: prevWeight })
+      // An edit's identity is the row it edits, which is immutable — so the
+      // retry finds that row again by id rather than trusting the position it
+      // had when the edit failed.
+      const rowIndex = () => workout.loggedSets.findIndex(s => s.id === id)
+      const applies = () => workout.activeSession?.id === sessionId && rowIndex() !== -1
       reportSaveFailure(err, 'edit', `Edit to ${setLabel(type)} set ${setNumber} · ${weight}lb × ${reps}`,
-        () => handleEdit(setIndex, reps, weight))
+        async () => { if (applies()) await handleEdit(rowIndex(), reps, weight) },
+        applies)
       return
     }
     // Editing the supplemental source set's weight re-cascades the pending
@@ -423,13 +472,19 @@ export default function Workout() {
   // Cross-lift supplemental logs independently of the linear set cursor: it
   // writes to its own store array and the same db.sets table (type 'cross'),
   // never touching currentSetIndex. Mirrors handleLog's optimistic add + rollback.
-  const handleLogCross = async (
+  const handleLogCross = (
+    section: { block: LoadedCrossBlock; sets: CrossSet[] },
+    localIdx: number, reps: number, weight: number,
+  ) => setMutations.run(() => logCrossSetAt(section, localIdx, reps, weight))
+
+  const logCrossSetAt = async (
     section: { block: LoadedCrossBlock; sets: CrossSet[] },
     localIdx: number, reps: number, weight: number,
   ) => {
     const s = section.sets[localIdx]
+    const sessionId = workout.activeSession!.id!
     const setData = {
-      sessionId: workout.activeSession!.id!,
+      sessionId,
       type: 'cross' as const,
       setNumber: s.setNumber,
       weight,
@@ -448,8 +503,14 @@ export default function Workout() {
     } catch (err) {
       deleteLastCrossSetFor(section.block.movementLiftId)
       setCrossSets(prevCross)
+      // A cross block has its own cursor: how many of its sets are logged. The
+      // rollback puts it back to `localIdx`, and while it is still there this
+      // retry refers to the same slot.
+      const applies = () => workout.activeSession?.id === sessionId
+        && workout.loggedCrossSets.filter(c => c.liftId === section.block.movementLiftId).length === localIdx
       reportSaveFailure(err, 'set', `${section.block.movementName} set ${s.setNumber} · ${weight}lb × ${reps}`,
-        () => handleLogCross(section, localIdx, reps, weight))
+        async () => { if (applies()) await handleLogCross(section, localIdx, reps, weight) },
+        applies)
       return
     }
     if (isPrCandidate(setData.type, weight, reps)) {
@@ -458,9 +519,14 @@ export default function Workout() {
     startRest(restTypeAfterSet(reps, s.reps))
   }
 
-  const handleEditCross = async (
+  const handleEditCross = (
+    section: { block: LoadedCrossBlock }, localIdx: number, reps: number, weight: number,
+  ) => setMutations.run(() => editCrossSetAt(section, localIdx, reps, weight))
+
+  const editCrossSetAt = async (
     section: { block: LoadedCrossBlock }, localIdx: number, reps: number, weight: number,
   ) => {
+    const sessionId = workout.activeSession?.id
     const liftId = section.block.movementLiftId
     const matches: number[] = []
     workout.loggedCrossSets.forEach((s, i) => { if (s.liftId === liftId) matches.push(i) })
@@ -475,12 +541,19 @@ export default function Workout() {
     } catch (err) {
       editCrossSet(absIdx, { reps: prevReps, weight: prevWeight })
       rebuildAllSets()
+      // Same as the linear edit: the row id is the identity, so the retry
+      // re-finds its position within the block rather than trusting the old one.
+      const blockIndex = () => workout.loggedCrossSets
+        .filter(s => s.liftId === liftId)
+        .findIndex(s => s.id === id)
+      const applies = () => workout.activeSession?.id === sessionId && blockIndex() !== -1
       reportSaveFailure(err, 'edit', `Edit to ${section.block.movementName} set ${localIdx + 1} · ${weight}lb × ${reps}`,
-        () => handleEditCross(section, localIdx, reps, weight))
+        async () => { if (applies()) await handleEditCross(section, blockIndex(), reps, weight) },
+        applies)
     }
   }
 
-  const handleDeleteCross = async (section: { block: LoadedCrossBlock }) => {
+  const handleDeleteCross = (section: { block: LoadedCrossBlock }) => setMutations.run(async () => {
     const liftId = section.block.movementLiftId
     const logged = workout.loggedCrossSets.filter(s => s.liftId === liftId)
     const last = logged[logged.length - 1]
@@ -488,7 +561,7 @@ export default function Workout() {
     if (last.id) await db.sets.delete(last.id)
     deleteLastCrossSetFor(liftId)
     rebuildAllSets()
-  }
+  })
 
   const handleAddJoker = () => {
     const jokerReps = JOKER_MIN_REPS[workout.activeSession!.week] ?? 5
@@ -572,6 +645,10 @@ export default function Workout() {
     if (finishing()) return
     setFinishing(true)
     try {
+      // Let any set still being written land first. COMPLETE reads the store's
+      // accessories and flips the session's status, and a set whose insert is
+      // still in flight would either miss that or land after it (F14).
+      await setMutations.idle()
       await fn()
     } finally {
       setFinishing(false)
@@ -603,11 +680,31 @@ export default function Workout() {
     const notesToSave = workout.activeAccessories
       .filter(acc => acc.notes?.trim())
       .map(acc => ({ sessionId, exerciseId: acc.exerciseId, notes: acc.notes!.trim() }))
-    await db.transaction(async () => {
-      await db.sessions.update(sessionId, { status: 'completed', notes: workout.notes, date: new Date() })
-      if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
-      if (notesToSave.length > 0) await db.accessoryNotes.bulkAdd(notesToSave)
-    })
+    // Status-conditional, so a resurrected store cannot complete a session the
+    // database already finished: that appended a second copy of every accessory
+    // set and overwrote the date and notes saved the first time (F13).
+    const applied = await finalizePendingSession(
+      db, sessionId,
+      { status: 'completed', notes: workout.notes, date: new Date() },
+      async () => {
+        if (toSave.length > 0) await db.accessorySets.bulkAdd(toSave)
+        if (notesToSave.length > 0) await db.accessoryNotes.bulkAdd(notesToSave)
+      },
+    )
+    if (!applied) {
+      const row = await db.sessions.get(sessionId)
+      if (row?.status !== 'completed') {
+        // Gone, or skipped out from under us. Nothing to finish.
+        showToast('That session is no longer active.')
+        clearSession()
+        navigate('/today')
+        return
+      }
+      // Already completed. The save is done and must not be replayed, but the
+      // phase that follows it — the accessory and lift TM prompts, the cycle
+      // roll-up — is exactly what a kill during the modal chain interrupts.
+      // Fall through and offer it again; each of those steps guards itself.
+    }
     // Accessory training maxes are asked about, not assumed — a weight dialled
     // in mid-set is a per-set decision until the whole slate says otherwise.
     const accRecs = getAccessoryTmRecommendations(workout.activeAccessories)
@@ -634,7 +731,16 @@ export default function Workout() {
     if (!await confirm('Skip this lift?', { destructive: true, confirmLabel: 'SKIP' })) return
     const session = workout.activeSession
     if (!session?.id) return
-    await db.sessions.update(session.id, { status: 'skipped' })
+    // Only a pending attempt can be skipped. Rewriting a completed row as
+    // 'skipped' would drop a finished workout out of History — the store says
+    // 'pending' for the whole post-complete modal chain, so a kill there is all
+    // it takes to arrive holding one (F13).
+    if (!await finalizePendingSession(db, session.id, { status: 'skipped' })) {
+      showToast('That session already finished — nothing to skip.')
+      clearSession()
+      navigate('/today')
+      return
+    }
     await finishSession()
   })
 
@@ -812,7 +918,7 @@ export default function Workout() {
           />
         </button>
 
-        <SaveFailureBanner />
+        <SaveFailureBanner sessionId={workout.activeSession!.id} />
 
         <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start mb-6">
           <CollapsibleSection
