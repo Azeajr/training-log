@@ -191,6 +191,101 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F100 | Low | — | — | `src/lib/cycle.ts` | `open` | — | **Noted during C1, not fixed.** `deloadTms` cannot be made idempotent: it is relative (`weight × 0.9` of whatever is current) and nothing records that a training-max row came from a deload rather than from the user, so the library cannot distinguish a second tap from a second cycle's deload. Its only guard is single-flight at the modal, which is now in place. A real fix needs the `source` provenance column **F39** asks for; folding these two together is the cheaper path. |
 | F101 | Low | — | C1 | `src/db/schema.ts` | `open` | — | **Noted while fixing F41.** `idx_exercises_name_nocase` is an additive migration, and migrations run inside a swallowed try/catch — deliberately, so a DB holding duplicates still boots. The consequence is that exactly those installs silently keep no uniqueness guarantee, and nothing tells them. Reconcile duplicate exercise names on import and at migration time (merge or suffix), then create the index, so the invariant holds everywhere rather than only where it happened to already hold. |
 
+## Remaining work, batched
+
+All seven clusters (C1–C7) are closed. What is left is individually rooted, so
+these batches group by **what a fix would touch**, not by a shared root cause.
+Every `open` finding belongs to exactly one batch — `batches.test.ts` fails if
+that stops being true, so a new finding cannot quietly land outside the plan.
+
+Batch membership is a judgement call and is meant to be revised; the partition
+being *complete* is not.
+
+| # | Batch | n | High | Groups because |
+|---|---|---|---|---|
+| 1 | The gate | 9 | 0 | The things that cannot currently see the code |
+| 2 | Destructive paths | 8 | **2** | Silent data loss and missing cascades |
+| 3 | Session lifecycle | 7 | **4** | The interlocking Today↔Workout story |
+| 4 | calc numerics | 9 | 0 | Pure functions, one file |
+| 5 | Async read identity | 5 | 0 | The same shape as F63, already solved once |
+| 6 | Config and assets | 6 | 0 | Build, PWA and repo hygiene |
+| 7 | Remainder | 12 | 0 | Genuinely individual |
+
+**Order: 2 → 1 → 3 → 4 → 5 → 6 → 7.**
+
+Not 1 first, despite the case for it. F01 and F07 destroy user data *today* and
+are small and isolated — putting a nine-finding infrastructure batch ahead of
+them means a user loses history while the tooling gets fixed. And the gate is
+not actually blocking: each fix in this pass has been verified by a targeted
+failing test and by reverting the fix to confirm the test catches it. The gate
+matters for **regression over time**, not for per-fix confidence — important,
+not urgent.
+
+Batch 1 goes second, before the session lifecycle, because batch 3 is the
+riskiest work left and is the one place a working E2E suite and an honest
+coverage gate are worth having first.
+
+### 1 — The gate
+
+`F69` `F71` `F74` `F75` `F77` `F78` `F85` `F86` `F87`
+
+Coverage measures a third of the codebase; `tests/e2e/**` is type-checked by
+nothing; the E2E suite runs in no workflow and 6 of its 32 specs fail; the test
+double diverges from what it stands in for. No application behaviour changes.
+
+**F78 is the hard one** — the E2E suite is *structurally* bound to the dev
+server by `helpers.freshStart`'s `__e2eResetDb` hook, which is `import.meta.env.
+DEV`-only. Against a production build it never appears and every test hangs. A
+redesign (context-per-test reset, as `verify-notify-hardening.js` already does),
+not a config line.
+
+### 2 — Destructive paths
+
+`F01` `F07` `F44` `F45` `F94` `F98` `F99` `F101`
+
+**F01** (High): swap accessory B→C then A→B and save — a later card deletes B's
+just-saved sets and notes. **F07** (High): startup with fewer than four lifts
+deletes the survivors and re-creates defaults with new ids, orphaning the
+training maxes and session history that referenced them.
+
+With the cascade family (`F44`, `F99`), `seed.ts`'s non-atomic clear+bulkAdd
+(`F98`), the missing index the mid-set PR check scans (`F94`), and the
+duplicate-name reconcile that `idx_exercises_name_nocase` still needs (`F101`).
+
+### 3 — Session lifecycle
+
+`F13` `F14` `F15` `F16` `F17` `F18` `F35`
+
+Four High, and they interlock: resume reconciliation, session hydration, save
+ordering, retry identity, start single-flight, selection generation. The one
+batch that has to be a single coherent pass rather than scattered fixes.
+
+Depends on **F05** (transactions serialized), which has landed.
+
+### 4 — calc numerics
+
+`F24` `F25` `F26` `F27` `F28` `F29` `F30` `F31` `F32`
+
+Nine findings, pure functions, no UI. The cheapest per finding in the ledger.
+
+### 5 — Async read identity
+
+`F10` `F19` `F20` `F21` `F23`
+
+Late results published over newer ones, and loading states never re-entered —
+the same defect `F63` had. `RecordsPanel`'s request-token fix is the template.
+
+### 6 — Config and assets
+
+`F70` `F72` `F80` `F81` `F82` `F83`
+
+### 7 — Remainder
+
+`F09` `F11` `F12` `F39` `F40` `F46` `F48` `F50` `F53` `F68` `F88` `F100`
+
+Individually rooted. `F39` and `F100` are the pair worth doing together — both
+want the training-max provenance column.
+
 ## Open leads
 
 Leads L01–L05 and L07 resolved into findings; see `deep-code-review.md:245`.
