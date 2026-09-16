@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **59** |
+| `open` | **56** |
 | `wip` | 0 |
-| `fixed` | **40** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F41, F42, F47, F51, F52, F54, F55, F57, F63, F49, F56, F76, F84, F89, F90, F91, F92, F93, F58, F59, F60, F61, F64, F65, F66, F73, F79, F95, F96, F97 |
+| `fixed` | **43** — F02, F03, F04, F05, F06, F08, F22, F33, F34, F36, F37, F38, F41, F42, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F73, F76, F79, F84, F89, F90, F91, F92, F93, F95, F96, F97 |
 | `fixed-by` | **2** — F43 (reader half; F99 carries the rest), F62 (closed by F61) |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -30,10 +30,10 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | State | Means |
 |---|---|
-| `open` | Untouched. |
+| `open` | **56** |
 | `wip` | Being worked now. Not a claim of anything. |
-| `fixed` | Code changed **and** a named regression test exists **and** a commit SHA is recorded. All three, or the state is not `fixed`. |
-| `fixed-by` | Closed by another finding's fix. Evidence column names the owning ID. |
+| `fixed` | **43** — F02, F03, F04, F05, F06, F08, F22, F33, F34, F36, F37, F38, F41, F42, F47, F49, F51, F52, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F73, F76, F79, F84, F89, F90, F91, F92, F93, F95, F96, F97 |
+| `fixed-by` | **2** — F43 (reader half; F99 carries the rest), F62 (closed by F61) |
 | `wontfix` | Deliberate. The decision and its reason are written in Notes. |
 | `blocked` | The exact missing dependency is named in Notes. |
 
@@ -67,7 +67,7 @@ Seven root-cause patterns from `deep-code-review.md:38-53`. A finding can sit in
 | C3 | State seeded once and never re-synced, or re-synced over the user | F49 ✅, F54 ✅, F56 ✅, F63 ✅ — **cluster closed** | None — `DurationInput.tsx:18-23` is the counter-example done right |
 | C4 | Cleanup or a default bound to something that can stop existing | F57 ✅, F58 ✅, F62 ✅ — **cluster closed** | None — per-file fixes |
 | C5 | Uneven keyboard and screen-reader access | F59 ✅, F60 ✅, F61 ✅, F64 ✅ — **cluster closed** | None — in each case a neighbouring file did it correctly |
-| C6 | Unvalidated external data written to durable storage or trusted as control flow | F03, F08, F65, F66, F67 | **F65** for the service-worker half (F65/F66 are the same `response.ok` gate) |
+| C6 | Unvalidated external data written to durable storage or trusted as control flow | F03 ✅, F08 ✅, F65 ✅, F66 ✅, F67 ✅ — **cluster closed** | **F65** for the service-worker half (F65/F66 are the same `response.ok` gate) |
 | C7 | A change made and its description not updated | F76 ✅, F84 ✅, F89 ✅, F90 ✅, F91 ✅, F92 ✅, F93 ✅ — **cluster closed** | None — independent doc edits |
 
 ## Suggested order
@@ -91,12 +91,12 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 |---|---|---|---|---|---|---|---|
 | F01 | **High** | B03 | — | `src/screens/HistoryEdit.tsx` | `open` | — | — |
 | F02 | **High** | B01 | — | `src/db/sqlite.worker.ts` | `fixed` | `5358262` · `startup.test.ts` F02 case + browser probe | The worker already reported `persistent: false` correctly; nothing read it. Startup now treats it as an outcome the caller must handle and shows a blocking **STORAGE UNAVAILABLE** screen with RELOAD / CONTINUE WITHOUT SAVING — the explicit temporary-mode acknowledgement the finding asked for. Verified in a real browser by patching the built worker to report non-persistent. |
-| F03 | Medium | B04 | C6 | `src/lib/export-import.ts` | `open` | — | Settings allowlist drops `hasDeloadWeek: false`; pairs with F08. |
+| F03 | Medium | B04 | C6 | `src/lib/export-import.ts` | `fixed` | `fe36572` · `export-import.test.ts` ×2 | `hasDeloadWeek` added to the settings column allowlist. It survived neither export nor import, and the restored null defaults to **enabled** — silently turning a three-week cycle into a four-week one, which is the shape the whole program hangs off. Round-tripped both ways in the tests. |
 | F04 | **High** | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `5358262` · `rpc.test.ts` ×5, `startup.test.ts` ×6 | Worker `onerror`/`onmessageerror` now reject readiness and every pending call; `init` has a 30s deadline; a dead worker rejects later calls instead of queueing against it. `main.tsx` has a catch and renders a **COULDN'T START** screen with RETRY. Verified in a real browser by 404ing the worker script: the page reaches the error screen instead of sitting on LOADING. |
 | F05 | **High** | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `f3e2a6d` · `transaction.test.ts` ×3 | **Root cause was the inference, not the arithmetic.** A depth counter cannot tell a nested call from an unrelated concurrent one once the outer body has awaited. Fixed by removing the question: `transaction()` now serializes, and `bulkAdd` no longer opens one of its own, so nothing nests. `txDepth` deleted. |
 | F06 | Medium | B01 | — | `src/db/sqlite-client.ts` | `fixed` | `f3e2a6d` · `transaction.test.ts` ×2 | Deleted with the counter it corrupted — there is no depth to get stuck above zero. BEGIN now runs inside the queued turn, and the queue is handed on in a `finally` even when a caller never got a turn. |
 | F07 | **High** | B02 | — | `src/db/seed.ts` | `open` | — | — |
-| F08 | **High** | B04 | C6 | `src/lib/export-import.ts` | `open` | — | Envelope validation; precondition for F03/F28/F31/F41 import-restore paths. |
+| F08 | **High** | B04 | C6 | `src/lib/export-import.ts` | `fixed` | `fe36572` · `export-import.test.ts` ×4 | `validateImportShape` now establishes the file **is** a backup before anything destructive runs. It only inspected tables that were present, so a document carrying none of them passed completely and the import then cleared every table and restored nothing. Settings did ask for overwrite confirmation — about a file never established to be a backup. **One** recognised table is the bar, deliberately: a sparse or legacy backup still imports; a file with no recognised table at all does not. |
 | F09 | Medium | B04 | — | `src/lib/export-import.ts` | `open` | — | — |
 | F10 | Medium | B03 | — | `src/screens/HistoryEdit.tsx` | `open` | — | — |
 | F11 | Medium | B04 | — | `src/store/settings-store.ts` | `open` | — | — |
@@ -155,7 +155,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F64 | Low | B08 | C5 | `src/components/layout/Rule.tsx` | `fixed` | `26981f0` · `Rule.test.tsx` ×5 | The dash fill is wrapped in `aria-hidden` inside `Rule`, so all 16 call sites get it — the fix that had been applied once at a call site now lives in the component. `Modal` keeps its own `aria-hidden`, but for a different reason now: its `sr-only` heading is the `aria-labelledby` target, so without it the title is announced twice. |
 | F65 | **High** | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg F | **Amended — the stated impact never reproduced.** The missing `ok` check was real but masked by **F95**: the cache write never ran, so no 503 could poison anything. Repairing F95 alone would have activated this for real, so both landed in one change. Leg F asserts both halves. |
 | F66 | Medium | B09 | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg G | **The live half of the pair.** Reproduced exactly as written: a 502 enters the cache-first precache and is served from it thereafter. Cache-first, so it is never re-fetched. |
-| F67 | Medium <br><sub>needs device</sub> | B09 | C6 | `src/lib/notifications.ts` | `open` | — | Platform impact **needs a real iOS device**. Per project rule, do not claim verified without one. |
+| F67 | Medium <br><sub>needs device</sub> | B09 | C6 | `src/lib/notifications.ts` | `fixed` | `fe36572` · `notifications.test.ts` ×2 — **platform claim still unverified** | `firePage` wraps the constructor and falls back to `ServiceWorkerRegistration.showNotification`. Unwrapped, the `TypeError` escaped the timer tick uncaught: no notification, and nothing reporting that none fired — while this module designates the page as the **reliable** path. An explicit permission denial is still respected rather than routed around. **What is NOT settled:** whether the constructor actually is unavailable on Android Chrome or in an iOS PWA. That needs a real device (installed PWA, permission granted, tab hidden, one rest bell) and this machine cannot answer it, per the project rule on mobile claims. The fallback is correct either way; the severity is not established. |
 | F68 | Low | B09 | — | `src/workers/timer.worker.ts` | `open` | — | — |
 | F69 | Medium | B10 | — | `vite.config.ts` | `open` | — | B12: scope is documented at `.claude/QUICK_START.md:22`. Known state — decide fix vs wontfix. |
 | F70 | Medium <br><sub>needs Lighthouse</sub> | B10 | — | `vite.config.ts` | `open` | — | Conditional severity; installability impact worth a Lighthouse check. |

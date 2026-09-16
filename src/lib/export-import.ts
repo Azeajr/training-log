@@ -102,7 +102,10 @@ const COLS = {
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],
   accessoryNotes: ['id', 'sessionId', 'exerciseId', 'notes'],
   assistanceDefaults: ['id', 'liftId', 'section', 'exerciseId'],
-  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications'],
+  // `hasDeloadWeek` belongs here: it was missing, so an import dropped it and
+  // the restored null defaulted to enabled — silently turning a three-week
+  // cycle into a four-week one, which is the shape the whole program hangs off.
+  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek'],
 } as const
 
 // Reject malformed table payloads BEFORE the destructive clear. Without this,
@@ -112,6 +115,26 @@ const COLS = {
 // import "succeeded". Duplicate ids surfaced as a raw UNIQUE-constraint SQL
 // error. SQLite coerces numeric-string rowids, so ids are compared as strings.
 function validateImportShape(d: Record<string, unknown>): void {
+  // Establish that this IS a backup before anything destructive runs. The loop
+  // below only inspects tables that are present, so a document carrying none of
+  // them — an unrelated JSON file, or an empty object — passed validation
+  // completely, and the import then cleared every table and restored nothing.
+  // Settings does ask the user to confirm an overwrite, but it was asking about
+  // a file never established to be a backup at all.
+  //
+  // One recognised table is the bar, deliberately: a backup taken before a
+  // later table existed is still a backup, and a legacy file must keep
+  // importing. What is rejected is a file with no recognised table at all.
+  const present = (Object.keys(COLS) as (keyof typeof COLS)[]).filter(
+    (name) => d[name] != null,
+  )
+  if (present.length === 0) {
+    throw new Error(
+      'Invalid backup: no recognised tables. Expected a training-log export ' +
+        `containing at least one of: ${Object.keys(COLS).join(', ')}.`,
+    )
+  }
+
   for (const name of Object.keys(COLS) as (keyof typeof COLS)[]) {
     const rows = d[name]
     if (rows == null) continue

@@ -93,9 +93,44 @@ function isPageHidden(): boolean {
   return typeof document !== 'undefined' && document.hidden
 }
 
+/**
+ * Fire through the service-worker registration. The page constructor is not the
+ * supported path everywhere — notably it is unavailable in several mobile
+ * contexts — and this module designates the page as the RELIABLE path, so
+ * without a fallback the reliability story inverts on exactly the platform this
+ * PWA targets (F67).
+ *
+ * `navigator.serviceWorker.ready` rather than `.controller`: a page that is not
+ * yet controlled (a first load, or a hard reload) still has a registration, and
+ * this is the last resort — it should not also require control.
+ */
+function fireViaRegistration(title: string, body: string, tag: string): void {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  void navigator.serviceWorker.ready
+    .then((reg) => reg.showNotification(title, { body, tag, requireInteraction: false }))
+    .catch(() => {
+      // Best effort by definition: there is nothing left to fall back to, and a
+      // missed nudge must not take the rest timer down with it.
+    })
+}
+
 function firePage(title: string, body: string, tag: string): void {
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
-  new Notification(title, { body, tag, requireInteraction: false })
+  // No page constructor at all: there is no permission to read here, so leave
+  // that judgement to the registration, which enforces it itself.
+  if (typeof Notification === 'undefined') {
+    fireViaRegistration(title, body, tag)
+    return
+  }
+  // An explicit denial is a decision, not a failure — do not route around it.
+  if (Notification.permission !== 'granted') return
+  try {
+    new Notification(title, { body, tag, requireInteraction: false })
+  } catch {
+    // The constructor exists but the engine refuses it ("Illegal constructor").
+    // Unwrapped, this TypeError escaped the timer tick uncaught: no
+    // notification, and nothing in the module reporting that none had fired.
+    fireViaRegistration(title, body, tag)
+  }
 }
 
 function scheduleSw(targets: NotifyTarget[]): void {
