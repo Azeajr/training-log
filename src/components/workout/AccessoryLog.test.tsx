@@ -47,3 +47,43 @@ describe('AccessoryLog duration inputs (F59)', () => {
     expect(new Set(names).size).toBe(names.length)
   })
 })
+
+// ── F62 ─────────────────────────────────────────────────────────────────────
+// InlineConfirm only calls stopPropagation when the optional prop is set, and
+// AccessoryLog did not set it — while the SetReadout it sits inside had onClick
+// on its root. The first tap on "undo" therefore bubbled: the row swapped to
+// the edit form, which unmounted the InlineConfirm before its "undo set?"
+// confirmation ever rendered. The control was functionally dead, so
+// deleteLastAccessorySet had no reachable caller in the UI.
+describe('AccessoryLog undo control (F62)', () => {
+  const withLogged = () => render(() => (
+    <AccessoryLog
+      accessory={accessory([
+        { setNumber: 1, weight: 20, reps: 10, duration: null, distance: null },
+      ])}
+      exercise={{ id: 1, name: 'Plank', type: 'reps', category: 'core' }}
+    />
+  ))
+
+  it('shows the confirmation instead of opening the editor', async () => {
+    withLogged()
+    const undo = screen.getByRole('button', { name: /Undo last Plank set/ })
+    fireEvent.click(undo)
+    await Promise.resolve()
+
+    expect(screen.getByText('undo set?')).toBeInTheDocument()
+    // The row must not have swapped to the edit form underneath it — that is
+    // what unmounted the InlineConfirm before its confirmation could render.
+    // The logged-set readout is still a readout, not an editor.
+    expect(screen.getByRole('button', { name: /Set 1:/ })).toBeInTheDocument()
+  })
+
+  it('keeps the undo control reachable after cancelling', async () => {
+    withLogged()
+    fireEvent.click(screen.getByRole('button', { name: /Undo last Plank set/ }))
+    await Promise.resolve()
+    fireEvent.click(screen.getByRole('button', { name: /^No, keep/ }))
+    await Promise.resolve()
+    expect(screen.getByRole('button', { name: /Undo last Plank set/ })).toBeInTheDocument()
+  })
+})
