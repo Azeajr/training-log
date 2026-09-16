@@ -27,21 +27,29 @@ src/
 │                                 #   collapsible groups (PROGRAM/TRAINING/EQUIPMENT/APP/DATA) with a
 │                                 #   sticky jump row; every irreversible action lives in DATA
 │
-├── components/
-│   ├── layout/                   # BottomNav (4 tabs), Toast, Rule (`--- LABEL ---`), SectionLabel
+├── components/                   # inventories below are the directory contents — regenerate with
+│                                 #   `ls src/components/<dir>/*.tsx`, do not hand-edit
+│   ├── layout/                   # BottomNav (4 tabs), Rule (`--- LABEL ---`), SectionLabel,
+│   │                             #   SubLabel, Toast, WeekBadge
 │   ├── stats/                    # RecordsPanel — records + TM progression; whole roster, or one
 │   │                             #   lift in `compact` form for History's by-lift header
-│   ├── modals/                   # ConfirmationDialog (wired to use-confirmation), CycleCompleteModal
-│   │                             #   (old → new TMs + STRONG CYCLE doubling), TmRecommendationModal,
-│   │                             #   AccessoryTmModal (post-session accessory TM prompts),
-│   │                             #   LiftSetupModal (TM, increment, equipment, cross blocks)
+│   ├── modals/                   # Modal (the shared dialog shell — owns the focus trap, Escape and
+│   │                             #   the `busy` guard; every modal below is built on it),
+│   │                             #   ModalAsyncStates (loading/error/empty ladder),
+│   │                             #   ConfirmationDialog (wired to use-confirmation),
+│   │                             #   CycleCompleteModal (old → new TMs + STRONG CYCLE doubling),
+│   │                             #   TmRecommendationModal, AccessoryTmModal (post-session accessory
+│   │                             #   TM prompts), LiftSetupModal (TM, increment, equipment, cross
+│   │                             #   blocks), ExerciseHistoryModal, LiftHistoryModal
 │   ├── forms/                    # Stepper, DurationInput, PlateDisplay, SetReadout,
-│   │                             #   SetLogControls/FieldRow, NotesField, NotesText, ExerciseEditor
+│   │                             #   SetLogControls/FieldRow, NotesField, NotesText, NotesBlock,
+│   │                             #   ExerciseEditor, ExerciseSetsBlock, LiftSetsByType
 │   ├── ui/                       # InlineConfirm, ToggleChip
 │   └── workout/                  # RestTimer (counts *down* to the configured target), SessionBar
 │                                 #   (outstanding work + COMPLETE; shares the strip with RestTimer),
 │                                 #   SetRow, CrossBlockLog, AccessoryLog, AccessoryPicker,
-│                                 #   AmrapTargets (tappable — fills the reps field)
+│                                 #   AmrapTargets (tappable — fills the reps field),
+│                                 #   CollapsibleSection, SaveFailureBanner
 │
 ├── store/                        # Solid stores — global reactive state, NOT Zustand
 │   ├── workout-store.ts          # active session, loggedSets (linear), loggedCrossSets (out-of-order),
@@ -93,7 +101,7 @@ src/
 │   ├── cleanup.ts                # pure buildCleanupPlan: orphan atm/accessorySets + exercises to archive
 │   ├── export-import.ts          # JSON export + destructive import (validate → clear → restore),
 │   │                             #   CSV export, pending-export retry via localStorage
-│   ├── pr.ts                     # detectAmrapPRs — rep-PR and e1RM-PR vs. all prior AMRAPs;
+│   ├── pr.ts                     # detectPRs — rep-PR and e1RM-PR vs. every prior WORKING set
 │   │                             #   first-ever AMRAP returns e1RmPr=true (baseline). prSessionIds —
 │   │                             #   pure: which sessions were a PR *when logged*, for History badges
 │   ├── accessory-tm.ts           # getAccessoryTmRecommendations (whole slate off-prescription →
@@ -101,10 +109,24 @@ src/
 │   │                             #   a training max on its own
 │   ├── format.ts                 # formatDateShort/Long/Iso (Iso is the LOCAL day, not toISOString)
 │   ├── audio-cues.ts             # module-scoped AudioContext; playCue(level), unlockAudio, ensureAudioCtx
-│   └── rest-timer-worker.ts      # module-scoped Worker factory (getTimerWorker), survives remounts
+│   ├── rest-timer-worker.ts      # module-scoped Worker factory (getTimerWorker), survives remounts
+│   ├── performance.ts            # isWorkingPerformance / bestEstimatedPerformance, and
+│   │                             #   baselineSets / baselineWorkingSets — the ONE definition of what
+│   │                             #   counts toward a record (completed sessions, plus the session
+│   │                             #   being logged). RecordsPanel, detectPRs and getLiftHistory all
+│   │                             #   read it; they used to apply three different filters
+│   ├── workout-compose.ts        # composes the session's set list from the plan + what is logged
+│   ├── exercise-history.ts       # getExerciseHistory (accessory) / getLiftHistory ("what did I do
+│   │                             #   last time", cross work included)
+│   ├── notifications.ts          # permission, restNotificationTargets, scheduleRest/cancelRest,
+│   │                             #   scheduleStalledSession/cancelStalled/cancelAll
+│   └── notify-timers.ts          # createNotifyTimers — tag-keyed timer table, shared by the page
+│                                 #   scheduler and the service worker's mirror of it
 │
 ├── hooks/
-│   └── use-confirmation.ts       # createConfirmation() + ConfirmationContext + useConfirmation
+│   ├── use-confirmation.ts       # createConfirmation() + ConfirmationContext + useConfirmation
+│   └── use-single-flight.ts      # busy/guard — one async handler at a time; pair `busy` with both
+│                                 #   the buttons' `disabled` AND Modal's `busy` prop
 │
 ├── types/
 │   └── domain.ts                 # canonical entity types + SupplementalTemplate, DeloadSupplemental,
@@ -116,7 +138,6 @@ src/
 
 ```
 public/
-├── icon-192.png / icon-512.png   # PWA icons
 ├── favicon.svg, icons.svg
 ├── _headers                      # Cloudflare: CSP + X-Frame-Options + Permissions-Policy + COOP
 └── demo-seed.json                # static demo dataset; user imports via Settings → IMPORT JSON
@@ -182,10 +203,12 @@ belongs there and never in `SCHEMA`, whose exec is unguarded.
 - **Equipment / plate math**: `resolveLiftLoading` / `resolveExerciseLoading` turn `plateMode` +
   `implementBase` (falling back to the legacy `usesBarbell` flag) into `{ mode, base }`, which
   `calcPlates` distributes as pairs (`paired`) or singles (`total`).
-- **Rest**: `restThresholds(settings)` turns the three stored durations into `{ normal, transition,
-  failNudge, failMax }` (fail nudge = `FAIL_NUDGE_RATIO` × the stored fail length, so three settings
-  cover four cues). `restStatus`, `restTarget` and `restNotificationTargets` all take that object —
-  the on-screen countdown, the audio cues and the notifications cannot disagree.
+- **Rest**: `restThresholds(settings)` turns the three stored durations into
+  `{ firstBell, secondBell, failedBell }` — one checkpoint each, no derived fourth. `restStatus`,
+  `restTarget` and `restNotificationTargets` all take that object, so the on-screen countdown, the
+  audio cues and the notifications cannot disagree. (This previously documented a
+  `{ normal, transition, failNudge, failMax }` shape derived through a `FAIL_NUDGE_RATIO`; that
+  model was replaced by the two-bell one and neither name exists in the code.)
 - **Session progress**: `SessionBar` renders one segment per block of work (linear sections, each
   cross block, each assistance slot), driven by `segments()` in `Workout.tsx`. Segments scroll to
   their block via a `data-section` attribute (`CollapsibleSection`'s `anchor` prop).
@@ -193,7 +216,11 @@ belongs there and never in `SCHEMA`, whose exec is unguarded.
   the `THEMES` map in `settings-store.ts` (11 themes) via `applyTheme()`. Tailwind utilities read the vars.
 - **Confirmation dialogs**: `ConfirmationContext` provided at the root in `App.tsx`; call
   `const { confirm } = useConfirmation()` and `await confirm('…')`.
-- **PWA**: `vite-plugin-pwa`, `registerType: 'prompt'`, `cleanupOutdatedCaches`, `.wasm` on `CacheFirst`.
+- **PWA**: `vite-plugin-pwa` in `injectManifest` mode — the SW is `src/service-worker.ts`, not
+  generated. `registerType: 'prompt'`, `skipWaiting`/`clientsClaim` false. Stale precache eviction
+  is hand-rolled on `activate` (delete `precache-`-prefixed caches that are not the current one);
+  no workbox runtime is imported, so `cleanupOutdatedCaches` is not what does it. `.wasm` on
+  `CacheFirst`.
   CSP set identically in `index.html`, `public/_headers`, and the vite preview server.
 - **Tests**: co-located `*.test.ts(x)`; Vitest + jsdom + `@solidjs/testing-library` + `@testing-library/jest-dom`.
   Coverage gated at 80% over `lib/`, `screens/`, `store/` — `components/`, `db/`, and `hooks/` sit

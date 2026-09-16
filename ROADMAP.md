@@ -745,12 +745,33 @@ Shipped mitigations:
 - **Dev-only escape hatch** — `window.__e2eResetDb` is behind `import.meta.env.DEV`.
 - **Supply chain** — deploy workflow least-privilege (`contents: read`, `persist-credentials: false`),
   `pnpm install --frozen-lockfile` + `pnpm audit signatures`, weekly Dependabot on npm and Actions.
-- **PWA cache** — `cleanupOutdatedCaches: true` with `registerType: 'prompt'` and
-  `skipWaiting`/`clientsClaim` false.
+  These were bypassed by the deploy step itself until 2026-09-15: it ran `pnpm dlx wrangler`, which
+  appeared in neither `package.json` nor the lockfile, with a production token. `wrangler` is a
+  pinned devDependency invoked via `pnpm exec` now, so it is covered by all three (F73).
+- **PWA cache** — `registerType: 'prompt'` with `skipWaiting`/`clientsClaim` false. The service
+  worker is `injectManifest` and imports no workbox runtime, so `cleanupOutdatedCaches` does
+  nothing: it hand-rolls its own eviction of stale `precache-`-prefixed caches on `activate`. The
+  flag is still set in `vite.config.ts` and was described as a mitigation here and in
+  `ARCHITECTURE_MAP.md` — one wrong claim in three places (F91).
 
 See "Security Hardening Pass (2026-05-22)" and Round 2 under Done for the original rationale.
 
-No open items.
+### Open items
+
+From the deep code review (`docs/deep-code-review.md`; state in
+`docs/deep-code-review-fixes.md`). This section read "No open items" until 2026-09-15, which was
+true when written and had since stopped being true.
+
+- **Fixed** — **F65** (a single 503 while online permanently poisoned the offline shell, defeating
+  the product's core promise) and **F66** (the same missing `response.ok` gate on the cache-first
+  precache branch); **F73** (unpinned `pnpm dlx wrangler` with a production token); **F41** (exercise
+  name uniqueness was a check-then-act with no storage constraint behind it — now
+  `idx_exercises_name_nocase`); **F84** (the migration script's hardcoded seed tables had drifted, so
+  a migration could import a duplicate exercise that could not then be renamed).
+- **Open** — **F08**: a valid JSON object carrying no recognised backup tables passes
+  `validateImportShape` and still clears every table. **F101**: `idx_exercises_name_nocase` is an
+  additive migration and migrations swallow errors, so installs that already hold duplicate exercise
+  names silently keep no uniqueness guarantee.
 
 ### Future considerations
 
@@ -764,7 +785,26 @@ No open items.
 
 ## Tech Debt
 
-No open items.
+### Open items
+
+From the deep code review. This section read "No open items" until 2026-09-15.
+
+- **F69** — the coverage gate's `include` covers `lib/`, `screens/` and `store/` only, so
+  `components/`, `db/` and `hooks/` are unmeasured. Most of the review's component findings live
+  where the gate cannot see, and `test:coverage` runs only in CI (see `CLAUDE.md` on the deploy gate).
+- **F71** — `tests/e2e/**` is type-checked by nothing: `tsconfig.e2e.json` is referenced by ESLint
+  but by no compiler entry point, and `playwright test` transpiles without checking. The same gap
+  covers `playwright.config.ts`, `stryker.config.mjs`, `eslint.config.js` and `scripts/`.
+- **F74 / F85** — the E2E suite runs in no workflow and 6 of its 32 specs fail. Dormant is the worst
+  of the options.
+- **F78** — the E2E suite points at `pnpm dev`, where the service worker is not registered and
+  `public/_headers` does not apply, so it exercises neither the SW, the production bundle nor the
+  production CSP. Structurally bound to the dev server by `helpers.freshStart`'s `__e2eResetDb` hook.
+- **F87** — the test client diverges from the code it stands in for.
+- **F100** — `deloadTms` cannot be made idempotent without recording that a training-max row came
+  from a deload rather than from the user; folds into **F39**'s provenance column.
+- **Fixed** — **F79**: `scripts/verify-notify-hardening.js` existed, passed, and was invoked by
+  nothing; it now runs in CI as the `verify-sw` job with two added legs.
 
 ### Resolved 2026-07-29 — dead code and stale naming
 
