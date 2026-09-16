@@ -45,7 +45,10 @@ export default defineConfig(() => {
       // instead of an auto-generated one. srcDir/filename tell the plugin where
       // to read it; `self.__WB_MANIFEST` is injected with the precache list.
       // The generateSW-only flags now live IN the SW file:
-      //   - cleanupOutdatedCaches() called on activate (stale precache evicted)
+      //   - stale-precache eviction on activate — hand-rolled in the SW, NOT
+      //     workbox's cleanupOutdatedCaches(): no workbox runtime is imported,
+      //     so that function does not exist here. The SW deletes caches whose
+      //     key starts with `precache-` and is not the current one.
       //   - clientsClaim skipped  → user keeps refresh-prompt control
       //   - skipWaiting skipped   → refresh stays user-gated (matches CSP)
       srcDir: 'src',

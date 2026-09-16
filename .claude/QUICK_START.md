@@ -59,7 +59,8 @@ sudo pacman -S atk at-spi2-atk libxcomposite libxdamage libxfixes libxrandr alsa
 4. **Calc logic**: `src/lib/calc.ts` (pure) — always add to `calc.test.ts`. e1RM is **Wathan**
    (`weight / (0.488 + 0.538·e^(−0.075·reps))`, with `reps === 1` short-circuiting to `weight`), and
    AMRAP targets seed off the median estimate over the last 3 non-deload AMRAPs (`seedE1Rm`,
-   `getRecentAmraps`). **PR detection**: `src/lib/pr.ts` (`detectAmrapPRs`) — always add to `pr.test.ts`.
+   `getRecentAmraps`). **PR detection**: `src/lib/pr.ts` (`detectPRs`) — scores every working set, not AMRAPs
+   alone, against the shared baseline in `lib/performance.ts`. Always add to `pr.test.ts`.
 5. **TM recommendation logic**: `src/lib/tm-recommendations.ts` — `getSessionTmRecommendation`
    (post-session AMRAP check, ≥15% delta) and `getCycleDoublingCandidates` (cycle-end doubling).
    Thresholds: `SESSION_TM_BUMP_THRESHOLD = 0.15`, `CYCLE_DOUBLE_THRESHOLD = 0.10`. Add to
@@ -78,8 +79,13 @@ Push to `main` → GitHub Actions builds and deploys to Cloudflare Pages
 
 The workflow is **path-filtered**: it only runs when the diff touches `src/**` (excluding
 `src/**/*.test.*`), `public/**`, `index.html`, `package.json`, `pnpm-lock.yaml`, `vite.config.*`, or
-`tsconfig*`. A docs- or test-only commit produces no run. CI never runs lint or tests, so
-`pnpm build && pnpm lint && pnpm test` locally is the only regression gate.
+`tsconfig*`. A docs- or test-only commit produces no *deploy* run.
+
+CI is not a no-op: `ci.yml` runs `pnpm run check:ci` (`lint` + `test:coverage` + `build`) on every
+PR, plus a `verify-sw` job that drives the real service worker against a production build, and
+`deploy.yml` runs `check:ci` again before deploying. Run `pnpm build && pnpm lint && pnpm test`
+locally to find failures sooner — it is the faster gate, not the only one. `test:coverage` and its
+thresholds run only in CI.
 
 ---
 

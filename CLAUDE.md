@@ -15,8 +15,11 @@ Tailwind 4, Vitest. Package manager is **pnpm**.
 **Database**: `@sqlite.org/sqlite-wasm` runs in a Web Worker + OPFS in prod, but in-process under vitest.
 
 **Deployment**: Cloudflare Pages (static, no server; `.github/workflows/deploy.yml`). The workflow is
-path-filtered and runs **no lint and no tests** — `pnpm build && pnpm lint && pnpm test` locally is the
-only regression gate.
+path-filtered, and it **does** gate: it runs `pnpm run check:ci` (`lint` + `test:coverage` + `build`)
+before deploying, so a failure blocks the deploy. Note `test:coverage`, not plain `test` — the
+coverage thresholds only ever run in CI, which is why their `include` scope matters.
+`.github/workflows/ci.yml` runs the same `check:ci` on every PR, plus a `verify-sw` job driving the
+real service worker against a production build (`pnpm run verify:sw`).
 
 ## Gotchas that cost time
 

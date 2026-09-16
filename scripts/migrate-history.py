@@ -14,39 +14,83 @@ Then import migration.json via Settings → IMPORT JSON in the app.
 
 import csv
 import json
+import re
 import sys
 import argparse
+from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
-# ── Lift config (must match seed.ts order so IDs are 1–4) ──────────────────
-LIFTS = [
-    { "id": 1, "name": "OHP",      "order": 1, "progressionIncrement": 5,  "baseWeight": 95,  "liftType": "upper" },
-    { "id": 2, "name": "Deadlift", "order": 2, "progressionIncrement": 10, "baseWeight": 135, "liftType": "lower" },
-    { "id": 3, "name": "Bench",    "order": 3, "progressionIncrement": 5,  "baseWeight": 95,  "liftType": "upper" },
-    { "id": 4, "name": "Squat",    "order": 4, "progressionIncrement": 10, "baseWeight": 135, "liftType": "lower" },
-]
+# ── Seed tables, read from seed.ts ──────────────────────────────────────────
+# These used to be hardcoded copies, "must match seed.ts order so IDs are 1-4".
+# They had already drifted: exercise 3 was "Curls" here and 'Bicep Curls' there,
+# and seed.ts had grown well past this list. A migration emitting the stale name
+# lands a SECOND exercise beside the seeded one on import — and once two
+# exercises share a name the repair path is closed, because renameExercise
+# rejects on the twin. A one-shot tool, but its one shot is a user's whole
+# history.
+#
+# So they are derived rather than restated. Ids are assigned 1..N in file order,
+# which is what a fresh install's AUTOINCREMENT produces from the same list.
 
-EXERCISES = [
-    { "id":  1, "name": "Chinups",                      "type": "reps" },
-    { "id":  2, "name": "Lat Pulldowns",                "type": "reps" },
-    { "id":  3, "name": "Curls",                        "type": "reps" },
-    { "id":  4, "name": "Glute Ham Raise",              "type": "reps" },
-    { "id":  5, "name": "Bulgarian Split Squat",        "type": "reps" },
-    { "id":  6, "name": "Nordic Curls",                 "type": "reps" },
-    { "id":  7, "name": "Hip Thrust",                   "type": "reps" },
-    { "id":  8, "name": "Barbell Row",                  "type": "reps" },
-    { "id":  9, "name": "Dumbbell Row",                 "type": "reps" },
-    { "id": 10, "name": "T Bar Row",                    "type": "reps" },
-    { "id": 11, "name": "Ab Wheel",                     "type": "reps" },
-    { "id": 12, "name": "Single Leg Romanian Deadlift", "type": "reps" },
-    { "id": 13, "name": "Romanian Deadlift",            "type": "reps" },
-    { "id": 14, "name": "Back Extension",               "type": "reps" },
-    { "id": 15, "name": "Good Mornings",                "type": "reps" },
-    { "id": 16, "name": "Leg Press",                    "type": "reps" },
-    { "id": 17, "name": "Loaded Carry",                 "type": "distance" },
-    { "id": 18, "name": "Plank",                        "type": "timed" },
-]
+SEED_TS = Path(__file__).resolve().parent.parent / "src" / "db" / "seed.ts"
+
+
+def _seed_block(name: str, src: str) -> str:
+    m = re.search(r"const " + name + r" = \[(.*?)\n\]", src, re.S)
+    if not m:
+        sys.exit(
+            f"migrate-history: could not find `const {name} = [...]` in {SEED_TS}.\n"
+            "The seed file's shape changed; update the parser rather than "
+            "reintroducing a hardcoded copy."
+        )
+    return m.group(1)
+
+
+def load_seed_tables():
+    """(lifts, exercises) as import-envelope rows, straight from seed.ts."""
+    src = SEED_TS.read_text()
+
+    lifts = []
+    for line in _seed_block("LIFTS", src).splitlines():
+        m = re.search(
+            r"name: '([^']+)'.*?order: (\d+).*?progressionIncrement: ([\d.]+)"
+            r".*?baseWeight: ([\d.]+).*?liftType: '([^']+)'",
+            line,
+        )
+        if m:
+            # Ids count matched ENTRIES, not lines — the block starts with a
+            # newline, so line numbers would shift every id by one.
+            lifts.append({
+                "id": len(lifts) + 1,
+                "name": m.group(1),
+                "order": int(m.group(2)),
+                "progressionIncrement": float(m.group(3)),
+                "baseWeight": float(m.group(4)),
+                "liftType": m.group(5),
+            })
+
+    exercises = []
+    for line in _seed_block("EXERCISES", src).splitlines():
+        m = re.search(r"name: '([^']+)'.*?type: '([^']+)'", line)
+        if m:
+            exercises.append({
+                "id": len(exercises) + 1, "name": m.group(1), "type": m.group(2),
+            })
+
+    # A parser that silently matches nothing would emit an empty roster and a
+    # user would import a history with no lifts at all.
+    if len(lifts) != 4:
+        sys.exit(f"migrate-history: expected 4 lifts from seed.ts, parsed {len(lifts)}")
+    if len(exercises) < 18:
+        sys.exit(
+            f"migrate-history: expected at least 18 exercises from seed.ts, "
+            f"parsed {len(exercises)}"
+        )
+    return lifts, exercises
+
+
+LIFTS, EXERCISES = load_seed_tables()
 
 # NOTE: this script used to emit a `liftAccessories` roster mapping exercises to
 # lifts. That table was dropped — assistance is now three slots per session,

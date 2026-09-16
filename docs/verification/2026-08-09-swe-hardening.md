@@ -2,8 +2,15 @@
 
 **Date:** 2026-08-09
 **Commit:** working tree (follow-up to `a0fc86c`)
-**Verdict:** PASS — automated tests. Runtime legs requiring a browser (offline nav reload,
-hidden-tab dedup) listed as TODO below; every leg has a unit-test pin.
+**Verdict:** PASS — automated tests **and** the browser legs. All five runtime legs (offline nav
+reload, hidden-tab dedup and the rest) were executed in headless Chromium against a production
+build by `scripts/verify-notify-hardening.js`; the table below records them as passed, and every
+leg also has a unit-test pin.
+
+> **Amended 2026-09-15.** This header previously read "Runtime legs requiring a browser … listed as
+> TODO below", directly above the table marking them all passed — it was written before the legs ran
+> and never updated after, and `docs/INDEX.md` repeated the stale claim. The harness now runs in CI
+> as the `verify-sw` job, and carries two further legs added with the F65/F66 fix.
 
 ## Claims under test
 

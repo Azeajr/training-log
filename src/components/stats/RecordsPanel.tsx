@@ -72,9 +72,13 @@ export default function RecordsPanel(props: Props) {
       // work set permanent records. Ties on weight keep the set with more reps.
       const working = await baselineWorkingSets(db, l.id!)
 
-      // Best e1RM across all successful working sets. This is intentionally
-      // broader than the AMRAP-only PR toast: a hard main, joker, supplemental,
-      // or attributed cross set is a valid strength performance here.
+      // Best e1RM across all successful working sets — a hard main, joker,
+      // supplemental or attributed cross set is a valid strength performance.
+      // This is the SAME population the PR toast scores against; both read
+      // baselineWorkingSets. The comment here used to call this "intentionally
+      // broader than the AMRAP-only PR toast", which stopped being true when
+      // the toast was widened — and the two readers disagreeing about what
+      // counts as a record was the substance of F38.
       const bestE1rm = bestEstimatedPerformance(working, settings.highRepDiscount)
       if (bestE1rm) {
         record.e1rm = Math.round(estimated1RM(bestE1rm.weight, bestE1rm.reps, settings.highRepDiscount))

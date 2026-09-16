@@ -9,7 +9,7 @@ Every markdown doc in the repo, what it is for, and when to load it.
 | Doc | Purpose |
 |---|---|
 | `CLAUDE.md` | Stack, deploy model, the gotchas that cost time, pointers to everything else |
-| `.claude/COMMON_MISTAKES.md` | Ten recurring failure modes with symptom → check → fix |
+| `.claude/COMMON_MISTAKES.md` | Recurring failure modes with symptom → check → fix |
 | `.claude/QUICK_START.md` | Commands and the common workflows (new screen, schema change, calc logic) |
 
 ## Load when the task calls for it
@@ -32,9 +32,12 @@ Dated runtime-verification logs, one per claim checked against the running app.
 
 - `docs/verification/2026-06-27-deload-toggle.md` — the 3-WEEK / 4-WEEK cycle toggle.
 - `docs/verification/2026-08-09-rest-timer-notifications.md` — rest-timer system
-  notifications (SW + page-timer fallback). Automated evidence; runtime pass pending.
+  notifications (SW + page-timer fallback). **PASS** — automated tests plus a Chrome desktop
+  runtime pass; the record names which legs remain unverified.
 - `docs/verification/2026-08-09-swe-hardening.md` — page-primary notification scheduling,
-  offline navigation shell, scoped cache eviction. Automated evidence; browser legs TODO.
+  offline navigation shell, scoped cache eviction. **PASS** — all five runtime legs executed in
+  headless Chromium against a production build by `scripts/verify-notify-hardening.js`, which now
+  runs in CI as the `verify-sw` job (two more legs were added with the F65/F66 fix).
 
 ## Review notes
 

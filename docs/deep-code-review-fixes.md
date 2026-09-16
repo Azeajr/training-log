@@ -10,9 +10,9 @@ Writing fix state into it would corrupt that claim. This document is the state.
 | | Count |
 |---|---|
 | Findings | **101** (F01–F101; F95–F101 opened during fix work) |
-| `open` | **66** |
+| `open` | **59** |
 | `wip` | 0 |
-| `fixed` | **33** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F41, F42, F47, F51, F52, F54, F55, F57, F63, F49, F56, F58, F59, F60, F61, F64, F65, F66, F73, F79, F95, F96, F97 |
+| `fixed` | **40** — F02, F04, F05, F06, F22, F33, F34, F36, F37, F38, F41, F42, F47, F51, F52, F54, F55, F57, F63, F49, F56, F76, F84, F89, F90, F91, F92, F93, F58, F59, F60, F61, F64, F65, F66, F73, F79, F95, F96, F97 |
 | `fixed-by` | **2** — F43 (reader half; F99 carries the rest), F62 (closed by F61) |
 | `wontfix` | 0 |
 | `blocked` | 0 |
@@ -68,7 +68,7 @@ Seven root-cause patterns from `deep-code-review.md:38-53`. A finding can sit in
 | C4 | Cleanup or a default bound to something that can stop existing | F57 ✅, F58 ✅, F62 ✅ — **cluster closed** | None — per-file fixes |
 | C5 | Uneven keyboard and screen-reader access | F59 ✅, F60 ✅, F61 ✅, F64 ✅ — **cluster closed** | None — in each case a neighbouring file did it correctly |
 | C6 | Unvalidated external data written to durable storage or trusted as control flow | F03, F08, F65, F66, F67 | **F65** for the service-worker half (F65/F66 are the same `response.ok` gate) |
-| C7 | A change made and its description not updated | F76, F84, F89, F90, F91, F92, F93 | None — independent doc edits |
+| C7 | A change made and its description not updated | F76 ✅, F84 ✅, F89 ✅, F90 ✅, F91 ✅, F92 ✅, F93 ✅ — **cluster closed** | None — independent doc edits |
 
 ## Suggested order
 
@@ -164,7 +164,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F73 | Medium <br><sub>supply chain</sub> | B10 | — | `.github/workflows/deploy.yml` | `fixed` | `9daa584` · rule 1(b) | `wrangler` is now a lockfile-pinned devDependency (4.131.2) invoked via `pnpm exec`. `allowBuilds` for `esbuild`/`workerd` set to **false** — verified unnecessary, so this removes two lifecycle-script executions the old `--allow-build` flags permitted. |
 | F74 | Medium | B10 | — | `.github/workflows/ci.yml` | `open` | — | Fix with F85 — assertions without CI wiring returns to the state that produced the finding. |
 | F75 | Low | B10 | — | `.github/workflows/ci.yml` | `open` | — | — |
-| F76 | Low <br><sub>docs</sub> | B10 | C7 | `CLAUDE.md` | `open` | — | — |
+| F76 | Low <br><sub>docs</sub> | B10 | C7 | `CLAUDE.md` | `fixed` | `<pending>` · rule 1(b) — claims re-checked against the workflows | `CLAUDE.md` and `QUICK_START.md` said "CI never runs lint or tests". `deploy.yml` runs `check:ci` **before** deploying and `ci.yml` runs it on every PR, plus the `verify-sw` job. Both now say what the workflows do, and call out that `test:coverage` — not plain `test` — is what gates, which is why **F69**'s `include` scope matters at the gate. |
 | F77 | Low | B10 | — | `eslint.config.js` | `open` | — | — |
 | F78 | Medium | B10 | — | `playwright.config.ts` | `open` | — | Precondition for F79/F65. |
 | F79 | Medium | B10 | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · rule 1(b) | `verify:sw` script added; new `verify-sw` CI job on every PR. Two harness defects had to be fixed first — **F96** and **F97**. |
@@ -172,16 +172,16 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F81 | Medium | B10 | — | `public/favicon.svg` | `open` | — | — |
 | F82 | Low | B10 | — | `public/demo-seed.json` | `open` | — | Decided in B12d; documented as `.claude/COMMON_MISTAKES.md` #7. Known state — decide fix vs wontfix. |
 | F83 | Low | B10 | — | `.gitignore` | `open` | — | — |
-| F84 | Low | B10 | C7 | `scripts/migrate-history.py` | `open` | — | — |
+| F84 | Low | B10 | C7 | `scripts/migrate-history.py` | `fixed` | `<pending>` · `seed-migration-parity.test.ts` ×3 | **Structural, not a re-sync.** `migrate-history.py` now reads `src/db/seed.ts` instead of restating it, so the two cannot drift. Drift was worse than recorded: the script had **18** exercises against seed's **27**, and id 3 was `"Curls"` vs `'Bicep Curls'` — a migration would import a duplicate that **F41** shows cannot then be renamed. The script hard-fails if parsing yields too few rows; the test re-introduces the original drift and catches it. |
 | F85 | Medium | B11 | — | `tests/e2e/app.spec.ts` | `open` | — | 6 of 32 E2E tests fail. Fix with F74. |
 | F86 | Low | B11 | — | `test-results/.last-run.json` | `open` | — | — |
 | F87 | Medium | B11 | — | `src/test-setup.ts` | `open` | — | — |
 | F88 | Low | B11 | — | `src/store/save-failure-store.ts` | `open` | — | — |
-| F89 | Medium | B12 | C7 | `.claude/ARCHITECTURE_MAP.md` | `open` | — | — |
-| F90 | Medium | B12 | C7 | `README.md` | `open` | — | — |
-| F91 | Medium | B12 | C7 | `ROADMAP.md` | `open` | — | — |
-| F92 | Low | B12 | C7 | `docs/INDEX.md` | `open` | — | — |
-| F93 | Low | B12 | C7 | `docs/INDEX.md` | `open` | — | — |
+| F89 | Medium | B12 | C7 | `.claude/ARCHITECTURE_MAP.md` | `fixed` | `<pending>` · rule 1(b) — inventories diffed against `ls` | Component and `lib/` inventories regenerated from the tree and verified complete by script (every file in `src/components/*/` and `src/lib/` now appears). `detectAmrapPRs` → `detectPRs`; the **Rest** pattern corrected from the replaced `{ normal, transition, failNudge, failMax }` / `FAIL_NUDGE_RATIO` model to the real `{ firstBell, secondBell, failedBell }`; the `icon-192/512.png` lines dropped (they never existed). `hooks/use-single-flight.ts` added. |
+| F90 | Medium | B12 | C7 | `README.md` | `fixed` | `<pending>` · rule 1(b) — checked against `pr.ts` | All four descriptions corrected. The in-code one mattered most: `RecordsPanel` claimed to be "intentionally broader than the AMRAP-only PR toast", a distinction that stopped existing when the toast widened — and both readers now share `baselineWorkingSets`, which is **F38**. Landed after F38, so the docs describe post-F38 behaviour. |
+| F91 | Medium | B12 | C7 | `ROADMAP.md` | `fixed` | `<pending>` · rule 1(b) — claims checked against the code | "No open items" replaced with the review's actual Security and Tech Debt findings, split into fixed and open. Both overstated mitigations corrected: the supply-chain bullet now records that the deploy step bypassed all three controls until F73, and the PWA bullet that `cleanupOutdatedCaches` does nothing in `injectManifest` mode — that wrong claim was in **three** places (`ROADMAP`, `vite.config.ts:48`, `ARCHITECTURE_MAP`), all fixed. |
+| F92 | Low | B12 | C7 | `docs/INDEX.md` | `fixed` | `<pending>` · count verified by script | `COMMON_MISTAKES.md` has **11** entries, not "Ten" — the count is dropped from the description entirely so it cannot drift again. The `Last Updated` stamp was already refreshed when the ledger was first indexed. |
+| F93 | Low | B12 | C7 | `docs/INDEX.md` | `fixed` | `<pending>` · verdicts checked against the records | Both index entries and the swe-hardening header corrected. That record's header read "Runtime legs … listed as TODO below" directly above a table marking all five **PASS**; the amendment says so explicitly rather than quietly rewriting it. Landed with **F79** having wired the harness into CI, which is the same reader question — "has this actually been verified?" |
 | F94 | Medium | B12 | — | `src/db/schema.ts` | `open` | — | Missing index on the table the mid-set PR check scans. Resolves L07(2). |
 | F95 | **High** | — | C6 | `src/service-worker.ts` | `fixed` | `9daa584` · leg F | **Opened during fix work, not by the review.** The navigation handler's shell refresh never executed: `response.clone()` ran inside the `caches.open(...).then()` callback, after `return response` handed the body to the navigation, so it threw "body is already used" and `void` swallowed it. The cached shell was frozen at whatever `install` precached; network-first refresh had never run once. Masked F65 and would have activated it if repaired alone. |
 | F96 | Medium | — | — | `scripts/verify-notify-hardening.js` | `fixed` | `9daa584` · all 7 legs | **Opened during fix work.** The harness the review called "already exists, already passes" failed **all six legs**: `completeSetupWizard` drove a three-step wizard with `data-testid` selectors, and the wizard is now two steps with no testids in a production build. F79's own thesis, demonstrated — a dormant capability decays. |
