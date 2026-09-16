@@ -20,9 +20,21 @@ export default function Rule(props: Props) {
       aria-hidden={props['aria-hidden']}
       class={`overflow-hidden whitespace-nowrap text-xs tracking-widest uppercase ${props.class ?? 'text-muted'}`}
     >
+      {/* The dashes are the look; they are not the name. Rendered as ordinary
+          text they became part of the accessible text of every divider in the
+          app — sixteen call sites, of which exactly one worked around it. The
+          workaround belongs here, so callers need no aria-hidden and Modal can
+          drop its own (F64). */}
       {props.label
-        ? <>--- <span class={props.labelClass}>{props.label}</span>{props.labelSuffix ? ` ${props.labelSuffix}` : ''} {FILL}</>
-        : FILL}
+        ? (
+          <>
+            <span aria-hidden="true">--- </span>
+            <span class={props.labelClass}>{props.label}</span>
+            {props.labelSuffix ? ` ${props.labelSuffix}` : ''}
+            <span aria-hidden="true"> {FILL}</span>
+          </>
+        )
+        : <span aria-hidden="true">{FILL}</span>}
     </div>
   )
 }

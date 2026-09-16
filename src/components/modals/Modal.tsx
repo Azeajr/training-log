@@ -163,9 +163,10 @@ export default function Modal(props: Props) {
             ← BACK
           </button>
         </Show>
-        {/* The Rule renders the title as `--- TITLE ------…`, which is the right
-            look and a terrible accessible name. The dashes are hidden from
-            assistive tech and a clean copy of the title carries the name. */}
+        {/* Rule keeps its own dash fill out of the accessible text now (F64),
+            so this aria-hidden is no longer working around the dashes. It stays
+            because the sr-only h2 below is what `aria-labelledby` points at:
+            without it the title would be announced twice. */}
         <h2 id={titleId} class="sr-only">{props.title}</h2>
         <Rule label={props.title!} class="text-muted" aria-hidden="true" />
         <div class="w-14" />

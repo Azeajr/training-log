@@ -27,11 +27,15 @@ interface Props {
 export default function SetReadout(props: Props) {
   const lg = () => props.size === 'lg'
   const hover = () => (props.onClick ? 'hover:text-text-dim' : '')
-  return (
-    <div
-      onClick={props.onClick}
-      class={`flex gap-3 ${lg() ? 'items-baseline' : 'items-center text-sm'} ${props.tone ?? (lg() ? 'text-text' : 'text-muted')} ${props.onClick ? 'cursor-pointer' : ''} ${props.class ?? ''}`}
-    >
+  const rowClass = () =>
+    `flex gap-3 ${lg() ? 'items-baseline' : 'items-center text-sm'} ${props.tone ?? (lg() ? 'text-text' : 'text-muted')} ${props.class ?? ''}`
+
+  // The readout itself, without the trailing slot. Kept separate because the
+  // trailing slot holds an InlineConfirm at the real call sites, and a <button>
+  // wrapping the whole row would nest interactive content — invalid, and the
+  // inner control becomes unreachable.
+  const readout = () => (
+    <>
       {props.leading}
       <Show when={props.weight != null}>
         <span
@@ -45,6 +49,28 @@ export default function SetReadout(props: Props) {
         <span class={`${lg() ? 'text-xl text-text' : ''} ${hover()}`}>× {props.value}</span>
       </Show>
       {props.badges}
+    </>
+  )
+
+  return (
+    <div class={rowClass()}>
+      {/* A real <button> when the row does something, not a div with
+          cursor-pointer: this is the app's only affordance for editing an
+          already logged set, so as a div it was pointer-only and unreachable by
+          keyboard or switch access (WCAG 2.1.1). AccessoryLog.tsx:92-94 states
+          the same standard — "keyboard support comes free". */}
+      <Show
+        when={props.onClick}
+        fallback={readout()}
+      >
+        <button
+          type="button"
+          onClick={() => props.onClick!()}
+          class={`flex gap-3 ${lg() ? 'items-baseline' : 'items-center'} text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+        >
+          {readout()}
+        </button>
+      </Show>
       {props.trailing}
     </div>
   )

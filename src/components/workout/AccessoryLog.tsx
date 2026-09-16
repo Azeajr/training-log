@@ -190,7 +190,15 @@ export default function AccessoryLog(props: Props) {
                   <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} fieldLabel="reps" />
                 </Show>
                 <Show when={type() === 'timed'}>
-                  <DurationInput value={editDuration()} onChange={setEditDuration} />
+                  {/* Both duration inputs are on screen at once in the
+                      ordinary case — editing a logged set renders this one
+                      while the active-set form renders the other — so without
+                      fieldLabel a screen reader hears two identical "Increase
+                      minutes" buttons (F59). */}
+                  <DurationInput
+                    value={editDuration()} onChange={setEditDuration}
+                    fieldLabel={`set ${i() + 1}`}
+                  />
                 </Show>
                 <Show when={type() === 'distance'}>
                   <Stepper value={editDistance()} onChange={setEditDistance} step={1} min={0} fieldLabel="distance" />
@@ -224,7 +232,7 @@ export default function AccessoryLog(props: Props) {
             </Show>
             <Show when={type() === 'timed'}>
               <FieldRow label="time">
-                <DurationInput value={duration()} onChange={setDuration} />
+                <DurationInput value={duration()} onChange={setDuration} fieldLabel="this set" />
               </FieldRow>
             </Show>
             <Show when={type() === 'distance'}>

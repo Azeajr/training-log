@@ -394,6 +394,7 @@ export default function HistoryEdit() {
                             <DurationInput
                               value={setRow().duration}
                               onChange={val => updateAccSet(ai, si, 'duration', val)}
+                              fieldLabel={`set ${si + 1}`}
                             />
                           </>
                         </Show>

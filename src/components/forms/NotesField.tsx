@@ -105,6 +105,12 @@ export default function NotesField(props: Props) {
     const { start, end } = lineRange(props.value, caret)
 
     if (e.key === 'Tab') {
+      // Gated on listMode, exactly as the Enter handler below is. Ungated, this
+      // swallowed Tab and Shift+Tab on any line that merely LOOKED like a
+      // bullet — so typing "- " at the start of a line trapped focus in the
+      // textarea with no way out but deleting the bullet, and the ←/→ escape
+      // chips are only rendered in list mode (WCAG 2.1.2, Level A).
+      if (!listMode()) return
       if (!bulletMatch(props.value.slice(start, end))) return
       e.preventDefault()
       retab(e.shiftKey ? -1 : 1)
