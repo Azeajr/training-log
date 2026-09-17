@@ -8,7 +8,6 @@ import {
 import { playCue, unlockAudio, ensureAudioCtx } from '../../lib/audio-cues'
 import { getTimerWorker } from '../../lib/rest-timer-worker'
 import { trace, isTraceEnabled } from '../../lib/trace'
-import { startKeepalive, stopKeepalive } from '../../lib/keepalive'
 import type { RestTimerTick, RestTimerBeat } from '../../workers/rest-timer-protocol'
 import {
   scheduleRest,
@@ -142,10 +141,6 @@ export default function RestTimer() {
     if (notify) scheduleRest(restStartedAt, workout.restType, t)
     void requestWakeLock()
     ensureAudioCtx()
-    // Experiment (off by default): hold the process across an app switch for
-    // the duration of this rest only, so the cost is bounded to when a bell is
-    // actually pending.
-    startKeepalive()
     // The page's own liveness, independent of message delivery. Worker beats
     // arriving in a burst while these show a hole is the signature of a frozen
     // page; both stopping together is the signature of a dead process. Only
@@ -160,7 +155,6 @@ export default function RestTimer() {
     onCleanup(() => {
       trace('rest.end', { elapsed: elapsed() })
       worker.postMessage({ type: 'stop' })
-      stopKeepalive()
       void releaseWakeLock()
     })
   })

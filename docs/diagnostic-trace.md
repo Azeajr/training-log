@@ -113,46 +113,6 @@ loss is below the app** — routing or volume, not code. Note that iOS has
 separate ringer and media volume: pressing the volume buttons while nothing is
 playing usually moves the ringer, not the channel this tone rides.
 
-## KEEP ALIVE — an experiment, not a feature
-
-Settings → DIAGNOSTICS → **KEEP ALIVE**. Off by default.
-
-**The problem it tests.** An app switch suspends the page process. Measured: 82
-seconds backgrounded, `page.beat` dark the whole time, monotonic clock advanced
-the full 82 seconds. The device was awake; the page was not. So the bell came
-due with nothing running to fire it and landed 3 seconds after the user
-returned. The service worker was meant to cover this and cannot — its own
-`setTimeout` does not keep it alive and the browser reaps it in ~30 s
-(COMMON_MISTAKES #11), while the first bell is 90 s out.
-
-**The hypothesis.** WebKit keeps a page running while it plays media. So play an
-inaudible loop for the length of a rest and the process may survive the switch.
-
-**Running it.** Do both, one after the other:
-
-1. TRACE ON, **KEEP ALIVE OFF**. Start a rest, switch to another app for ~60 s,
-   come back after the bell was due. COPY. That is the control.
-2. TRACE ON, **KEEP ALIVE ON**. Same again. COPY.
-
-**Reading it.** One question: **did `page.beat` keep ticking while you were
-away?**
-
-- Ticking through the gap → the process stayed alive, the hypothesis holds, and
-  `notify.fire` should show a `drift` near zero instead of "fired on return".
-- Dark anyway → the hypothesis is dead, and the honest deliverable is UI copy
-  that stops the toggle promising what the platform will not do.
-
-Also worth checking in the ON run: `keepalive.playing` (it started),
-`keepalive.blocked` (autoplay refused — it retries on the next touch),
-`keepalive.media` with `pause` (iOS stopped it), and `keepalive.session`
-(whether `ambient` was accepted, which is what decides if your music keeps
-playing).
-
-**Costs, which is why it is off by default.** Battery, for the length of each
-rest. And the audio session: `ambient` asks iOS to mix rather than interrupt, so
-a gym playlist should survive — but where that API is missing there is no such
-guarantee.
-
 ## What it cannot see
 
 Stated plainly, because the gaps are part of reading it:

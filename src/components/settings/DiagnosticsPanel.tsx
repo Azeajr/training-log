@@ -3,7 +3,6 @@ import { isTraceEnabled, setTraceEnabled, traceStats, clearTrace, trace } from '
 import { buildTraceExport, formatTraceExport } from '../../lib/trace-export'
 import { restThresholds } from '../../lib/calc'
 import { playCue } from '../../lib/audio-cues'
-import { isKeepaliveEnabled, setKeepaliveEnabled } from '../../lib/keepalive'
 import { settings } from '../../store/settings-store'
 import { showToast } from '../../store/toast-store'
 import { useConfirmation } from '../../hooks/use-confirmation'
@@ -27,7 +26,6 @@ export default function DiagnosticsPanel() {
   const { confirm } = useConfirmation()
   const [on, setOn] = createSignal(isTraceEnabled())
   const [stats, setStats] = createSignal(traceStats())
-  const [keepalive, setKeepalive] = createSignal(isKeepaliveEnabled())
   const [text, setText] = createSignal<string | null>(null)
   const [busy, setBusy] = createSignal(false)
 
@@ -92,13 +90,6 @@ export default function DiagnosticsPanel() {
     showToast('Trace cleared', 2000)
   })
 
-  const toggleKeepalive = () => {
-    const next = !keepalive()
-    setKeepaliveEnabled(next)
-    setKeepalive(next)
-    refresh()
-  }
-
   // Fires the real cue from a real touch. The bell is otherwise 90 seconds of
   // waiting per attempt, and it lands within half a second of the system
   // notification sound, which masks a 150 ms tone completely. On a tap there is
@@ -131,18 +122,6 @@ export default function DiagnosticsPanel() {
         <ToggleChip active={on()} onClick={toggle} ariaLabel="Diagnostic trace">
           {on() ? 'ON' : 'OFF'}
         </ToggleChip>
-      </div>
-      <div class="flex items-center justify-between py-1 border-b border-border-dim">
-        <span class="text-muted text-xs uppercase tracking-widest">KEEP ALIVE</span>
-        <ToggleChip active={keepalive()} onClick={toggleKeepalive} ariaLabel="Keep alive experiment">
-          {keepalive() ? 'ON' : 'OFF'}
-        </ToggleChip>
-      </div>
-      <div class="text-faint text-xs py-2">
-        Experiment. Plays an inaudible loop for the length of a rest, to see
-        whether iOS keeps the app running when you switch away — bells arrive
-        late otherwise. Costs battery, and asks to mix with your music rather
-        than interrupt it. Leave it off unless you are testing.
       </div>
       <div class="text-faint text-xs py-2" data-testid="trace-stats">
         {stats().count} events · {span()}
