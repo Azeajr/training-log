@@ -130,16 +130,24 @@ test.describe('PT checklist', () => {
     await expect(page.getByText('knee exercise note', { exact: true })).toBeVisible()
   })
 
-  test('reaches PT from the Today screen', async ({ page }) => {
-    await page.goto('/pt/new')
-    await page.getByLabel('Routine name').fill('Knee')
-    await page.getByLabel('Exercise 1 name').fill('Wall slide')
-    await page.getByRole('button', { name: 'DONE' }).click()
-    // Wait for DONE's own navigate('/pt') to land first: clicking TODAY while
-    // it is still in flight navigates away and is then bounced straight back.
-    await expect(page.getByRole('button', { name: 'START', exact: true })).toBeVisible()
+  test('selects and starts multiple PT routines from Today', async ({ page }) => {
+    for (const [routine, exercise] of [['Knee', 'Wall slide'], ['Shoulder', 'Band pull-apart']]) {
+      await page.goto('/pt/new')
+      await page.getByLabel('Routine name').fill(routine)
+      await page.getByLabel('Exercise 1 name').fill(exercise)
+      await page.getByRole('button', { name: 'DONE', exact: true }).click()
+      // Wait for DONE's navigation before leaving the routines page.
+      await expect(page.getByLabel(`Include ${routine}`)).toBeVisible()
+    }
 
     await page.getByRole('link', { name: 'TODAY' }).click()
-    await expect(page.getByRole('button', { name: /Knee.*START/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'START PT SESSION (0)', exact: true })).toBeDisabled()
+    await page.getByLabel('Include Knee').check()
+    await page.getByLabel('Include Shoulder').check()
+    await expect(page).toHaveURL(/\/today$/)
+    await page.getByRole('button', { name: 'START PT SESSION (2)', exact: true }).click()
+    await expect(page).toHaveURL(/\/pt\/run$/)
+    await expect(page.getByRole('checkbox', { name: 'Wall slide set 1, 10 reps', exact: true })).toBeVisible()
+    await expect(page.getByRole('checkbox', { name: 'Band pull-apart set 1, 10 reps', exact: true })).toBeVisible()
   })
 })

@@ -5,6 +5,8 @@ import Today from './Today'
 import { db } from '../db/index'
 import { clearSession, startSession, workout } from '../store/workout-store'
 import { toast } from '../store/toast-store'
+import { savePtRoutine } from '../lib/pt'
+import { clearAllPtRuns, getPtRun, ptSessionRoutineIds, startPtRun, togglePtSet } from '../store/pt-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import type { Session } from '../types/domain'
@@ -66,7 +68,9 @@ const LIFTS = [
 
 beforeEach(async () => {
   clearSession()
+  clearAllPtRuns()
   await Promise.all([
+    db.ptRoutines.clear(), db.ptExercises.clear(),
     db.lifts.clear(), db.trainingMaxes.clear(),
     db.cycles.clear(), db.sessions.clear(), db.sets.clear(),
     db.liftSupplementals.clear(),
@@ -79,6 +83,59 @@ beforeEach(async () => {
 })
 
 afterEach(drain)
+
+describe('Today — select PT routines together', () => {
+  const routine = (name: string) => savePtRoutine(db, {
+    name,
+    exercises: [{ name: `${name} exercise`, sets: 2, measure: 'reps', targetReps: 10, resistanceKind: 'none' }],
+  })
+
+  it('selects multiple routines without leaving Today, then starts only the selected routines', async () => {
+    const knee = await routine('Knee')
+    const shoulder = await routine('Shoulder')
+    await routine('Ankle')
+    renderToday()
+    expect(await screen.findByRole('button', { name: 'START PT SESSION (0)' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include Knee' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include Shoulder' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include Ankle' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include Ankle' }))
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(ptSessionRoutineIds()).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'START PT SESSION (2)' }))
+    expect(ptSessionRoutineIds().sort()).toEqual([knee, shoulder].sort())
+    expect(mockNavigate).toHaveBeenCalledWith('/pt/run')
+    expect(screen.getByRole('link', { name: /all PT routines \+ history/ })).toHaveAttribute('href', '/pt')
+  })
+
+  it('adds a routine to the ongoing session while preserving completed sets', async () => {
+    const knee = await routine('Knee')
+    const shoulder = await routine('Shoulder')
+    const exercise = (await db.ptExercises.where('routineId').equals(knee).toArray())[0]
+    startPtRun(knee)
+    togglePtSet(exercise.id!, 1)
+    renderToday()
+    const included = await screen.findByRole('checkbox', { name: 'Include Knee' })
+    expect(included).toBeChecked()
+    expect(included).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include Shoulder' }))
+    fireEvent.click(screen.getByRole('button', { name: 'ADD TO PT SESSION (1)' }))
+    expect(ptSessionRoutineIds().sort()).toEqual([knee, shoulder].sort())
+    expect(getPtRun(knee)?.done).toEqual([`${exercise.id}:1`])
+    expect(mockNavigate).toHaveBeenCalledWith('/pt/run')
+  })
+
+  it('keeps routines without active exercises out of the selection', async () => {
+    await db.ptRoutines.add({ name: 'Empty', order: 0 })
+    const archived = await routine('Archived exercises')
+    const exercise = (await db.ptExercises.where('routineId').equals(archived).toArray())[0]
+    await db.ptExercises.update(exercise.id!, { archived: true })
+    renderToday()
+    expect(await screen.findByRole('checkbox', { name: 'Include Empty' })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: 'Include Archived exercises' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'START PT SESSION (0)' })).toBeDisabled()
+  })
+})
 
 describe('Today screen', () => {
   it('renders a button for each lift', async () => {
