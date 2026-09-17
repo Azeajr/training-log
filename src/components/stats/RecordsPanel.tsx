@@ -5,6 +5,7 @@ import { estimated1RM } from '../../lib/calc'
 import { bestEstimatedPerformance, baselineWorkingSets } from '../../lib/performance'
 import { settings } from '../../store/settings-store'
 import Rule from '../layout/Rule'
+import AsyncErrorBox from '../ui/AsyncErrorBox'
 
 interface RecordRow {
   name: string
@@ -153,16 +154,11 @@ export default function RecordsPanel(props: Props) {
     <Show
       when={!read.error()}
       fallback={
-        <div role="alert" class="border border-danger px-3 py-2">
-          <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not read your records</div>
-          <div class="text-text-dim text-sm mb-2 break-words">{read.error()}</div>
-          <button
-            onClick={() => void read.retry()}
-            class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
-          >
-            RETRY
-          </button>
-        </div>
+        <AsyncErrorBox
+          title="Could not read your records"
+          error={read.error()!}
+          onRetry={() => void read.retry()}
+        />
       }
     >
     <Show when={!read.loading()} fallback={<div class="text-muted text-sm tracking-widest uppercase">Loading…</div>}>

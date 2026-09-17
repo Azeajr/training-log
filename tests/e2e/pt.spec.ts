@@ -151,7 +151,7 @@ test.describe('PT checklist', () => {
     await expect(page.getByLabel('Note for Wall slide', { exact: true })).toHaveValue('knee exercise note')
 
     await page.getByRole('link', { name: 'TODAY', exact: true }).click()
-    await page.getByRole('button', { name: 'RESUME PT SESSION · 2 routines', exact: true }).click()
+    await page.getByRole('button', { name: 'RESUME PT SESSION . 2 routines', exact: true }).click()
     await expect(shoulderSet).toHaveAttribute('aria-checked', 'true')
     await expect(kneeSet).toHaveAttribute('aria-checked', 'true')
     await page.getByRole('button', { name: 'FINISH SESSION', exact: true }).click()

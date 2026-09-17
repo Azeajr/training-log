@@ -19,6 +19,7 @@ import { createAsyncRead } from '../lib/async-read'
 import { listPtRoutines } from '../lib/pt'
 import { getPtRun, ptSessionRoutineIds, startPtSession } from '../store/pt-store'
 import Rule from '../components/layout/Rule'
+import AsyncErrorBox from '../components/ui/AsyncErrorBox'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
@@ -358,16 +359,11 @@ export default function Today() {
       when={!read.error()}
       fallback={
         <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
-          <div role="alert" class="border border-danger px-3 py-2">
-            <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not load today</div>
-            <div class="text-text-dim text-sm mb-2 break-words">{read.error()}</div>
-            <button
-              onClick={() => void read.retry()}
-              class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
-            >
-              RETRY
-            </button>
-          </div>
+          <AsyncErrorBox
+            title="Could not load today"
+            error={read.error()!}
+            onRetry={() => void read.retry()}
+          />
         </div>
       }
     >
@@ -537,7 +533,7 @@ export default function Today() {
               onClick={() => navigate('/pt/run')}
               class="block w-full text-left border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-3"
             >
-              RESUME PT SESSION · {ptSessionRoutineIds().length} routine{ptSessionRoutineIds().length === 1 ? '' : 's'}
+              RESUME PT SESSION . {ptSessionRoutineIds().length} routine{ptSessionRoutineIds().length === 1 ? '' : 's'}
             </button>
           </Show>
           <Show

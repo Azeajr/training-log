@@ -13,6 +13,7 @@ import NotesBlock from '../components/forms/NotesBlock'
 import ExerciseSetsBlock from '../components/forms/ExerciseSetsBlock'
 import LiftSetsByType from '../components/forms/LiftSetsByType'
 import RecordsPanel from '../components/stats/RecordsPanel'
+import AsyncErrorBox from '../components/ui/AsyncErrorBox'
 import ExerciseHistoryModal from '../components/modals/ExerciseHistoryModal'
 import { gapsForSession } from '../store/save-failure-store'
 import { createAsyncRead } from '../lib/async-read'
@@ -633,16 +634,12 @@ export default function History() {
           stays above it: changing view re-runs the read, which is a second way
           out besides RETRY. */}
       <Show when={readError()}>
-        <div role="alert" class="border border-danger px-3 py-2 mb-4">
-          <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not read your history</div>
-          <div class="text-text-dim text-sm mb-2 break-words">{readError()}</div>
-          <button
-            onClick={() => { void read.retry(); void monthRead.retry() }}
-            class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
-          >
-            RETRY
-          </button>
-        </div>
+        <AsyncErrorBox
+          title="Could not read your history"
+          error={readError()!}
+          onRetry={() => { void read.retry(); void monthRead.retry() }}
+          class="mb-4"
+        />
       </Show>
 
       <Show when={mode() === 'records'}>
