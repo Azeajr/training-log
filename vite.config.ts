@@ -84,7 +84,10 @@ export default defineConfig(() => {
         // has and PRECACHE_PATHS is derived from this manifest — without it the
         // SW's fetch handler passed the file straight through, so the only icon
         // that actually existed failed to load offline (F72).
-        globPatterns: ['**/*.{html,js,css,ico,png,svg,wasm}'],
+        // `wav` is here for `silence.wav`, the keepalive loop: an offline-first
+        // app must not lose the rest timer's process-hold the moment the
+        // network goes away.
+        globPatterns: ['**/*.{html,js,css,ico,png,svg,wasm,wav}'],
         // wasm is precached via globPatterns above and served cache-first in
         // the SW fetch handler (src/service-worker.ts); no runtimeCaching here
         // because vite-plugin-pwa only supports runtimeCaching under generateSW.

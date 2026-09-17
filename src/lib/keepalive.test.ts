@@ -3,26 +3,22 @@ import {
   startKeepalive, stopKeepalive, setKeepaliveEnabled, isKeepaliveEnabled, reloadKeepalive,
 } from './keepalive'
 import { readTrace, reloadTrace } from './trace'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 let play: ReturnType<typeof vi.fn>
 let pause: ReturnType<typeof vi.fn>
-let created: Blob[]
-let revoked: string[]
 
 beforeEach(() => {
   localStorage.clear()
   reloadTrace()
   reloadKeepalive()
-  created = []
-  revoked = []
   play = vi.fn().mockResolvedValue(undefined)
   pause = vi.fn()
   // jsdom implements neither of these.
   HTMLMediaElement.prototype.play = play as unknown as HTMLMediaElement['play']
   HTMLMediaElement.prototype.pause = pause as unknown as HTMLMediaElement['pause']
   HTMLMediaElement.prototype.load = vi.fn() as unknown as HTMLMediaElement['load']
-  URL.createObjectURL = vi.fn((b: Blob) => { created.push(b); return `blob:fake-${created.length}` })
-  URL.revokeObjectURL = vi.fn((u: string) => { revoked.push(u) })
 })
 
 afterEach(() => {
@@ -45,7 +41,6 @@ describe('the off switch', () => {
     expect(isKeepaliveEnabled()).toBe(false)
     startKeepalive()
     expect(play).not.toHaveBeenCalled()
-    expect(created).toHaveLength(0)
     expect(readTrace()).toHaveLength(0)
   })
 
@@ -73,12 +68,11 @@ describe('holding the process', () => {
     expect(evs).toContain('keepalive.playing')
   })
 
-  it('releases the object URL when the rest ends', () => {
+  it('pauses and releases the element when the rest ends', () => {
     enable()
     startKeepalive()
     stopKeepalive()
     expect(pause).toHaveBeenCalled()
-    expect(revoked).toEqual(['blob:fake-1'])
   })
 
   it('asks for an audio session that mixes rather than interrupts', () => {
@@ -120,29 +114,55 @@ describe('when autoplay is refused', () => {
   })
 })
 
-describe('the silent loop itself', () => {
-  it('is a well-formed 16-bit mono WAV', async () => {
-    enable()
-    startKeepalive()
-    const view = new DataView(await created[0].arrayBuffer())
-    const tag = (off: number, len: number) =>
-      String.fromCharCode(...Array.from({ length: len }, (_, i) => view.getUint8(off + i)))
+// The first device run failed every play() with `NotSupportedError` and a media
+// `error` event — the loop never started, so the experiment tested nothing. The
+// source was a `blob:` URL, and iOS requires a media resource that answers
+// byte-range requests, which blob URLs do not. It is a shipped file now, and
+// these cases hold that file to the shape the fix depends on.
+describe('the shipped silence.wav', () => {
+  const wav = readFileSync(join(import.meta.dirname, '..', '..', 'public', 'silence.wav'))
+  const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength)
+  const tag = (off: number, len: number) =>
+    String.fromCharCode(...Array.from({ length: len }, (_, i) => view.getUint8(off + i)))
+
+  it('is a well-formed 16-bit mono PCM WAV', () => {
     expect(tag(0, 4)).toBe('RIFF')
     expect(tag(8, 4)).toBe('WAVE')
+    expect(view.getUint16(20, true)).toBe(1)       // PCM
     expect(view.getUint16(22, true)).toBe(1)       // mono
     expect(view.getUint16(34, true)).toBe(16)      // bits per sample
-    expect(view.getUint32(4, true)).toBe(view.byteLength - 8)
+    expect(view.getUint32(4, true)).toBe(wav.byteLength - 8)
   })
 
-  it('is near-silence, not digital silence', async () => {
-    enable()
-    startKeepalive()
-    const view = new DataView(await created[0].arrayBuffer())
-    const first = view.getInt16(44, true)
-    const second = view.getInt16(46, true)
+  it('is near-silence, not digital silence', () => {
     // A run of zeroes can be detected and discarded by the engine, taking the
     // media session — and the whole point — with it. ±1 LSB is about -90 dBFS.
-    expect(first).toBe(1)
-    expect(second).toBe(-1)
+    expect(view.getInt16(44, true)).toBe(1)
+    expect(view.getInt16(46, true)).toBe(-1)
+  })
+
+  it('is what the module loads — a file, never a blob URL', () => {
+    const seen: string[] = []
+    const RealAudio = window.Audio
+    class SpyAudio extends RealAudio {
+      constructor(src?: string) {
+        super(src)
+        if (src !== undefined) seen.push(src)
+      }
+    }
+    vi.stubGlobal('Audio', SpyAudio)
+    enable()
+    startKeepalive()
+    // The regression this pins: a `blob:` URL answers no byte-range requests,
+    // which iOS requires of a media resource, and every play() came back
+    // `NotSupportedError`.
+    expect(seen).toEqual(['/silence.wav'])
+    vi.unstubAllGlobals()
+  })
+
+  it('is precached, so the loop survives going offline', () => {
+    const cfg = readFileSync(join(import.meta.dirname, '..', '..', 'vite.config.ts'), 'utf8')
+    const globs = /globPatterns: \['\*\*\/\*\.\{([^}]+)\}'\]/.exec(cfg)
+    expect(globs?.[1].split(',')).toContain('wav')
   })
 })
