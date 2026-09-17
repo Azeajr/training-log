@@ -33,8 +33,19 @@ const ENABLED_KEY = 'notif-keepalive-on'
 // may not hold the session at all, which the experiment will show.
 const SESSION_TYPE = 'ambient'
 
+// A real file, not a blob: URL.
+//
+// The first device run failed on every attempt with
+// `NotSupportedError: The operation is not supported.` and a media `error`
+// event — the loop never played once, so it tested nothing. iOS requires a
+// media resource that supports byte-range requests, and a `blob:` URL does not
+// provide them. A file served over HTTP does, so the source is now an asset.
+// It is precached (`wav` is in vite.config's globPatterns) because an
+// offline-first app must not lose this the moment the network does — the same
+// mistake F72 made with the only icon that existed.
+const SILENCE_URL = '/silence.wav'
+
 let el: HTMLAudioElement | null = null
-let objectUrl: string | null = null
 let retryBound = false
 let enabled = read()
 
@@ -66,39 +77,6 @@ export function reloadKeepalive(): void {
   enabled = read()
 }
 
-/**
- * A WAV of near-silence.
- *
- * 16-bit samples alternating ±1 LSB rather than a run of zeroes: that is about
- * -90 dBFS, inaudible on any hardware, but it is not digital silence — which
- * some engines detect and discard, taking the media session with it. Generated
- * rather than shipped as an asset so the whole experiment is one file and adds
- * nothing to the bundle.
- */
-function silentWav(seconds = 1, rate = 8000): Blob {
-  const samples = seconds * rate
-  const dataBytes = samples * 2
-  const buf = new ArrayBuffer(44 + dataBytes)
-  const view = new DataView(buf)
-  const ascii = (off: number, s: string) => {
-    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i))
-  }
-  ascii(0, 'RIFF')
-  view.setUint32(4, 36 + dataBytes, true)
-  ascii(8, 'WAVEfmt ')
-  view.setUint32(16, 16, true)            // fmt chunk size
-  view.setUint16(20, 1, true)             // PCM
-  view.setUint16(22, 1, true)             // mono
-  view.setUint32(24, rate, true)
-  view.setUint32(28, rate * 2, true)      // byte rate
-  view.setUint16(32, 2, true)             // block align
-  view.setUint16(34, 16, true)            // bits per sample
-  ascii(36, 'data')
-  view.setUint32(40, dataBytes, true)
-  for (let i = 0; i < samples; i++) view.setInt16(44 + i * 2, i % 2 === 0 ? 1 : -1, true)
-  return new Blob([buf], { type: 'audio/wav' })
-}
-
 function claimAudioSession(): void {
   const nav = navigator as Navigator & { audioSession?: { type?: string } }
   if (!nav.audioSession) {
@@ -115,15 +93,20 @@ function claimAudioSession(): void {
 
 function ensureElement(): void {
   if (el) return
-  objectUrl = URL.createObjectURL(silentWav())
-  const audio = new Audio(objectUrl)
+  const audio = new Audio(SILENCE_URL)
   audio.loop = true
   audio.preload = 'auto'
   // Deliberately NOT muted: a muted element does not hold a media session, and
   // the session is the entire point. The silence comes from the content.
   audio.muted = false
   for (const name of ['playing', 'pause', 'ended', 'stalled', 'error', 'suspend'] as const) {
-    audio.addEventListener(name, () => trace('keepalive.media', { event: name, paused: audio.paused }))
+    audio.addEventListener(name, () => trace('keepalive.media', {
+      event: name,
+      paused: audio.paused,
+      // MediaError tells apart "could not fetch it" from "cannot decode it",
+      // which is the difference between a caching problem and a format one.
+      code: audio.error?.code ?? null,
+    }))
   }
   el = audio
 }
@@ -178,8 +161,4 @@ export function stopKeepalive(): void {
     trace('keepalive.stop.failed', { error: String(err) })
   }
   el = null
-  if (objectUrl) {
-    URL.revokeObjectURL(objectUrl)
-    objectUrl = null
-  }
 }
