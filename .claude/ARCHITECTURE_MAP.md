@@ -140,10 +140,10 @@ src/
 public/
 ├── favicon.svg, icons.svg
 ├── _headers                      # Cloudflare: CSP + X-Frame-Options + Permissions-Policy + COOP
-└── (demo-seed.json moved to fixtures/ — see F82; nothing fetches it, so it is not published)
+└── (demo-seed.json is gone — moved out of public/ by F82, then deleted 2026-09-17: nothing read it)
 
 tests/e2e/                        # Playwright specs + auto-fixtures (_noPageErrors, _freshDb)
-scripts/                          # debug-browser.js, migrate-history.py
+scripts/                          # debug-browser.js, generate-icons.mjs, verify-notify-hardening.js
 ```
 
 ## Routes (`src/App.tsx`)

@@ -73,20 +73,16 @@ describe('.claude/ docs are not silently ignored (F83)', () => {
 
 // ── F82 ─────────────────────────────────────────────────────────────────────
 // `public/` is published verbatim, so a 45 KB export of real training history
-// sitting there was fetchable at /demo-seed.json on the deployed site — while
-// nothing in the app ever read it. Its documented purpose is a hand import
-// through Settings → IMPORT JSON, which the repo serves just as well.
-describe('the demo seed is not published (F82)', () => {
-  it('lives outside public/', () => {
+// sitting there was fetchable at /demo-seed.json on the deployed site while
+// nothing in the app ever read it. B10 moved it to `fixtures/` to stop the
+// publishing; it was **deleted outright on 2026-09-17**, because the purpose
+// that kept it alive — import it by hand through Settings to reach a demo
+// state — is one the single user of this app has no reason to want, holding a
+// copy of their own real training history to serve it.
+describe('the demo seed is gone (F82)', () => {
+  it('is in neither public/ nor fixtures/', () => {
     expect(existsSync(join(root, 'public', 'demo-seed.json'))).toBe(false)
-    expect(existsSync(join(root, 'fixtures', 'demo-seed.json'))).toBe(true)
-  })
-
-  it('is still a valid import envelope, so the documented path still works', () => {
-    const seed = JSON.parse(readFileSync(join(root, 'fixtures', 'demo-seed.json'), 'utf8'))
-    expect(seed.version).toBeDefined()
-    expect(Array.isArray(seed.lifts)).toBe(true)
-    expect(seed.lifts.length).toBeGreaterThan(0)
+    expect(existsSync(join(root, 'fixtures', 'demo-seed.json'))).toBe(false)
   })
 
   // Everything here is published verbatim to the deployed site, so the list is

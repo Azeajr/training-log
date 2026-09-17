@@ -57,3 +57,8 @@ playwright-report/
 
 # Hermes agent worktrees — worker checkouts, never committed
 .worktrees/
+
+# Python bytecode. A .pyc for scripts/migrate-history.py was tracked for
+# months — machine-specific, regenerated on every run.
+__pycache__/
+*.pyc
