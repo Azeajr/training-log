@@ -4,7 +4,7 @@ import { Router, Route } from '@solidjs/router'
 import PT from './PT'
 import { db } from '../db/index'
 import { archivePtRoutine, commitPtRun, getPtRoutine, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
-import { clearPtRun, startPtRun, togglePtSet } from '../store/pt-store'
+import { clearAllPtRuns as clearPtRun, getPtRun, startPtRun, togglePtSet } from '../store/pt-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 
@@ -100,11 +100,29 @@ describe('PT screen', () => {
     togglePtSet(1, 1)
 
     renderPT()
-    const banner = await screen.findByText(/PT IN PROGRESS/)
-    expect(banner.textContent).toContain('Knee')
-    expect(banner.textContent).toContain('1 ticked')
+    const banner = await screen.findByText(/RESUME PT SESSION/)
+    expect(banner.textContent).toContain('1 routine')
     fireEvent.click(banner)
-    expect(mockNavigate).toHaveBeenCalledWith(`/pt/${id}/run`)
+    expect(mockNavigate).toHaveBeenCalledWith('/pt/run')
+  })
+
+  it('offers one resume control for a session and removes only a deleted routine', async () => {
+    const knee = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft()] })
+    const shoulder = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
+    startPtRun(knee)
+    togglePtSet(1, 1)
+    startPtRun(shoulder)
+    renderPT()
+    await waitFor(() => expect(screen.getAllByText(/RESUME PT SESSION/)).toHaveLength(1))
+    expect(screen.getByText(/RESUME PT SESSION/).textContent).toContain('2 routines')
+    expect(await screen.findAllByText('RESUME')).toHaveLength(2)
+    fireEvent.click(screen.getByText(/RESUME PT SESSION/))
+    expect(mockNavigate).toHaveBeenCalledWith('/pt/run')
+
+    fireEvent.click(screen.getByLabelText('Delete Knee'))
+    fireEvent.click(await screen.findByRole('button', { name: /yes, delete knee/i }))
+    await waitFor(() => expect(getPtRun(knee)).toBeUndefined())
+    expect(getPtRun(shoulder)).toBeDefined()
   })
 
   it('deletes a routine and drops an in-progress run of it', async () => {
@@ -119,7 +137,19 @@ describe('PT screen', () => {
     await waitFor(() => expect(document.body.textContent).toContain('No routines yet'))
     expect(await db.ptRoutines.count()).toBe(0)
     // The store no longer points at a routine that does not exist.
-    await waitFor(() => expect(document.body.textContent).not.toContain('PT IN PROGRESS'))
+    await waitFor(() => expect(document.body.textContent).not.toContain('RESUME PT SESSION'))
+  })
+
+  it('starts selected routines together', async () => {
+    const knee = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft()] })
+    const shoulder = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
+    renderPT()
+    fireEvent.click(await screen.findByLabelText('Include Knee'))
+    fireEvent.click(screen.getByLabelText('Include Shoulder'))
+    fireEvent.click(screen.getByRole('button', { name: 'START SESSION (2)' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/pt/run')
+    expect(getPtRun(knee)).toBeDefined()
+    expect(getPtRun(shoulder)).toBeDefined()
   })
 
   it('lists past runs newest first with their done count', async () => {

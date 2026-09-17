@@ -3,6 +3,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createRoot } from 'solid-js'
 import {
   clearPtRun,
+  clearAllPtRuns,
+  getPtRun,
   getPtExerciseNote,
   isPtSetDone,
   ptExerciseNotesForCommit,
@@ -17,7 +19,7 @@ import {
 } from './pt-store'
 
 beforeEach(() => {
-  clearPtRun()
+  clearAllPtRuns()
   localStorage.clear()
   resetPtPersistenceError()
 })
@@ -30,8 +32,9 @@ describe('startPtRun', () => {
     expect(ptRun.done).toEqual([])
   })
 
-  it('wipes the previous run rather than carrying its ticks across routines', () => {
+  it('keeps independent progress and resumes the original notes and start time', () => {
     startPtRun(1)
+    const startedAt = ptRun.startedAt
     togglePtSet(10, 1)
     setPtExerciseNote(10, 'note')
     setPtNotes('session note')
@@ -42,6 +45,15 @@ describe('startPtRun', () => {
     expect(ptRun.done).toEqual([])
     expect(ptRun.exerciseNotes).toEqual({})
     expect(ptRun.notes).toBe('')
+    togglePtSet(20, 1)
+    startPtRun(1)
+    expect(ptRun.startedAt).toBe(startedAt)
+    expect(ptRun.done).toEqual(['10:1'])
+    expect(ptRun.exerciseNotes).toEqual({ 10: 'note' })
+    expect(ptRun.notes).toBe('session note')
+    clearPtRun()
+    expect(getPtRun(1)).toBeUndefined()
+    expect(getPtRun(2)?.done).toEqual(['20:1'])
   })
 })
 
@@ -196,6 +208,45 @@ describe('loadFromStorage', () => {
     expect(store.ptRun.done).toEqual(['4:1'])
     expect(store.ptRun.notes).toBe('n')
     expect(store.getPtExerciseNote(4)).toBe('x')
+  })
+
+  it('persists and restores multiple runs, including notes and start times', async () => {
+    const original = await import('./pt-store')
+    const dispose = createRoot(d => { original.setupPtRunPersistence(); return d })
+    try {
+      original.startPtRun(1)
+      const startedAt = original.ptRun.startedAt
+      original.togglePtSet(10, 2)
+      original.setPtNotes('knee notes')
+      original.setPtExerciseNote(10, 'lighter band')
+      original.startPtRun(2)
+      original.togglePtSet(20, 1)
+      await new Promise(r => setTimeout(r, 0))
+      vi.resetModules()
+      const restored = await import('./pt-store')
+      expect(restored.getPtRun(2)?.done).toEqual(['20:1'])
+      restored.startPtRun(1)
+      expect(restored.ptRun.startedAt).toBe(startedAt)
+      expect(restored.ptRun.done).toEqual(['10:2'])
+      expect(restored.ptRun.notes).toBe('knee notes')
+      expect(restored.getPtExerciseNote(10)).toBe('lighter band')
+      expect(restored.getPtRun(2)?.done).toEqual(['20:1'])
+    } finally {
+      dispose()
+    }
+  })
+
+  it('ignores malformed paused entries without losing valid progress', async () => {
+    localStorage.setItem('pt-run', JSON.stringify({
+      v: 1,
+      state: { routineId: 1, done: ['10:1'] },
+      paused: { 1: { routineId: 1 }, 2: { routineId: 3 }, 4: null, 5: { routineId: 5, done: 42 } },
+    }))
+    const store = await import('./pt-store')
+    expect(store.getPtRun(1)?.done).toEqual(['10:1'])
+    expect(store.getPtRun(2)).toBeUndefined()
+    expect(store.getPtRun(4)).toBeUndefined()
+    expect(store.getPtRun(5)?.done).toEqual([])
   })
 
   it('returns defaults on malformed JSON', async () => {

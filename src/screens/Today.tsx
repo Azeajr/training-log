@@ -17,7 +17,7 @@ import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
 import { createAsyncRead } from '../lib/async-read'
 import { listPtRoutines } from '../lib/pt'
-import { ptRun } from '../store/pt-store'
+import { ptSessionRoutineIds } from '../store/pt-store'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
@@ -69,7 +69,6 @@ export default function Today() {
       setPtRoutines([])
     }
   }
-  const activePtRoutine = () => ptRoutines().find(r => r.id === ptRun.routineId)
 
   // Everything about a lift that has to be fetched: its training max and its
   // assistance defaults. Both are async, and publishing whatever landed last
@@ -525,12 +524,12 @@ export default function Today() {
 
         <div class="mt-10">
           <Rule label="PT" class="text-muted mb-4" />
-          <Show when={ptRun.routineId !== null && activePtRoutine()}>
+          <Show when={ptSessionRoutineIds().length > 0}>
             <button
-              onClick={() => navigate(`/pt/${ptRun.routineId}/run`)}
+              onClick={() => navigate('/pt/run')}
               class="block w-full text-left border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-3"
             >
-              &#9654; PT IN PROGRESS — {activePtRoutine()!.name} ({ptRun.done.length} ticked)
+              RESUME PT SESSION · {ptSessionRoutineIds().length} routine{ptSessionRoutineIds().length === 1 ? '' : 's'}
             </button>
           </Show>
           <Show

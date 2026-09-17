@@ -1,8 +1,8 @@
-import { createStore, produce } from 'solid-js/store'
-import { createEffect, createSignal } from 'solid-js'
+import { createStore, produce, reconcile, unwrap } from 'solid-js/store'
+import { batch, createEffect, createSignal } from 'solid-js'
 
 /**
- * The in-progress PT run.
+ * The in-progress PT session, with a draft per included routine.
  *
  * Deliberately shaped unlike `workout-store`: there is no `activeSession`,
  * because a PT run has no database row until it is finished. Ticking a box
@@ -50,22 +50,38 @@ const PERSISTED_VALIDATORS: Record<(typeof PERSISTED_KEYS)[number], (v: unknown)
   notes: v => typeof v === 'string',
 }
 
-function loadFromStorage(): Partial<PtRunState> {
+function validateState(state: unknown): Partial<PtRunState> {
+  if (!isPlainObject(state)) return {}
+  const src = state as Record<string, unknown>
+  const out: Partial<PtRunState> = {}
+  for (const k of PERSISTED_KEYS) {
+    if (Object.hasOwn(src, k) && PERSISTED_VALIDATORS[k](src[k])) {
+      (out as Record<string, unknown>)[k] = src[k]
+    }
+  }
+  return out
+}
+
+function loadFromStorage(): { current: Partial<PtRunState>; paused: Record<string, PtRunState> } {
+  const empty = { current: {}, paused: {} }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as { v?: number; state?: unknown }
-    if (parsed.v !== STORAGE_VERSION) return {}
-    const state = parsed.state
-    if (state == null || typeof state !== 'object' || Array.isArray(state)) return {}
-    const src = state as Record<string, unknown>
-    const out: Partial<PtRunState> = {}
-    for (const k of PERSISTED_KEYS) {
-      if (k in src && PERSISTED_VALIDATORS[k](src[k])) (out as Record<string, unknown>)[k] = src[k]
+    if (!raw) return empty
+    const parsed = JSON.parse(raw) as { v?: number; state?: unknown; paused?: unknown }
+    if (parsed.v !== STORAGE_VERSION) return empty
+    const current = validateState(parsed.state)
+    const paused: Record<string, PtRunState> = {}
+    if (isPlainObject(parsed.paused)) {
+      for (const [id, value] of Object.entries(parsed.paused as object)) {
+        const run = validateState(value)
+        if (run.routineId != null && String(run.routineId) === id && run.routineId !== current.routineId) {
+          paused[id] = { ...emptyState(), ...run }
+        }
+      }
     }
-    return out
+    return { current, paused }
   } catch {
-    return {}
+    return empty
   }
 }
 
@@ -78,10 +94,27 @@ const emptyState = (): PtRunState => ({
   notes: '',
 })
 
+const restored = loadFromStorage()
+// Keep the original `state` entry readable so existing single-routine drafts
+// restore unchanged. Additional routines persist alongside it.
+const [pausedRuns, setPausedRuns] = createStore<Record<string, PtRunState>>(restored.paused)
 export const [ptRun, setPtRun] = createStore<PtRunState>({
   ...emptyState(),
-  ...loadFromStorage(),
+  ...restored.current,
 })
+
+/** Progress for any routine, including ones the user has navigated away from. */
+export function getPtRun(routineId: number): PtRunState | undefined {
+  return ptRun.routineId === routineId ? ptRun : pausedRuns[String(routineId)]
+}
+
+export function ptSessionRoutineIds(): number[] {
+  return [...(ptRun.routineId === null ? [] : [ptRun.routineId]), ...Object.keys(pausedRuns).map(Number)]
+}
+
+export function startPtSession(routineIds: number[]): void {
+  batch(() => routineIds.forEach(startPtRun))
+}
 
 // Non-null means the run is no longer being mirrored to localStorage, and says
 // why. Same contract as workout-store's: a write failure inside a reactive
@@ -96,6 +129,7 @@ export function setupPtRunPersistence() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         v: STORAGE_VERSION,
+        paused: pausedRuns,
         state: {
           routineId: ptRun.routineId,
           startedAt: ptRun.startedAt,
@@ -119,42 +153,66 @@ export function resetPtPersistenceError(): void {
 const key = (ptExerciseId: number, setNumber: number): string => `${ptExerciseId}:${setNumber}`
 
 export function startPtRun(routineId: number): void {
-  setPtRun({ ...emptyState(), routineId, startedAt: Date.now() })
+  if (ptRun.routineId === routineId) return
+  batch(() => {
+    if (ptRun.routineId !== null) {
+      setPausedRuns(String(ptRun.routineId), structuredClone(unwrap(ptRun)))
+    }
+    const resumed = pausedRuns[String(routineId)]
+    const next = resumed ? structuredClone(unwrap(resumed)) : { ...emptyState(), routineId, startedAt: Date.now() }
+    setPausedRuns(produce(runs => { delete runs[String(routineId)] }))
+    setPtRun(reconcile(next))
+  })
 }
 
-export function clearPtRun(): void {
-  setPtRun(emptyState())
+export function clearPtRun(routineId: number | null = ptRun.routineId): void {
+  batch(() => {
+    if (routineId !== null) setPausedRuns(produce(runs => { delete runs[String(routineId)] }))
+    if (ptRun.routineId === routineId) setPtRun(reconcile(emptyState()))
+  })
 }
 
-export function isPtSetDone(ptExerciseId: number, setNumber: number): boolean {
-  return ptRun.done.includes(key(ptExerciseId, setNumber))
+/** Reset all drafts, for test isolation. */
+export function clearAllPtRuns(): void {
+  batch(() => {
+    setPausedRuns(reconcile({}))
+    setPtRun(reconcile(emptyState()))
+  })
 }
 
-export function togglePtSet(ptExerciseId: number, setNumber: number): void {
+export function isPtSetDone(ptExerciseId: number, setNumber: number, routineId = ptRun.routineId): boolean {
+  return (routineId === null ? ptRun : getPtRun(routineId))?.done.includes(key(ptExerciseId, setNumber)) ?? false
+}
+
+export function togglePtSet(ptExerciseId: number, setNumber: number, routineId = ptRun.routineId): void {
   const k = key(ptExerciseId, setNumber)
-  setPtRun(produce(state => {
+  const update = produce<PtRunState>(state => {
     const at = state.done.indexOf(k)
     if (at === -1) state.done.push(k)
     else state.done.splice(at, 1)
-  }))
+  })
+  if (routineId === ptRun.routineId) setPtRun(update)
+  else if (routineId !== null && getPtRun(routineId)) setPausedRuns(String(routineId), update)
 }
 
-export function setPtExerciseNote(ptExerciseId: number, note: string): void {
-  setPtRun('exerciseNotes', String(ptExerciseId), note)
+export function setPtExerciseNote(ptExerciseId: number, note: string, routineId = ptRun.routineId): void {
+  if (routineId === ptRun.routineId) setPtRun('exerciseNotes', String(ptExerciseId), note)
+  else if (routineId !== null && getPtRun(routineId)) setPausedRuns(String(routineId), 'exerciseNotes', String(ptExerciseId), note)
 }
 
-export function getPtExerciseNote(ptExerciseId: number): string {
-  return ptRun.exerciseNotes[String(ptExerciseId)] ?? ''
+export function getPtExerciseNote(ptExerciseId: number, routineId = ptRun.routineId): string {
+  return (routineId === null ? ptRun : getPtRun(routineId))?.exerciseNotes[String(ptExerciseId)] ?? ''
 }
 
-export function setPtNotes(notes: string): void {
-  setPtRun('notes', notes)
+export function setPtNotes(notes: string, routineId = ptRun.routineId): void {
+  if (routineId === ptRun.routineId) setPtRun('notes', notes)
+  else if (routineId !== null && getPtRun(routineId)) setPausedRuns(String(routineId), 'notes', notes)
 }
 
 /** Per-exercise notes keyed by number, the shape `commitPtRun` takes. */
-export function ptExerciseNotesForCommit(): Record<number, string> {
+export function ptExerciseNotesForCommit(routineId = ptRun.routineId): Record<number, string> {
   const out: Record<number, string> = {}
-  for (const [id, note] of Object.entries(ptRun.exerciseNotes)) {
+  for (const [id, note] of Object.entries((routineId === null ? ptRun : getPtRun(routineId))?.exerciseNotes ?? {})) {
     const numeric = Number(id)
     if (Number.isInteger(numeric)) out[numeric] = note
   }
