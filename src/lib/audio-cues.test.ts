@@ -285,3 +285,88 @@ describe('audio trace', () => {
     expect(readTrace().map(e => e.ev)).toContain('audio.vibrate.absent')
   })
 })
+
+// ── F108 ────────────────────────────────────────────────────────────────────
+// `playTone` only ever resumed a context whose state was exactly `suspended`.
+// WebKit has a third state — `interrupted` — that a phone lock or another app's
+// audio puts the context into, and it was never even asked to resume. Captured
+// on an installed iOS PWA: a note armed at t+581.0 did not sound until t+611.4,
+// when the touch that hit SKIP resumed the context and released it. The bell
+// rang half a minute after the rest it belonged to.
+describe('a context that is not running (F108)', () => {
+  async function loadTracing() {
+    localStorage.clear()
+    localStorage.setItem('notif-trace-on', '1')
+    const traceMod = await import('./trace')
+    traceMod.reloadTrace()
+    const audio = await loadModule()
+    return { ...audio, ...traceMod }
+  }
+
+  /** A context stuck in `state`, whose resume() behaves as told. */
+  function stubCtx(state: string, resume: () => Promise<void>) {
+    const resumeSpy = vi.fn(resume)
+    vi.stubGlobal('AudioContext', class extends FakeAudioContext {
+      constructor() {
+        super()
+        this.state = state as 'running' | 'suspended' | 'closed'
+        this.resume = resumeSpy as never
+      }
+    })
+    return resumeSpy
+  }
+
+  it('asks an interrupted context to resume — the old check never did', async () => {
+    const { playCue, readTrace } = await loadTracing()
+    const resume = stubCtx('interrupted', async () => {})
+    playCue('nudge')
+    await flush()
+    expect(resume).toHaveBeenCalled()
+    expect(readTrace().map(e => e.ev)).toContain('audio.tone.resumed')
+  })
+
+  it('records a resume that never settles instead of awaiting it forever', async () => {
+    vi.useFakeTimers()
+    try {
+      const { playCue, readTrace } = await loadTracing()
+      stubCtx('interrupted', () => new Promise<void>(() => {}))
+      playCue('nudge')
+      await vi.advanceTimersByTimeAsync(500)
+      const resumed = readTrace().find(e => e.ev === 'audio.tone.resumed')
+      // Unsettled forever is exactly what iOS does outside a user gesture, and
+      // it used to leave no record at all.
+      expect(resumed?.d).toMatchObject({ resumed: 'timeout' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('names the ghost bell when the note is scheduled against a stopped clock', async () => {
+    const { playCue, readTrace } = await loadTracing()
+    stubCtx('interrupted', async () => {})   // resolves, but state stays put
+    playCue('nudge')
+    await flush()
+    const dead = readTrace().find(e => e.ev === 'audio.tone.deadctx')
+    expect(dead?.d).toMatchObject({ state: 'interrupted' })
+  })
+
+  it('survives a resume() that throws synchronously', async () => {
+    const { playCue, readTrace } = await loadTracing()
+    stubCtx('interrupted', () => { throw new DOMException('InvalidStateError') })
+    playCue('nudge')
+    await flush()
+    expect(readTrace().map(e => e.ev)).toContain('audio.tone.resumed')
+    expect(readTrace().map(e => e.ev)).not.toContain('audio.tone.failed')
+  })
+
+  it('leaves a running context alone: no resume, no ghost record', async () => {
+    const { playCue, readTrace } = await loadTracing()
+    const resume = stubCtx('running', async () => {})
+    playCue('nudge')
+    await flush()
+    expect(resume).not.toHaveBeenCalled()
+    const evs = readTrace().map(e => e.ev)
+    expect(evs).not.toContain('audio.tone.deadctx')
+    expect(evs).toContain('audio.tone.armed')
+  })
+})

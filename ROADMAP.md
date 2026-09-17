@@ -37,6 +37,29 @@ Ceiling, stated in `docs/diagnostic-trace.md`: nothing runs while the process is
 suspended, `showNotification` resolving is not proof of display, and nothing
 below WebAudio is visible. The gaps are read as data rather than papered over.
 
+**First capture, and what it settled (2026-09-17).** An installed iOS PWA, 686
+records over 12 minutes:
+
+- **The locked-phone case is a clock, not a bug.** Across a 316-second lock the
+  monotonic clock advanced **23 seconds** — iOS stops it while the device
+  sleeps, and `setTimeout` counts against it. A 90-second bell armed before a
+  lock is not dropped; it is postponed by the whole sleep. An app switch behaves
+  completely differently (clock keeps running, bell fires 3 s late on return),
+  which is exactly the difference reported from the device.
+- **The tick worker is fine.** 295 ticks, zero gaps in its sequence, receipt lag
+  ≤ 55 ms while visible.
+- **F108, found in the capture**: `playTone` only resumed a context whose state
+  was exactly `suspended`. WebKit's third state, `interrupted` — what a lock or
+  another app's audio produces — was never asked to resume, so the note was
+  scheduled against a stopped clock and sounded on the next touch. Captured
+  armed at t+581.0, sounding at t+611.4, released by the tap that hit SKIP.
+  Fixed: resume whenever the state is not `running`, with the attempt raced
+  against a deadline so an unsettled resume is recorded rather than awaited
+  forever. The stale note is **recorded, not yet dropped** — whether to drop it
+  is a live decision.
+- **TEST CUE** added to DIAGNOSTICS: the bell on demand, from a real tap, with
+  no 90-second wait and no notification chime to mask it.
+
 ### Rest-timer recovery checkpoints (2026-09-11)
 
 - A completed set now rings at both configured checkpoints (90 s and 180 s by default), leaving

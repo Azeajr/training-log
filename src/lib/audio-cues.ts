@@ -16,6 +16,29 @@ function getAudioCtx(): AudioContext {
   return audioCtx
 }
 
+// How long to wait for a resume before calling it a non-answer.
+//
+// `resume()` outside a user gesture is unreliable on iOS: it can sit unsettled
+// indefinitely, which would leave `playTone` awaiting a promise that never
+// resolves — no note, no error, and nothing recorded about why. Racing it
+// against a deadline turns "never settled" from an invisible hang into an
+// observation. 400 ms because a bell that needs longer than that has already
+// missed its moment.
+const RESUME_TIMEOUT_MS = 400
+
+async function resumeWithin(ctx: AudioContext): Promise<'ok' | 'failed' | 'timeout'> {
+  let attempt: Promise<'ok' | 'failed'>
+  try {
+    attempt = ctx.resume().then(() => 'ok' as const, () => 'failed' as const)
+  } catch {
+    return 'failed'
+  }
+  return Promise.race([
+    attempt,
+    new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), RESUME_TIMEOUT_MS)),
+  ])
+}
+
 /**
  * One tone.
  *
@@ -25,15 +48,25 @@ function getAudioCtx(): AudioContext {
  * calls are what turn "no sound" into an answer, and they are laid out to split
  * the two candidates apart:
  *
- *   `audio.tone` with no matching `audio.tone.armed`  → `resume()` never
- *     resolved; the context is suspended and everything after the await is dead
- *     code. The cue never ran.
+ *   `audio.tone.resumed` with `resumed: "timeout"`   → `resume()` never
+ *     settled, which is what iOS does outside a user gesture. Recorded rather
+ *     than awaited forever.
+ *   `audio.tone.deadctx`                              → the context was still
+ *     not running when the note was scheduled. This is the ghost bell: the note
+ *     sits against a stopped clock and plays on the NEXT user gesture, minutes
+ *     late. Observed on an installed iOS PWA — armed at t+581.0, played at
+ *     t+611.4, released by the touch that hit SKIP.
  *   `audio.tone.armed` with no `audio.tone.ended`     → the note was scheduled
  *     against a clock that is not advancing (`currentTime` frozen), so it will
  *     never arrive.
  *   `audio.tone.ended` and still nothing audible      → WebAudio did its job
  *     and the loss is below it: silent switch, routing, volume. Not fixable
  *     from here, but no longer a mystery.
+ *
+ * The state check is `!== 'running'`, not `=== 'suspended'`: WebKit has a third
+ * state, `interrupted`, which the old check did not recognise, so a context
+ * stopped by a phone lock or another app's audio was never even asked to
+ * resume (F108).
  */
 async function playTone(freq: number, duration: number, startDelay = 0): Promise<void> {
   try {
@@ -41,9 +74,16 @@ async function playTone(freq: number, duration: number, startDelay = 0): Promise
     trace('audio.tone', {
       freq, duration, startDelay, state: ctx.state, currentTime: ctx.currentTime,
     })
-    if (ctx.state === 'suspended') {
-      await ctx.resume()
-      trace('audio.tone.resumed', { state: ctx.state, currentTime: ctx.currentTime })
+    if (ctx.state !== 'running') {
+      const resumed = await resumeWithin(ctx)
+      trace('audio.tone.resumed', { resumed, state: ctx.state, currentTime: ctx.currentTime })
+    }
+    if (ctx.state !== 'running') {
+      // Scheduled anyway, deliberately: this is where the ghost bell comes from
+      // — a note queued against a stopped clock plays on the next user gesture,
+      // minutes late. Whether to drop it instead is a live decision (F108); for
+      // now it is recorded rather than changed, so the trace can settle it.
+      trace('audio.tone.deadctx', { freq, state: ctx.state, currentTime: ctx.currentTime })
     }
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()

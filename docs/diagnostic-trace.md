@@ -55,7 +55,9 @@ harness exists for, and `elapsed` cannot show it: `elapsed` is computed from
 |---|---|
 | `cue.play` | a bell was requested, and the context state at that moment |
 | `audio.tone` | `playTone` entered, with `state` and `currentTime` |
-| `audio.tone.resumed` | a suspended context resumed |
+| `audio.tone.resumed` | a stopped context was asked to resume. `resumed` is `ok`, `failed` or **`timeout`** — and `timeout` means `resume()` never settled, which is what iOS does outside a user gesture |
+| `audio.tone.deadctx` | the context was **still not running** when the note was scheduled — the ghost bell, which will sound on the next touch |
+| `cue.test` | the TEST CUE button was tapped |
 | `audio.tone.armed` | the note was scheduled, at `at` on the audio clock |
 | `audio.tone.ended` | **the note actually ran** |
 | `audio.tone.failed` | the error the old silent `catch` swallowed |
@@ -64,8 +66,13 @@ harness exists for, and `elapsed` cannot show it: `elapsed` is computed from
 
 Read it as a ladder:
 
-- `audio.tone` with no `audio.tone.resumed` → **`resume()` never settled.**
-  Everything after the await is dead code; the cue never ran.
+- `audio.tone.resumed` carrying `timeout` → **`resume()` never settled.** iOS
+  refuses to start a context outside a user gesture; nothing sounds until you
+  touch the screen.
+- `audio.tone.deadctx` → **the ghost bell.** The note was queued against a
+  stopped clock and will play whenever the context next resumes — captured once
+  at 30 seconds late, released by the tap that hit SKIP. If you hear a bell at
+  the moment you touch the screen, this is what it is.
 - `resumed` but no `armed` → it threw in between; see `audio.tone.failed`.
 - `armed` but no `ended` → the note was scheduled against a clock that is not
   advancing. Compare `currentTime` between records: if it is frozen, the
@@ -90,6 +97,21 @@ Read it as a ladder:
 | `sw.click` | the notification was tapped — the only **proof** it was displayed |
 
 ---
+
+## TEST CUE
+
+Settings → DIAGNOSTICS → **TEST CUE** plays the real bell immediately, from your
+tap. Use it instead of waiting out a rest:
+
+- A tap is a user gesture, which is the one context where iOS reliably lets an
+  AudioContext resume — so it removes the resume question entirely.
+- Nothing else is making a sound, where a real bell lands within half a second
+  of the system notification chime, which masks a 150 ms tone completely.
+
+**If TEST CUE is inaudible with media volume up and the silent switch off, the
+loss is below the app** — routing or volume, not code. Note that iOS has
+separate ringer and media volume: pressing the volume buttons while nothing is
+playing usually moves the ringer, not the channel this tone rides.
 
 ## What it cannot see
 

@@ -1,8 +1,9 @@
 import { createSignal, Show } from 'solid-js'
-import { isTraceEnabled, setTraceEnabled, traceStats, clearTrace } from '../../lib/trace'
+import { isTraceEnabled, setTraceEnabled, traceStats, clearTrace, trace } from '../../lib/trace'
 import { swTraceSetEnabled, swTraceClear } from '../../lib/trace-sw-store'
 import { buildTraceExport, formatTraceExport } from '../../lib/trace-export'
 import { restThresholds } from '../../lib/calc'
+import { playCue } from '../../lib/audio-cues'
 import { settings } from '../../store/settings-store'
 import { showToast } from '../../store/toast-store'
 import { useConfirmation } from '../../hooks/use-confirmation'
@@ -94,6 +95,18 @@ export default function DiagnosticsPanel() {
     showToast('Trace cleared', 2000)
   })
 
+  // Fires the real cue from a real touch. The bell is otherwise 90 seconds of
+  // waiting per attempt, and it lands within half a second of the system
+  // notification sound, which masks a 150 ms tone completely. On a tap there is
+  // nothing to confuse it with — and a gesture is also the one context where
+  // iOS reliably lets an AudioContext resume, so a cue that is inaudible HERE
+  // is inaudible for reasons below the app.
+  const testCue = () => {
+    trace('cue.test', { requested: true })
+    playCue('nudge')
+    refresh()
+  }
+
   const span = () => {
     const { first, last } = stats()
     if (first == null || last == null) return '—'
@@ -136,6 +149,12 @@ export default function DiagnosticsPanel() {
             SHARE
           </button>
         </Show>
+        <button
+          onClick={testCue}
+          class="border border-border px-3 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent"
+        >
+          TEST CUE
+        </button>
         <button
           onClick={show}
           disabled={busy()}
