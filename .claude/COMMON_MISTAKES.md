@@ -39,10 +39,10 @@ unless explicitly asked. Keep validation strictly before the first `clear()`.
 
 **Symptom**: Seeded TMs or imported history reference the wrong lift after a DB reset or fresh seed.
 **Check**: `src/db/seed.ts` inserts lifts via `bulkAdd` with `AUTOINCREMENT`, so IDs follow insertion
-order (OHP=1, Deadlift=2, Bench=3, Squat=4). `scripts/migrate-history.py` hardcodes the same order.
+order (OHP=1, Deadlift=2, Bench=3, Squat=4).
 **Fix**: Never assume lift IDs outside of seed order — look up by name.
-**Note**: an import payload may carry table keys that no longer exist (`fixtures/demo-seed.json` and
-older backups still contain `liftAccessories`). Unknown keys are ignored — `validateImportShape` and
+**Note**: an import payload may carry table keys that no longer exist (older backups still contain
+`liftAccessories`). Unknown keys are ignored — `validateImportShape` and
 `importFromRawData` both iterate `COLS`/`importSpec`, never the payload — so they neither restore nor
 error.
 
@@ -85,15 +85,17 @@ identity is stable and whose order actually moves.
 
 ---
 
-### 7. Demo data is a static asset, not an auto-seed
+### 7. There is no demo data
 
 **Symptom**: Expecting demo content on a fresh deploy and finding the DB empty.
-**Check**: `fixtures/demo-seed.json` is a hand-import payload; nothing reads it and it is no longer
-published (it sat in `public/`, so 45 KB of real training history was fetchable at
-`/demo-seed.json` on the deployed site — F82). The `VITE_DEMO` declaration was
-removed.
-**Fix**: Import it manually via Settings → IMPORT JSON on a fresh DB. If automatic demo seeding is
-ever needed, wire it in `main.tsx` between `dbReady` and `seedDatabase` — don't reintroduce the env var.
+**Check**: There is none to find. `demo-seed.json` sat in `public/`, which is published verbatim, so
+45 KB of real training history was fetchable at `/demo-seed.json` on the deployed site (F82). B10
+moved it to `fixtures/`; it was deleted outright on 2026-09-17, because nothing read it and the one
+purpose it had — hand-import through Settings to reach a demo state — was not worth keeping a copy
+of the user's own history in the repo for. The `VITE_DEMO` declaration was removed long before.
+**Fix**: Use an export of the real DB if a populated state is needed, or `pnpm test:e2e` for a true
+first-run one. If automatic demo seeding is ever wanted, wire it in `main.tsx` between `dbReady` and
+`seedDatabase` — don't reintroduce the env var.
 
 ---
 

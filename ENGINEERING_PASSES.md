@@ -78,8 +78,8 @@ co-located `*.test.ts(x)`; Playwright specs live in `tests/e2e/`.
 - **`shouldShowJokerButton` hides once supplemental logging starts** — a joker would shift the positional
   indices the logged-set mapping depends on.
 - iOS Safari's back-swipe cannot be suppressed from web code (`.claude/COMMON_MISTAKES.md` #6).
-  `fixtures/demo-seed.json` is a manual Settings → IMPORT payload, never auto-seeded, and deliberately
-  outside `public/` so it is not published.
+  There is no demo payload any more: `demo-seed.json` was moved out of `public/` (F82) and then
+  deleted on 2026-09-17, because nothing read it.
 
 ### Commands
 
