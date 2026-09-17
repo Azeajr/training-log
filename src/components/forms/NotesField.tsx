@@ -25,6 +25,9 @@ interface Props {
   rows?: number
   textareaClass: string
   class?: string
+  // Accessible name, for fields whose own label is not adjacent — a per-row
+  // note repeated down a list needs to say which row it belongs to.
+  ariaLabel?: string
 }
 
 // Freeform notes textarea with an optional bullet-list mode: while active,
@@ -154,6 +157,7 @@ export default function NotesField(props: Props) {
         onKeyDown={handleKeyDown}
         placeholder={props.placeholder}
         rows={props.rows ?? 3}
+        aria-label={props.ariaLabel}
         autocapitalize="off"
         class={props.textareaClass}
       />
