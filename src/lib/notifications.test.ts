@@ -196,7 +196,7 @@ describe('notifications — page timers, no SW (dev preview fallback)', () => {
 })
 
 describe('notifications — SW present (production)', () => {
-  it('arms the SW and keeps the page silent while the tab is visible', () => {
+  it('arms the SW and still fires page-side while the tab is visible', () => {
     installSw()
     scheduleRest(NOW, 'normal')
     expect(swPostMessage).toHaveBeenCalledWith({
@@ -206,8 +206,8 @@ describe('notifications — SW present (production)', () => {
       title: 'Rest complete',
       body: 'First bell — go if ready',
     })
-    vi.advanceTimersByTime(REST_FIRST_BELL * 1000 + 1000)
-    expect(notifCalls).toHaveLength(0)             // visible tab: SW owns it
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
+    expect(notifCalls).toHaveLength(1)             // F107: no abstain for the SW
   })
 
   it('page also fires when the tab is hidden (SW is best-effort)', () => {
@@ -219,11 +219,11 @@ describe('notifications — SW present (production)', () => {
     expect(swPostMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'schedule' }))
   })
 
-  it('past-due target with SW present and visible tab: page stays silent', () => {
+  it('past-due target with SW present and visible tab: page fires (F107)', () => {
     installSw()
     scheduleRest(NOW - 200_000, 'normal')
     vi.advanceTimersByTime(0)
-    expect(notifCalls).toHaveLength(0)
+    expect(notifCalls).toHaveLength(2)             // both bells, coalesced by tag
     expect(swPostMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'schedule' }))
   })
 
@@ -241,6 +241,79 @@ describe('notifications — SW present (production)', () => {
     cancelRest()
     expect(swPostMessage).toHaveBeenCalledWith({ type: 'cancel', tag: 'rest-timer' })
     vi.advanceTimersByTime(REST_FIRST_BELL * 1000 + 1000)
+    expect(notifCalls).toHaveLength(0)
+  })
+})
+
+// ── F107 ────────────────────────────────────────────────────────────────────
+// The page used to abstain whenever a service worker controlled a VISIBLE page:
+// `if (swController() && !isPageHidden()) return`. Two justifications were
+// recorded for it, and the device test of 2026-09-16 broke both.
+//
+// "The SW owns the visible-tab case" (the code's own comment) cannot be true.
+// `navigator.serviceWorker.controller` reports CONTROL, not aliveness — it stays
+// non-null after the browser terminates an idle worker (~30 s, COMMON_MISTAKES
+// #11) — while the SW's schedule is plain in-memory setTimeouts that die with it
+// and are never re-armed. The first bell is 90 s out, so the page stood aside
+// for a worker that was, by then, usually gone. Nobody fired.
+//
+// "The in-app rest UI already alerts the user there" (deep-code-review.md:3377,
+// which checked this line and ruled it justified) does not hold on the platform
+// this PWA targets: on an installed iOS PWA with the app open and visible, the
+// reporter got no audio cue and no notification. Whether the audio failure is
+// the AudioContext or a frozen tick worker is still open; either way it is not a
+// second alert this one can lean on.
+//
+// Firing both sides is safe, and is what the shared `tag` is for: a same-tag
+// notification replaces its predecessor rather than stacking, and a replacement
+// does not re-alert (`renotify` defaults to false). So a live SW and the page
+// firing the same target cost one alert, not two — while a dead SW now costs
+// nothing at all.
+describe('a controlling service worker does not silence the page (F107)', () => {
+  it('fires the first bell with the tab visible and a SW in control', () => {
+    installSw()
+    scheduleRest(NOW, 'normal')
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
+    expect(notifCalls).toHaveLength(1)
+    expect(notifCalls[0].title).toBe('Rest complete')
+    expect(notifCalls[0].opts.tag).toBe('rest-timer')
+  })
+
+  it('fires the failed-set bell with the tab visible and a SW in control', () => {
+    installSw()
+    scheduleRest(NOW, 'fail')
+    vi.advanceTimersByTime(REST_FAILED_BELL * 1000)
+    expect(notifCalls).toHaveLength(1)
+    expect(notifCalls[0].opts.body).toBe('Failed-set rest complete')
+  })
+
+  it('fires the stalled-session notification with the tab visible and a SW in control', () => {
+    installSw()
+    scheduleStalledSession(NOW)
+    vi.advanceTimersByTime(STALLED_DELAY_MS)
+    expect(notifCalls).toHaveLength(1)
+    expect(notifCalls[0].opts.tag).toBe('stalled-session')
+  })
+
+  it('does not depend on visibility either way', () => {
+    installSw()
+    setPageHidden(true)
+    scheduleRest(NOW, 'normal')
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
+    const hidden = notifCalls.length
+    cancelAll()
+    notifCalls = []
+    setPageHidden(false)
+    scheduleRest(NOW + REST_FIRST_BELL * 1000, 'normal')
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
+    expect(notifCalls).toHaveLength(hidden)
+  })
+
+  it('still respects an explicit permission denial', () => {
+    installSw()
+    MockNotification.permission = 'denied'
+    scheduleRest(NOW, 'normal')
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
     expect(notifCalls).toHaveLength(0)
   })
 })

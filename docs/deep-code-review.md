@@ -3380,6 +3380,13 @@ confirmation and the missing upper clamp; it remains one finding, not two.
   suppression applies only while the tab is *visible*, where `RestTimer`'s own
   audio cue and on-screen countdown already alert the user. The notification is
   redundant there by design, not a missing alert.
+  **Amended 2026-09-16 (device test) — this conclusion is wrong, and is opened as
+  F107.** Both halves fail. The SW cannot own the visible case: `controller`
+  reports control, not aliveness, and it stays non-null after the worker is
+  reaped, so the page deferred to a dead worker. And the fallback alert it leaned
+  on is not there on the platform this PWA targets — on an installed iOS PWA with
+  the app open and visible, the reporter got no audio cue and no notification.
+  The original reasoning here was right about the risk and wrong to dismiss it.
 - Catch-up firing on reload does **not** produce a notification storm. Reopening
   the app after a long gap makes both rest targets and the stalled-session target
   past-due, but the page is visible and SW-controlled at that moment, so

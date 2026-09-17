@@ -22,6 +22,12 @@ leg also has a unit-test pin.
 2. **No duplicate notifications in the foreground (policy).** With a SW controlling the page, the
    page fires only while the tab is hidden; the SW owns the visible case. No SW (dev preview) →
    page always fires.
+   **Amended 2026-09-16 (F107): this policy is withdrawn.** The SW cannot own the visible case —
+   `navigator.serviceWorker.controller` reports control, not aliveness, and the SW's timers die
+   with the worker (~30 s idle) and are never re-armed, so a 90 s bell had nothing to defer to and
+   nothing fired at all. The page now fires regardless of visibility; the shared `tag` coalesces a
+   live SW's notification with it into one OS item, without re-alerting. Leg C's expectation
+   changed from `page 0 / SW 1` to `page 1 / SW 1` on the same date.
 3. **Offline cold navigation works (Finding 2).** `index.html` is precached (`vite.config.ts`
    glob) and the fetch handler is network-first for navigations with a precached-shell fallback,
    so `/`, `/workout`, … render offline instead of a dead page.
