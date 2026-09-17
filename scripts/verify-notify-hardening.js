@@ -12,8 +12,7 @@
  *   E. reload mid-rest fires the past-due nudge exactly once (SW)
  *   B. hidden tab: page ALSO fires (page + SW, tag-coalesced to one OS item)
  *   D. SW dead + hidden tab: page timer still fires
- *   H. diagnostic trace: a real SW records into IndexedDB, the page into
- *      localStorage, and both halves come back non-empty
+ *   H. diagnostic trace: the page sink records a real rest into localStorage
  *
  * Each leg runs in a FRESH browser context (fresh OPFS + storage + SW), so no
  * production DB reset hook is required (that hook is DEV-only). Rest state is
@@ -95,44 +94,11 @@ async function injectRest(page, startedAt = Date.now() - REST_MS - 10_000) {
   }, { startedAt, rest: 'normal' })
 }
 
-// The SW half of the trace lives in IndexedDB because a service worker cannot
-// reach localStorage. jsdom has no IndexedDB at all, so this leg is the only
-// place the SW sink is exercised for real.
-async function setTraceFlags(page) {
-  await page.evaluate(() => {
-    localStorage.setItem('notif-trace-on', '1')
-    return new Promise((resolve) => {
-      const req = indexedDB.open('notif-trace-sw', 1)
-      req.onupgradeneeded = () => {
-        const db = req.result
-        if (!db.objectStoreNames.contains('events')) db.createObjectStore('events', { autoIncrement: true })
-        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      }
-      req.onsuccess = () => {
-        const db = req.result
-        const tx = db.transaction('meta', 'readwrite')
-        tx.objectStore('meta').put(true, 'enabled')
-        tx.oncomplete = () => { db.close(); resolve() }
-        tx.onerror = () => { db.close(); resolve() }
-      }
-      req.onerror = () => resolve()
-    })
-  })
-}
-
-async function readSwTrace(page) {
-  return page.evaluate(() => new Promise((resolve) => {
-    const req = indexedDB.open('notif-trace-sw', 1)
-    req.onsuccess = () => {
-      const db = req.result
-      if (!db.objectStoreNames.contains('events')) { db.close(); resolve([]); return }
-      const tx = db.transaction('events', 'readonly')
-      const all = tx.objectStore('events').getAll()
-      tx.oncomplete = () => { db.close(); resolve((all.result ?? []).map((r) => r.ev)) }
-      tx.onerror = () => { db.close(); resolve([]) }
-    }
-    req.onerror = () => resolve([])
-  }))
+// The trace's page sink is localStorage, written synchronously. This leg drives
+// it against a production build so the instrument itself is covered, rather than
+// only the things it measures.
+async function setTraceFlag(page) {
+  await page.evaluate(() => { localStorage.setItem('notif-trace-on', '1') })
 }
 
 async function readPageTrace(page) {
@@ -399,37 +365,25 @@ async function main() {
       if (c.page !== 1) throw new Error(`page fired ${c.page}, expected 1`)
       if (c.sw !== 0) throw new Error(`SW fired ${c.sw}, expected 0`)
     })
-    await leg('H: diagnostic trace - SW into IndexedDB, page into localStorage', async () => {
+    await leg('H: diagnostic trace - the page sink records a real rest', async () => {
       const { page } = await freshContext(browser)
-      await setTraceFlags(page)
-      // A service worker reads its switch once per script evaluation, so one
-      // that booted before the flag was set will never see it. Replacing the
-      // registration is what forces a fresh evaluation.
-      await page.evaluate(async () => {
-        const regs = await navigator.serviceWorker.getRegistrations()
-        for (const r of regs) await r.unregister()
-      })
-      await page.reload()                   // new SW installs and evaluates
-      await page.waitForTimeout(800)
+      await setTraceFlag(page)
       await injectRest(page)
-      await page.reload()                   // and now controls the page
+      await page.reload()
       await waitForSwControl(page)
       await page.waitForTimeout(1_500)
 
-      const sw = await readSwTrace(page)
-      const pageEvents = await readPageTrace(page)
-      if (!sw.includes('sw.boot')) {
-        throw new Error(`SW recorded no boot; got [${sw.join(', ')}]`)
-      }
-      if (!pageEvents.includes('rest.start')) {
-        throw new Error(`page recorded no rest.start; got [${pageEvents.slice(0, 8).join(', ')}]`)
+      const events = await readPageTrace(page)
+      if (!events.includes('rest.start')) {
+        throw new Error(`page recorded no rest.start; got [${events.slice(0, 8).join(', ')}]`)
       }
       // The tick carries the worker's own clock, which is the measurement the
       // whole harness exists for.
-      if (!pageEvents.includes('worker.tick')) {
-        throw new Error(`page recorded no worker.tick; got [${pageEvents.slice(0, 8).join(', ')}]`)
+      if (!events.includes('worker.tick')) {
+        throw new Error(`page recorded no worker.tick; got [${events.slice(0, 8).join(', ')}]`)
       }
     })
+
   } finally {
     await browser.close()
     preview?.kill()

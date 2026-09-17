@@ -1,6 +1,5 @@
 import { createSignal, Show } from 'solid-js'
 import { isTraceEnabled, setTraceEnabled, traceStats, clearTrace, trace } from '../../lib/trace'
-import { swTraceSetEnabled, swTraceClear } from '../../lib/trace-sw-store'
 import { buildTraceExport, formatTraceExport } from '../../lib/trace-export'
 import { restThresholds } from '../../lib/calc'
 import { playCue } from '../../lib/audio-cues'
@@ -37,9 +36,6 @@ export default function DiagnosticsPanel() {
   const toggle = () => {
     const next = !on()
     setTraceEnabled(next)
-    // The service worker cannot read localStorage, so its half of the switch
-    // lives in IndexedDB, which both sides can see.
-    void swTraceSetEnabled(next)
     setOn(next)
     refresh()
   }
@@ -92,7 +88,6 @@ export default function DiagnosticsPanel() {
     })
     if (!ok) return
     clearTrace()
-    await swTraceClear()
     setText(null)
     showToast('Trace cleared', 2000)
   })

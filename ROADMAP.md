@@ -29,7 +29,11 @@ hand (an installed iOS PWA is exactly where a clipboard write gets refused).
 - **SW sink** (`src/lib/trace-sw-store.ts`): IndexedDB, because a service worker
   cannot reach localStorage. `sw.boot` at script evaluation is the record that
   turns "the SW notification did not arrive" into evidence — a second boot means
-  the first worker was killed.
+  the first worker was killed. **Removed 2026-09-17**: it recorded nothing in
+  any capture from a real device, and a zero meaning "the sink never worked"
+  reads exactly like a zero meaning "the worker did nothing". Dead code that
+  reports a false negative is worse than no code. What the SW does is inferred
+  from the page side now.
 - **Verified in a real browser**: `verify:sw` leg H drives a real service worker
   and asserts both halves come back non-empty. Disabling the SW sink fails it.
 

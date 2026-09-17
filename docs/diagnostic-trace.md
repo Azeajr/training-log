@@ -19,20 +19,16 @@ It is **off by default** and records nothing at all while off.
    of the three to be refused).
 4. Paste it somewhere it can be read.
 
-**CLEAR** before each capture keeps the log to one scenario. The log is capped
-at 1200 page records and 500 service-worker records; the oldest fall off.
-
-**The service worker picks up the switch on its next start**, not immediately —
-it reads the flag once per script evaluation and the browser reaps an idle
-worker in about 30 seconds. If SW records are missing from a capture taken
-seconds after switching on, that is why.
+**CLEAR** before each capture keeps the log to one scenario. The log is capped at 1200
+records; the oldest fall off.
 
 ---
 
 ## What the records mean
 
-Every record carries `t` (wall clock), `p` (ms since page start), `src`
-(`page`, `worker` or `sw`), and `ev`.
+Every record carries `t` (wall clock), `p` (ms since page start), `src` (`page`
+or `worker` — the worker's are relayed through the page and stamped with the
+worker's own clock), and `ev`.
 
 ### The rest timer and the tick worker
 
@@ -92,9 +88,13 @@ Read it as a ladder:
 | `notify.page.threw` | the constructor was refused |
 | `notify.reg.*` | the service-worker-registration fallback |
 | `notify.readback` | how many notifications the registration is **holding** under that tag afterwards |
-| `sw.boot` | a service worker **started**. A second one means the first was killed |
-| `sw.msg.schedule` / `sw.shown` / `sw.show.failed` | the SW's own half |
-| `sw.click` | the notification was tapped — the only **proof** it was displayed |
+
+There is **no service-worker half**. There was one, writing to IndexedDB, and it
+recorded nothing in any capture taken from a real device — a zero that means
+"the sink never worked" reads exactly like a zero that means "the worker did
+nothing", so it was removed rather than left to mislead. What the SW does is
+therefore inferred from the page side, not observed. See
+`docs/verification/2026-09-17-keepalive-and-audio-clock.md`.
 
 ---
 
@@ -173,8 +173,7 @@ Stated plainly, because the gaps are part of reading it:
 
 | Piece | File |
 |---|---|
-| Page sink (localStorage, synchronous) | `src/lib/trace.ts` |
-| SW sink (IndexedDB, shared with the page) | `src/lib/trace-sw-store.ts` |
+| The sink (localStorage, synchronous) | `src/lib/trace.ts` |
 | Merge + environment block | `src/lib/trace-export.ts` |
 | Settings panel | `src/components/settings/DiagnosticsPanel.tsx` |
 | Worker stamps and heartbeats | `src/workers/rest-timer-protocol.ts` |

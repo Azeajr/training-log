@@ -1,20 +1,21 @@
-// One readable artefact out of two sinks.
+// One readable artefact out of the page's trace.
 //
-// The page writes to localStorage (src/lib/trace.ts) and the service worker to
-// IndexedDB (src/lib/trace-sw-store.ts), because those are the stores each side
-// can reach. They are halves of one timeline, so the export merges them by wall
-// clock and puts the environment at the top — the questions this is meant to
-// answer all begin "on which device, in what mode, with what permission".
+// The environment goes at the top because the questions this is meant to answer
+// all begin "on which device, in what mode, with what permission".
+//
+// There was a second sink once, inside the service worker, writing to
+// IndexedDB. It recorded nothing in any capture taken from a real device, and a
+// zero that means "the sink never worked" reads exactly like a zero that means
+// "the worker did nothing" — so it was removed rather than left to mislead.
+// `docs/verification/2026-09-17-keepalive-and-audio-clock.md` has the detail.
 
 import { readTrace, traceStats, type TraceEvent } from './trace'
-import { swTraceRead } from './trace-sw-store'
 
 export interface TraceExport {
   v: 1
   generatedAt: number
   env: Record<string, unknown>
-  stats: { page: number; sw: number; first: number | null; last: number | null; degraded: boolean }
-  /** Page and SW records merged, oldest first. */
+  stats: { page: number; first: number | null; last: number | null; degraded: boolean }
   events: TraceEvent[]
 }
 
@@ -65,17 +66,14 @@ async function storageEstimate(): Promise<Record<string, unknown> | 'unavailable
 }
 
 export async function buildTraceExport(extra?: Record<string, unknown>): Promise<TraceExport> {
-  const page = readTrace()
-  const sw = await swTraceRead()
-  const events = [...page, ...sw].sort((a, b) => a.t - b.t)
+  const events = readTrace()
   const stats = traceStats()
   return {
     v: 1,
     generatedAt: Date.now(),
     env: { ...environment(), storage: await storageEstimate(), ...(extra ?? {}) },
     stats: {
-      page: page.length,
-      sw: sw.length,
+      page: events.length,
       first: events.length > 0 ? events[0].t : stats.first,
       last: events.length > 0 ? events[events.length - 1].t : stats.last,
       degraded: stats.degraded,

@@ -10,12 +10,6 @@ vi.mock('../../lib/audio-cues', () => ({
   playCue: vi.fn(),
 }))
 
-vi.mock('../../lib/trace-sw-store', () => ({
-  swTraceRead: vi.fn(async () => []),
-  swTraceSetEnabled: vi.fn(async () => undefined),
-  swTraceClear: vi.fn(async () => undefined),
-}))
-
 function renderPanel() {
   const api = createConfirmation()
   return render(() => (
@@ -52,13 +46,6 @@ describe('DiagnosticsPanel', () => {
     // The switch itself is the first record, so a log never opens with an
     // unexplained edge.
     expect(readTrace().map(e => e.ev)).toContain('trace.on')
-  })
-
-  it('switches the service worker half on with the same tap', async () => {
-    const { swTraceSetEnabled } = await import('../../lib/trace-sw-store')
-    renderPanel()
-    fireEvent.click(screen.getByLabelText('Diagnostic trace'))
-    await waitFor(() => expect(swTraceSetEnabled).toHaveBeenCalledWith(true))
   })
 
   it('reports how much has been captured', async () => {
@@ -120,8 +107,7 @@ describe('DiagnosticsPanel', () => {
     expect(readTrace()).toHaveLength(1)
   })
 
-  it('discards both halves on confirm', async () => {
-    const { swTraceClear } = await import('../../lib/trace-sw-store')
+  it('discards the log on confirm', async () => {
     localStorage.setItem('notif-trace-on', '1')
     reloadTrace()
     trace('rest.start')
@@ -130,7 +116,6 @@ describe('DiagnosticsPanel', () => {
     await waitFor(() => expect(screen.getByText('DISCARD')).toBeInTheDocument())
     fireEvent.click(screen.getByText('DISCARD'))
     await waitFor(() => expect(readTrace()).toHaveLength(0))
-    expect(swTraceClear).toHaveBeenCalled()
   })
 
   it('offers SHARE only where the platform has it', () => {
