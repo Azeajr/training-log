@@ -105,6 +105,8 @@ CREATE TABLE IF NOT EXISTS ptExercises (
   resistanceKind TEXT NOT NULL,
   resistanceWeight REAL,
   resistanceBand TEXT,
+  equipmentHeight REAL,
+  equipmentHeightUnit TEXT,
   "order" INTEGER NOT NULL,
   archived INTEGER
 );
@@ -255,6 +257,11 @@ export const ADDITIVE_MIGRATIONS = [
   // "unknown" and fall back to the old inference for those rows only.
   `ALTER TABLE trainingMaxes ADD COLUMN source TEXT`,
   `ALTER TABLE trainingMaxes ADD COLUMN cycleId INTEGER`,
+  // Box/step height, kept apart from resistance so a bodyweight step-down and a
+  // loaded one both record it. Nullable with no backfill: an existing routine
+  // genuinely has no recorded height, and the prescription line omits it.
+  `ALTER TABLE ptExercises ADD COLUMN equipmentHeight REAL`,
+  `ALTER TABLE ptExercises ADD COLUMN equipmentHeightUnit TEXT`,
 ] as const
 
 export const ALL_TABLES = [

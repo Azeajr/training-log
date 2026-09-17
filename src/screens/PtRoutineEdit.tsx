@@ -118,6 +118,8 @@ export default function PtRoutineEdit() {
       distanceUnit: ex.distanceUnit ?? 'yd',
       resistanceKind: ex.resistanceKind,
       resistanceWeight: ex.resistanceWeight ?? 10,
+      equipmentHeight: ex.equipmentHeight ?? null,
+      equipmentHeightUnit: ex.equipmentHeightUnit ?? 'in',
       resistanceBand: ex.resistanceBand ?? '',
     })))
   }
@@ -381,6 +383,32 @@ export default function PtRoutineEdit() {
                         </Index>
                       </div>
                     </Show>
+                  </div>
+
+                  <div>
+                    <SubLabel class="mb-1">EQUIPMENT HEIGHT (OPTIONAL)</SubLabel>
+                    <p class="text-text-dim text-xs mb-2">Box or step height. Leave blank when it doesn't apply.</p>
+                    <div class="flex gap-2">
+                      <input
+                        type="number"
+                        inputmode="decimal"
+                        min="0"
+                        step="any"
+                        value={draft().equipmentHeight ?? ''}
+                        onInput={e => patch(index, { equipmentHeight: e.currentTarget.value === '' ? null : e.currentTarget.valueAsNumber })}
+                        aria-label={`Exercise ${index + 1} equipment height`}
+                        class={INPUT_CLASS}
+                      />
+                      <select
+                        value={draft().equipmentHeightUnit ?? 'in'}
+                        onChange={e => patch(index, { equipmentHeightUnit: e.currentTarget.value as 'in' | 'cm' })}
+                        aria-label={`Exercise ${index + 1} equipment height unit`}
+                        class="bg-surface border border-border text-text px-2 py-1 text-sm"
+                      >
+                        <option value="in">in</option>
+                        <option value="cm">cm</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div>
