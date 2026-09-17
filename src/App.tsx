@@ -20,6 +20,9 @@ const HistoryEdit = lazy(() => import('./screens/HistoryEdit'))
 const Settings = lazy(() => import('./screens/Settings'))
 const Setup = lazy(() => import('./screens/Setup'))
 const Stats = lazy(() => import('./screens/Stats'))
+const PT = lazy(() => import('./screens/PT'))
+const PtRoutineEdit = lazy(() => import('./screens/PtRoutineEdit'))
+const PtRun = lazy(() => import('./screens/PtRun'))
 
 function AppShell(props: ParentProps) {
   const navigate = useNavigate()
@@ -99,6 +102,12 @@ export default function App() {
         <Route path="/history" component={History} />
         <Route path="/stats" component={Stats} />
         <Route path="/history/:sessionId/edit" component={HistoryEdit} />
+        {/* `/pt/new` before the dynamic sibling: it is the routine builder with
+            no routine yet, and must not be read as a routine id. */}
+        <Route path="/pt" component={PT} />
+        <Route path="/pt/new" component={PtRoutineEdit} />
+        <Route path="/pt/:routineId/edit" component={PtRoutineEdit} />
+        <Route path="/pt/:routineId/run" component={PtRun} />
         <Route path="/settings" component={Settings} />
         <Route path="/setup" component={Setup} />
       </Router>

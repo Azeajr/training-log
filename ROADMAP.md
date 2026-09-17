@@ -2,6 +2,48 @@
 
 ## Done
 
+### PT Checklists (2026-09-17)
+
+Rehab work, kept deliberately apart from training. Today → PT, plus `/pt`,
+`/pt/new`, `/pt/:routineId/edit` and `/pt/:routineId/run`. No fifth nav tab: PT
+matters while injured and should not take up a quarter of the nav the rest of
+the time.
+
+A PT routine is a checklist, not a session. It answers "did I do the work
+today", and nothing in it reaches training maxes, records or e1RM — which is why
+it gets its own five tables rather than riding on `exercises` + `accessorySets`,
+whose rows hang off a 5/3/1 `sessions` row and would need a synthetic session
+per rehab day to exist at all.
+
+- **Prescription** (`ptRoutines`, `ptExercises`): name, description, an optional
+  video link, a set count, and two orthogonal axes — what a set is *measured* in
+  (reps / time / distance) and what *resistance* it carries (none / weight /
+  band). A backward sled walk is 3 × 50 yd at 180 lb; a band pull-apart is
+  3 × 15 reps on a red band. Distance carries its own unit (`yd`/`m`/`ft`)
+  rather than inheriting the accessory log's unit-less column, which the CSV
+  header calls metres and the screen renders as feet.
+- **Running it** (`store/pt-store.ts`): ticks live in localStorage and **nothing
+  is written to the database until FINISH**, which commits the session, a check
+  row per prescribed set, and any notes in one transaction. So there is no
+  pending PT session, nothing to reconcile on resume, and DISCARD is a store
+  reset rather than a delete racing a completion — the whole drift class in
+  COMMON_MISTAKES #5 has nothing to act on. A run is dated from when it
+  *started*, so one begun at 11pm belongs to that day.
+- **Unticked sets are recorded too.** A row per prescribed set, done or not, is
+  what makes "6/8" a fact about the run instead of an inference from how many
+  rows happen to be there.
+- **Editing is a draft** (`savePtRoutine`): the builder holds the whole routine
+  in memory and commits on DONE, so CANCEL leaves the database untouched and a
+  new routine cannot exist half-built. Removing an exercise that a past run
+  performed archives it rather than deleting it — the run still names what was
+  done instead of pointing at a missing id.
+- **Video links are allowlisted to http/https** (`isSafeVideoUrl`). The link is
+  a string the user pastes and it is rendered as an `href`; `javascript:` and
+  `data:` URLs execute on click.
+- **Verified in a real browser**: `tests/e2e/pt.spec.ts` builds a routine, runs
+  it, reloads mid-run to prove the ticks survive, finishes, and reads the run
+  back out of history.
+
 ### Diagnostic Trace for Rest Timer, Audio and Notifications (2026-09-17)
 
 Settings → APP → DIAGNOSTICS. Off by default; records nothing while off.

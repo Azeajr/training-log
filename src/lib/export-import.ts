@@ -22,12 +22,13 @@ export async function retryPendingExport(): Promise<void> {
 
 export async function exportJson(db: TrainingDB): Promise<void> {
   // Fanned out, not awaited in sequence: each toArray() is its own round-trip to
-  // the SQLite worker and none of the twelve depends on another, so awaiting them
-  // one at a time paid twelve times the latency for no ordering benefit.
+  // the SQLite worker and none of them depends on another, so awaiting them one
+  // at a time paid the latency once per table for no ordering benefit.
   const [
     lifts, trainingMaxes, accessoryTrainingMaxes, cycles, sessions, sets,
     exercises, liftSupplementals, accessorySets, accessoryNotes,
     assistanceDefaults, settingsRows,
+    ptRoutines, ptExercises, ptSessions, ptSetChecks, ptNotes,
   ] = await Promise.all([
     db.lifts.toArray(),
     db.trainingMaxes.toArray(),
@@ -41,6 +42,11 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     db.accessoryNotes.toArray(),
     db.assistanceDefaults.toArray(),
     db.settings.toArray(),
+    db.ptRoutines.toArray(),
+    db.ptExercises.toArray(),
+    db.ptSessions.toArray(),
+    db.ptSetChecks.toArray(),
+    db.ptNotes.toArray(),
   ])
   const data = {
     exportedAt: new Date().toISOString(),
@@ -57,6 +63,11 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     accessoryNotes,
     assistanceDefaults,
     settings: settingsRows,
+    ptRoutines,
+    ptExercises,
+    ptSessions,
+    ptSetChecks,
+    ptNotes,
   }
   const content = JSON.stringify(data, null, 2)
   const filename = `training-log-${formatDateIso(new Date())}.json`
@@ -105,6 +116,11 @@ const COLS = {
   // `hasDeloadWeek` belongs here: it was missing, so an import dropped it and
   // the restored null defaulted to enabled — silently turning a three-week
   // cycle into a four-week one, which is the shape the whole program hangs off.
+  ptRoutines: ['id', 'name', 'notes', 'order', 'archived'],
+  ptExercises: ['id', 'routineId', 'name', 'description', 'videoUrl', 'sets', 'measure', 'targetReps', 'targetSeconds', 'targetDistance', 'distanceUnit', 'resistanceKind', 'resistanceWeight', 'resistanceBand', 'order', 'archived'],
+  ptSessions: ['id', 'routineId', 'date', 'notes'],
+  ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done'],
+  ptNotes: ['id', 'sessionId', 'ptExerciseId', 'notes'],
   settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek'],
 } as const
 
@@ -191,6 +207,11 @@ function importSpec(db: TrainingDB): ImportTableSpec[] {
     { key: 'accessoryNotes',         table: db.accessoryNotes,         dates: [] },
     { key: 'assistanceDefaults',     table: db.assistanceDefaults,     dates: [] },
     { key: 'settings',               table: db.settings,               dates: [] },
+    { key: 'ptRoutines',             table: db.ptRoutines,             dates: [] },
+    { key: 'ptExercises',            table: db.ptExercises,            dates: [] },
+    { key: 'ptSessions',             table: db.ptSessions,             dates: ['date'] },
+    { key: 'ptSetChecks',            table: db.ptSetChecks,            dates: [] },
+    { key: 'ptNotes',                table: db.ptNotes,                dates: [] },
   ]
 }
 

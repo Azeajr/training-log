@@ -20,6 +20,9 @@ src/
 │   ├── HistoryEdit.tsx           # edit a past session: sets, accessories, notes, status
 │   ├── Stats.tsx                 # thin wrapper over components/stats/RecordsPanel; /stats is the
 │   │                             #   direct link to the whole-roster view (no nav tab)
+│   ├── PT.tsx                    # physical-therapy hub: routine list + dated run history
+│   ├── PtRoutineEdit.tsx         # build/edit a PT routine — a DRAFT; DONE commits, CANCEL writes nothing
+│   ├── PtRun.tsx                 # the checklist itself: tick each prescribed set, FINISH commits
 │   ├── Setup.tsx                 # 2-step first-run wizard: lift roster → TMs (+ START TRAINING)
 │   └── Settings.tsx              # rest timers, theme, plates/equipment, supplemental + cross blocks,
 │                                 #   cycle shape (deload on/off + deload supplemental), exercise
@@ -59,7 +62,10 @@ src/
 │   ├── settings-store.ts         # rest timers, theme, barWeight, plates, supplementalTemplate,
 │   │                             #   deloadSupplemental, hasDeloadWeek; loaded from db.settings on
 │   │                             #   boot; THEMES map (11 themes) + applyTheme()
-│   └── toast-store.ts            # createSignal singleton + showToast(msg, ms)
+│   ├── toast-store.ts            # createSignal singleton + showToast(msg, ms)
+│   └── pt-store.ts               # the in-progress PT run (routineId, startedAt, ticked sets, notes);
+│                                 #   localStorage-persisted like workout-store, but with NO db row —
+│                                 #   nothing is written until FINISH, so there is nothing to reconcile
 │
 ├── db/
 │   ├── index.ts                  # PRIMARY runtime DB — one SQLiteTable per table (with its
@@ -149,7 +155,8 @@ scripts/                          # debug-browser.js, generate-icons.mjs, verify
 ## Routes (`src/App.tsx`)
 
 `/` and `/today` → Today · `/workout` → Workout · `/history` → History · `/stats` → Stats ·
-`/history/:sessionId/edit` → HistoryEdit · `/settings` → Settings · `/setup` → Setup.
+`/history/:sessionId/edit` → HistoryEdit · `/settings` → Settings · `/setup` → Setup ·
+`/pt` → PT · `/pt/new` and `/pt/:routineId/edit` → PtRoutineEdit · `/pt/:routineId/run` → PtRun.
 BottomNav carries four of these — TODAY, WORKOUT, HISTORY, SETTINGS. `/stats` stays routable but has
 no tab: records and TM progression live inside History, which already charted the same numbers.
 All screens are `lazy()` inside a `<Suspense>`; `AppShell` redirects to `/setup` on every navigation
@@ -171,6 +178,11 @@ while `trainingMaxes` is empty.
 | `accessoryNotes` | one note per (session, exercise) | unique index enforced via `ADDITIVE_MIGRATIONS` |
 | `assistanceDefaults` | a lift's pick per assistance section | unique on `(liftId, section)` |
 | `settings` | single-row user settings | `plates` JSON; `hasDeloadWeek` bool; `supplementalTemplate`, `deloadSupplemental` |
+| `ptRoutines` | a PT checklist | `order`, `archived` |
+| `ptExercises` | one prescribed exercise | `measure: reps\|time\|distance` + its target; `distanceUnit`; `resistanceKind: none\|weight\|band`; `archived` once a run has performed it |
+| `ptSessions` | one dated run | no `status` — a row exists only for a finished run |
+| `ptSetChecks` | one row per prescribed set | `done` bool; unticked sets are recorded, which is what makes "6/8" |
+| `ptNotes` | one note per (run, ptExercise) | unique index, like `accessoryNotes` |
 
 Indexes cover the foreign keys above. `liftAccessories` was dropped — the per-lift accessory roster
 concept is gone; a session's assistance comes from `assistanceDefaults` plus in-session picks.
@@ -194,6 +206,11 @@ belongs there and never in `SCHEMA`, whose exec is unguarded.
   `@sqlite.org/sqlite-wasm` package, in-process, no Worker/OPFS. `SQLiteTable` and the query layer are
   shared verbatim; only the RPC target changes. lib/db tests reset via `__resetForTest()`; screen tests
   clear the tables they seed.
+- **PT is not training**: `ptRoutines`/`ptExercises` are a checklist prescription and nothing in them
+  feeds `performance.ts`, `pr.ts` or any TM math. A run writes no row until FINISH (`commitPtRun`),
+  so the store-vs-DB reconciliation the workout side needs has no analogue here. `measure` (what a
+  set is counted in) and `resistanceKind` (what it is loaded with) are orthogonal — a sled walk is
+  distance + weight. `savePtRoutine` archives rather than deletes an exercise that a run performed.
 - **Cycle shape**: `cycleFinalWeek(settings.hasDeloadWeek)` decides whether a cycle runs 1–3 or 1–4.
   `cycles.closedThroughWeek` is a self-healing cache of the highest contiguous completed week, so
   changing the lift roster mid-cycle never reopens a finished week.
@@ -241,4 +258,4 @@ belongs there and never in `SCHEMA`, whose exec is unguarded.
 
 ---
 
-**Last Updated**: 2026-09-05
+**Last Updated**: 2026-09-17

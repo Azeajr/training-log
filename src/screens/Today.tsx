@@ -1,7 +1,7 @@
 import { createSignal, createResource, onMount, Show, For } from 'solid-js'
 import { useNavigate, A } from '@solidjs/router'
 import { db } from '../db/index'
-import type { Lift } from '../types/domain'
+import type { Lift, PtRoutine } from '../types/domain'
 import { workout, startSession, resumeSession, clearSession, addAccessory, toActiveAccessory } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, calcCrossSets, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
@@ -16,6 +16,8 @@ import { useConfirmation } from '../hooks/use-confirmation'
 import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
 import { createAsyncRead } from '../lib/async-read'
+import { listPtRoutines } from '../lib/pt'
+import { ptRun } from '../store/pt-store'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
@@ -54,7 +56,20 @@ export default function Today() {
   // no error, no retry, no way back short of navigating away. The same defect
   // F23 had on /stats, on the screen the app opens to (F102).
   const read = createAsyncRead()
-  onMount(() => { void read.run(() => load()) })
+  onMount(() => { void read.run(() => load()); void loadPt() })
+
+  // PT is an aside on this screen, not what it exists for. Its read gets its
+  // own state and its own catch so a failure here cannot take the 5/3/1 session
+  // down with it — the shape F106 left on the cross-lift preview.
+  const [ptRoutines, setPtRoutines] = createSignal<PtRoutine[]>([])
+  const loadPt = async () => {
+    try {
+      setPtRoutines(await listPtRoutines(db))
+    } catch {
+      setPtRoutines([])
+    }
+  }
+  const activePtRoutine = () => ptRoutines().find(r => r.id === ptRun.routineId)
 
   // Everything about a lift that has to be fetched: its training max and its
   // assistance defaults. Both are async, and publishing whatever landed last
@@ -506,6 +521,43 @@ export default function Today() {
               </button>
             </Show>
           </div>
+        </div>
+
+        <div class="mt-10">
+          <Rule label="PT" class="text-muted mb-4" />
+          <Show when={ptRun.routineId !== null && activePtRoutine()}>
+            <button
+              onClick={() => navigate(`/pt/${ptRun.routineId}/run`)}
+              class="block w-full text-left border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-3"
+            >
+              &#9654; PT IN PROGRESS — {activePtRoutine()!.name} ({ptRun.done.length} ticked)
+            </button>
+          </Show>
+          <Show
+            when={ptRoutines().length > 0}
+            fallback={
+              <A href="/pt" class="block border border-border text-muted hover:border-accent hover:text-accent px-4 py-3 text-xs tracking-widest uppercase text-center">
+                + SET UP A PT ROUTINE
+              </A>
+            }
+          >
+            <div class="space-y-2">
+              <For each={ptRoutines()}>
+                {routine => (
+                  <button
+                    onClick={() => navigate(`/pt/${routine.id}/run`)}
+                    class="w-full flex items-center justify-between gap-2 border border-border text-muted hover:border-accent hover:text-accent px-3 py-2 text-xs tracking-widest uppercase"
+                  >
+                    <span class="truncate">{routine.name}</span>
+                    <span class="shrink-0">START ▸</span>
+                  </button>
+                )}
+              </For>
+              <A href="/pt" class="block text-faint text-xs tracking-widest hover:text-accent pt-1">
+                all PT routines + history ▸
+              </A>
+            </div>
+          </Show>
         </div>
 
         <Show when={pickerSlot() !== null && selectedLiftId()}>
