@@ -4,6 +4,13 @@ Two captures from an installed iOS PWA (iPhone, iOS 18.7, Safari 26.6.1), taken
 with the diagnostic trace (`docs/diagnostic-trace.md`). One control, one with
 KEEP ALIVE on. The raw exports are not kept; everything they settled is below.
 
+> **KEEP ALIVE no longer exists in the app.** It was removed the same day, not
+> because it failed — it passed, and the numbers are below — but because nothing
+> consumed the aliveness it bought, and it cost battery and an audio session for
+> the length of every rest. This record is kept so that rebuilding it is a known
+> quantity rather than a fresh investigation. Claim 2 is what it achieved;
+> claim 3 is what was never demonstrated and would have to be, first.
+
 ## Claim 1 — an app switch suspends the page process
 
 **Established earlier the same day**, and the reason KEEP ALIVE exists. With the
