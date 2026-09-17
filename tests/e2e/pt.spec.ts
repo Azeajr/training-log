@@ -62,6 +62,44 @@ test.describe('PT checklist', () => {
     await expect(page.getByText('No PT runs recorded yet')).toBeVisible()
   })
 
+  test('keeps step height alongside weight, sets, and reps through edit, run, and history', async ({ page }) => {
+    // Only the row's expander carries aria-expanded; the reorder and remove
+    // controls share the exercise name, so matching on name alone is ambiguous.
+    const stepDownRow = page.locator('button[aria-expanded]').filter({ hasText: 'Step down' })
+    await page.goto('/pt/new')
+    await page.getByLabel('Routine name').fill('Step-down rehab')
+    await page.getByLabel('Exercise 1 name').fill('Step down')
+    await page.getByRole('button', { name: 'WEIGHT', exact: true }).click()
+    await page.getByLabel('Exercise 1 equipment height', { exact: true }).fill('6.5')
+    const prescription = '3 x 10 reps . 10 lb . 6.5 in high'
+    await expect(page.getByText(prescription, { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await page.getByRole('link', { name: 'EDIT', exact: true }).click()
+    await page.reload()
+    await stepDownRow.click()
+    await expect(page.getByLabel('Exercise 1 equipment height', { exact: true })).toHaveValue('6.5')
+    await expect(page.getByLabel('Exercise 1 equipment height unit')).toHaveValue('in')
+    await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await page.getByRole('button', { name: 'START', exact: true }).click()
+    await expect(page.getByText(prescription, { exact: true })).toBeVisible()
+    await page.getByRole('checkbox').first().click()
+    await page.getByRole('button', { name: 'FINISH', exact: true }).click()
+    await page.getByRole('button', { name: /Step-down rehab.*1\/3/ }).click()
+    await expect(page.getByText(prescription, { exact: true })).toBeVisible()
+
+    await page.getByRole('link', { name: 'EDIT', exact: true }).click()
+    await stepDownRow.click()
+    await page.getByLabel('Exercise 1 equipment height unit').selectOption('cm')
+    await page.getByLabel('Exercise 1 equipment height', { exact: true }).fill('15')
+    await expect(page.getByText('3 x 10 reps . 10 lb . 15 cm high', { exact: true })).toBeVisible()
+    await page.getByLabel('Exercise 1 equipment height', { exact: true }).fill('')
+    await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await page.getByRole('link', { name: 'EDIT', exact: true }).click()
+    await stepDownRow.click()
+    await expect(page.getByLabel('Exercise 1 equipment height', { exact: true })).toBeEmpty()
+    await expect(page.getByText('3 x 10 reps . 10 lb', { exact: true })).toBeVisible()
+  })
+
   test('archives a routine and restores it, keeping the run history', async ({ page }) => {
     await page.goto('/pt/new')
     await page.getByLabel('Routine name').fill('Knee block')

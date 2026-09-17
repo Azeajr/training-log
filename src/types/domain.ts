@@ -262,6 +262,9 @@ export interface PtExercise {
   resistanceKind: PtResistanceKind
   /** Set for resistanceKind 'weight' (lb); null otherwise. */
   resistanceWeight?: number | null
+  /** Optional box/step height, independent of resistance and repetition target. */
+  equipmentHeight?: number | null
+  equipmentHeightUnit?: 'in' | 'cm' | null
   /** Set for resistanceKind 'band' (free text: "red", "green doubled"). */
   resistanceBand?: string | null
   order: number

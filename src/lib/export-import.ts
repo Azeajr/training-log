@@ -117,7 +117,7 @@ const COLS = {
   // the restored null defaulted to enabled — silently turning a three-week
   // cycle into a four-week one, which is the shape the whole program hangs off.
   ptRoutines: ['id', 'name', 'notes', 'order', 'archived'],
-  ptExercises: ['id', 'routineId', 'name', 'description', 'videoUrl', 'sets', 'measure', 'targetReps', 'targetSeconds', 'targetDistance', 'distanceUnit', 'resistanceKind', 'resistanceWeight', 'resistanceBand', 'order', 'archived'],
+  ptExercises: ['id', 'routineId', 'name', 'description', 'videoUrl', 'sets', 'measure', 'targetReps', 'targetSeconds', 'targetDistance', 'distanceUnit', 'resistanceKind', 'resistanceWeight', 'resistanceBand', 'equipmentHeight', 'equipmentHeightUnit', 'order', 'archived'],
   ptSessions: ['id', 'routineId', 'date', 'notes'],
   ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done'],
   ptNotes: ['id', 'sessionId', 'ptExerciseId', 'notes'],
@@ -362,6 +362,7 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
     'target_reps', 'target_seconds', 'target_distance', 'distance_unit',
     'resistance_kind', 'resistance_weight_lb', 'resistance_band',
     'exercise_notes', 'session_notes',
+    'equipment_height', 'equipment_height_unit',
   ]]
 
   // Chronological, then by the routine's own exercise order, then set number —
@@ -381,7 +382,7 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
     // the only record that it happened, and dropping it would make the sheet
     // disagree with the history list about how many runs there were.
     if (sessionChecks.length === 0) {
-      rows.push([dateStr, name, '', '', '', '', '', '', '', '', '', '', '', '', session.notes ?? ''])
+      rows.push([dateStr, name, '', '', '', '', '', '', '', '', '', '', '', '', session.notes ?? '', '', ''])
       continue
     }
 
@@ -403,6 +404,8 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
         exercise?.resistanceBand ?? '',
         noteByKey.get(`${session.id!}:${check.ptExerciseId}`) ?? '',
         session.notes ?? '',
+        exercise?.equipmentHeight != null ? String(exercise.equipmentHeight) : '',
+        exercise?.equipmentHeightUnit ?? '',
       ])
     }
   }

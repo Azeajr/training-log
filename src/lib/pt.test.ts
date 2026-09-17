@@ -141,6 +141,33 @@ describe('formatting', () => {
 })
 
 describe('validatePtExercise', () => {
+  it('keeps optional equipment height alongside weight, sets, and reps', () => {
+    const row = validatePtExercise(repsDraft({
+      name: 'Step down', sets: 3, targetReps: 10,
+      resistanceKind: 'weight', resistanceWeight: 10,
+      equipmentHeight: 6.5, equipmentHeightUnit: 'in',
+    }), 1, 0)
+    expect(formatPtPrescription(row)).toBe('3 x 10 reps . 10 lb . 6.5 in high')
+    expect(formatPtPrescription({ ...row, resistanceKind: 'none', equipmentHeight: 15, equipmentHeightUnit: 'cm' }))
+      .toBe('3 x 10 reps . 15 cm high')
+  })
+
+  it('leaves old prescriptions unchanged and clears the unit when height is removed', () => {
+    const row = validatePtExercise(repsDraft({ equipmentHeight: null, equipmentHeightUnit: 'cm' }), 1, 0)
+    expect(row.equipmentHeight).toBeNull()
+    expect(row.equipmentHeightUnit).toBeNull()
+    expect(formatPtPrescription(row)).toBe('3 x 15 reps . red band')
+  })
+
+  it.each([0, -1, NaN, Infinity])('rejects invalid equipment height %s', equipmentHeight => {
+    expect(() => validatePtExercise(repsDraft({ equipmentHeight }), 1, 0)).toThrow(/equipment height/)
+  })
+
+  it('rejects unknown height units', () => {
+    expect(() => validatePtExercise(repsDraft({ equipmentHeight: 6, equipmentHeightUnit: 'ft' as 'in' }), 1, 0))
+      .toThrow(/equipment height unit/)
+  })
+
   it('nulls the fields outside the chosen measure and resistance', () => {
     const row = validatePtExercise(
       repsDraft({ targetSeconds: 30, targetDistance: 25, resistanceWeight: 40 }),

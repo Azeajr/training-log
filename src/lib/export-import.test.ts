@@ -1192,6 +1192,17 @@ describe('exportPtCsv', () => {
     expect(lines).toHaveLength(1)
     expect(lines[0]).toContain('"date","routine"')
   })
+
+  it('exports equipment height and its unit beside the existing prescription columns', async () => {
+    const { routineId, band } = await seedPt()
+    await db.ptExercises.update(band.id!, { equipmentHeight: 6.5, equipmentHeightUnit: 'in' })
+    await commitPtRun(db, { routineId, date: new Date(), checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }] })
+    await exportPtCsv(db)
+    const lines = (await capturedBlob!.text()).split('\n')
+    expect(lines[0]).toMatch(/"equipment_height","equipment_height_unit"$/)
+    expect(lines[1]).toMatch(/"6.5","in"$/)
+    expect(lines[1].split(',')).toHaveLength(lines[0].split(',').length)
+  })
 })
 
 // ─── PT through the JSON round trip ───────────────────────────────────────────
@@ -1205,6 +1216,7 @@ describe('PT backup round trip', () => {
         name: 'Backward sled walk', sets: 3, measure: 'distance', targetDistance: 50,
         distanceUnit: 'yd', resistanceKind: 'weight', resistanceWeight: 180,
         description: 'short steps', videoUrl: 'https://example.com/v',
+        equipmentHeight: 15, equipmentHeightUnit: 'cm',
       }],
     })
     const exercise = (await getPtRoutine(db, routineId))!.exercises[0]
@@ -1235,6 +1247,7 @@ describe('PT backup round trip', () => {
       measure: 'distance', targetDistance: 50, distanceUnit: 'yd',
       resistanceKind: 'weight', resistanceWeight: 180,
       videoUrl: 'https://example.com/v',
+      equipmentHeight: 15, equipmentHeightUnit: 'cm',
     })
     const checks = await db.ptSetChecks.toArray()
     expect(checks.filter(c => c.done)).toHaveLength(1)

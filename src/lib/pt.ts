@@ -92,10 +92,11 @@ export function formatPtResistance(ex: ResistanceFields): string {
 }
 
 /** The whole prescription on one line: "3 x 50 yd . 180 lb". */
-export function formatPtPrescription(ex: TargetFields & ResistanceFields & Pick<PtExercise, 'sets'>): string {
+export function formatPtPrescription(ex: TargetFields & ResistanceFields & Pick<PtExercise, 'sets' | 'equipmentHeight' | 'equipmentHeightUnit'>): string {
   const head = `${ex.sets} x ${formatPtTarget(ex)}`
   const resistance = formatPtResistance(ex)
-  return resistance === '' ? head : `${head} . ${resistance}`
+  const height = ex.equipmentHeight == null ? '' : `${ex.equipmentHeight} ${ex.equipmentHeightUnit ?? 'in'} high`
+  return [head, resistance, height].filter(Boolean).join(' . ')
 }
 
 /** What the routine editor holds per row before anything is written. */
@@ -113,6 +114,8 @@ export interface PtExerciseDraft {
   distanceUnit?: PtDistanceUnit | null
   resistanceKind: PtResistanceKind
   resistanceWeight?: number | null
+  equipmentHeight?: number | null
+  equipmentHeightUnit?: PtExercise['equipmentHeightUnit']
   resistanceBand?: string | null
 }
 
@@ -145,6 +148,8 @@ export function validatePtExercise(draft: PtExerciseDraft, routineId: number, or
     distanceUnit: null,
     resistanceKind: draft.resistanceKind,
     resistanceWeight: null,
+    equipmentHeight: null,
+    equipmentHeightUnit: null,
     resistanceBand: null,
     order,
   }
@@ -180,6 +185,18 @@ export function validatePtExercise(draft: PtExerciseDraft, routineId: number, or
     const band = (draft.resistanceBand ?? '').trim()
     if (band === '') throw new PtValidationError(`${name}: name the band (its colour, say)`)
     row.resistanceBand = band
+  }
+
+  if (draft.equipmentHeight != null) {
+    if (!Number.isFinite(draft.equipmentHeight) || draft.equipmentHeight <= 0) {
+      throw new PtValidationError(`${name}: equipment height must be more than 0`)
+    }
+    const unit = draft.equipmentHeightUnit ?? 'in'
+    if (unit !== 'in' && unit !== 'cm') {
+      throw new PtValidationError(`${name}: unknown equipment height unit "${unit}"`)
+    }
+    row.equipmentHeight = draft.equipmentHeight
+    row.equipmentHeightUnit = unit
   }
 
   return row
