@@ -6,6 +6,10 @@ import ConfirmationDialog from '../../components/modals/ConfirmationDialog'
 import { trace, readTrace, reloadTrace, isTraceEnabled } from '../../lib/trace'
 import { toast } from '../../store/toast-store'
 
+vi.mock('../../lib/audio-cues', () => ({
+  playCue: vi.fn(),
+}))
+
 vi.mock('../../lib/trace-sw-store', () => ({
   swTraceRead: vi.fn(async () => []),
   swTraceSetEnabled: vi.fn(async () => undefined),
@@ -131,5 +135,36 @@ describe('DiagnosticsPanel', () => {
   it('offers SHARE only where the platform has it', () => {
     renderPanel()
     expect(screen.queryByText('SHARE')).toBeNull()
+  })
+})
+
+// ── TEST CUE ────────────────────────────────────────────────────────────────
+// The bell is otherwise 90 seconds per attempt, and it lands within half a
+// second of the system notification sound, which masks a 150 ms tone outright.
+// A tap has nothing to confuse it with — and a gesture is the one context where
+// iOS reliably lets an AudioContext resume, so a cue inaudible here is
+// inaudible for reasons below the app.
+describe('TEST CUE', () => {
+  it('plays the real cue on a real tap', async () => {
+    const { playCue } = await import('../../lib/audio-cues')
+    renderPanel()
+    fireEvent.click(screen.getByText('TEST CUE'))
+    expect(playCue).toHaveBeenCalledWith('nudge')
+  })
+
+  it('records the tap when tracing is on, so a capture shows it was requested', async () => {
+    localStorage.setItem('notif-trace-on', '1')
+    reloadTrace()
+    renderPanel()
+    fireEvent.click(screen.getByText('TEST CUE'))
+    expect(readTrace().map(e => e.ev)).toContain('cue.test')
+  })
+
+  it('works with tracing off — it is a speaker test, not a trace feature', async () => {
+    const { playCue } = await import('../../lib/audio-cues')
+    renderPanel()
+    fireEvent.click(screen.getByText('TEST CUE'))
+    expect(playCue).toHaveBeenCalled()
+    expect(readTrace()).toHaveLength(0)
   })
 })
