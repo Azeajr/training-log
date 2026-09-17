@@ -181,3 +181,104 @@ describe('resume posts at once (F68)', () => {
     }
   })
 })
+
+// ── diagnostics channel ─────────────────────────────────────────────────────
+// A Worker has no localStorage, so it cannot record anything itself. What it
+// can do is STAMP what it emits, and keep emitting while ticks are suppressed.
+// Together those two make the page/worker split observable from the page:
+// a burst of old `at` values means the page froze, a hole in `seq` means the
+// worker did.
+describe('worker-side stamps and heartbeats', () => {
+  function timer(trace = false) {
+    const ticks: Array<{ elapsed: number; at: number; seq: number }> = []
+    const beats: Array<{ seq: number; paused: boolean; armed: boolean }> = []
+    const t = createRestTimer(
+      (tick) => ticks.push(tick),
+      (b) => beats.push(b),
+    )
+    if (trace) t.handle({ type: 'trace', on: true })
+    return { t, ticks, beats }
+  }
+
+  it('stamps every tick with the worker clock and a sequence number', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+    const { t, ticks } = timer()
+    t.handle({ type: 'start', restStartedAt: Date.now() })
+    vi.advanceTimersByTime(3_000)
+    expect(ticks.map(x => x.seq)).toEqual([0, 1, 2])
+    expect(ticks.map(x => x.at)).toEqual([
+      Date.parse('2026-01-01T00:00:01Z'),
+      Date.parse('2026-01-01T00:00:02Z'),
+      Date.parse('2026-01-01T00:00:03Z'),
+    ])
+    t.terminate()
+  })
+
+  it('emits no heartbeats until tracing is switched on', () => {
+    vi.useFakeTimers()
+    const { t, beats } = timer()
+    t.handle({ type: 'start', restStartedAt: Date.now() })
+    t.handle({ type: 'pause' })
+    vi.advanceTimersByTime(5_000)
+    expect(beats).toEqual([])
+    t.terminate()
+  })
+
+  it('beats through a pause, where ticks are silent by design', () => {
+    vi.useFakeTimers()
+    const { t, ticks, beats } = timer(true)
+    t.handle({ type: 'start', restStartedAt: Date.now() })
+    vi.advanceTimersByTime(1_000)
+    const tickedBefore = ticks.length
+    t.handle({ type: 'pause' })
+    vi.advanceTimersByTime(4_000)
+    expect(ticks.length).toBe(tickedBefore)      // still silent — C2, by design
+    expect(beats.length).toBe(4)                 // and still demonstrably alive
+    expect(beats.every(b => b.paused && b.armed)).toBe(true)
+    t.terminate()
+  })
+
+  it('leaves no hole in the sequence across a pause', () => {
+    vi.useFakeTimers()
+    const { t, ticks, beats } = timer(true)
+    t.handle({ type: 'start', restStartedAt: Date.now() })
+    vi.advanceTimersByTime(2_000)
+    t.handle({ type: 'pause' })
+    vi.advanceTimersByTime(2_000)
+    t.handle({ type: 'resume' })
+    vi.advanceTimersByTime(2_000)
+    // Contiguity is the assertion: a missing number means the worker lost time,
+    // and a pause must not look like that.
+    const seqs = [...ticks.map(x => x.seq), ...beats.map(b => b.seq)].sort((a, b) => a - b)
+    expect(seqs).toEqual([...seqs.keys()])
+    t.terminate()
+  })
+
+  it('stops beating when tracing is switched back off', () => {
+    vi.useFakeTimers()
+    const { t, beats } = timer(true)
+    t.handle({ type: 'start', restStartedAt: Date.now() })
+    t.handle({ type: 'pause' })
+    vi.advanceTimersByTime(2_000)
+    const before = beats.length
+    expect(before).toBeGreaterThan(0)
+    t.handle({ type: 'trace', on: false })
+    vi.advanceTimersByTime(5_000)
+    expect(beats.length).toBe(before)
+    t.terminate()
+  })
+
+  it('goes quiet once the rest stops, because the interval itself is gone', () => {
+    vi.useFakeTimers()
+    const { t, beats } = timer(true)
+    t.handle({ type: 'start', restStartedAt: Date.now() })
+    t.handle({ type: 'stop' })
+    t.handle({ type: 'trace', on: true })
+    // `stop` clears the interval, so nothing beats — the absence of a rest is
+    // recorded page-side, not here.
+    vi.advanceTimersByTime(3_000)
+    expect(beats).toEqual([])
+    t.terminate()
+  })
+})

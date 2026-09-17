@@ -7,6 +7,8 @@ import {
 } from '../../lib/calc'
 import { playCue, unlockAudio, ensureAudioCtx } from '../../lib/audio-cues'
 import { getTimerWorker } from '../../lib/rest-timer-worker'
+import { trace, isTraceEnabled } from '../../lib/trace'
+import type { RestTimerTick, RestTimerBeat } from '../../workers/rest-timer-protocol'
 import {
   scheduleRest,
   cancelRest,
@@ -72,7 +74,10 @@ export default function RestTimer() {
   onCleanup(() => document.removeEventListener('touchstart', unlockAudio))
 
   const [isVisible, setIsVisible] = createSignal(!document.hidden)
-  const visibilityHandler = () => setIsVisible(!document.hidden)
+  const visibilityHandler = () => {
+    trace('page.visibility', { hidden: document.hidden, elapsed: elapsed() })
+    setIsVisible(!document.hidden)
+  }
   document.addEventListener('visibilitychange', visibilityHandler)
   onCleanup(() => document.removeEventListener('visibilitychange', visibilityHandler))
 
@@ -113,12 +118,42 @@ export default function RestTimer() {
       return
     }
     const worker = getTimerWorker()
-    worker.onmessage = (e: MessageEvent<{ elapsed: number }>) => setElapsed(e.data.elapsed)
+    worker.onmessage = (e: MessageEvent<RestTimerTick | RestTimerBeat>) => {
+      const data = e.data
+      // `lag` is the measurement: the worker stamps `at` when it emits, so a
+      // large lag means the PAGE was not running when the message arrived.
+      // `elapsed` alone cannot show that — it is computed from `Date.now()` at
+      // emit time, so it looks correct no matter how late it is read.
+      const lag = Date.now() - data.at
+      if ('hb' in data) {
+        trace('worker.beat', { seq: data.seq, at: data.at, lag, paused: data.paused }, 'worker')
+        return
+      }
+      trace('worker.tick', { seq: data.seq, at: data.at, lag, elapsed: data.elapsed }, 'worker')
+      setElapsed(data.elapsed)
+    }
+    worker.postMessage({ type: 'trace', on: isTraceEnabled() })
     worker.postMessage({ type: 'start', restStartedAt })
+    trace('rest.start', {
+      restStartedAt, type: workout.restType, thresholds: t,
+      hidden: document.hidden, notify,
+    })
     if (notify) scheduleRest(restStartedAt, workout.restType, t)
     void requestWakeLock()
     ensureAudioCtx()
+    // The page's own liveness, independent of message delivery. Worker beats
+    // arriving in a burst while these show a hole is the signature of a frozen
+    // page; both stopping together is the signature of a dead process. Only
+    // created while tracing, so normal use carries no extra timer.
+    if (isTraceEnabled()) {
+      const beat = setInterval(
+        () => trace('page.beat', { elapsed: elapsed(), hidden: document.hidden }),
+        1000,
+      )
+      onCleanup(() => clearInterval(beat))
+    }
     onCleanup(() => {
+      trace('rest.end', { elapsed: elapsed() })
       worker.postMessage({ type: 'stop' })
       void releaseWakeLock()
     })
@@ -164,6 +199,7 @@ export default function RestTimer() {
     const currPhase = restStatus(e, type, t).phase
     if (prevPhase !== currPhase) {
       const cue = phaseToCue[currPhase]
+      trace('cue.phase', { prev: prevPhase, curr: currPhase, elapsed: e, cue, hidden: document.hidden })
       if (cue) playCue(cue)
     }
   })
@@ -196,14 +232,17 @@ export default function RestTimer() {
             </div>
             <div class="flex gap-2 shrink-0">
               <button
-                onClick={() => setBonus(b => b + BONUS_STEP)}
+                onClick={() => {
+                  trace('rest.extend', { by: BONUS_STEP, elapsed: elapsed() })
+                  setBonus(b => b + BONUS_STEP)
+                }}
                 aria-label="Add 30 seconds to this rest"
                 class="border border-border px-3 py-3 font-mono text-text-dim text-xs tracking-widest hover:border-accent hover:text-accent"
               >
                 +30s
               </button>
               <button
-                onClick={stopRest}
+                onClick={() => { trace('rest.skip', { elapsed: elapsed() }); stopRest() }}
                 aria-label="SKIP REST"
                 class="border border-border px-5 py-3 font-mono text-text-dim text-xs tracking-widest hover:border-accent hover:text-accent"
               >

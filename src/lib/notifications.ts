@@ -32,6 +32,7 @@
 import { DEFAULT_REST_THRESHOLDS } from './calc'
 import type { RestPhase, RestThresholds } from './calc'
 import { createNotifyTimers, type NotifyTarget } from './notify-timers'
+import { trace } from './trace'
 
 const REST_TAG = 'rest-timer'
 const STALLED_TAG = 'stalled-session'
@@ -105,27 +106,59 @@ function swController(): ServiceWorker | null {
  * this is the last resort — it should not also require control.
  */
 function fireViaRegistration(title: string, body: string, tag: string): void {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    trace('notify.reg.absent', { tag })
+    return
+  }
+  trace('notify.reg', { tag })
   void navigator.serviceWorker.ready
-    .then((reg) => reg.showNotification(title, { body, tag, requireInteraction: false }))
-    .catch(() => {
+    .then((reg) => reg.showNotification(title, { body, tag, requireInteraction: false })
+      .then(() => {
+        trace('notify.reg.ok', { tag })
+        void readBackDelivery(reg, tag)
+      }))
+    .catch((err: unknown) => {
       // Best effort by definition: there is nothing left to fall back to, and a
       // missed nudge must not take the rest timer down with it.
+      trace('notify.reg.failed', { tag, error: String(err) })
     })
+}
+
+/**
+ * Ask the registration what it is actually holding under this tag.
+ *
+ * `showNotification` resolving means the request was accepted, NOT that the OS
+ * displayed anything — which is exactly the gap in the iOS reports. This is the
+ * closest the platform comes to an answer, and it is a proxy, not proof: a
+ * notification the user has already dismissed is gone from here too.
+ */
+async function readBackDelivery(reg: ServiceWorkerRegistration, tag: string): Promise<void> {
+  try {
+    const held = await reg.getNotifications({ tag })
+    trace('notify.readback', { tag, held: held.length })
+  } catch (err) {
+    trace('notify.readback.failed', { tag, error: String(err) })
+  }
 }
 
 function firePage(title: string, body: string, tag: string): void {
   // No page constructor at all: there is no permission to read here, so leave
   // that judgement to the registration, which enforces it itself.
   if (typeof Notification === 'undefined') {
+    trace('notify.page.absent', { tag })
     fireViaRegistration(title, body, tag)
     return
   }
   // An explicit denial is a decision, not a failure — do not route around it.
-  if (Notification.permission !== 'granted') return
+  if (Notification.permission !== 'granted') {
+    trace('notify.page.denied', { tag, permission: Notification.permission })
+    return
+  }
   try {
     new Notification(title, { body, tag, requireInteraction: false })
-  } catch {
+    trace('notify.page.ok', { tag })
+  } catch (err) {
+    trace('notify.page.threw', { tag, error: String(err) })
     // The constructor exists but the engine refuses it ("Illegal constructor").
     // Unwrapped, this TypeError escaped the timer tick uncaught: no
     // notification, and nothing in the module reporting that none had fired.
@@ -135,7 +168,11 @@ function firePage(title: string, body: string, tag: string): void {
 
 function scheduleSw(targets: NotifyTarget[]): void {
   const ctrl = swController()
-  if (!ctrl) return
+  if (!ctrl) {
+    trace('notify.sw.uncontrolled', { count: targets.length })
+    return
+  }
+  trace('notify.sw.schedule', { count: targets.length, tags: targets.map(t => t.tag) })
   for (const t of targets) {
     ctrl.postMessage({ type: 'schedule', tag: t.tag, fireAt: t.fireAt, title: t.title, body: t.body })
   }
@@ -151,6 +188,7 @@ function cancelSw(tag: string): void {
 // so re-scheduling a rest never drops the stalled-session timer and vice-versa.
 const pageTimers = createNotifyTimers({
   fire: (target) => firePage(target.title, target.body, target.tag),
+  trace: (ev, d) => trace(ev, d),
 })
 
 function schedulePage(key: string, targets: NotifyTarget[]): void {
@@ -163,6 +201,11 @@ export function scheduleRest(
   restType: 'normal' | 'fail',
   t: RestThresholds = DEFAULT_REST_THRESHOLDS,
 ): void {
+  trace('notify.scheduleRest', {
+    restStartedAt, restType, t,
+    permission: typeof Notification === 'undefined' ? 'no-ctor' : Notification.permission,
+    controlled: swController() != null,
+  })
   cancelRest()
   const targets = restNotificationTargets(restStartedAt, restType, t)
   if (targets.length === 0) return

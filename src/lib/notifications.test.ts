@@ -14,6 +14,7 @@ import {
   REST_FIRST_BELL,
   REST_SECOND_BELL,
 } from './calc'
+import { readTrace, reloadTrace } from './trace'
 
 const NOW = 1_000_000_000
 
@@ -367,5 +368,81 @@ describe('firePage on an engine that rejects the constructor (F67)', () => {
     await vi.advanceTimersByTimeAsync(50)
     await Promise.resolve()
     expect(showNotification).toHaveBeenCalled()
+  })
+})
+
+// ── diagnostics ─────────────────────────────────────────────────────────────
+// The iOS reports are all of the form "nothing happened", and nothing in this
+// module said which nothing it was: no permission, no constructor, a throw, or
+// a request the OS accepted and then did not show. One record per branch.
+describe('notification trace', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('notif-trace-on', '1')
+    reloadTrace()
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+    reloadTrace()
+  })
+
+  it('separates a permission denial from a silent failure', () => {
+    MockNotification.permission = 'denied'
+    scheduleRest(NOW, 'normal')
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
+    const denied = readTrace().find(e => e.ev === 'notify.page.denied')
+    expect(denied?.d).toMatchObject({ permission: 'denied' })
+    expect(readTrace().map(e => e.ev)).not.toContain('notify.page.ok')
+  })
+
+  it('records the arming context: permission and whether a SW controls the page', () => {
+    installSw()
+    scheduleRest(NOW, 'normal')
+    const armed = readTrace().find(e => e.ev === 'notify.scheduleRest')
+    expect(armed?.d).toMatchObject({ permission: 'granted', controlled: true })
+    expect(readTrace().map(e => e.ev)).toContain('notify.sw.schedule')
+  })
+
+  it('records a successful page notification', () => {
+    scheduleRest(NOW, 'normal')
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
+    expect(readTrace().map(e => e.ev)).toContain('notify.page.ok')
+  })
+
+  it('records the constructor throwing, which used to be invisible', () => {
+    const ctor = function () { throw new TypeError('Illegal constructor') } as unknown as NotifCtor
+    Object.defineProperty(ctor, 'permission', { value: 'granted', configurable: true })
+    notifGlobal.Notification = ctor
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: { controller: null, ready: Promise.resolve({ showNotification: vi.fn().mockResolvedValue(undefined), getNotifications: vi.fn().mockResolvedValue([]) }) },
+      writable: true, configurable: true,
+    })
+    scheduleRest(NOW, 'normal')
+    vi.advanceTimersByTime(REST_FIRST_BELL * 1000)
+    const threw = readTrace().find(e => e.ev === 'notify.page.threw')
+    expect(String(threw?.d?.error)).toContain('Illegal constructor')
+    expect(readTrace().map(e => e.ev)).toContain('notify.reg')
+  })
+
+  it('reads back what the registration is actually holding', async () => {
+    const getNotifications = vi.fn().mockResolvedValue([{ tag: 'rest-timer' }])
+    const ctor = function () { throw new TypeError('nope') } as unknown as NotifCtor
+    Object.defineProperty(ctor, 'permission', { value: 'granted', configurable: true })
+    notifGlobal.Notification = ctor
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        controller: null,
+        ready: Promise.resolve({ showNotification: vi.fn().mockResolvedValue(undefined), getNotifications }),
+      },
+      writable: true, configurable: true,
+    })
+    scheduleRest(Date.now() - 200_000, 'normal', { firstBell: 1, secondBell: 2, failedBell: 3 })
+    await vi.advanceTimersByTimeAsync(50)
+    await Promise.resolve()
+    // `showNotification` resolving only means the request was accepted; this is
+    // the closest the platform comes to saying it was shown.
+    const back = readTrace().find(e => e.ev === 'notify.readback')
+    expect(back?.d).toMatchObject({ held: 1 })
   })
 })

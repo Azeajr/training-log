@@ -195,3 +195,93 @@ describe('vibration guard', () => {
     expect(FakeAudioContext.instances[0].oscillators).toHaveLength(1)
   })
 })
+
+// ── diagnostics ─────────────────────────────────────────────────────────────
+// On an installed iOS PWA with the app open and visible, the rest bell makes no
+// sound, while the same path works on desktop. Nothing in this module reported
+// anything, because every failure it has ends in a swallowed catch. These cases
+// pin what the trace must say in each of the three candidate worlds, so the
+// export can be read as an answer rather than a hint.
+describe('audio trace', () => {
+  async function loadTracing(on: boolean) {
+    localStorage.clear()
+    if (on) localStorage.setItem('notif-trace-on', '1')
+    const traceMod = await import('./trace')
+    traceMod.reloadTrace()
+    const audio = await loadModule()
+    return { ...audio, ...traceMod }
+  }
+
+  it('records nothing at all while tracing is off', async () => {
+    const { playCue, readTrace } = await loadTracing(false)
+    playCue('nudge')
+    await flush()
+    expect(readTrace()).toHaveLength(0)
+    // and the cue itself is untouched
+    expect(FakeAudioContext.instances[0].oscillators).toHaveLength(1)
+  })
+
+  it('does not even attach an onended handler while tracing is off', async () => {
+    const { playCue } = await loadTracing(false)
+    playCue('nudge')
+    await flush()
+    const osc = FakeAudioContext.instances[0].oscillators[0] as FakeOscillator & { onended?: unknown }
+    expect(osc.onended).toBeUndefined()
+  })
+
+  it('records the whole arc of a tone that plays', async () => {
+    const { playCue, readTrace } = await loadTracing(true)
+    playCue('nudge')
+    await flush()
+    const osc = FakeAudioContext.instances[0].oscillators[0] as FakeOscillator & {
+      onended?: () => void
+    }
+    osc.onended?.()
+    const evs = readTrace().map(e => e.ev)
+    expect(evs).toContain('cue.play')
+    expect(evs).toContain('audio.tone')
+    expect(evs).toContain('audio.tone.armed')
+    expect(evs).toContain('audio.tone.ended')
+  })
+
+  it('stops at audio.tone when resume never resolves — the cue never ran', async () => {
+    const { playCue, readTrace } = await loadTracing(true)
+    vi.stubGlobal('AudioContext', class extends FakeAudioContext {
+      constructor() {
+        super()
+        this.state = 'suspended'
+        // A resume that never settles is the first candidate world: iOS
+        // refusing to resume a context outside a gesture.
+        this.resume = vi.fn(() => new Promise<void>(() => {})) as never
+      }
+    })
+    playCue('nudge')
+    await flush()
+    const evs = readTrace().map(e => e.ev)
+    expect(evs).toContain('audio.tone')
+    // Everything after the await is dead code in this world, and the absence
+    // of these two is what says so.
+    expect(evs).not.toContain('audio.tone.resumed')
+    expect(evs).not.toContain('audio.tone.armed')
+  })
+
+  it('reports the error the catch used to swallow', async () => {
+    const { playCue, readTrace } = await loadTracing(true)
+    vi.stubGlobal('AudioContext', class extends FakeAudioContext {
+      createOscillator(): never { throw new TypeError('no oscillator for you') }
+    })
+    playCue('nudge')
+    await flush()
+    const failed = readTrace().find(e => e.ev === 'audio.tone.failed')
+    expect(failed).toBeDefined()
+    expect(String(failed?.d?.error)).toContain('no oscillator for you')
+  })
+
+  it('records a missing Vibration API rather than nothing', async () => {
+    const { playCue, readTrace } = await loadTracing(true)
+    delete (navigator as { vibrate?: unknown }).vibrate
+    playCue('nudge')
+    await flush()
+    expect(readTrace().map(e => e.ev)).toContain('audio.vibrate.absent')
+  })
+})
