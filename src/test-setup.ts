@@ -13,9 +13,10 @@ import { createRestTimer, type RestTimerMessage } from './workers/rest-timer-pro
 // a real Worker delivers through a port.
 class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null
-  private timer = createRestTimer((tick) => {
-    this.onmessage?.(new MessageEvent('message', { data: tick }))
-  })
+  private timer = createRestTimer(
+    (tick) => { this.onmessage?.(new MessageEvent('message', { data: tick })) },
+    (beat) => { this.onmessage?.(new MessageEvent('message', { data: beat })) },
+  )
 
   postMessage(data: unknown) {
     this.timer.handle(data as RestTimerMessage)
