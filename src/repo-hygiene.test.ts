@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 // Assertions about the shape of the repository rather than the behaviour of the
@@ -89,17 +89,36 @@ describe('the demo seed is not published (F82)', () => {
     expect(seed.lifts.length).toBeGreaterThan(0)
   })
 
+  // Everything here is published verbatim to the deployed site, so the list is
+  // an allowlist and a new entry is a decision, not a formality.
+  const ALLOWED = [
+    '_headers',
+    'apple-touch-icon.png',
+    'favicon.svg',
+    'icon-192.png',
+    'icon-512.png',
+    // The keepalive loop (src/lib/keepalive.ts). Published on purpose: iOS
+    // requires a media resource that answers byte-range requests, which a
+    // blob: URL does not, so this has to be a real file served over HTTP.
+    // 16 KB of inaudible dither, precached with the rest of the app.
+    'silence.wav',
+  ]
+
   it('public/ carries only what the app actually serves', () => {
     const published = execFileSync('git', ['ls-files', 'public/'], { cwd: root, encoding: 'utf8' })
       .split('\n')
       .filter(Boolean)
       .map(p => p.replace('public/', ''))
-    expect(published.sort()).toEqual([
-      '_headers',
-      'apple-touch-icon.png',
-      'favicon.svg',
-      'icon-192.png',
-      'icon-512.png',
-    ])
+    expect(published.sort()).toEqual([...ALLOWED].sort())
+  })
+
+  // `git ls-files` sees only what is TRACKED, and vite copies public/ into the
+  // build whatever git thinks. So a file created but not yet committed is
+  // already publishable while this suite reports green — which is exactly what
+  // happened when silence.wav was added: the local run passed and CI failed on
+  // the very next push. Reading the directory closes that window locally.
+  it('has nothing in public/ on disk that the allowlist does not name', () => {
+    const onDisk = readdirSync(join(root, 'public')).sort()
+    expect(onDisk).toEqual([...ALLOWED].sort())
   })
 })
