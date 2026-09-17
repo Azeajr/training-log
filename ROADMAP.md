@@ -29,9 +29,54 @@ hand (an installed iOS PWA is exactly where a clipboard write gets refused).
 - **SW sink** (`src/lib/trace-sw-store.ts`): IndexedDB, because a service worker
   cannot reach localStorage. `sw.boot` at script evaluation is the record that
   turns "the SW notification did not arrive" into evidence — a second boot means
-  the first worker was killed.
+  the first worker was killed. **Removed 2026-09-17**: it recorded nothing in
+  any capture from a real device, and a zero meaning "the sink never worked"
+  reads exactly like a zero meaning "the worker did nothing". Dead code that
+  reports a false negative is worse than no code. What the SW does is inferred
+  from the page side now.
 - **Verified in a real browser**: `verify:sw` leg H drives a real service worker
   and asserts both halves come back non-empty. Disabling the SW sink fails it.
+
+Ceiling, stated in `docs/diagnostic-trace.md`: nothing runs while the process is
+suspended, `showNotification` resolving is not proof of display, and nothing
+below WebAudio is visible. The gaps are read as data rather than papered over.
+
+**First capture, and what it settled (2026-09-17).** An installed iOS PWA, 686
+records over 12 minutes:
+
+- **The locked-phone case is a clock, not a bug.** Across a 316-second lock the
+  monotonic clock advanced **23 seconds** — iOS stops it while the device
+  sleeps, and `setTimeout` counts against it. A 90-second bell armed before a
+  lock is not dropped; it is postponed by the whole sleep. An app switch behaves
+  completely differently (clock keeps running, bell fires 3 s late on return),
+  which is exactly the difference reported from the device.
+- **The tick worker is fine.** 295 ticks, zero gaps in its sequence, receipt lag
+  ≤ 55 ms while visible.
+- **F108, found in the capture**: `playTone` only resumed a context whose state
+  was exactly `suspended`. WebKit's third state, `interrupted` — what a lock or
+  another app's audio produces — was never asked to resume, so the note was
+  scheduled against a stopped clock and sounded on the next touch. Captured
+  armed at t+581.0, sounding at t+611.4, released by the tap that hit SKIP.
+  Fixed: resume whenever the state is not `running`, with the attempt raced
+  against a deadline so an unsettled resume is recorded rather than awaited
+  forever. The stale note is **recorded, not yet dropped** — whether to drop it
+  is a live decision.
+- **TEST CUE** added to DIAGNOSTICS: the bell on demand, from a real tap, with
+  no 90-second wait and no notification chime to mask it. **Result: the cue is
+  audible on an installed iOS PWA** — six taps, six completed notes, confirmed
+  by ear. The original "no bell" was the silent switch, plus a 150 ms tone
+  masked by the notification chime landing 0.4 s earlier, plus F108. No platform
+  gate is warranted; what remains is cue design.
+- **KEEP ALIVE** was added to DIAGNOSTICS as an experiment and **removed the
+  same day**. It worked — an inaudible loop held the iOS process alive across a
+  175-second app switch, with no `page.beat` gap over 2.9 s where the control
+  went dark for 31.9 s. But nothing consumed that aliveness: the tick worker
+  still pauses while the page is hidden, and the run that proved the mechanism
+  had notifications off, so a bell arriving on time was never demonstrated. A
+  working mechanism with no product behind it, costing battery and an audio
+  session per rest, is what rots. The result is kept in
+  `docs/verification/2026-09-17-keepalive-and-audio-clock.md`, which is enough
+  to rebuild it deliberately if the app-switch case ever earns the work.
 
 Ceiling, stated in `docs/diagnostic-trace.md`: nothing runs while the process is
 suspended, `showNotification` resolving is not proof of display, and nothing

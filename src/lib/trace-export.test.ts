@@ -2,13 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { buildTraceExport, formatTraceExport } from './trace-export'
 import { trace, reloadTrace, clearTrace } from './trace'
 
-vi.mock('./trace-sw-store', () => ({
-  swTraceRead: vi.fn(async () => [
-    { seq: 0, t: 150, p: 0, src: 'sw' as const, ev: 'sw.boot' },
-    { seq: 1, t: 350, p: 0, src: 'sw' as const, ev: 'sw.shown', d: { tag: 'rest-timer' } },
-  ]),
-}))
-
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem('notif-trace-on', '1')
@@ -16,16 +9,16 @@ beforeEach(() => {
 })
 
 describe('buildTraceExport', () => {
-  it('interleaves the page and service-worker halves by wall clock', async () => {
+  it('carries the page records in order, with their span', async () => {
     vi.spyOn(Date, 'now')
-      .mockReturnValueOnce(100)   // page event 1
-      .mockReturnValueOnce(200)   // page event 2
+      .mockReturnValueOnce(100)
+      .mockReturnValueOnce(200)
       .mockReturnValue(999)
     trace('rest.start')
     trace('notify.arm')
     const x = await buildTraceExport()
-    expect(x.events.map(e => e.ev)).toEqual(['rest.start', 'sw.boot', 'notify.arm', 'sw.shown'])
-    expect(x.stats).toMatchObject({ page: 2, sw: 2, first: 100, last: 350 })
+    expect(x.events.map(e => e.ev)).toEqual(['rest.start', 'notify.arm'])
+    expect(x.stats).toMatchObject({ page: 2, first: 100, last: 200 })
     vi.restoreAllMocks()
   })
 
@@ -68,7 +61,7 @@ describe('formatTraceExport', () => {
     const text = formatTraceExport(await buildTraceExport())
     const [, body] = text.split(/--- events \(\d+\) ---\n/)
     const lines = body.trim().split('\n')
-    expect(lines).toHaveLength(4)          // 2 page + 2 mocked SW
+    expect(lines).toHaveLength(2)
     for (const l of lines) expect(() => JSON.parse(l) as unknown).not.toThrow()
   })
 

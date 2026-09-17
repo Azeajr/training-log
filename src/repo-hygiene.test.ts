@@ -97,11 +97,6 @@ describe('the demo seed is not published (F82)', () => {
     'favicon.svg',
     'icon-192.png',
     'icon-512.png',
-    // The keepalive loop (src/lib/keepalive.ts). Published on purpose: iOS
-    // requires a media resource that answers byte-range requests, which a
-    // blob: URL does not, so this has to be a real file served over HTTP.
-    // 16 KB of inaudible dither, precached with the rest of the app.
-    'silence.wav',
   ]
 
   it('public/ carries only what the app actually serves', () => {
@@ -115,8 +110,9 @@ describe('the demo seed is not published (F82)', () => {
   // `git ls-files` sees only what is TRACKED, and vite copies public/ into the
   // build whatever git thinks. So a file created but not yet committed is
   // already publishable while this suite reports green — which is exactly what
-  // happened when silence.wav was added: the local run passed and CI failed on
-  // the very next push. Reading the directory closes that window locally.
+  // happened when a keepalive loop was added to public/: the local run passed
+  // and CI failed on the very next push. Reading the directory closes that
+  // window locally.
   it('has nothing in public/ on disk that the allowlist does not name', () => {
     const onDisk = readdirSync(join(root, 'public')).sort()
     expect(onDisk).toEqual([...ALLOWED].sort())

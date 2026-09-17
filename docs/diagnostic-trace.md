@@ -19,20 +19,16 @@ It is **off by default** and records nothing at all while off.
    of the three to be refused).
 4. Paste it somewhere it can be read.
 
-**CLEAR** before each capture keeps the log to one scenario. The log is capped
-at 1200 page records and 500 service-worker records; the oldest fall off.
-
-**The service worker picks up the switch on its next start**, not immediately —
-it reads the flag once per script evaluation and the browser reaps an idle
-worker in about 30 seconds. If SW records are missing from a capture taken
-seconds after switching on, that is why.
+**CLEAR** before each capture keeps the log to one scenario. The log is capped at 1200
+records; the oldest fall off.
 
 ---
 
 ## What the records mean
 
-Every record carries `t` (wall clock), `p` (ms since page start), `src`
-(`page`, `worker` or `sw`), and `ev`.
+Every record carries `t` (wall clock), `p` (ms since page start), `src` (`page`
+or `worker` — the worker's are relayed through the page and stamped with the
+worker's own clock), and `ev`.
 
 ### The rest timer and the tick worker
 
@@ -92,9 +88,13 @@ Read it as a ladder:
 | `notify.page.threw` | the constructor was refused |
 | `notify.reg.*` | the service-worker-registration fallback |
 | `notify.readback` | how many notifications the registration is **holding** under that tag afterwards |
-| `sw.boot` | a service worker **started**. A second one means the first was killed |
-| `sw.msg.schedule` / `sw.shown` / `sw.show.failed` | the SW's own half |
-| `sw.click` | the notification was tapped — the only **proof** it was displayed |
+
+There is **no service-worker half**. There was one, writing to IndexedDB, and it
+recorded nothing in any capture taken from a real device — a zero that means
+"the sink never worked" reads exactly like a zero that means "the worker did
+nothing", so it was removed rather than left to mislead. What the SW does is
+therefore inferred from the page side, not observed. See
+`docs/verification/2026-09-17-keepalive-and-audio-clock.md`.
 
 ---
 
@@ -112,46 +112,6 @@ tap. Use it instead of waiting out a rest:
 loss is below the app** — routing or volume, not code. Note that iOS has
 separate ringer and media volume: pressing the volume buttons while nothing is
 playing usually moves the ringer, not the channel this tone rides.
-
-## KEEP ALIVE — an experiment, not a feature
-
-Settings → DIAGNOSTICS → **KEEP ALIVE**. Off by default.
-
-**The problem it tests.** An app switch suspends the page process. Measured: 82
-seconds backgrounded, `page.beat` dark the whole time, monotonic clock advanced
-the full 82 seconds. The device was awake; the page was not. So the bell came
-due with nothing running to fire it and landed 3 seconds after the user
-returned. The service worker was meant to cover this and cannot — its own
-`setTimeout` does not keep it alive and the browser reaps it in ~30 s
-(COMMON_MISTAKES #11), while the first bell is 90 s out.
-
-**The hypothesis.** WebKit keeps a page running while it plays media. So play an
-inaudible loop for the length of a rest and the process may survive the switch.
-
-**Running it.** Do both, one after the other:
-
-1. TRACE ON, **KEEP ALIVE OFF**. Start a rest, switch to another app for ~60 s,
-   come back after the bell was due. COPY. That is the control.
-2. TRACE ON, **KEEP ALIVE ON**. Same again. COPY.
-
-**Reading it.** One question: **did `page.beat` keep ticking while you were
-away?**
-
-- Ticking through the gap → the process stayed alive, the hypothesis holds, and
-  `notify.fire` should show a `drift` near zero instead of "fired on return".
-- Dark anyway → the hypothesis is dead, and the honest deliverable is UI copy
-  that stops the toggle promising what the platform will not do.
-
-Also worth checking in the ON run: `keepalive.playing` (it started),
-`keepalive.blocked` (autoplay refused — it retries on the next touch),
-`keepalive.media` with `pause` (iOS stopped it), and `keepalive.session`
-(whether `ambient` was accepted, which is what decides if your music keeps
-playing).
-
-**Costs, which is why it is off by default.** Battery, for the length of each
-rest. And the audio session: `ambient` asks iOS to mix rather than interrupt, so
-a gym playlist should survive — but where that API is missing there is no such
-guarantee.
 
 ## What it cannot see
 
@@ -173,8 +133,7 @@ Stated plainly, because the gaps are part of reading it:
 
 | Piece | File |
 |---|---|
-| Page sink (localStorage, synchronous) | `src/lib/trace.ts` |
-| SW sink (IndexedDB, shared with the page) | `src/lib/trace-sw-store.ts` |
+| The sink (localStorage, synchronous) | `src/lib/trace.ts` |
 | Merge + environment block | `src/lib/trace-export.ts` |
 | Settings panel | `src/components/settings/DiagnosticsPanel.tsx` |
 | Worker stamps and heartbeats | `src/workers/rest-timer-protocol.ts` |
