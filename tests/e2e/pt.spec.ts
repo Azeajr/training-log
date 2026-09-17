@@ -28,7 +28,7 @@ test.describe('PT checklist', () => {
     await expect(page.getByText('Shoulder rehab')).toBeVisible()
     await expect(page.getByText('1 exercise')).toBeVisible()
 
-    await page.getByRole('button', { name: 'START' }).click()
+    await page.getByRole('button', { name: 'START', exact: true }).click()
     const boxes = page.getByRole('checkbox')
     await expect(boxes).toHaveCount(3)
 
@@ -45,7 +45,7 @@ test.describe('PT checklist', () => {
     await page.getByRole('button', { name: 'FINISH' }).click()
 
     await expect(page.getByText('PT HISTORY')).toBeVisible()
-    await expect(page.getByText('2/3')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Shoulder rehab.*2\/3/ })).toBeVisible()
   })
 
   test('discards a run without recording it', async ({ page }) => {
@@ -54,7 +54,7 @@ test.describe('PT checklist', () => {
     await page.getByLabel('Exercise 1 name').fill('Wall slide')
     await page.getByRole('button', { name: 'DONE' }).click()
 
-    await page.getByRole('button', { name: 'START' }).click()
+    await page.getByRole('button', { name: 'START', exact: true }).click()
     await page.getByRole('checkbox').first().click()
     await page.getByRole('button', { name: 'DISCARD' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'DISCARD' }).click()
@@ -68,7 +68,7 @@ test.describe('PT checklist', () => {
     await page.getByLabel('Exercise 1 name').fill('Wall slide')
     await page.getByRole('button', { name: 'DONE' }).click()
 
-    await page.getByRole('button', { name: 'START' }).click()
+    await page.getByRole('button', { name: 'START', exact: true }).click()
     await page.getByRole('checkbox').first().click()
     await page.getByRole('button', { name: 'FINISH' }).click()
     await expect(page.getByText('PT HISTORY')).toBeVisible()
@@ -78,14 +78,56 @@ test.describe('PT checklist', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'ARCHIVE' }).click()
 
     await expect(page.getByText('ARCHIVED', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'START' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'START', exact: true })).toHaveCount(0)
     // The run it produced outlives the routine's retirement (one of three
     // prescribed sets was ticked).
-    await expect(page.getByText('1/3')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Knee block.*1\/3/ })).toBeVisible()
 
     await page.getByRole('button', { name: 'RESTORE' }).click()
     await expect(page.getByText('ARCHIVED', { exact: true })).toBeHidden()
-    await expect(page.getByRole('button', { name: 'START' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'START', exact: true })).toBeVisible()
+  })
+
+  test('combines routines, restores progress, and saves separate history', async ({ page }) => {
+    for (const [routine, exercise] of [['Shoulder', 'Band pull-apart'], ['Knee', 'Wall slide']]) {
+      await page.goto('/pt/new')
+      await page.getByLabel('Routine name').fill(routine)
+      await page.getByLabel('Exercise 1 name').fill(exercise)
+      await page.getByRole('button', { name: 'DONE', exact: true }).click()
+      await expect(page.getByLabel(`Include ${routine}`)).toBeVisible()
+    }
+
+    await page.getByLabel('Include Shoulder').check()
+    await page.getByLabel('Include Knee').check()
+    await page.getByRole('button', { name: 'START SESSION (2)', exact: true }).click()
+    const shoulderSet = page.getByRole('checkbox', { name: 'Band pull-apart set 1, 10 reps', exact: true })
+    const kneeSet = page.getByRole('checkbox', { name: 'Wall slide set 2, 10 reps', exact: true })
+    await shoulderSet.click()
+    await kneeSet.click()
+    await page.getByLabel('Notes for Shoulder', { exact: true }).fill('shoulder session note')
+    await page.getByLabel('Note for Wall slide', { exact: true }).fill('knee exercise note')
+    await page.reload()
+    await expect(shoulderSet).toHaveAttribute('aria-checked', 'true')
+    await expect(kneeSet).toHaveAttribute('aria-checked', 'true')
+    await expect(page.getByLabel('Notes for Shoulder', { exact: true })).toHaveValue('shoulder session note')
+    await expect(page.getByLabel('Note for Wall slide', { exact: true })).toHaveValue('knee exercise note')
+
+    await page.getByRole('link', { name: 'TODAY', exact: true }).click()
+    await page.getByRole('button', { name: 'RESUME PT SESSION · 2 routines', exact: true }).click()
+    await expect(shoulderSet).toHaveAttribute('aria-checked', 'true')
+    await expect(kneeSet).toHaveAttribute('aria-checked', 'true')
+    await page.getByRole('button', { name: 'FINISH SESSION', exact: true }).click()
+
+    await expect(page.getByText('PT HISTORY', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /RESUME PT SESSION/ })).toHaveCount(0)
+    const shoulderHistory = page.getByRole('button', { name: /Shoulder.*1\/3/ })
+    const kneeHistory = page.getByRole('button', { name: /Knee.*1\/3/ })
+    await expect(shoulderHistory).toBeVisible()
+    await expect(kneeHistory).toBeVisible()
+    await shoulderHistory.click()
+    await expect(page.getByText('shoulder session note', { exact: true })).toBeVisible()
+    await kneeHistory.click()
+    await expect(page.getByText('knee exercise note', { exact: true })).toBeVisible()
   })
 
   test('reaches PT from the Today screen', async ({ page }) => {
@@ -95,7 +137,7 @@ test.describe('PT checklist', () => {
     await page.getByRole('button', { name: 'DONE' }).click()
     // Wait for DONE's own navigate('/pt') to land first: clicking TODAY while
     // it is still in flight navigates away and is then bounced straight back.
-    await expect(page.getByRole('button', { name: 'START' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'START', exact: true })).toBeVisible()
 
     await page.getByRole('link', { name: 'TODAY' }).click()
     await expect(page.getByRole('button', { name: /Knee.*START/ })).toBeVisible()
