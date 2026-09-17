@@ -9,15 +9,15 @@ Writing fix state into it would corrupt that claim. This document is the state.
 
 | | Count |
 |---|---|
-| Findings | **106** (F01–F106; F95–F101 opened during fix work, F102–F106 by the L06 failure-injection pass) |
+| Findings | **107** (F01–F107; F95–F101 opened during fix work, F102–F106 by the L06 failure-injection pass, F107 by the 2026-09-16 device test) |
 | `open` | **0** |
 | `wip` | 0 |
-| `fixed` | **103** — F01, F02, F03, F04, F05, F06, F07, F08, F09, F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F39, F40, F41, F42, F44, F45, F46, F47, F48, F49, F50, F51, F52, F53, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F68, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F81, F82, F83, F84, F85, F86, F87, F88, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F100, F101, F102, F103, F104, F105, F106 |
+| `fixed` | **104** — F01, F02, F03, F04, F05, F06, F07, F08, F09, F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F28, F29, F30, F31, F32, F33, F34, F35, F36, F37, F38, F39, F40, F41, F42, F44, F45, F46, F47, F48, F49, F50, F51, F52, F53, F54, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F68, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F81, F82, F83, F84, F85, F86, F87, F88, F89, F90, F91, F92, F93, F94, F95, F96, F97, F99, F100, F101, F102, F103, F104, F105, F106, F107 |
 | `fixed-by` | **3** — F43, F62, F98 |
 | `wontfix` | 0 |
 | `blocked` | 0 |
 
-**By severity: 14 High / 56 Medium / 36 Low.**
+**By severity: 14 High / 57 Medium / 36 Low.**
 
 > **Count correction.** `deep-code-review.md:34` says "12 high". Counted directly
 > from its own findings table, **13** rows carry High: F01, F02, F04, F05, F07,
@@ -196,6 +196,7 @@ Evidence column format: `<sha>` · `#<pr>` · `<test name>`. All three for `fixe
 | F104 | Medium | L06 | — | `src/screens/Today.tsx` | `fixed` | `dcdd24f` · `Today.test.tsx` ×2 | **Half-started.** Assistance defaults are seeded *after* `startSession`, so a failure there left a real pending row created and the store pointing at it, with no navigation and no error — the user stranded on Today under a "SESSION IN PROGRESS" banner for a session they never entered, and that row holds the week open (the F16 harm, reached a different way). It navigates anyway now and reports the missing defaults: the session is real and valid, only a convenience failed, and abandoning it would discard what the user just asked for. |
 | F105 | Medium | L06 | — | `src/screens/Today.tsx` | `fixed` | `dcdd24f` · `Today.test.tsx` abandon case | Abandoning with a failing discard kept everything — right for the data — but said nothing, so the user believed the old session was gone when it was still there, still holding the week open. It now reports **which** action failed: the outer catch would say "could not start the session", which is true but names the wrong thing. That distinction is why the test asserts the specific wording — the looser version passed either way. |
 | F106 | Medium | L06 | — | `src/screens/Today.tsx` | `fixed` | `dcdd24f` · `Today.test.tsx` ×2 | **`?? []` guards a null, not a throw.** `crossPreview` is a `createResource` read as `crossPreview() ?? []`, and reading a *rejected* resource throws — so the throw came back out of `setLoading(false)` and one optional preview failing left the entire screen on "Loading…". Probed in isolation to confirm the mechanism rather than infer it: a rejecting resource does not break its owner, but reading it does. Checking `.error` first reads the failure without re-raising it. |
+| F107 | Medium | — | — | `src/lib/notifications.ts` | `fixed` | `ea58dac` · `notifications.test.ts` ×5 + `verify:sw` leg C | **Nobody fired.** `pageTimers.fire` returned early whenever a service worker controlled a **visible** page — "the SW owns the visible-tab case". It cannot: `navigator.serviceWorker.controller` reports **control, not aliveness** and stays non-null after an idle worker is reaped (~30 s, COMMON_MISTAKES #11), while the SW's schedule is in-memory `setTimeout`s that die with it and are never re-armed. A 90 s bell therefore had nothing left to defer to. **This line was examined during the review and cleared** (`deep-code-review.md:3377`, "checked and justified as written") on a second ground — that the in-app audio cue and countdown already alert a visible user. The 2026-09-16 device test broke that half too: installed iOS PWA, app open and visible, **no audio cue and no notification**. The page now fires whatever the visibility; the shared `tag` coalesces a live SW's notification with it and a replacement does not re-alert (`renotify` defaults to false), so the honest cost is one alert when the SW is alive and one when it is dead, instead of two-or-none. Opened and fixed post-review, F102–F106 precedent. Consequence accepted, not hidden: reopening the app during a stale rest now catch-up-fires one notification per tag, which the no-SW path and the audio cue already did. Why the iOS audio cue is silent while visible is **still open** — it is a separate failure, not this one. |
 
 ## Remaining work, batched
 
