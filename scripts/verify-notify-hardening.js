@@ -8,7 +8,7 @@
  *
  * Drives the REAL app in Chromium headless against `vite preview`:
  *   A. offline hard reload at / and /workout renders the shell
- *   C. visible tab + SW control: page silent, exactly one SW notification
+ *   C. visible tab + SW control: page fires too (F107) - page 1, SW 1
  *   E. reload mid-rest fires the past-due nudge exactly once (SW)
  *   B. hidden tab: page ALSO fires (page + SW, tag-coalesced to one OS item)
  *   D. SW dead + hidden tab: page timer still fires
@@ -295,25 +295,29 @@ async function main() {
       if ((await cached(PATH)) !== 200) throw new Error('a good response was not precached')
     })
 
-    await leg('C: visible tab - page silent, SW fires once', async () => {
+    // F107: the page used to stay silent here, deferring to the SW. It cannot -
+    // `controller` reports control, not aliveness, and the SW's timers die with
+    // the worker. Both sides now fire; the shared tag coalesces them into one OS
+    // item, and a replacement does not re-alert.
+    await leg('C: visible tab - page fires alongside the SW (F107)', async () => {
       const { page, swWorker } = await freshContext(browser)
       await injectRest(page) // past-due: fires immediately on boot
       await page.reload()
       await waitForSwControl(page)
       await page.waitForTimeout(700)
       const c = await countNotifs(page, swWorker)
-      if (c.page !== 0) throw new Error(`page fired ${c.page}, expected 0`)
+      if (c.page !== 1) throw new Error(`page fired ${c.page}, expected 1`)
       if (c.sw !== 1) throw new Error(`SW fired ${c.sw}, expected 1`)
     })
 
-    await leg('E: reload mid-rest - past-due nudge fires once', async () => {
+    await leg('E: reload mid-rest - past-due nudge fires once per path', async () => {
       const { page, swWorker } = await freshContext(browser)
       await injectRest(page)
       await page.reload()
       await waitForSwControl(page)
       await page.waitForTimeout(700)
       const c = await countNotifs(page, swWorker)
-      if (c.page !== 0 || c.sw !== 1) throw new Error(`page=${c.page} sw=${c.sw}, expected 0/1`)
+      if (c.page !== 1 || c.sw !== 1) throw new Error(`page=${c.page} sw=${c.sw}, expected 1/1`)
     })
 
     await leg('B: hidden tab - page fires alongside SW', async () => {

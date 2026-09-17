@@ -6,11 +6,13 @@
 // setTimeout does not keep the worker alive, so the SW path is best-effort),
 // with the SW armed in parallel as a bonus background path.
 //
-// Fire policy:
-//   - SW controls the page → the page fires ONLY while the tab is hidden
-//     (the SW owns the visible-tab case; the in-app rest UI already alerts
-//     the user there).
-//   - no SW (dev preview, unsupported engine) → the page always fires.
+// Fire policy: the page ALWAYS fires, whether or not a service worker controls
+// it and whatever the tab's visibility. It does not stand aside for the SW,
+// because `navigator.serviceWorker.controller` reports control, not aliveness:
+// it stays non-null across a termination, while the SW's schedule is plain
+// in-memory setTimeouts that die with the worker and are never re-armed. A bell
+// 90 s out therefore had nothing left to defer to, and nobody fired (F107).
+// Firing both sides is what the shared `tag` is for — see below.
 //
 // Catch-up: targets whose fireAt has passed while the page was dead fire
 // immediately when the page re-arms them on load (RestTimer mounts with the
@@ -22,8 +24,10 @@
 //   { type: 'cancel',   tag }                        — drop a pending one
 //
 // `tag` is the coalescing key: a new rest checkpoint replaces a stale one rather
-// than stacking. Rest-phase and stalled-session notifications use distinct
-// tags.
+// than stacking, and that is also what makes the page and the SW firing the same
+// target harmless — the second replaces the first, and a replacement does not
+// re-alert (`renotify` defaults to false). Rest-phase and stalled-session
+// notifications use distinct tags.
 
 import { DEFAULT_REST_THRESHOLDS } from './calc'
 import type { RestPhase, RestThresholds } from './calc'
@@ -89,10 +93,6 @@ function swController(): ServiceWorker | null {
   return navigator.serviceWorker.controller
 }
 
-function isPageHidden(): boolean {
-  return typeof document !== 'undefined' && document.hidden
-}
-
 /**
  * Fire through the service-worker registration. The page constructor is not the
  * supported path everywhere — notably it is unavailable in several mobile
@@ -150,12 +150,7 @@ function cancelSw(tag: string): void {
 // both tags — cancelRest/cancelStalled/cancelAll map onto tag-scoped cancels,
 // so re-scheduling a rest never drops the stalled-session timer and vice-versa.
 const pageTimers = createNotifyTimers({
-  fire: (target) => {
-    // SW-present + visible tab: the SW owns the visible case; firing the page
-    // notification too would double the nudge.
-    if (swController() && !isPageHidden()) return
-    firePage(target.title, target.body, target.tag)
-  },
+  fire: (target) => firePage(target.title, target.body, target.tag),
 })
 
 function schedulePage(key: string, targets: NotifyTarget[]): void {
