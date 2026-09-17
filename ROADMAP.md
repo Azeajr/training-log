@@ -58,7 +58,20 @@ records over 12 minutes:
   forever. The stale note is **recorded, not yet dropped** — whether to drop it
   is a live decision.
 - **TEST CUE** added to DIAGNOSTICS: the bell on demand, from a real tap, with
-  no 90-second wait and no notification chime to mask it.
+  no 90-second wait and no notification chime to mask it. **Result: the cue is
+  audible on an installed iOS PWA** — six taps, six completed notes, confirmed
+  by ear. The original "no bell" was the silent switch, plus a 150 ms tone
+  masked by the notification chime landing 0.4 s earlier, plus F108. No platform
+  gate is warranted; what remains is cue design.
+- **KEEP ALIVE** added to DIAGNOSTICS, off by default — an experiment, not a
+  feature. An app switch suspends the page process (82 s backgrounded, `page.beat`
+  dark throughout, monotonic clock advancing the whole time), so the bell fires
+  on return rather than on time. WebKit keeps a page running while it plays
+  media, so this plays an inaudible 16-bit dithered loop for the length of a
+  rest to see whether the process survives. `navigator.audioSession` is set to
+  `ambient` so it mixes with the user's music rather than interrupting it.
+  Protocol and how to read the result: `docs/diagnostic-trace.md`. If the
+  process still goes dark, the deliverable is honest UI copy instead.
 
 ### Rest-timer recovery checkpoints (2026-09-11)
 

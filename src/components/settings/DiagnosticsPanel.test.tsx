@@ -42,11 +42,12 @@ afterEach(() => {
 describe('DiagnosticsPanel', () => {
   it('starts off, and switching it on records from that moment', async () => {
     renderPanel()
-    expect(screen.getByText('OFF')).toBeInTheDocument()
+    const chip = screen.getByLabelText('Diagnostic trace')
+    expect(chip).toHaveTextContent('OFF')
     expect(isTraceEnabled()).toBe(false)
 
-    fireEvent.click(screen.getByText('OFF'))
-    await waitFor(() => expect(screen.getByText('ON')).toBeInTheDocument())
+    fireEvent.click(chip)
+    await waitFor(() => expect(screen.getByLabelText('Diagnostic trace')).toHaveTextContent('ON'))
     expect(isTraceEnabled()).toBe(true)
     // The switch itself is the first record, so a log never opens with an
     // unexplained edge.
@@ -56,7 +57,7 @@ describe('DiagnosticsPanel', () => {
   it('switches the service worker half on with the same tap', async () => {
     const { swTraceSetEnabled } = await import('../../lib/trace-sw-store')
     renderPanel()
-    fireEvent.click(screen.getByText('OFF'))
+    fireEvent.click(screen.getByLabelText('Diagnostic trace'))
     await waitFor(() => expect(swTraceSetEnabled).toHaveBeenCalledWith(true))
   })
 
