@@ -40,6 +40,10 @@ Dated runtime-verification logs, one per claim checked against the running app.
 - `docs/verification/2026-08-09-rest-timer-notifications.md` — rest-timer system
   notifications (SW + page-timer fallback). **PASS** — automated tests plus a Chrome desktop
   runtime pass; the record names which legs remain unverified.
+- `docs/verification/2026-09-17-keepalive-and-audio-clock.md` — an inaudible loop
+  holds the iOS process alive across an app switch (**PASS**); whether the bell then
+  arrives on time is **not tested**; `AudioContext.state` lies after a background
+  (**F109**).
 - `docs/verification/2026-08-09-swe-hardening.md` — page-primary notification scheduling,
   offline navigation shell, scoped cache eviction. **PASS** — all five runtime legs executed in
   headless Chromium against a production build by `scripts/verify-notify-hardening.js`, which now
