@@ -356,6 +356,19 @@ export interface PtRunInput {
  * no row to reconcile and no orphan to clean up.
  */
 export async function commitPtRun(db: TrainingDB, run: PtRunInput): Promise<number> {
+  return (await commitPtSession(db, [run]))[0]
+}
+
+/** Save all selected routines atomically so retrying cannot duplicate a partial session. */
+export async function commitPtSession(db: TrainingDB, runs: PtRunInput[]): Promise<number[]> {
+  const ids: number[] = []
+  await db.transaction(async () => {
+    for (const run of runs) ids.push(await writePtRun(db, run))
+  })
+  return ids
+}
+
+async function writePtRun(db: TrainingDB, run: PtRunInput): Promise<number> {
   if (run.checks.length === 0) {
     throw new PtValidationError('Nothing to save — this routine has no sets')
   }
@@ -365,19 +378,16 @@ export async function commitPtRun(db: TrainingDB, run: PtRunInput): Promise<numb
     .map(([exerciseId, text]) => ({ ptExerciseId: Number(exerciseId), notes: text.trim() }))
     .filter(n => n.notes !== '')
 
-  let sessionId = 0
-  await db.transaction(async () => {
-    sessionId = await db.ptSessions.add({ routineId: run.routineId, date: run.date, notes })
-    await db.ptSetChecks.bulkAdd(run.checks.map(c => ({
-      sessionId,
-      ptExerciseId: c.ptExerciseId,
-      setNumber: c.setNumber,
-      done: c.done,
-    })))
-    if (exerciseNotes.length > 0) {
-      await db.ptNotes.bulkAdd(exerciseNotes.map(n => ({ ...n, sessionId })))
-    }
-  })
+  const sessionId = await db.ptSessions.add({ routineId: run.routineId, date: run.date, notes })
+  await db.ptSetChecks.bulkAdd(run.checks.map(c => ({
+    sessionId,
+    ptExerciseId: c.ptExerciseId,
+    setNumber: c.setNumber,
+    done: c.done,
+  })))
+  if (exerciseNotes.length > 0) {
+    await db.ptNotes.bulkAdd(exerciseNotes.map(n => ({ ...n, sessionId })))
+  }
   return sessionId
 }
 

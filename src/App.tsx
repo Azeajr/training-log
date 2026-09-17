@@ -106,6 +106,7 @@ export default function App() {
             no routine yet, and must not be read as a routine id. */}
         <Route path="/pt" component={PT} />
         <Route path="/pt/new" component={PtRoutineEdit} />
+        <Route path="/pt/run" component={PtRun} />
         <Route path="/pt/:routineId/edit" component={PtRoutineEdit} />
         <Route path="/pt/:routineId/run" component={PtRun} />
         <Route path="/settings" component={Settings} />

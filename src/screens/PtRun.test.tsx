@@ -4,7 +4,7 @@ import { Router, Route } from '@solidjs/router'
 import PtRun from './PtRun'
 import { db } from '../db/index'
 import { getPtRoutine, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
-import { clearPtRun, ptRun, startPtRun, togglePtSet } from '../store/pt-store'
+import { clearAllPtRuns as clearPtRun, getPtRun, ptRun, startPtRun, startPtSession, ptSessionRoutineIds, togglePtSet } from '../store/pt-store'
 import { toast } from '../store/toast-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
@@ -38,12 +38,13 @@ const sledDraft = (over: Partial<PtExerciseDraft> = {}): PtExerciseDraft => ({
   ...over,
 })
 
-function renderRun(routineId: number) {
+function renderRun(routineId?: number) {
   const api = createConfirmation()
-  window.history.pushState({}, '', `/pt/${routineId}/run`)
+  window.history.pushState({}, '', routineId === undefined ? '/pt/run' : `/pt/${routineId}/run`)
   return render(() => (
     <ConfirmationContext.Provider value={api}>
       <Router>
+        <Route path="/pt/run" component={PtRun} />
         <Route path="/pt/:routineId/run" component={PtRun} />
       </Router>
       <ConfirmationDialog />
@@ -65,6 +66,59 @@ beforeEach(async () => {
 afterEach(drain)
 
 describe('PtRun screen', () => {
+  it('runs selected routines on one screen and saves their histories together', async () => {
+    const knee = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft({ name: 'Knee bends' })] })
+    const shoulder = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
+    startPtSession([knee, shoulder])
+    const view = renderRun()
+    await screen.findByText('Knee bends')
+    fireEvent.click(checkbox(/Knee bends set 1/))
+    fireEvent.click(checkbox(/Band pull-apart set 2/))
+    fireEvent.input(screen.getByLabelText('Notes for Knee'), { target: { value: 'knee note' } })
+    fireEvent.input(screen.getByLabelText('Note for Band pull-apart'), { target: { value: 'green band' } })
+    expect(getPtRun(knee)?.done).toHaveLength(1)
+    expect(getPtRun(shoulder)?.done).toHaveLength(1)
+    expect(document.querySelectorAll('details')).toHaveLength(2)
+
+    fireEvent.click(screen.getByText('BACK TO ROUTINES'))
+    view.unmount()
+    renderRun()
+    await screen.findByText('Knee bends')
+    expect(checkbox(/Knee bends set 1/).getAttribute('aria-checked')).toBe('true')
+    expect(checkbox(/Band pull-apart set 2/).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByText('FINISH SESSION'))
+    await waitFor(() => expect(ptSessionRoutineIds()).toEqual([]))
+    const sessions = await db.ptSessions.toArray()
+    expect(sessions.map(s => s.routineId).sort()).toEqual([knee, shoulder].sort())
+    expect(sessions.find(s => s.routineId === knee)?.notes).toBe('knee note')
+    expect(await db.ptSetChecks.count()).toBe(4)
+    expect((await db.ptSetChecks.toArray()).filter(c => c.done)).toHaveLength(2)
+    expect((await db.ptNotes.toArray())[0].notes).toBe('green band')
+  })
+
+  it('keeps all progress after a failed combined save and retries without duplicate history', async () => {
+    const knee = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft({ name: 'Knee bends' })] })
+    const shoulder = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
+    startPtSession([knee, shoulder])
+    renderRun()
+    await screen.findByText('Knee bends')
+    fireEvent.click(checkbox(/Knee bends set 1/))
+    fireEvent.click(checkbox(/Band pull-apart set 1/))
+    const original = db.ptSessions.add.bind(db.ptSessions)
+    const spy = vi.spyOn(db.ptSessions, 'add').mockImplementationOnce(original)
+      .mockRejectedValueOnce(new Error('disk full'))
+    fireEvent.click(screen.getByText('FINISH SESSION'))
+    await waitFor(() => expect(toast()).toContain('disk full'))
+    expect(await db.ptSessions.count()).toBe(0)
+    expect(await db.ptSetChecks.count()).toBe(0)
+    expect(getPtRun(knee)?.done).toHaveLength(1)
+    expect(getPtRun(shoulder)?.done).toHaveLength(1)
+    spy.mockRestore()
+    fireEvent.click(screen.getByText('FINISH SESSION'))
+    await waitFor(() => expect(ptSessionRoutineIds()).toEqual([]))
+    expect(await db.ptSessions.count()).toBe(2)
+  })
+
   it('renders one checkbox per prescribed set', async () => {
     const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft({ sets: 3 })] })
     renderRun(id)
@@ -144,7 +198,7 @@ describe('PtRun screen', () => {
   })
 
   it('does not carry another routine\'s ticks into this one', async () => {
-    const other = await savePtRoutine(db, { name: 'Other', exercises: [repsDraft()] })
+    const other = await savePtRoutine(db, { name: 'Other', exercises: [repsDraft({ name: 'Other exercise' })] })
     const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
     startPtRun(other)
     togglePtSet(1, 1)

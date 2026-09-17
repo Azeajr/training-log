@@ -14,7 +14,7 @@ import {
   type PtSessionDetail,
   type PtSessionSummary,
 } from '../lib/pt'
-import { clearPtRun, ptRun } from '../store/pt-store'
+import { clearPtRun, getPtRun, ptSessionRoutineIds, startPtSession } from '../store/pt-store'
 import { createAsyncRead } from '../lib/async-read'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
@@ -32,6 +32,7 @@ export default function PT() {
   const navigate = useNavigate()
   const { confirm } = useConfirmation()
   const [routines, setRoutines] = createSignal<PtRoutine[]>([])
+  const [selected, setSelected] = createSignal<number[]>([])
   const [archived, setArchived] = createSignal<PtRoutine[]>([])
   const [counts, setCounts] = createSignal<Record<number, number>>({})
   const [history, setHistory] = createSignal<PtSessionSummary[]>([])
@@ -61,15 +62,13 @@ export default function PT() {
 
   void read.run(load)
 
-  const activeRoutine = () => routines().find(r => r.id === ptRun.routineId)
-
   const handleDeleteRoutine = async (routine: PtRoutine) => {
     try {
       await deletePtRoutine(db, routine.id!)
       // The in-progress run belongs to a routine that no longer exists — its
       // exercise ids would resolve to nothing on the run screen. Dropped here
       // rather than left to fail later.
-      if (ptRun.routineId === routine.id) clearPtRun()
+      clearPtRun(routine.id!)
       showToast(`Deleted ${routine.name}.`)
       await read.run(load)
     } catch (err) {
@@ -137,12 +136,12 @@ export default function PT() {
       }
     >
       <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
-        <Show when={ptRun.routineId !== null && activeRoutine()}>
+        <Show when={ptSessionRoutineIds().length > 0}>
           <button
-            onClick={() => navigate(`/pt/${ptRun.routineId}/run`)}
+            onClick={() => navigate('/pt/run')}
             class="block w-full text-left border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-6"
           >
-            &#9654; PT IN PROGRESS — {activeRoutine()!.name} ({ptRun.done.length} ticked)
+            RESUME PT SESSION · {ptSessionRoutineIds().length} routine{ptSessionRoutineIds().length === 1 ? '' : 's'}
           </button>
         </Show>
 
@@ -166,6 +165,16 @@ export default function PT() {
                 {routine => (
                   <div class="border border-border px-3 py-2">
                     <div class="flex items-center justify-between gap-2">
+                      <input
+                        type="checkbox"
+                        aria-label={`Include ${routine.name}`}
+                        checked={!!getPtRun(routine.id!) || selected().includes(routine.id!)}
+                        disabled={!!getPtRun(routine.id!) || (counts()[routine.id!] ?? 0) === 0}
+                        onChange={e => setSelected(ids => e.currentTarget.checked
+                          ? [...ids, routine.id!]
+                          : ids.filter(id => id !== routine.id))}
+                        class="h-5 w-5 shrink-0 accent-accent"
+                      />
                       <div class="min-w-0">
                         <div class="text-text text-sm uppercase tracking-widest truncate">{routine.name}</div>
                         <div class="text-faint text-xs tracking-widest">
@@ -178,7 +187,7 @@ export default function PT() {
                           disabled={(counts()[routine.id!] ?? 0) === 0}
                           class="border border-accent text-accent px-3 py-1 text-xs tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          START
+                          {getPtRun(routine.id!) ? 'RESUME' : 'START'}
                         </button>
                         <A
                           href={`/pt/${routine.id}/edit`}
@@ -202,6 +211,20 @@ export default function PT() {
               </For>
             </div>
           </Show>
+        </Show>
+
+        <Show when={routines().length > 0}>
+          <p class="text-text-dim text-xs mb-2">Select routines to do together in one session.</p>
+          <button
+            disabled={selected().length === 0}
+            onClick={() => {
+              startPtSession(selected().filter(id => routines().some(r => r.id === id) && (counts()[id] ?? 0) > 0))
+              navigate('/pt/run')
+            }}
+            class="w-full border border-accent text-accent px-4 py-3 text-xs tracking-widest mb-4 disabled:opacity-40"
+          >
+            {ptSessionRoutineIds().length ? 'ADD TO SESSION' : 'START SESSION'} ({selected().length})
+          </button>
         </Show>
 
         <A
