@@ -17,7 +17,7 @@ import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
 import { createAsyncRead } from '../lib/async-read'
 import { listPtRoutines } from '../lib/pt'
-import { ptSessionRoutineIds } from '../store/pt-store'
+import { getPtRun, ptSessionRoutineIds, startPtSession } from '../store/pt-store'
 import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
@@ -62,9 +62,17 @@ export default function Today() {
   // own state and its own catch so a failure here cannot take the 5/3/1 session
   // down with it — the shape F106 left on the cross-lift preview.
   const [ptRoutines, setPtRoutines] = createSignal<PtRoutine[]>([])
+  const [selectedPtIds, setSelectedPtIds] = createSignal<number[]>([])
+  const [ptCounts, setPtCounts] = createSignal<Record<number, number>>({})
   const loadPt = async () => {
     try {
-      setPtRoutines(await listPtRoutines(db))
+      const [routines, exercises] = await Promise.all([listPtRoutines(db), db.ptExercises.toArray()])
+      const counts: Record<number, number> = {}
+      for (const exercise of exercises) {
+        if (!exercise.archived) counts[exercise.routineId] = (counts[exercise.routineId] ?? 0) + 1
+      }
+      setPtCounts(counts)
+      setPtRoutines(routines)
     } catch {
       setPtRoutines([])
     }
@@ -541,18 +549,43 @@ export default function Today() {
             }
           >
             <div class="space-y-2">
+              <p class="text-text-dim text-xs">Select routines to do together in one session.</p>
               <For each={ptRoutines()}>
                 {routine => (
-                  <button
-                    onClick={() => navigate(`/pt/${routine.id}/run`)}
-                    class="w-full flex items-center justify-between gap-2 border border-border text-muted hover:border-accent hover:text-accent px-3 py-2 text-xs tracking-widest uppercase"
+                  <label
+                    class="w-full flex items-center gap-3 border border-border text-text px-3 py-3 text-xs tracking-widest uppercase"
                   >
-                    <span class="truncate">{routine.name}</span>
-                    <span class="shrink-0">START ▸</span>
-                  </button>
+                    <input
+                      type="checkbox"
+                      aria-label={`Include ${routine.name}`}
+                      checked={!!getPtRun(routine.id!) || selectedPtIds().includes(routine.id!)}
+                      disabled={!!getPtRun(routine.id!) || !ptCounts()[routine.id!]}
+                      onChange={e => setSelectedPtIds(ids => e.currentTarget.checked
+                        ? [...ids, routine.id!]
+                        : ids.filter(id => id !== routine.id))}
+                      class="h-5 w-5 shrink-0 accent-accent"
+                    />
+                    <span class="min-w-0 break-words flex-1">{routine.name}</span>
+                    <Show when={getPtRun(routine.id!)} fallback={
+                      <Show when={!ptCounts()[routine.id!]}><span class="text-faint">No exercises</span></Show>
+                    }>
+                      <span class="text-accent">In session</span>
+                    </Show>
+                  </label>
                 )}
               </For>
-              <A href="/pt" class="block text-faint text-xs tracking-widest hover:text-accent pt-1">
+              <button
+                disabled={selectedPtIds().length === 0}
+                onClick={() => {
+                  startPtSession(selectedPtIds())
+                  setSelectedPtIds([])
+                  navigate('/pt/run')
+                }}
+                class="w-full border border-accent text-accent px-4 py-3 text-xs tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {ptSessionRoutineIds().length ? 'ADD TO PT SESSION' : 'START PT SESSION'} ({selectedPtIds().length})
+              </button>
+              <A href="/pt" class="block border border-border text-muted text-center text-xs tracking-widest hover:border-accent hover:text-accent px-4 py-3">
                 all PT routines + history ▸
               </A>
             </div>
