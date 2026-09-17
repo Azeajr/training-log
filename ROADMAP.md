@@ -2,6 +2,41 @@
 
 ## Done
 
+### Diagnostic Trace for Rest Timer, Audio and Notifications (2026-09-17)
+
+Settings → APP → DIAGNOSTICS. Off by default; records nothing while off.
+
+Every failure in this area is silent — `playTone` swallowed its errors, a
+notification that never fired left nothing behind, a reaped service worker
+reported nothing — and none of it reproduces on a desktop, so the only
+instrument had been asking the user one scenario at a time. This records what
+actually happened and hands it back as text: COPY, SHARE, or SHOW and select by
+hand (an installed iOS PWA is exactly where a clipboard write gets refused).
+
+- **Page sink** (`src/lib/trace.ts`): a ring buffer written **synchronously** to
+  localStorage, because iOS can suspend a process between an `await` and its
+  continuation and lose the write that mattered. Not the app's own SQLite/OPFS —
+  that goes through a Worker, and a frozen worker is one of the things under
+  investigation.
+- **Worker stamps** (`src/workers/rest-timer-protocol.ts`): a Worker has no
+  storage, so every tick now carries the worker's own `at` and a shared `seq`. A
+  hole in `seq` means the worker lost time; a large `lag` means the page did.
+  `elapsed` alone can show neither. A heartbeat that survives the hidden-page
+  pause resolves the ambiguity between "paused as designed" and "gone".
+- **Audio ladder**: `tone` → `resumed` → `armed` → `ended`, laid out so the
+  three candidate worlds (resume never settled / clock not advancing / WebAudio
+  fine and the loss is below it) are told apart by which record is missing.
+- **SW sink** (`src/lib/trace-sw-store.ts`): IndexedDB, because a service worker
+  cannot reach localStorage. `sw.boot` at script evaluation is the record that
+  turns "the SW notification did not arrive" into evidence — a second boot means
+  the first worker was killed.
+- **Verified in a real browser**: `verify:sw` leg H drives a real service worker
+  and asserts both halves come back non-empty. Disabling the SW sink fails it.
+
+Ceiling, stated in `docs/diagnostic-trace.md`: nothing runs while the process is
+suspended, `showNotification` resolving is not proof of display, and nothing
+below WebAudio is visible. The gaps are read as data rather than papered over.
+
 ### Rest-timer recovery checkpoints (2026-09-11)
 
 - A completed set now rings at both configured checkpoints (90 s and 180 s by default), leaving

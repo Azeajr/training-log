@@ -119,3 +119,63 @@ describe('pending', () => {
     expect(timers.pending()[0].target.tag).toBe('stalled')
   })
 })
+
+// ── diagnostics ─────────────────────────────────────────────────────────────
+// The sink is injected rather than imported because this module runs in both
+// the page and the service worker, which have different storage available.
+describe('the optional trace hook', () => {
+  function tracing() {
+    const seen: Array<{ ev: string; d?: Record<string, unknown> }> = []
+    const fired: string[] = []
+    const timers = createNotifyTimers({
+      fire: (t) => fired.push(t.tag),
+      trace: (ev, d) => seen.push({ ev, d }),
+    })
+    return { seen, fired, timers }
+  }
+
+  it('records arm, fire and the drift between due and actual', () => {
+    vi.useFakeTimers({ now: 1_000 })
+    const { seen, timers } = tracing()
+    timers.arm({ fireAt: 3_000, title: 't', body: 'b', tag: 'rest-timer' })
+    expect(seen[0].ev).toBe('notify.arm')
+    expect(seen[0].d).toMatchObject({ tag: 'rest-timer', fireAt: 3_000, delay: 2_000 })
+
+    vi.advanceTimersByTime(2_000)
+    const fire = seen.find(s => s.ev === 'notify.fire')
+    expect(fire?.d).toMatchObject({ tag: 'rest-timer', fireAt: 3_000, drift: 0 })
+    vi.useRealTimers()
+  })
+
+  it('reports a late fire as drift rather than as an ordinary one', () => {
+    vi.useFakeTimers({ now: 1_000 })
+    const { seen, timers } = tracing()
+    // Past-due by a minute: the arming path fires it on the next tick, and
+    // without the drift figure that is indistinguishable from an on-time bell.
+    timers.arm({ fireAt: 1_000 - 60_000, title: 't', body: 'b', tag: 'rest-timer' })
+    vi.advanceTimersByTime(0)
+    const fire = seen.find(s => s.ev === 'notify.fire')
+    expect(fire?.d?.drift).toBe(60_000)
+    vi.useRealTimers()
+  })
+
+  it('records a cancel, and records nothing twice for one handle', () => {
+    vi.useFakeTimers({ now: 1_000 })
+    const { seen, timers } = tracing()
+    timers.arm({ fireAt: 5_000, title: 't', body: 'b', tag: 'rest-timer' })
+    timers.cancelTag('rest-timer')
+    timers.cancelTag('rest-timer')
+    expect(seen.filter(s => s.ev === 'notify.cancel')).toHaveLength(1)
+    vi.useRealTimers()
+  })
+
+  it('works with no hook supplied at all', () => {
+    vi.useFakeTimers({ now: 1_000 })
+    const fired: string[] = []
+    const timers = createNotifyTimers({ fire: (t) => fired.push(t.tag) })
+    timers.arm({ fireAt: 2_000, title: 't', body: 'b', tag: 'x' })
+    vi.advanceTimersByTime(1_000)
+    expect(fired).toEqual(['x'])
+    vi.useRealTimers()
+  })
+})

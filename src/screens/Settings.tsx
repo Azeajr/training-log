@@ -21,6 +21,7 @@ import SectionLabel from '../components/layout/SectionLabel'
 import ToggleChip from '../components/ui/ToggleChip'
 import Stepper from '../components/forms/Stepper'
 import ExerciseEditor from '../components/forms/ExerciseEditor'
+import DiagnosticsPanel from '../components/settings/DiagnosticsPanel'
 
 const GROUPS = [
   { id: 'program', label: 'Program' },
@@ -987,6 +988,8 @@ export default function Settings() {
             )}</For>
           </div>
         </div>
+
+        <DiagnosticsPanel />
       </Group>
 
       <Group id="data" label="DATA" tone="text-danger">
