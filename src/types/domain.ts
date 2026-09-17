@@ -198,3 +198,117 @@ export interface Settings {
   restTimerNotifications?: boolean
   highRepDiscount?: HighRepDiscount
 }
+
+// ---------------------------------------------------------------------------
+// PT (physical therapy)
+//
+// A rehab checklist, deliberately NOT a training session. The 5/3/1 side of the
+// app exists to answer "how strong am I" — it derives training maxes, records
+// and e1RM from what was logged. A PT routine answers one question only: did I
+// do the work today. Nothing here feeds `performance.ts`, `pr.ts` or any TM
+// calculation, which is exactly why it gets its own tables rather than riding
+// on `exercises` + `accessorySets` (those hang off a 5/3/1 `sessions` row and
+// would need a synthetic session per rehab day to exist at all).
+// ---------------------------------------------------------------------------
+
+/** What one prescribed set is counted in. */
+export type PtMeasure = 'reps' | 'time' | 'distance'
+
+/**
+ * The unit a distance target is written in, stored per exercise.
+ *
+ * Carried explicitly because the accessory log hardcodes feet at the render
+ * site (`accessorySetValue`) while the CSV header calls the same column
+ * `distance_m` — the number is unit-less in the database and the two readers
+ * already disagree about it. A sled walk prescribed in yards must read back in
+ * yards, so PT stores the unit with the value instead of inheriting that.
+ */
+export type PtDistanceUnit = 'yd' | 'm' | 'ft'
+
+/**
+ * How resistance is expressed for an exercise. Orthogonal to `PtMeasure`: a
+ * backward sled walk is 50 yd (measure) at 180 lb (resistance), and a band
+ * pull-apart is 15 reps (measure) on a red band (resistance).
+ */
+export type PtResistanceKind = 'none' | 'weight' | 'band'
+
+/** A saved PT checklist — the prescription, not a performance of it. */
+export interface PtRoutine {
+  id?: number
+  name: string
+  notes?: string | null
+  order: number
+  archived?: boolean
+}
+
+/** One exercise within a routine, with its prescription. */
+export interface PtExercise {
+  id?: number
+  routineId: number
+  name: string
+  description?: string | null
+  /** http/https only — validated on save, see `isSafeVideoUrl` in lib/pt.ts. */
+  videoUrl?: string | null
+  /** How many sets to tick off. Always >= 1. */
+  sets: number
+  measure: PtMeasure
+  /** Set for measure 'reps'; null otherwise. */
+  targetReps?: number | null
+  /** Set for measure 'time'; null otherwise. */
+  targetSeconds?: number | null
+  /** Set for measure 'distance'; null otherwise, paired with `distanceUnit`. */
+  targetDistance?: number | null
+  distanceUnit?: PtDistanceUnit | null
+  resistanceKind: PtResistanceKind
+  /** Set for resistanceKind 'weight' (lb); null otherwise. */
+  resistanceWeight?: number | null
+  /** Set for resistanceKind 'band' (free text: "red", "green doubled"). */
+  resistanceBand?: string | null
+  order: number
+  /**
+   * Dropped from the checklist but kept for history. An exercise that has never
+   * been run is deleted outright on save; one with `ptSetChecks` rows against it
+   * is archived instead, so a past run still renders the name of what was done
+   * rather than a dangling id.
+   */
+  archived?: boolean
+}
+
+/**
+ * One dated run of a routine.
+ *
+ * There is no `status` column and no pending row, unlike `sessions`. A run is
+ * buffered in `store/pt-store` and written here only when the user finishes it,
+ * so every row that exists is a run that happened. That also means abandoning a
+ * run leaves nothing behind to reconcile — the whole class of store-vs-DB drift
+ * that COMMON_MISTAKES #5 documents for workouts cannot arise here.
+ */
+export interface PtSession {
+  id?: number
+  routineId: number
+  date: Date
+  notes?: string | null
+}
+
+/**
+ * One prescribed set of one exercise in one run, ticked or not.
+ *
+ * A row is written for every prescribed set, including the ones left unticked —
+ * that is what makes "6/8" a fact about the run rather than an inference from
+ * how many rows happen to be present.
+ */
+export interface PtSetCheck {
+  id?: number
+  sessionId: number
+  ptExerciseId: number
+  setNumber: number
+  done: boolean
+}
+
+/** Free-text note on one exercise within one run ("switched to green band"). */
+export interface PtNote {
+  id?: number
+  sessionId: number
+  ptExerciseId: number
+  notes: string
+}

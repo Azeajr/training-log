@@ -83,6 +83,50 @@ CREATE TABLE IF NOT EXISTS assistanceDefaults (
   section TEXT NOT NULL,
   exerciseId INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ptRoutines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  notes TEXT,
+  "order" INTEGER NOT NULL,
+  archived INTEGER
+);
+CREATE TABLE IF NOT EXISTS ptExercises (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  routineId INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  videoUrl TEXT,
+  sets INTEGER NOT NULL,
+  measure TEXT NOT NULL,
+  targetReps INTEGER,
+  targetSeconds REAL,
+  targetDistance REAL,
+  distanceUnit TEXT,
+  resistanceKind TEXT NOT NULL,
+  resistanceWeight REAL,
+  resistanceBand TEXT,
+  "order" INTEGER NOT NULL,
+  archived INTEGER
+);
+CREATE TABLE IF NOT EXISTS ptSessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  routineId INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  notes TEXT
+);
+CREATE TABLE IF NOT EXISTS ptSetChecks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sessionId INTEGER NOT NULL,
+  ptExerciseId INTEGER NOT NULL,
+  setNumber INTEGER NOT NULL,
+  done INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ptNotes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sessionId INTEGER NOT NULL,
+  ptExerciseId INTEGER NOT NULL,
+  notes TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   restTimer1 INTEGER NOT NULL,
@@ -103,6 +147,18 @@ CREATE INDEX IF NOT EXISTS idx_accessoryNotes_sessionId ON accessoryNotes(sessio
 CREATE INDEX IF NOT EXISTS idx_accessoryTrainingMaxes_exerciseId ON accessoryTrainingMaxes(exerciseId);
 CREATE INDEX IF NOT EXISTS idx_liftSupplementals_liftId ON liftSupplementals(liftId);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assistanceDefaults_lift_section ON assistanceDefaults(liftId, section);
+CREATE INDEX IF NOT EXISTS idx_ptExercises_routineId ON ptExercises(routineId);
+CREATE INDEX IF NOT EXISTS idx_ptSessions_routineId ON ptSessions(routineId);
+CREATE INDEX IF NOT EXISTS idx_ptSetChecks_sessionId ON ptSetChecks(sessionId);
+CREATE INDEX IF NOT EXISTS idx_ptNotes_sessionId ON ptNotes(sessionId);
+-- Both PT unique indexes sit in SCHEMA and not in ADDITIVE_MIGRATIONS,
+-- which is the opposite of idx_accessoryNotes_session_exercise above. The
+-- rule there is about existing rows: SCHEMA exec is unguarded and runs on
+-- every boot, so an index that CAN fail against data already on disk would
+-- brick that database. These two tables ship in the same release as their
+-- indexes, so no database can hold a violating row before the index exists.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ptSetChecks_session_exercise_set ON ptSetChecks(sessionId, ptExerciseId, setNumber);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ptNotes_session_exercise ON ptNotes(sessionId, ptExerciseId);
 `
 
 export const ADDITIVE_MIGRATIONS = [
@@ -206,4 +262,5 @@ export const ALL_TABLES = [
   'exercises', 'liftSupplementals',
   'accessoryTrainingMaxes', 'accessorySets', 'accessoryNotes', 'settings',
   'assistanceDefaults',
+  'ptRoutines', 'ptExercises', 'ptSessions', 'ptSetChecks', 'ptNotes',
 ] as const

@@ -1,0 +1,317 @@
+import { createSignal, For, Show } from 'solid-js'
+import { A, useNavigate } from '@solidjs/router'
+import { db } from '../db/index'
+import type { PtRoutine } from '../types/domain'
+import {
+  deletePtRoutine,
+  deletePtSession,
+  formatPtPrescription,
+  getPtSessionDetail,
+  listArchivedPtRoutines,
+  listPtRoutines,
+  listPtSessions,
+  unarchivePtRoutine,
+  type PtSessionDetail,
+  type PtSessionSummary,
+} from '../lib/pt'
+import { clearPtRun, ptRun } from '../store/pt-store'
+import { createAsyncRead } from '../lib/async-read'
+import { useConfirmation } from '../hooks/use-confirmation'
+import { showToast } from '../store/toast-store'
+import { formatDateShort } from '../lib/format'
+import Rule from '../components/layout/Rule'
+import SectionLabel from '../components/layout/SectionLabel'
+import InlineConfirm from '../components/ui/InlineConfirm'
+
+const message = (err: unknown): string =>
+  err instanceof Error ? err.message : 'something went wrong'
+
+const HISTORY_LIMIT = 30
+
+export default function PT() {
+  const navigate = useNavigate()
+  const { confirm } = useConfirmation()
+  const [routines, setRoutines] = createSignal<PtRoutine[]>([])
+  const [archived, setArchived] = createSignal<PtRoutine[]>([])
+  const [counts, setCounts] = createSignal<Record<number, number>>({})
+  const [history, setHistory] = createSignal<PtSessionSummary[]>([])
+  const [openSession, setOpenSession] = createSignal<number | null>(null)
+  const [detail, setDetail] = createSignal<PtSessionDetail | null>(null)
+
+  const read = createAsyncRead()
+
+  const load = async (isCurrent: () => boolean) => {
+    const [rows, archivedRows, sessions, exercises] = await Promise.all([
+      listPtRoutines(db),
+      listArchivedPtRoutines(db),
+      listPtSessions(db, HISTORY_LIMIT),
+      db.ptExercises.toArray(),
+    ])
+    if (!isCurrent()) return
+    const byRoutine: Record<number, number> = {}
+    for (const ex of exercises) {
+      if (ex.archived) continue
+      byRoutine[ex.routineId] = (byRoutine[ex.routineId] ?? 0) + 1
+    }
+    setRoutines(rows)
+    setArchived(archivedRows)
+    setCounts(byRoutine)
+    setHistory(sessions)
+  }
+
+  void read.run(load)
+
+  const activeRoutine = () => routines().find(r => r.id === ptRun.routineId)
+
+  const handleDeleteRoutine = async (routine: PtRoutine) => {
+    try {
+      await deletePtRoutine(db, routine.id!)
+      // The in-progress run belongs to a routine that no longer exists — its
+      // exercise ids would resolve to nothing on the run screen. Dropped here
+      // rather than left to fail later.
+      if (ptRun.routineId === routine.id) clearPtRun()
+      showToast(`Deleted ${routine.name}.`)
+      await read.run(load)
+    } catch (err) {
+      showToast(`Could not delete that routine: ${message(err)}`)
+    }
+  }
+
+  const handleRestore = async (routine: PtRoutine) => {
+    try {
+      await unarchivePtRoutine(db, routine.id!)
+      showToast(`${routine.name} restored.`)
+      await read.run(load)
+    } catch (err) {
+      showToast(`Could not restore that routine: ${message(err)}`)
+    }
+  }
+
+  const handleDeleteSession = async (summary: PtSessionSummary) => {
+    if (!await confirm(
+      `Delete the ${formatDateShort(summary.session.date)} ${summary.routineName} run?`,
+      { destructive: true, confirmLabel: 'DELETE' },
+    )) return
+    try {
+      await deletePtSession(db, summary.session.id!)
+      if (openSession() === summary.session.id) setOpenSession(null)
+      await read.run(load)
+    } catch (err) {
+      showToast(`Could not delete that run: ${message(err)}`)
+    }
+  }
+
+  const toggleDetail = async (sessionId: number) => {
+    if (openSession() === sessionId) {
+      setOpenSession(null)
+      return
+    }
+    setOpenSession(sessionId)
+    setDetail(null)
+    try {
+      const loaded = await getPtSessionDetail(db, sessionId)
+      // Guarded: a second tap while this one is in flight must not publish the
+      // first run's exercises under the second run's heading.
+      if (openSession() === sessionId) setDetail(loaded)
+    } catch (err) {
+      showToast(`Could not load that run: ${message(err)}`)
+    }
+  }
+
+  return (
+    <Show
+      when={!read.error()}
+      fallback={
+        <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
+          <div role="alert" class="border border-danger px-3 py-2">
+            <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not load PT</div>
+            <div class="text-text-dim text-sm mb-2 break-words">{read.error()}</div>
+            <button
+              onClick={() => void read.retry()}
+              class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
+            >
+              RETRY
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
+        <Show when={ptRun.routineId !== null && activeRoutine()}>
+          <button
+            onClick={() => navigate(`/pt/${ptRun.routineId}/run`)}
+            class="block w-full text-left border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-6"
+          >
+            &#9654; PT IN PROGRESS — {activeRoutine()!.name} ({ptRun.done.length} ticked)
+          </button>
+        </Show>
+
+        <Rule label="PT ROUTINES" class="text-muted mb-4" />
+
+        <Show
+          when={!read.loading() || routines().length > 0}
+          fallback={<p class="text-muted text-xs uppercase tracking-widest mb-6">Loading…</p>}
+        >
+          <Show
+            when={routines().length > 0}
+            fallback={
+              <p class="text-text-dim text-sm mb-6">
+                No routines yet. Build one from the exercises your physio gave you, then tick
+                them off as you go.
+              </p>
+            }
+          >
+            <div class="mb-6 space-y-2">
+              <For each={routines()}>
+                {routine => (
+                  <div class="border border-border px-3 py-2">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="min-w-0">
+                        <div class="text-text text-sm uppercase tracking-widest truncate">{routine.name}</div>
+                        <div class="text-faint text-xs tracking-widest">
+                          {counts()[routine.id!] ?? 0} exercise{(counts()[routine.id!] ?? 0) === 1 ? '' : 's'}
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => navigate(`/pt/${routine.id}/run`)}
+                          disabled={(counts()[routine.id!] ?? 0) === 0}
+                          class="border border-accent text-accent px-3 py-1 text-xs tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          START
+                        </button>
+                        <A
+                          href={`/pt/${routine.id}/edit`}
+                          class="border border-border text-muted hover:border-accent hover:text-accent px-3 py-1 text-xs tracking-widest"
+                        >
+                          EDIT
+                        </A>
+                        <InlineConfirm
+                          label="✕"
+                          ariaLabel={`Delete ${routine.name}`}
+                          confirmText="delete routine + its history?"
+                          onConfirm={() => void handleDeleteRoutine(routine)}
+                        />
+                      </div>
+                    </div>
+                    <Show when={routine.notes}>
+                      <p class="text-text-dim text-xs mt-1 whitespace-pre-wrap">{routine.notes}</p>
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+        </Show>
+
+        <A
+          href="/pt/new"
+          class="block text-center border border-border text-muted hover:border-accent hover:text-accent px-4 py-3 text-xs tracking-widest uppercase mb-8"
+        >
+          + NEW ROUTINE
+        </A>
+
+        {/* Archived routines keep their runs, so they stay listed here rather
+            than disappearing: a rehab block that comes back is a restore, not a
+            rebuild. */}
+        <Show when={archived().length > 0}>
+          <div class="mb-8">
+            <SectionLabel tone="text-faint" class="mb-2">ARCHIVED</SectionLabel>
+            <div class="space-y-2">
+              <For each={archived()}>
+                {routine => (
+                  <div class="border border-border/50 px-3 py-2 flex items-center justify-between gap-2">
+                    <span class="text-muted text-sm uppercase tracking-widest truncate">{routine.name}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => void handleRestore(routine)}
+                        class="border border-border text-muted hover:border-accent hover:text-accent px-3 py-1 text-xs tracking-widest"
+                      >
+                        RESTORE
+                      </button>
+                      <InlineConfirm
+                        label="✕"
+                        ariaLabel={`Delete ${routine.name}`}
+                        confirmText="delete routine + its history?"
+                        onConfirm={() => void handleDeleteRoutine(routine)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
+
+        <Rule label="PT HISTORY" class="text-muted mb-4" />
+        <Show
+          when={history().length > 0}
+          fallback={<p class="text-text-dim text-sm">No PT runs recorded yet.</p>}
+        >
+          <div class="space-y-1">
+            <For each={history()}>
+              {summary => (
+                <div class="border-b border-border/50 py-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => void toggleDetail(summary.session.id!)}
+                      aria-expanded={openSession() === summary.session.id}
+                      class="flex-1 text-left flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span class="text-faint text-xs tracking-widest w-16 shrink-0">
+                        {formatDateShort(summary.session.date)}
+                      </span>
+                      <span class="text-text uppercase tracking-widest truncate flex-1">
+                        {summary.routineName}
+                      </span>
+                      <span class={summary.done === summary.total ? 'text-accent text-xs tracking-widest' : 'text-warn text-xs tracking-widest'}>
+                        {summary.done}/{summary.total}
+                      </span>
+                    </button>
+                    <InlineConfirm
+                      label="✕"
+                      ariaLabel={`Delete ${summary.routineName} run`}
+                      confirmText="delete run?"
+                      onConfirm={() => void handleDeleteSession(summary)}
+                    />
+                  </div>
+
+                  <Show when={openSession() === summary.session.id}>
+                    <div class="pl-16 pt-2 pb-1">
+                      <Show when={detail()} fallback={<p class="text-muted text-xs tracking-widest">Loading…</p>}>
+                        <For each={detail()!.exercises}>
+                          {row => (
+                            <div class="mb-2">
+                              <div class="flex justify-between gap-3 text-xs">
+                                <span class="text-text-dim uppercase tracking-widest truncate">
+                                  {row.exercise.name}
+                                </span>
+                                <span class="text-faint shrink-0">
+                                  {row.checks.filter(c => c.done).length}/{row.checks.length}
+                                </span>
+                              </div>
+                              <div class="text-faint text-xs">{formatPtPrescription(row.exercise)}</div>
+                              <Show when={row.note}>
+                                <div class="text-text-dim text-xs whitespace-pre-wrap">{row.note}</div>
+                              </Show>
+                            </div>
+                          )}
+                        </For>
+                        <Show when={detail()!.session.notes}>
+                          <div class="mt-2">
+                            <SectionLabel tone="text-faint" class="mb-1">NOTES</SectionLabel>
+                            <p class="text-text-dim text-xs whitespace-pre-wrap">{detail()!.session.notes}</p>
+                          </div>
+                        </Show>
+                      </Show>
+                    </div>
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
+    </Show>
+  )
+}

@@ -6,6 +6,7 @@ import { seedDatabase } from './db/seed'
 import { loadSettings, applyTheme } from './store/settings-store'
 import { settings } from './store/settings-store'
 import { setupWorkoutPersistence } from './store/workout-store'
+import { setupPtRunPersistence } from './store/pt-store'
 import { prepareApp } from './startup'
 import { StartupError, StorageUnavailable } from './components/StartupScreen'
 
@@ -19,6 +20,7 @@ const startApp = () => {
   applyTheme(settings.theme)
   mount(() => {
     setupWorkoutPersistence()
+    setupPtRunPersistence()
     return <App />
   })
 }

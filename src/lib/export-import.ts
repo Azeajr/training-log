@@ -22,12 +22,13 @@ export async function retryPendingExport(): Promise<void> {
 
 export async function exportJson(db: TrainingDB): Promise<void> {
   // Fanned out, not awaited in sequence: each toArray() is its own round-trip to
-  // the SQLite worker and none of the twelve depends on another, so awaiting them
-  // one at a time paid twelve times the latency for no ordering benefit.
+  // the SQLite worker and none of them depends on another, so awaiting them one
+  // at a time paid the latency once per table for no ordering benefit.
   const [
     lifts, trainingMaxes, accessoryTrainingMaxes, cycles, sessions, sets,
     exercises, liftSupplementals, accessorySets, accessoryNotes,
     assistanceDefaults, settingsRows,
+    ptRoutines, ptExercises, ptSessions, ptSetChecks, ptNotes,
   ] = await Promise.all([
     db.lifts.toArray(),
     db.trainingMaxes.toArray(),
@@ -41,6 +42,11 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     db.accessoryNotes.toArray(),
     db.assistanceDefaults.toArray(),
     db.settings.toArray(),
+    db.ptRoutines.toArray(),
+    db.ptExercises.toArray(),
+    db.ptSessions.toArray(),
+    db.ptSetChecks.toArray(),
+    db.ptNotes.toArray(),
   ])
   const data = {
     exportedAt: new Date().toISOString(),
@@ -57,6 +63,11 @@ export async function exportJson(db: TrainingDB): Promise<void> {
     accessoryNotes,
     assistanceDefaults,
     settings: settingsRows,
+    ptRoutines,
+    ptExercises,
+    ptSessions,
+    ptSetChecks,
+    ptNotes,
   }
   const content = JSON.stringify(data, null, 2)
   const filename = `training-log-${formatDateIso(new Date())}.json`
@@ -105,6 +116,11 @@ const COLS = {
   // `hasDeloadWeek` belongs here: it was missing, so an import dropped it and
   // the restored null defaulted to enabled — silently turning a three-week
   // cycle into a four-week one, which is the shape the whole program hangs off.
+  ptRoutines: ['id', 'name', 'notes', 'order', 'archived'],
+  ptExercises: ['id', 'routineId', 'name', 'description', 'videoUrl', 'sets', 'measure', 'targetReps', 'targetSeconds', 'targetDistance', 'distanceUnit', 'resistanceKind', 'resistanceWeight', 'resistanceBand', 'order', 'archived'],
+  ptSessions: ['id', 'routineId', 'date', 'notes'],
+  ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done'],
+  ptNotes: ['id', 'sessionId', 'ptExerciseId', 'notes'],
   settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek'],
 } as const
 
@@ -191,6 +207,11 @@ function importSpec(db: TrainingDB): ImportTableSpec[] {
     { key: 'accessoryNotes',         table: db.accessoryNotes,         dates: [] },
     { key: 'assistanceDefaults',     table: db.assistanceDefaults,     dates: [] },
     { key: 'settings',               table: db.settings,               dates: [] },
+    { key: 'ptRoutines',             table: db.ptRoutines,             dates: [] },
+    { key: 'ptExercises',            table: db.ptExercises,            dates: [] },
+    { key: 'ptSessions',             table: db.ptSessions,             dates: ['date'] },
+    { key: 'ptSetChecks',            table: db.ptSetChecks,            dates: [] },
+    { key: 'ptNotes',                table: db.ptNotes,                dates: [] },
   ]
 }
 
@@ -304,6 +325,90 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
     `training-log-history-${formatDateIso(new Date())}.csv`,
     'text/csv'
   )
+}
+
+/**
+ * PT runs as their own CSV.
+ *
+ * A separate file rather than extra rows in `exportCsv`: that sheet is shaped
+ * around a 5/3/1 session — lift, week, weight, is_amrap — and a PT check has
+ * none of those. Forcing them in means a dozen permanently blank columns on
+ * every row and a `lift` column holding a routine name, which is exactly the
+ * sort of overloading that makes a spreadsheet lie. The prescription is
+ * repeated on each row because a spreadsheet has no joins: filtering to one
+ * exercise has to carry what that exercise asked for.
+ */
+export async function exportPtCsv(db: TrainingDB): Promise<void> {
+  const [sessions, checks, notes, routines, exercises] = await Promise.all([
+    db.ptSessions.toArray(),
+    db.ptSetChecks.toArray(),
+    db.ptNotes.toArray(),
+    db.ptRoutines.toArray(),
+    db.ptExercises.toArray(),
+  ])
+
+  const routineName = new Map(routines.map(r => [r.id!, r.name]))
+  const exerciseById = new Map(exercises.map(e => [e.id!, e]))
+  const noteByKey = new Map(notes.map(n => [`${n.sessionId}:${n.ptExerciseId}`, n.notes]))
+  const checksBySession = new Map<number, typeof checks>()
+  for (const check of checks) {
+    const bucket = checksBySession.get(check.sessionId)
+    if (bucket) bucket.push(check)
+    else checksBySession.set(check.sessionId, [check])
+  }
+
+  const rows: string[][] = [[
+    'date', 'routine', 'exercise', 'set_number', 'done', 'measure',
+    'target_reps', 'target_seconds', 'target_distance', 'distance_unit',
+    'resistance_kind', 'resistance_weight_lb', 'resistance_band',
+    'exercise_notes', 'session_notes',
+  ]]
+
+  // Chronological, then by the routine's own exercise order, then set number —
+  // the order the work was actually done in, which is what a reader scanning
+  // the sheet expects. The table's insertion order is none of those.
+  const ordered = [...sessions].sort((a, b) => a.date.getTime() - b.date.getTime())
+  for (const session of ordered) {
+    const dateStr = formatDateIso(session.date)
+    const name = routineName.get(session.routineId) ?? String(session.routineId)
+    const sessionChecks = (checksBySession.get(session.id!) ?? []).slice().sort((a, b) => {
+      const orderA = exerciseById.get(a.ptExerciseId)?.order ?? 0
+      const orderB = exerciseById.get(b.ptExerciseId)?.order ?? 0
+      return orderA - orderB || a.setNumber - b.setNumber
+    })
+
+    // A run with no checks still gets a row: its date and any session note are
+    // the only record that it happened, and dropping it would make the sheet
+    // disagree with the history list about how many runs there were.
+    if (sessionChecks.length === 0) {
+      rows.push([dateStr, name, '', '', '', '', '', '', '', '', '', '', '', '', session.notes ?? ''])
+      continue
+    }
+
+    for (const check of sessionChecks) {
+      const exercise = exerciseById.get(check.ptExerciseId)
+      rows.push([
+        dateStr,
+        name,
+        exercise?.name ?? String(check.ptExerciseId),
+        String(check.setNumber),
+        check.done ? 'true' : 'false',
+        exercise?.measure ?? '',
+        exercise?.targetReps != null ? String(exercise.targetReps) : '',
+        exercise?.targetSeconds != null ? String(exercise.targetSeconds) : '',
+        exercise?.targetDistance != null ? String(exercise.targetDistance) : '',
+        exercise?.distanceUnit ?? '',
+        exercise?.resistanceKind ?? '',
+        exercise?.resistanceWeight != null ? String(exercise.resistanceWeight) : '',
+        exercise?.resistanceBand ?? '',
+        noteByKey.get(`${session.id!}:${check.ptExerciseId}`) ?? '',
+        session.notes ?? '',
+      ])
+    }
+  }
+
+  const csv = rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n')
+  triggerDownload(csv, `training-log-pt-${formatDateIso(new Date())}.csv`, 'text/csv')
 }
 
 function triggerDownload(content: string, filename: string, mimeType: string): void {
