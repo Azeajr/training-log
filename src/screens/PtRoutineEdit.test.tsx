@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
+import { render, screen, fireEvent, waitFor, within } from '@solidjs/testing-library'
 import { Router, Route } from '@solidjs/router'
 import PtRoutineEdit from './PtRoutineEdit'
 import { db } from '../db/index'
-import { getPtRoutine, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
+import { commitPtRun, getPtRoutine, listArchivedPtRoutines, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
 import { toast } from '../store/toast-store'
+import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
+import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 
 const mockNavigate = vi.fn()
 vi.mock('@solidjs/router', async () => {
@@ -25,20 +27,28 @@ const repsDraft = (over: Partial<PtExerciseDraft> = {}): PtExerciseDraft => ({
 })
 
 function renderNew() {
+  const api = createConfirmation()
   window.history.pushState({}, '', '/pt/new')
   return render(() => (
-    <Router>
-      <Route path="/pt/new" component={PtRoutineEdit} />
-    </Router>
+    <ConfirmationContext.Provider value={api}>
+      <Router>
+        <Route path="/pt/new" component={PtRoutineEdit} />
+      </Router>
+      <ConfirmationDialog />
+    </ConfirmationContext.Provider>
   ))
 }
 
 function renderEdit(routineId: number) {
+  const api = createConfirmation()
   window.history.pushState({}, '', `/pt/${routineId}/edit`)
   return render(() => (
-    <Router>
-      <Route path="/pt/:routineId/edit" component={PtRoutineEdit} />
-    </Router>
+    <ConfirmationContext.Provider value={api}>
+      <Router>
+        <Route path="/pt/:routineId/edit" component={PtRoutineEdit} />
+      </Router>
+      <ConfirmationDialog />
+    </ConfirmationContext.Provider>
   ))
 }
 
@@ -210,6 +220,46 @@ describe('PtRoutineEdit screen', () => {
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/pt'))
     expect((await getPtRoutine(db, id))!.exercises.map(e => e.name)).toEqual(['Second', 'First'])
+  })
+
+  it('archives an existing routine, keeping its runs', async () => {
+    const id = await savePtRoutine(db, { name: 'Old block', exercises: [repsDraft()] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    await commitPtRun(db, {
+      routineId: id,
+      date: new Date(2026, 8, 16),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+    })
+
+    renderEdit(id)
+    fireEvent.click(await screen.findByText('ARCHIVE ROUTINE'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByText('ARCHIVE'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/pt'))
+    expect((await listArchivedPtRoutines(db)).map(r => r.name)).toEqual(['Old block'])
+    // Archive is the non-destructive half of the pair: the run survives.
+    expect(await db.ptSessions.count()).toBe(1)
+    expect(await db.ptSetChecks.count()).toBe(1)
+  })
+
+  it('leaves the routine alone when the archive is declined', async () => {
+    const id = await savePtRoutine(db, { name: 'Old block', exercises: [repsDraft()] })
+
+    renderEdit(id)
+    fireEvent.click(await screen.findByText('ARCHIVE ROUTINE'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByText('CANCEL'))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(await listArchivedPtRoutines(db)).toEqual([])
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('offers no archive on a routine that does not exist yet', async () => {
+    renderNew()
+    await screen.findByText('NEW PT ROUTINE')
+    expect(screen.queryByText('ARCHIVE ROUTINE')).toBeNull()
   })
 
   it('sends the user back when the routine has gone', async () => {

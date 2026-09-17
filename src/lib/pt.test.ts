@@ -3,6 +3,9 @@ import { beforeEach, describe, it, expect } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import {
+  applyPtCleanup,
+  archivePtRoutine,
+  buildPtCleanupPlan,
   commitPtRun,
   deletePtRoutine,
   deletePtSession,
@@ -12,11 +15,15 @@ import {
   getPtRoutine,
   getPtSessionDetail,
   isSafeVideoUrl,
+  listArchivedPtRoutines,
   listPtRoutines,
   listPtSessions,
+  planPtCleanup,
+  ptCleanupCount,
   normalizeVideoUrl,
   PtValidationError,
   savePtRoutine,
+  unarchivePtRoutine,
   validatePtExercise,
   type PtExerciseDraft,
 } from './pt'
@@ -513,5 +520,179 @@ describe('listPtRoutines', () => {
 describe('getPtRoutine', () => {
   it('returns null for a routine that does not exist', async () => {
     expect(await getPtRoutine(db, 999)).toBeNull()
+  })
+})
+
+describe('archivePtRoutine', () => {
+  it('drops the routine from the start list but keeps its runs', async () => {
+    const id = await savePtRoutine(db, { name: 'Knee block', exercises: [repsDraft()] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    await commitPtRun(db, {
+      routineId: id,
+      date: new Date(2026, 8, 16),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+    })
+
+    await archivePtRoutine(db, id)
+
+    expect(await listPtRoutines(db)).toEqual([])
+    expect((await listArchivedPtRoutines(db)).map(r => r.name)).toEqual(['Knee block'])
+    // The whole point of archiving over deleting: the history survives, and
+    // still resolves to the routine's real name.
+    const history = await listPtSessions(db)
+    expect(history).toHaveLength(1)
+    expect(history[0].routineName).toBe('Knee block')
+  })
+
+  it('restores an archived routine unchanged', async () => {
+    const id = await savePtRoutine(db, { name: 'Knee block', exercises: [repsDraft(), sledDraft()] })
+    await archivePtRoutine(db, id)
+    await unarchivePtRoutine(db, id)
+
+    expect((await listPtRoutines(db)).map(r => r.name)).toEqual(['Knee block'])
+    expect(await listArchivedPtRoutines(db)).toEqual([])
+    expect((await getPtRoutine(db, id))!.exercises).toHaveLength(2)
+  })
+
+  it('leaves an archived routine runnable by direct lookup', async () => {
+    const id = await savePtRoutine(db, { name: 'Knee block', exercises: [repsDraft()] })
+    await archivePtRoutine(db, id)
+    // getPtRoutine is not the start list — a run already under way, or a
+    // bookmarked URL, still resolves.
+    expect((await getPtRoutine(db, id))!.routine.archived).toBe(true)
+  })
+})
+
+describe('buildPtCleanupPlan', () => {
+  it('finds nothing in a consistent database', () => {
+    const result = buildPtCleanupPlan(
+      [{ id: 1 }],
+      [{ id: 10, routineId: 1 }],
+      [{ id: 100, routineId: 1 }],
+      [{ id: 1000, sessionId: 100, ptExerciseId: 10 }],
+      [{ id: 2000, sessionId: 100, ptExerciseId: 10 }],
+    )
+    expect(ptCleanupCount(result)).toBe(0)
+  })
+
+  it('flags exercises and runs whose routine is gone', () => {
+    const result = buildPtCleanupPlan(
+      [{ id: 1 }],
+      [{ id: 10, routineId: 1 }, { id: 11, routineId: 99 }],
+      [{ id: 100, routineId: 1 }, { id: 101, routineId: 99 }],
+      [],
+      [],
+    )
+    expect(result.orphanExerciseIds).toEqual([11])
+    expect(result.orphanSessionIds).toEqual([101])
+  })
+
+  it('flags checks and notes whose session is gone', () => {
+    const result = buildPtCleanupPlan(
+      [{ id: 1 }],
+      [{ id: 10, routineId: 1 }],
+      [{ id: 100, routineId: 1 }],
+      [{ id: 1000, sessionId: 100, ptExerciseId: 10 }, { id: 1001, sessionId: 999, ptExerciseId: 10 }],
+      [{ id: 2000, sessionId: 999, ptExerciseId: 10 }],
+    )
+    expect(result.orphanCheckIds).toEqual([1001])
+    expect(result.orphanNoteIds).toEqual([2000])
+  })
+
+  it('flags a check whose exercise is gone — the case that makes a run under-count', () => {
+    const result = buildPtCleanupPlan(
+      [{ id: 1 }],
+      [{ id: 10, routineId: 1 }],
+      [{ id: 100, routineId: 1 }],
+      [{ id: 1000, sessionId: 100, ptExerciseId: 10 }, { id: 1001, sessionId: 100, ptExerciseId: 77 }],
+      [],
+    )
+    expect(result.orphanCheckIds).toEqual([1001])
+  })
+
+  it('sweeps the children of a run it is already removing, in one pass', () => {
+    const result = buildPtCleanupPlan(
+      [],
+      [{ id: 10, routineId: 99 }],
+      [{ id: 100, routineId: 99 }],
+      [{ id: 1000, sessionId: 100, ptExerciseId: 10 }],
+      [{ id: 2000, sessionId: 100, ptExerciseId: 10 }],
+    )
+    // Without this, cleaning a run left its checks behind as a second
+    // generation of orphans that a further pass would have to catch.
+    expect(result).toEqual({
+      orphanExerciseIds: [10],
+      orphanSessionIds: [100],
+      orphanCheckIds: [1000],
+      orphanNoteIds: [2000],
+    })
+    expect(ptCleanupCount(result)).toBe(4)
+  })
+
+})
+
+describe('planPtCleanup / applyPtCleanup', () => {
+  it('removes exactly the orphans an import left behind', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    const sessionId = await commitPtRun(db, {
+      routineId: id,
+      date: new Date(2026, 8, 16),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+    })
+    // What a hand-trimmed backup restores: rows pointing at ids that are absent.
+    await db.ptSetChecks.add({ sessionId: 9999, ptExerciseId: exercise.id!, setNumber: 1, done: true })
+    await db.ptNotes.add({ sessionId: 9999, ptExerciseId: exercise.id!, notes: 'orphan' })
+    await db.ptExercises.add({
+      routineId: 9999, name: 'Orphan', sets: 1, measure: 'reps', targetReps: 5,
+      resistanceKind: 'none', order: 0,
+    })
+
+    const plan = await planPtCleanup(db)
+    expect(ptCleanupCount(plan)).toBe(3)
+    await applyPtCleanup(db, plan)
+
+    expect(await db.ptExercises.count()).toBe(1)
+    expect(await db.ptNotes.count()).toBe(0)
+    // The healthy run is untouched.
+    const checks = await db.ptSetChecks.where('sessionId').equals(sessionId).toArray()
+    expect(checks).toHaveLength(1)
+    expect(await db.ptSetChecks.count()).toBe(1)
+  })
+
+  it('leaves an ARCHIVED routine and its runs alone', async () => {
+    const id = await savePtRoutine(db, { name: 'Old block', exercises: [repsDraft()] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    await commitPtRun(db, {
+      routineId: id,
+      date: new Date(),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+    })
+    await archivePtRoutine(db, id)
+
+    // Archived is retired, not deleted: the routine row is still there, so
+    // nothing that points at it is an orphan.
+    const plan = await planPtCleanup(db)
+    expect(ptCleanupCount(plan)).toBe(0)
+    await applyPtCleanup(db, plan)
+    expect(await db.ptSetChecks.count()).toBe(1)
+    expect(await db.ptExercises.count()).toBe(1)
+  })
+
+  it('is a no-op on a clean database', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    await commitPtRun(db, {
+      routineId: id,
+      date: new Date(),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+    })
+
+    const plan = await planPtCleanup(db)
+    expect(ptCleanupCount(plan)).toBe(0)
+    await applyPtCleanup(db, plan)
+
+    expect(await db.ptSetChecks.count()).toBe(1)
+    expect(await db.ptExercises.count()).toBe(1)
   })
 })

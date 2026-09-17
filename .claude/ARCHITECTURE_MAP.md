@@ -106,7 +106,8 @@ src/
 │   ├── plate-loading.ts          # resolveLiftLoading / resolveExerciseLoading → { mode, base }
 │   ├── cleanup.ts                # pure buildCleanupPlan: orphan atm/accessorySets + exercises to archive
 │   ├── export-import.ts          # JSON export + destructive import (validate → clear → restore),
-│   │                             #   CSV export, pending-export retry via localStorage
+│   │                             #   CSV export (+ exportPtCsv — its own file; a PT check has no
+│   │                             #   lift or week), pending-export retry via localStorage
 │   ├── pr.ts                     # detectPRs — rep-PR and e1RM-PR vs. every prior WORKING set
 │   │                             #   first-ever AMRAP returns e1RmPr=true (baseline). prSessionIds —
 │   │                             #   pure: which sessions were a PR *when logged*, for History badges
@@ -210,7 +211,11 @@ belongs there and never in `SCHEMA`, whose exec is unguarded.
   feeds `performance.ts`, `pr.ts` or any TM math. A run writes no row until FINISH (`commitPtRun`),
   so the store-vs-DB reconciliation the workout side needs has no analogue here. `measure` (what a
   set is counted in) and `resistanceKind` (what it is loaded with) are orthogonal — a sled walk is
-  distance + weight. `savePtRoutine` archives rather than deletes an exercise that a run performed.
+  distance + weight. `savePtRoutine` archives rather than deletes an exercise that a run performed,
+  and `archivePtRoutine` is the non-destructive half of the routine pair — it retires a routine and
+  keeps its runs, where `deletePtRoutine` takes them with it. Only an import can produce PT orphans
+  (checks whose session or exercise is gone); `buildPtCleanupPlan` finds them for Settings → CLEANUP,
+  because `getPtSessionDetail` drops unresolvable rows on read, so a run silently under-counts.
 - **Cycle shape**: `cycleFinalWeek(settings.hasDeloadWeek)` decides whether a cycle runs 1–3 or 1–4.
   `cycles.closedThroughWeek` is a self-healing cache of the highest contiguous completed week, so
   changing the lift roster mid-cycle never reopens a finished week.

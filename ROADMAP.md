@@ -40,9 +40,23 @@ per rehab day to exist at all.
 - **Video links are allowlisted to http/https** (`isSafeVideoUrl`). The link is
   a string the user pastes and it is rendered as an `href`; `javascript:` and
   `data:` URLs execute on click.
+- **Retiring a routine** is `archivePtRoutine` (from its edit screen), the
+  non-destructive half of the pair: the routine leaves the start list, every run
+  of it stays in history under its real name, and RESTORE puts it back.
+  `deletePtRoutine` is still there and still takes the runs with it.
+- **PT gets its own CSV** (`exportPtCsv`, Settings → DATA, shown once there is
+  any PT history). Not extra rows in the existing sheet: that one is shaped
+  around a 5/3/1 session — lift, week, weight, is_amrap — and a rehab check has
+  none of them, so folding it in means a dozen permanently blank columns and a
+  `lift` column holding a routine name. JSON backup carries all five PT tables.
+- **CLEANUP ORPHANS covers PT** (`buildPtCleanupPlan`). Nothing in the app can
+  create a PT orphan; an import can, and left alone they are invisible —
+  `getPtSessionDetail` drops a check whose exercise is missing, so a run that
+  recorded three sets renders as 2/2.
 - **Verified in a real browser**: `tests/e2e/pt.spec.ts` builds a routine, runs
-  it, reloads mid-run to prove the ticks survive, finishes, and reads the run
-  back out of history.
+  it, reloads mid-run to prove the ticks survive, finishes, reads the run back
+  out of history, then archives and restores the routine with its history
+  intact.
 
 ### Diagnostic Trace for Rest Timer, Audio and Notifications (2026-09-17)
 

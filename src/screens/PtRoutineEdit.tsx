@@ -3,6 +3,7 @@ import { useNavigate, useParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { PtDistanceUnit, PtMeasure, PtResistanceKind } from '../types/domain'
 import {
+  archivePtRoutine,
   formatPtPrescription,
   getPtRoutine,
   savePtRoutine,
@@ -14,6 +15,7 @@ import {
   type PtExerciseDraft,
 } from '../lib/pt'
 import { createAsyncRead } from '../lib/async-read'
+import { useConfirmation } from '../hooks/use-confirmation'
 import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
 import Rule from '../components/layout/Rule'
@@ -66,6 +68,7 @@ const emptyDraft = (): PtExerciseDraft => ({
 export default function PtRoutineEdit() {
   const params = useParams<{ routineId?: string }>()
   const navigate = useNavigate()
+  const { confirm } = useConfirmation()
 
   const routineId = (): number | null => {
     const raw = params.routineId
@@ -164,6 +167,26 @@ export default function PtRoutineEdit() {
       // Validation errors are the common case and name the offending exercise,
       // so the message is shown as-is rather than wrapped in a generic prefix.
       showToast(message(err))
+    }
+  })
+
+  // Archive, not delete: deleting a routine takes every run of it, and the
+  // record of having done the rehab is usually the part worth keeping. Lives
+  // here rather than on the list row, which already carries START/EDIT/delete
+  // and wraps on a phone with a fourth control.
+  const handleArchive = guard(async () => {
+    const id = routineId()
+    if (id === null) return
+    if (!await confirm(
+      `Archive ${name().trim() || 'this routine'}? It leaves the start list; its history is kept.`,
+      { confirmLabel: 'ARCHIVE' },
+    )) return
+    try {
+      await archivePtRoutine(db, id)
+      showToast('Routine archived.')
+      navigate('/pt')
+    } catch (err) {
+      showToast(`Could not archive that routine: ${message(err)}`)
     }
   })
 
@@ -408,6 +431,16 @@ export default function PtRoutineEdit() {
         >
           + ADD EXERCISE
         </button>
+
+        <Show when={!isNew()}>
+          <button
+            onClick={() => void handleArchive()}
+            disabled={saving()}
+            class="w-full border border-border text-muted hover:border-warn hover:text-warn px-4 py-2 text-xs tracking-widest uppercase mb-6 disabled:opacity-40"
+          >
+            ARCHIVE ROUTINE
+          </button>
+        </Show>
 
         <div class="flex gap-2">
           <button

@@ -3,9 +3,10 @@ import { db } from '../db/index'
 import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode, DeloadSupplemental } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { clearSession } from '../store/workout-store'
-import { exportJson, importJson, exportCsv } from '../lib/export-import'
+import { exportJson, importJson, exportCsv, exportPtCsv } from '../lib/export-import'
 import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
+import { applyPtCleanup, planPtCleanup, ptCleanupCount } from '../lib/pt'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
 import { createExercise, ExerciseNameConflictError, renameExercise, setExerciseCategory, setExercisePlateLoading, archiveExercise, unarchiveExercise } from '../lib/exercise'
 import { updateLift, archiveLift, unarchiveLift, moveLift, liftsCrossReferencing } from '../lib/lift'
@@ -112,6 +113,9 @@ export default function Settings() {
   const [editingLift, setEditingLift] = createSignal<number | null>(null)
   const [editLiftName, setEditLiftName] = createSignal('')
   const [editLiftIncrement, setEditLiftIncrement] = createSignal(5)
+  // Whether there is any PT to export. Gates one button, so it is a count and
+  // not a read of the rows themselves.
+  const [hasPtData, setHasPtData] = createSignal(false)
   // eslint-disable-next-line no-unassigned-vars -- Solid `ref={fileInputRef}` reassigns at runtime
   let fileInputRef!: HTMLInputElement
 
@@ -127,6 +131,7 @@ export default function Settings() {
     }))
     setTms(tmMap)
     setExercises(await db.exercises.toArray())
+    setHasPtData(await db.ptSessions.count() > 0)
     const allAtms = await db.accessoryTrainingMaxes.toArray()
     const increments: Record<number, { tmId: number; incrementLb: number }> = {}
     for (const atm of [...allAtms].sort((a, b) => b.setAt.getTime() - a.setAt.getTime())) {
@@ -271,7 +276,7 @@ export default function Settings() {
 
   const handleCleanupAccessoryData = async () => {
     if (!await confirm(
-      'Delete orphan accessory rows and archive unused exercises? This cannot be undone.',
+      'Delete orphan accessory and PT rows, and archive unused exercises? This cannot be undone.',
       { destructive: true, confirmLabel: 'CLEANUP' }
     )) return
 
@@ -292,14 +297,20 @@ export default function Settings() {
       // the user had just picked as a lift's assistance default (F45).
       allDefaults.map(d => ({ exerciseId: d.exerciseId })),
     )
+    // PT's own orphans, planned separately because the two share no rows. Only
+    // an import can produce them, and left alone they are invisible: a check
+    // whose exercise is missing is dropped on read, so a run renders as 2/2
+    // when three sets were recorded.
+    const ptPlan = await planPtCleanup(db)
 
     await db.transaction(async () => {
       if (plan.orphanAtmIds.length > 0) await db.accessoryTrainingMaxes.where('id').anyOf(plan.orphanAtmIds).delete()
       if (plan.orphanSetIds.length > 0) await db.accessorySets.where('id').anyOf(plan.orphanSetIds).delete()
       for (const id of plan.exercisesToArchive) await archiveExercise(db, id)
     })
+    await applyPtCleanup(db, ptPlan)
 
-    const orphanCount = plan.orphanAtmIds.length + plan.orphanSetIds.length
+    const orphanCount = plan.orphanAtmIds.length + plan.orphanSetIds.length + ptCleanupCount(ptPlan)
     await load()
     showToast(
       orphanCount === 0 && plan.exercisesToArchive.length === 0
@@ -1002,6 +1013,13 @@ export default function Settings() {
             <button onClick={() => void exportCsv(db)} class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent">
               EXPORT CSV
             </button>
+            {/* Only once there is PT data: a button that downloads a file with
+                nothing but a header row is worse than no button. */}
+            <Show when={hasPtData()}>
+              <button onClick={() => void exportPtCsv(db)} class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent">
+                EXPORT PT CSV
+              </button>
+            </Show>
             <button
               onClick={() => fileInputRef.click()}
               class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
@@ -1022,7 +1040,8 @@ export default function Settings() {
           </Show>
 
           <div class="text-faint text-xs leading-relaxed mb-8">
-            JSON backup restores all history. CSV exports completed sessions for spreadsheets.
+            JSON backup restores all history, PT included. CSV exports completed sessions for
+            spreadsheets; PT runs get their own file, since a rehab check has no lift or week.
           </div>
 
           {/* Everything below rewrites data and cannot be undone. Gathered here
@@ -1037,7 +1056,8 @@ export default function Settings() {
               CLEANUP ORPHANS
             </button>
             <p class="text-faint text-xs mt-1 mb-4">
-              Deletes accessory rows with no session and archives exercises nothing uses.
+              Deletes accessory and PT rows whose session, routine or exercise is gone, and
+              archives exercises nothing uses.
             </p>
             <button
               onClick={() => void handleDeload()}

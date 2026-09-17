@@ -6,6 +6,7 @@ import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import { db } from '../db/index'
 import { DEFAULT_PLATES, loadSettings } from '../store/settings-store'
 import { toast } from '../store/toast-store'
+import { commitPtRun, getPtRoutine, savePtRoutine } from '../lib/pt'
 
 function renderSettings() {
   const api = createConfirmation()
@@ -1521,5 +1522,90 @@ describe('Settings — cycle shape reconcile', () => {
     await waitFor(() => expect(screen.getByText(/Week 4 of 4/)).toBeInTheDocument())
     expect(await db.cycles.count()).toBe(1)
     expect(document.body.textContent).not.toContain('CYCLE COMPLETE')
+  })
+})
+
+// ─── PT in the DATA group ─────────────────────────────────────────────────────
+
+describe('Settings — PT data', () => {
+  const clearPt = () => Promise.all([
+    db.ptRoutines.clear(), db.ptExercises.clear(),
+    db.ptSessions.clear(), db.ptSetChecks.clear(), db.ptNotes.clear(),
+  ])
+
+  const seedPtRun = async () => {
+    const routineId = await savePtRoutine(db, {
+      name: 'Rehab',
+      exercises: [{
+        name: 'Wall slide', sets: 1, measure: 'reps', targetReps: 10, resistanceKind: 'none',
+      }],
+    })
+    const exercise = (await getPtRoutine(db, routineId))!.exercises[0]
+    await commitPtRun(db, {
+      routineId,
+      date: new Date(2026, 8, 16),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+    })
+    return { routineId, exercise }
+  }
+
+  beforeEach(async () => {
+    await clearPt()
+    await Promise.all([
+      db.exercises.clear(), db.accessoryTrainingMaxes.clear(),
+      db.accessorySets.clear(), db.sessions.clear(), db.lifts.clear(), db.cycles.clear(),
+    ])
+  })
+
+  afterEach(drain)
+
+  it('offers no PT CSV button before there is any PT history', async () => {
+    renderSettings()
+    await screen.findByText('EXPORT CSV')
+    expect(screen.queryByText('EXPORT PT CSV')).toBeNull()
+  })
+
+  it('offers the PT CSV button once a run exists', async () => {
+    await seedPtRun()
+    renderSettings()
+    await screen.findByText('EXPORT PT CSV')
+  })
+
+  it('CLEANUP ORPHANS removes PT rows whose session is gone', async () => {
+    const { exercise } = await seedPtRun()
+    await db.ptSetChecks.add({ sessionId: 9999, ptExerciseId: exercise.id!, setNumber: 1, done: true })
+    await db.ptNotes.add({ sessionId: 9999, ptExerciseId: exercise.id!, notes: 'orphan' })
+
+    renderSettings()
+    fireEvent.click(await screen.findByText('CLEANUP ORPHANS'))
+    fireEvent.click(await screen.findByText('CLEANUP'))
+
+    await waitFor(async () => expect(await db.ptNotes.count()).toBe(0))
+    // The healthy run is untouched.
+    expect(await db.ptSetChecks.count()).toBe(1)
+    expect(await db.ptSessions.count()).toBe(1)
+  })
+
+  it('counts the PT rows it removed in the toast', async () => {
+    const { exercise } = await seedPtRun()
+    await db.ptSetChecks.add({ sessionId: 9999, ptExerciseId: exercise.id!, setNumber: 1, done: true })
+
+    renderSettings()
+    fireEvent.click(await screen.findByText('CLEANUP ORPHANS'))
+    fireEvent.click(await screen.findByText('CLEANUP'))
+
+    await waitFor(() => expect(toast()).toMatch(/Removed 1 orphan rows/))
+  })
+
+  it('leaves a healthy PT database alone', async () => {
+    await seedPtRun()
+
+    renderSettings()
+    fireEvent.click(await screen.findByText('CLEANUP ORPHANS'))
+    fireEvent.click(await screen.findByText('CLEANUP'))
+
+    await waitFor(() => expect(toast()).toBe('No orphan data found'))
+    expect(await db.ptSetChecks.count()).toBe(1)
+    expect(await db.ptExercises.count()).toBe(1)
   })
 })

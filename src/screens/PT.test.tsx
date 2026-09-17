@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import { Router, Route } from '@solidjs/router'
 import PT from './PT'
 import { db } from '../db/index'
-import { commitPtRun, getPtRoutine, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
+import { archivePtRoutine, commitPtRun, getPtRoutine, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
 import { clearPtRun, startPtRun, togglePtSet } from '../store/pt-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
@@ -210,6 +210,59 @@ describe('PT screen', () => {
 
     await waitFor(async () => expect(await db.ptSessions.count()).toBe(0))
     expect(await db.ptRoutines.count()).toBe(1)
+  })
+
+  it('lists an archived routine apart from the start list, with its history kept', async () => {
+    const live = await savePtRoutine(db, { name: 'Current', exercises: [repsDraft()] })
+    const old = await savePtRoutine(db, { name: 'Old block', exercises: [repsDraft()] })
+    const exercise = (await getPtRoutine(db, old))!.exercises[0]
+    await commitPtRun(db, {
+      routineId: old,
+      date: new Date(2026, 8, 16),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+    })
+    await archivePtRoutine(db, old)
+
+    renderPT()
+
+    await screen.findByText('ARCHIVED')
+    expect(document.body.textContent).toContain('Old block')
+    expect(document.body.textContent).toContain('Current')
+    // Archived routines have no START — they are retired, not runnable.
+    expect(screen.getAllByText('START')).toHaveLength(1)
+    // …but the run they produced is still in history.
+    expect(document.body.textContent).toContain('Sep 16')
+    expect(live).toBeGreaterThan(0)
+  })
+
+  it('restores an archived routine to the start list', async () => {
+    const id = await savePtRoutine(db, { name: 'Old block', exercises: [repsDraft()] })
+    await archivePtRoutine(db, id)
+
+    renderPT()
+    fireEvent.click(await screen.findByText('RESTORE'))
+
+    await waitFor(() => expect(screen.queryByText('ARCHIVED')).toBeNull())
+    expect(await screen.findByText('START')).toBeTruthy()
+  })
+
+  it('deletes an archived routine outright', async () => {
+    const id = await savePtRoutine(db, { name: 'Old block', exercises: [repsDraft()] })
+    await archivePtRoutine(db, id)
+
+    renderPT()
+    await screen.findByText('ARCHIVED')
+    fireEvent.click(screen.getByLabelText('Delete Old block'))
+    fireEvent.click(await screen.findByRole('button', { name: /yes, delete old block/i }))
+
+    await waitFor(async () => expect(await db.ptRoutines.count()).toBe(0))
+  })
+
+  it('shows no ARCHIVED section when nothing is archived', async () => {
+    await savePtRoutine(db, { name: 'Current', exercises: [repsDraft()] })
+    renderPT()
+    await screen.findByText('Current')
+    expect(screen.queryByText('ARCHIVED')).toBeNull()
   })
 
   it('says so when a read fails, and retries', async () => {

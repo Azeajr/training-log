@@ -191,6 +191,29 @@ export async function listPtRoutines(db: TrainingDB): Promise<PtRoutine[]> {
   return rows.filter(r => !r.archived)
 }
 
+/** Archived routines, in display order — the restore list. */
+export async function listArchivedPtRoutines(db: TrainingDB): Promise<PtRoutine[]> {
+  const rows = await db.ptRoutines.orderBy('order').toArray()
+  return rows.filter(r => r.archived === true)
+}
+
+/**
+ * Retire a routine without touching its history.
+ *
+ * The alternative on offer is `deletePtRoutine`, which takes the runs with it.
+ * A rehab block ends but the record of having done it is the part worth
+ * keeping, so archiving is the non-destructive half of that pair: the routine
+ * leaves the start list, every past run still resolves to its name, and
+ * restoring it puts it back unchanged.
+ */
+export async function archivePtRoutine(db: TrainingDB, routineId: number): Promise<void> {
+  await db.ptRoutines.update(routineId, { archived: true })
+}
+
+export async function unarchivePtRoutine(db: TrainingDB, routineId: number): Promise<void> {
+  await db.ptRoutines.update(routineId, { archived: false })
+}
+
 export interface PtRoutineDetail {
   routine: PtRoutine
   /** Active exercises only, in order — what a run of this routine consists of. */
@@ -447,5 +470,105 @@ export async function deletePtSession(db: TrainingDB, sessionId: number): Promis
     await db.ptSetChecks.where('sessionId').equals(sessionId).delete()
     await db.ptNotes.where('sessionId').equals(sessionId).delete()
     await db.ptSessions.delete(sessionId)
+  })
+}
+
+/**
+ * Rows that reference something that is no longer there.
+ *
+ * Nothing in the app creates these: `savePtRoutine` only hard-deletes an
+ * exercise with no checks against it, and `deletePtRoutine` takes the runs,
+ * checks and notes with it in one transaction. An IMPORT can, though — a
+ * backup carries whatever tables it carries, and one taken mid-edit or trimmed
+ * by hand can restore checks whose session is absent. Left alone they are
+ * invisible: `getPtSessionDetail` reads the run's own exercise ids and simply
+ * drops the ones that do not resolve, so a run silently renders as 2/2 when
+ * three sets were recorded.
+ *
+ * Pure, and separate from `buildCleanupPlan`: the two share no rows, and one
+ * function taking nine positional arrays across both domains is how the
+ * argument order gets confused.
+ */
+export interface PtCleanupPlan {
+  /** Exercises belonging to a routine that no longer exists. */
+  orphanExerciseIds: number[]
+  /** Runs of a routine that no longer exists. */
+  orphanSessionIds: number[]
+  /** Checks whose run, or whose exercise, is gone. */
+  orphanCheckIds: number[]
+  /** Notes whose run, or whose exercise, is gone. */
+  orphanNoteIds: number[]
+}
+
+export function buildPtCleanupPlan(
+  routines: Array<{ id: number }>,
+  exercises: Array<{ id: number; routineId: number }>,
+  sessions: Array<{ id: number; routineId: number }>,
+  checks: Array<{ id: number; sessionId: number; ptExerciseId: number }>,
+  notes: Array<{ id: number; sessionId: number; ptExerciseId: number }>,
+): PtCleanupPlan {
+  const routineIds = new Set(routines.map(r => r.id))
+  const orphanExerciseIds = exercises.filter(e => !routineIds.has(e.routineId)).map(e => e.id)
+  const orphanSessionIds = sessions.filter(s => !routineIds.has(s.routineId)).map(s => s.id)
+
+  // A check is kept only if BOTH ends resolve, and the sessions being removed
+  // above count as already gone — otherwise cleaning up a run would leave its
+  // checks behind as a second generation of orphans on the next pass.
+  const doomedSessions = new Set(orphanSessionIds)
+  const liveSessionIds = new Set(
+    sessions.filter(s => !doomedSessions.has(s.id)).map(s => s.id),
+  )
+  const doomedExercises = new Set(orphanExerciseIds)
+  const liveExerciseIds = new Set(
+    exercises.filter(e => !doomedExercises.has(e.id)).map(e => e.id),
+  )
+  const dangling = (row: { sessionId: number; ptExerciseId: number }) =>
+    !liveSessionIds.has(row.sessionId) || !liveExerciseIds.has(row.ptExerciseId)
+
+  return {
+    orphanExerciseIds,
+    orphanSessionIds,
+    orphanCheckIds: checks.filter(dangling).map(c => c.id),
+    orphanNoteIds: notes.filter(dangling).map(n => n.id),
+  }
+}
+
+/** How many rows a plan would remove. Zero means there was nothing to do. */
+export function ptCleanupCount(plan: PtCleanupPlan): number {
+  return plan.orphanExerciseIds.length + plan.orphanSessionIds.length
+    + plan.orphanCheckIds.length + plan.orphanNoteIds.length
+}
+
+/** Read the four tables, work out the plan, and return it unapplied. */
+export async function planPtCleanup(db: TrainingDB): Promise<PtCleanupPlan> {
+  const [routines, exercises, sessions, checks, notes] = await Promise.all([
+    db.ptRoutines.toArray(),
+    db.ptExercises.toArray(),
+    db.ptSessions.toArray(),
+    db.ptSetChecks.toArray(),
+    db.ptNotes.toArray(),
+  ])
+  return buildPtCleanupPlan(
+    routines.map(r => ({ id: r.id! })),
+    exercises.map(e => ({ id: e.id!, routineId: e.routineId })),
+    sessions.map(s => ({ id: s.id!, routineId: s.routineId })),
+    checks.map(c => ({ id: c.id!, sessionId: c.sessionId, ptExerciseId: c.ptExerciseId })),
+    notes.map(n => ({ id: n.id!, sessionId: n.sessionId, ptExerciseId: n.ptExerciseId })),
+  )
+}
+
+/**
+ * Apply a plan in one transaction.
+ *
+ * Takes the plan rather than recomputing it, so the caller can show the user
+ * what is about to go and delete exactly that.
+ */
+export async function applyPtCleanup(db: TrainingDB, plan: PtCleanupPlan): Promise<void> {
+  if (ptCleanupCount(plan) === 0) return
+  await db.transaction(async () => {
+    if (plan.orphanCheckIds.length > 0) await db.ptSetChecks.where('id').anyOf(plan.orphanCheckIds).delete()
+    if (plan.orphanNoteIds.length > 0) await db.ptNotes.where('id').anyOf(plan.orphanNoteIds).delete()
+    if (plan.orphanSessionIds.length > 0) await db.ptSessions.where('id').anyOf(plan.orphanSessionIds).delete()
+    if (plan.orphanExerciseIds.length > 0) await db.ptExercises.where('id').anyOf(plan.orphanExerciseIds).delete()
   })
 }

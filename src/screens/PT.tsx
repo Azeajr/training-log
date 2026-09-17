@@ -7,8 +7,10 @@ import {
   deletePtSession,
   formatPtPrescription,
   getPtSessionDetail,
+  listArchivedPtRoutines,
   listPtRoutines,
   listPtSessions,
+  unarchivePtRoutine,
   type PtSessionDetail,
   type PtSessionSummary,
 } from '../lib/pt'
@@ -30,6 +32,7 @@ export default function PT() {
   const navigate = useNavigate()
   const { confirm } = useConfirmation()
   const [routines, setRoutines] = createSignal<PtRoutine[]>([])
+  const [archived, setArchived] = createSignal<PtRoutine[]>([])
   const [counts, setCounts] = createSignal<Record<number, number>>({})
   const [history, setHistory] = createSignal<PtSessionSummary[]>([])
   const [openSession, setOpenSession] = createSignal<number | null>(null)
@@ -38,8 +41,9 @@ export default function PT() {
   const read = createAsyncRead()
 
   const load = async (isCurrent: () => boolean) => {
-    const [rows, sessions, exercises] = await Promise.all([
+    const [rows, archivedRows, sessions, exercises] = await Promise.all([
       listPtRoutines(db),
+      listArchivedPtRoutines(db),
       listPtSessions(db, HISTORY_LIMIT),
       db.ptExercises.toArray(),
     ])
@@ -50,6 +54,7 @@ export default function PT() {
       byRoutine[ex.routineId] = (byRoutine[ex.routineId] ?? 0) + 1
     }
     setRoutines(rows)
+    setArchived(archivedRows)
     setCounts(byRoutine)
     setHistory(sessions)
   }
@@ -69,6 +74,16 @@ export default function PT() {
       await read.run(load)
     } catch (err) {
       showToast(`Could not delete that routine: ${message(err)}`)
+    }
+  }
+
+  const handleRestore = async (routine: PtRoutine) => {
+    try {
+      await unarchivePtRoutine(db, routine.id!)
+      showToast(`${routine.name} restored.`)
+      await read.run(load)
+    } catch (err) {
+      showToast(`Could not restore that routine: ${message(err)}`)
     }
   }
 
@@ -195,6 +210,38 @@ export default function PT() {
         >
           + NEW ROUTINE
         </A>
+
+        {/* Archived routines keep their runs, so they stay listed here rather
+            than disappearing: a rehab block that comes back is a restore, not a
+            rebuild. */}
+        <Show when={archived().length > 0}>
+          <div class="mb-8">
+            <SectionLabel tone="text-faint" class="mb-2">ARCHIVED</SectionLabel>
+            <div class="space-y-2">
+              <For each={archived()}>
+                {routine => (
+                  <div class="border border-border/50 px-3 py-2 flex items-center justify-between gap-2">
+                    <span class="text-muted text-sm uppercase tracking-widest truncate">{routine.name}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => void handleRestore(routine)}
+                        class="border border-border text-muted hover:border-accent hover:text-accent px-3 py-1 text-xs tracking-widest"
+                      >
+                        RESTORE
+                      </button>
+                      <InlineConfirm
+                        label="✕"
+                        ariaLabel={`Delete ${routine.name}`}
+                        confirmText="delete routine + its history?"
+                        onConfirm={() => void handleDeleteRoutine(routine)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
 
         <Rule label="PT HISTORY" class="text-muted mb-4" />
         <Show

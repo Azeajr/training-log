@@ -2,7 +2,8 @@
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
-import { retryPendingExport, exportJson, importFromRawData, exportCsv, importJson, MAX_IMPORT_BYTES } from './export-import'
+import { retryPendingExport, exportJson, importFromRawData, exportCsv, exportPtCsv, importJson, MAX_IMPORT_BYTES } from './export-import'
+import { commitPtRun, getPtRoutine, savePtRoutine } from './pt'
 import { hasTrainingMaxes, refreshTrainingMaxPresence, resetTrainingMaxPresence } from './training-max'
 
 let capturedBlob: Blob | null = null
@@ -1057,5 +1058,215 @@ describe('exportCsv — timed and distance accessories (F09)', () => {
     const text = await capturedBlob!.text()
     // Before this, a plank's ONLY performance figure appeared nowhere in the file.
     expect(text).toContain('90')
+  })
+})
+
+// ─── exportPtCsv ──────────────────────────────────────────────────────────────
+
+describe('exportPtCsv', () => {
+  const seedPt = async () => {
+    const routineId = await savePtRoutine(db, {
+      name: 'Shoulder rehab',
+      exercises: [
+        {
+          name: 'Band pull-apart', sets: 2, measure: 'reps', targetReps: 15,
+          resistanceKind: 'band', resistanceBand: 'red',
+        },
+        {
+          name: 'Backward sled walk', sets: 1, measure: 'distance', targetDistance: 50,
+          distanceUnit: 'yd', resistanceKind: 'weight', resistanceWeight: 180,
+        },
+      ],
+    })
+    const [band, sled] = (await getPtRoutine(db, routineId))!.exercises
+    return { routineId, band, sled }
+  }
+
+  it('writes one row per check, with the prescription carried on each', async () => {
+    const { routineId, band, sled } = await seedPt()
+    await commitPtRun(db, {
+      routineId,
+      date: new Date(2026, 8, 16),
+      notes: 'felt fine',
+      checks: [
+        { ptExerciseId: band.id!, setNumber: 1, done: true },
+        { ptExerciseId: band.id!, setNumber: 2, done: false },
+        { ptExerciseId: sled.id!, setNumber: 1, done: true },
+      ],
+      exerciseNotes: { [sled.id!]: 'heavier sled' },
+    })
+
+    await exportPtCsv(db)
+
+    const lines = (await capturedBlob!.text()).split('\n')
+    expect(capturedBlob!.type).toBe('text/csv')
+    expect(lines[0]).toContain('"date","routine","exercise","set_number","done","measure"')
+    expect(lines).toHaveLength(4)
+    expect(lines[1]).toContain('"2026-09-16","Shoulder rehab","Band pull-apart","1","true","reps"')
+    expect(lines[1]).toContain('"15"')
+    expect(lines[1]).toContain('"band"')
+    expect(lines[1]).toContain('"red"')
+    expect(lines[2]).toContain('"2","false"')
+    // The sled row keeps its own unit and its weight, which is the pairing the
+    // single lift-shaped CSV had nowhere to put.
+    expect(lines[3]).toContain('"Backward sled walk","1","true","distance"')
+    expect(lines[3]).toContain('"50","yd"')
+    expect(lines[3]).toContain('"weight","180"')
+    expect(lines[3]).toContain('"heavier sled"')
+    expect(lines[3]).toContain('"felt fine"')
+  })
+
+  it('orders rows by date, then by the routine\'s exercise order, then set number', async () => {
+    const { routineId, band, sled } = await seedPt()
+    await commitPtRun(db, {
+      routineId,
+      date: new Date(2026, 8, 16),
+      // Deliberately out of order: the sheet must not inherit insertion order.
+      checks: [
+        { ptExerciseId: sled.id!, setNumber: 1, done: true },
+        { ptExerciseId: band.id!, setNumber: 2, done: true },
+        { ptExerciseId: band.id!, setNumber: 1, done: true },
+      ],
+    })
+    await commitPtRun(db, {
+      routineId,
+      date: new Date(2026, 8, 14),
+      checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }],
+    })
+
+    await exportPtCsv(db)
+
+    const lines = (await capturedBlob!.text()).split('\n').slice(1)
+    expect(lines.map(l => l.split(',').slice(0, 4).join(','))).toEqual([
+      '"2026-09-14","Shoulder rehab","Band pull-apart","1"',
+      '"2026-09-16","Shoulder rehab","Band pull-apart","1"',
+      '"2026-09-16","Shoulder rehab","Band pull-apart","2"',
+      '"2026-09-16","Shoulder rehab","Backward sled walk","1"',
+    ])
+  })
+
+  it('keeps a run with no checks, so the sheet agrees with the history list', async () => {
+    const { routineId } = await seedPt()
+    await db.ptSessions.add({ routineId, date: new Date(2026, 8, 16), notes: 'logged nothing' })
+
+    await exportPtCsv(db)
+
+    const lines = (await capturedBlob!.text()).split('\n')
+    expect(lines).toHaveLength(2)
+    expect(lines[1]).toContain('"logged nothing"')
+  })
+
+  it('names a run whose routine was deleted by its id rather than dropping it', async () => {
+    const { routineId, band } = await seedPt()
+    await commitPtRun(db, {
+      routineId,
+      date: new Date(2026, 8, 16),
+      checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }],
+    })
+    await db.ptRoutines.delete(routineId)
+
+    await exportPtCsv(db)
+
+    const lines = (await capturedBlob!.text()).split('\n')
+    expect(lines).toHaveLength(2)
+    expect(lines[1]).toContain(`"${routineId}"`)
+  })
+
+  it('escapes quotes in a note', async () => {
+    const { routineId, band } = await seedPt()
+    await commitPtRun(db, {
+      routineId,
+      date: new Date(2026, 8, 16),
+      checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }],
+      exerciseNotes: { [band.id!]: 'used the "heavy" band' },
+    })
+
+    await exportPtCsv(db)
+
+    expect(await capturedBlob!.text()).toContain('"used the ""heavy"" band"')
+  })
+
+  it('writes a header-only file when there is no PT history', async () => {
+    await exportPtCsv(db)
+    const lines = (await capturedBlob!.text()).split('\n')
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('"date","routine"')
+  })
+})
+
+// ─── PT through the JSON round trip ───────────────────────────────────────────
+
+describe('PT backup round trip', () => {
+  it('exports every PT table and restores it verbatim', async () => {
+    const routineId = await savePtRoutine(db, {
+      name: 'Shoulder rehab',
+      notes: 'clinic',
+      exercises: [{
+        name: 'Backward sled walk', sets: 3, measure: 'distance', targetDistance: 50,
+        distanceUnit: 'yd', resistanceKind: 'weight', resistanceWeight: 180,
+        description: 'short steps', videoUrl: 'https://example.com/v',
+      }],
+    })
+    const exercise = (await getPtRoutine(db, routineId))!.exercises[0]
+    await commitPtRun(db, {
+      routineId,
+      date: new Date(2026, 8, 16),
+      notes: 'good',
+      checks: [
+        { ptExerciseId: exercise.id!, setNumber: 1, done: true },
+        { ptExerciseId: exercise.id!, setNumber: 2, done: false },
+      ],
+      exerciseNotes: { [exercise.id!]: 'heavier' },
+    })
+
+    await exportJson(db)
+    const parsed = JSON.parse(await capturedBlob!.text())
+    expect(parsed.ptRoutines).toHaveLength(1)
+    expect(parsed.ptExercises).toHaveLength(1)
+    expect(parsed.ptSessions).toHaveLength(1)
+    expect(parsed.ptSetChecks).toHaveLength(2)
+    expect(parsed.ptNotes).toHaveLength(1)
+
+    await importFromRawData(db, parsed)
+
+    const restored = await getPtRoutine(db, routineId)
+    expect(restored!.routine.notes).toBe('clinic')
+    expect(restored!.exercises[0]).toMatchObject({
+      measure: 'distance', targetDistance: 50, distanceUnit: 'yd',
+      resistanceKind: 'weight', resistanceWeight: 180,
+      videoUrl: 'https://example.com/v',
+    })
+    const checks = await db.ptSetChecks.toArray()
+    expect(checks.filter(c => c.done)).toHaveLength(1)
+    // The boolean survives the INTEGER column round trip rather than coming
+    // back as 1/0 and reading as truthy for both.
+    expect(checks.every(c => typeof c.done === 'boolean')).toBe(true)
+    // And the date survives as a Date, not an ISO string.
+    expect((await db.ptSessions.toArray())[0].date).toBeInstanceOf(Date)
+  })
+
+  it('wipes PT tables when a legacy backup carries none of them', async () => {
+    await savePtRoutine(db, { name: 'Rehab', exercises: [{
+      name: 'Wall slide', sets: 1, measure: 'reps', targetReps: 10, resistanceKind: 'none',
+    }] })
+
+    // A backup taken before PT existed. Import is destructive by design
+    // (COMMON_MISTAKES #2) — this asserts the documented behaviour, not a wish.
+    await importFromRawData(db, { lifts: [] })
+
+    expect(await db.ptRoutines.count()).toBe(0)
+    expect(await db.ptExercises.count()).toBe(0)
+  })
+
+  it('carries the archived flag on a retired routine', async () => {
+    const routineId = await savePtRoutine(db, { name: 'Old block', exercises: [{
+      name: 'Wall slide', sets: 1, measure: 'reps', targetReps: 10, resistanceKind: 'none',
+    }] })
+    await db.ptRoutines.update(routineId, { archived: true })
+
+    await exportJson(db)
+    await importFromRawData(db, JSON.parse(await capturedBlob!.text()))
+
+    expect((await db.ptRoutines.get(routineId))?.archived).toBe(true)
   })
 })

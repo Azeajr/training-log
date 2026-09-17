@@ -62,11 +62,40 @@ test.describe('PT checklist', () => {
     await expect(page.getByText('No PT runs recorded yet')).toBeVisible()
   })
 
+  test('archives a routine and restores it, keeping the run history', async ({ page }) => {
+    await page.goto('/pt/new')
+    await page.getByLabel('Routine name').fill('Knee block')
+    await page.getByLabel('Exercise 1 name').fill('Wall slide')
+    await page.getByRole('button', { name: 'DONE' }).click()
+
+    await page.getByRole('button', { name: 'START' }).click()
+    await page.getByRole('checkbox').first().click()
+    await page.getByRole('button', { name: 'FINISH' }).click()
+    await expect(page.getByText('PT HISTORY')).toBeVisible()
+
+    await page.getByRole('link', { name: 'EDIT' }).click()
+    await page.getByRole('button', { name: 'ARCHIVE ROUTINE' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'ARCHIVE' }).click()
+
+    await expect(page.getByText('ARCHIVED', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'START' })).toHaveCount(0)
+    // The run it produced outlives the routine's retirement (one of three
+    // prescribed sets was ticked).
+    await expect(page.getByText('1/3')).toBeVisible()
+
+    await page.getByRole('button', { name: 'RESTORE' }).click()
+    await expect(page.getByText('ARCHIVED', { exact: true })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'START' })).toBeVisible()
+  })
+
   test('reaches PT from the Today screen', async ({ page }) => {
     await page.goto('/pt/new')
     await page.getByLabel('Routine name').fill('Knee')
     await page.getByLabel('Exercise 1 name').fill('Wall slide')
     await page.getByRole('button', { name: 'DONE' }).click()
+    // Wait for DONE's own navigate('/pt') to land first: clicking TODAY while
+    // it is still in flight navigates away and is then bounced straight back.
+    await expect(page.getByRole('button', { name: 'START' })).toBeVisible()
 
     await page.getByRole('link', { name: 'TODAY' }).click()
     await expect(page.getByRole('button', { name: /Knee.*START/ })).toBeVisible()
