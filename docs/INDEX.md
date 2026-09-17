@@ -21,6 +21,12 @@ Every markdown doc in the repo, what it is for, and when to load it.
 | `ROADMAP.md` | Shipped changelog, planned features, security posture, tech debt |
 | `README.md` | User-facing overview: features, stack, program structure, how to run |
 
+## Field instruments
+
+- `docs/diagnostic-trace.md` — the rest-timer / audio / notification trace: how to
+  capture one on a phone, how to read each record, and what it cannot see. Load
+  this before asking a user what they observed.
+
 ## Design notes
 
 - `docs/design/plate-loading-model.md` — the `{ plateMode, implementBase }` generalization of

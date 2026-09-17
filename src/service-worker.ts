@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { createNotifyTimers } from './lib/notify-timers'
 import { dedupePrecacheUrls, toPrecachePaths, type PrecacheEntry } from './lib/precache'
+import { swTrace } from './lib/trace-sw-store'
 // Custom SW for rest-timer notifications. vite-plugin-pwa runs injectManifest:
 // it rewrites `sw.__WB_MANIFEST` into the precache list built from globPatterns
 // in vite.config.ts. Precaching + wasm caching are handled inline via the native
@@ -34,12 +35,19 @@ const CACHE_NAME = 'precache-v1'
 
 const PRECACHE_PATHS = toPrecachePaths(PRECACHE_URLS)
 
+// Top level, so it runs on every script EVALUATION. That is the record worth
+// having: a second boot means the browser terminated the first worker, taking
+// its pending setTimeouts with it, and nothing else in the system says so.
+swTrace('sw.boot', {})
+
 sw.addEventListener('install', (event: ExtendableEvent) => {
+  swTrace('sw.install', { urls: PRECACHE_URLS.length })
   if (!PRECACHE_URLS.length) return
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)))
 })
 
 sw.addEventListener('activate', (event: ExtendableEvent) => {
+  swTrace('sw.activate', {})
   event.waitUntil(
     caches
       .keys()
@@ -112,8 +120,10 @@ const notifyTimers = createNotifyTimers({
   fire: (target) => {
     sw.registration
       ?.showNotification(target.title, { body: target.body, tag: target.tag, requireInteraction: false })
-      .catch(() => {})
+      .then(() => swTrace('sw.shown', { tag: target.tag }))
+      .catch((err: unknown) => swTrace('sw.show.failed', { tag: target.tag, error: String(err) }))
   },
+  trace: (ev, d) => swTrace(ev, d),
 })
 
 sw.addEventListener('message', (event: ExtendableMessageEvent) => {
@@ -129,13 +139,18 @@ sw.addEventListener('message', (event: ExtendableMessageEvent) => {
     typeof msg.title === 'string' &&
     typeof msg.body === 'string'
   ) {
+    swTrace('sw.msg.schedule', { tag: msg.tag, fireAt: msg.fireAt, in: msg.fireAt - Date.now() })
     notifyTimers.arm({ tag: msg.tag, fireAt: msg.fireAt, title: msg.title, body: msg.body })
   } else if (msg.type === 'cancel' && typeof msg.tag === 'string') {
+    swTrace('sw.msg.cancel', { tag: msg.tag })
     notifyTimers.cancelTag(msg.tag)
   }
 })
 
 sw.addEventListener('notificationclick', (event: NotificationEvent) => {
+  // Proof of delivery, and the only kind this platform offers: a notification
+  // cannot be clicked unless it was actually shown.
+  swTrace('sw.click', { tag: event.notification.tag })
   event.notification.close()
   event.waitUntil(
     sw.clients

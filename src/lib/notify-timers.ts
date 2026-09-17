@@ -33,6 +33,13 @@ export interface NotifyTimersDeps {
   /** Defaults to Date.now; injectable for tests. */
   now?: () => number
   fire: (target: NotifyTarget, handle: TimerHandle) => void
+  /**
+   * Diagnostics sink, optional. Passed in rather than imported because this
+   * module runs in BOTH the page and the service worker, and they have
+   * different storage available to them — a SW has no localStorage. Each side
+   * supplies its own; neither side's sink can break the other.
+   */
+  trace?: (ev: string, d?: Record<string, unknown>) => void
 }
 
 export interface NotifyTimers {
@@ -47,6 +54,7 @@ export interface NotifyTimers {
 export function createNotifyTimers(deps: NotifyTimersDeps): NotifyTimers {
   // Bound at call time so injected/patched clocks (vi.useFakeTimers) win.
   const now = (): number => (deps.now ?? Date.now)()
+  const trace = (ev: string, d?: Record<string, unknown>) => deps.trace?.(ev, d)
   const byHandle = new Map<TimerHandle, Pending>()
   const byTag = new Map<string, Set<TimerHandle>>()
   let seq = 0
@@ -66,6 +74,7 @@ export function createNotifyTimers(deps: NotifyTimersDeps): NotifyTimers {
     pending.fired = true
     if (pending.timer) clearTimeout(pending.timer)
     release(handle)
+    trace('notify.cancel', { handle, tag: pending.target.tag, fireAt: pending.target.fireAt })
   }
 
   return {
@@ -84,10 +93,17 @@ export function createNotifyTimers(deps: NotifyTimersDeps): NotifyTimers {
         if (pending.fired) return
         pending.fired = true
         release(handle)
+        // Drift is the point: a timer that fires minutes late because the
+        // process was suspended looks identical to one that fired on time,
+        // unless the gap between due and actual is written down.
+        trace('notify.fire', {
+          handle, tag: target.tag, fireAt: target.fireAt, at: now(), drift: now() - target.fireAt,
+        })
         deps.fire(target, handle)
       }
 
       const delay = target.fireAt - now()
+      trace('notify.arm', { handle, tag: target.tag, fireAt: target.fireAt, delay })
       // Past-due targets fire on a deferred tick so a re-schedule's
       // cancel-then-arm sequence can drop stale targets without them popping.
       pending.timer = setTimeout(fireNow, delay <= 0 ? 0 : delay)
