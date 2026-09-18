@@ -121,7 +121,15 @@ CREATE TABLE IF NOT EXISTS ptSetChecks (
   sessionId INTEGER NOT NULL,
   ptExerciseId INTEGER NOT NULL,
   setNumber INTEGER NOT NULL,
-  done INTEGER NOT NULL
+  done INTEGER NOT NULL,
+  reps INTEGER,
+  seconds REAL,
+  distance REAL,
+  distanceUnit TEXT,
+  weight REAL,
+  band TEXT,
+  equipmentHeight REAL,
+  equipmentHeightUnit TEXT
 );
 CREATE TABLE IF NOT EXISTS ptNotes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -262,6 +270,19 @@ export const ADDITIVE_MIGRATIONS = [
   // genuinely has no recorded height, and the prescription line omits it.
   `ALTER TABLE ptExercises ADD COLUMN equipmentHeight REAL`,
   `ALTER TABLE ptExercises ADD COLUMN equipmentHeightUnit TEXT`,
+  // What was actually done, per set, as opposed to what was prescribed. NULL
+  // across all eight means a row written before PT recorded anything but a
+  // tick — those and only those fall back to the exercise's prescription. A row
+  // written since carries its resolved values even when they match, because the
+  // prescription is editable and would otherwise rewrite finished history.
+  `ALTER TABLE ptSetChecks ADD COLUMN reps INTEGER`,
+  `ALTER TABLE ptSetChecks ADD COLUMN seconds REAL`,
+  `ALTER TABLE ptSetChecks ADD COLUMN distance REAL`,
+  `ALTER TABLE ptSetChecks ADD COLUMN distanceUnit TEXT`,
+  `ALTER TABLE ptSetChecks ADD COLUMN weight REAL`,
+  `ALTER TABLE ptSetChecks ADD COLUMN band TEXT`,
+  `ALTER TABLE ptSetChecks ADD COLUMN equipmentHeight REAL`,
+  `ALTER TABLE ptSetChecks ADD COLUMN equipmentHeightUnit TEXT`,
 ] as const
 
 export const ALL_TABLES = [

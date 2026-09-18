@@ -6,7 +6,7 @@ import { db } from '../db/index'
 import { clearSession, startSession, workout } from '../store/workout-store'
 import { toast } from '../store/toast-store'
 import { savePtRoutine } from '../lib/pt'
-import { clearAllPtRuns, getPtRun, ptSessionRoutineIds, startPtRun, togglePtSet } from '../store/pt-store'
+import { clearAllPtRuns, isPtSetDone, ptSessionRoutineIds, startPtRun, togglePtSet } from '../store/pt-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import type { Session } from '../types/domain'
@@ -121,7 +121,7 @@ describe('Today — select PT routines together', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include Shoulder' }))
     fireEvent.click(screen.getByRole('button', { name: 'ADD TO PT SESSION (1)' }))
     expect(ptSessionRoutineIds().sort()).toEqual([knee, shoulder].sort())
-    expect(getPtRun(knee)?.done).toEqual([`${exercise.id}:1`])
+    expect(isPtSetDone(exercise.id!, 1, knee)).toBe(true)
     expect(mockNavigate).toHaveBeenCalledWith('/pt/run')
   })
 

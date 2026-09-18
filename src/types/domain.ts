@@ -306,6 +306,23 @@ export interface PtSetCheck {
   ptExerciseId: number
   setNumber: number
   done: boolean
+  /**
+   * What was actually done, resolved at the moment the run was saved.
+   *
+   * These are filled even when they match the prescription, because the
+   * prescription is editable: raising an exercise's target later must not
+   * rewrite what a finished run says happened. All eight null together means a
+   * row from before PT recorded anything but a tick, and only those fall back to
+   * the exercise's own fields.
+   */
+  reps?: number | null
+  seconds?: number | null
+  distance?: number | null
+  distanceUnit?: PtDistanceUnit | null
+  weight?: number | null
+  band?: string | null
+  equipmentHeight?: number | null
+  equipmentHeightUnit?: 'in' | 'cm' | null
 }
 
 /** Free-text note on one exercise within one run ("switched to green band"). */

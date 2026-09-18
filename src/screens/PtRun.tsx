@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Index, Show } from 'solid-js'
+import { batch, createMemo, createSignal, For, Index, Show } from 'solid-js'
 import { useNavigate, useParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { PtExercise } from '../types/domain'
@@ -8,6 +8,7 @@ import {
   formatPtResistance,
   formatPtTarget,
   getPtRoutine,
+  resolvePtCheck,
   type PtRoutineDetail,
 } from '../lib/pt'
 import {
@@ -16,6 +17,8 @@ import {
   getPtRun,
   ptSessionRoutineIds,
   isPtSetDone,
+  ensurePtSets,
+  ptSetsFor,
   ptExerciseNotesForCommit,
   ptPersistenceError,
   setPtExerciseNote,
@@ -61,8 +64,11 @@ export default function PtRun() {
   const [groups, setGroups] = createSignal<PtRoutineDetail[]>([])
   const exercises = createMemo(() => groups().flatMap(group => group.exercises))
   const routineName = () => groups().length === 1 ? groups()[0].routine.name : 'PT SESSION'
-  const groupDone = (items: PtExercise[]) => items.reduce((sum, ex) => sum +
-    Array.from({ length: ex.sets }, (_, i) => i + 1).filter(n => isPtSetDone(ex.id!, n, ex.routineId)).length, 0)
+  // The store owns how many sets a run has, not the prescription — a run can
+  // add sets to an exercise or drop one, and every count here follows that.
+  const setsOf = (ex: PtExercise) => ptSetsFor(ex.id!, ex.routineId)
+  const doneIn = (items: PtExercise[]) => items.reduce((sum, ex) => sum + setsOf(ex).filter(s => s.done).length, 0)
+  const setsIn = (items: PtExercise[]) => items.reduce((sum, ex) => sum + setsOf(ex).length, 0)
 
   const read = createAsyncRead()
 
@@ -81,19 +87,19 @@ export default function PtRun() {
       return
     }
     if (id !== null) startPtRun(id)
-    setGroups((details as PtRoutineDetail[]).sort((a, b) => a.routine.order - b.routine.order))
+    const sorted = (details as PtRoutineDetail[]).sort((a, b) => a.routine.order - b.routine.order)
+    // Seed each exercise's set list to its prescribed length. Only the screen
+    // knows the prescription, so the store cannot do this for itself — and it
+    // only ever grows, leaving a resumed run's own sets alone.
+    batch(() => sorted.forEach(group =>
+      group.exercises.forEach(ex => ensurePtSets(ex.id!, ex.sets, ex.routineId))))
+    setGroups(sorted)
   }
 
   void read.run(load)
 
-  const total = createMemo(() => exercises().reduce((sum, ex) => sum + ex.sets, 0))
-  const doneCount = createMemo(() =>
-    exercises().reduce(
-      (sum, ex) => sum + Array.from({ length: ex.sets }, (_, i) => i + 1)
-        .filter(setNumber => isPtSetDone(ex.id!, setNumber, ex.routineId)).length,
-      0,
-    ),
-  )
+  const total = createMemo(() => setsIn(exercises()))
+  const doneCount = createMemo(() => doneIn(exercises()))
 
   const { busy: finishing, guard } = useSingleFlight()
 
@@ -111,10 +117,13 @@ export default function PtRun() {
       const id = group.routine.id!
       const run = getPtRun(id)!
       const checks = group.exercises.flatMap(ex =>
-        Array.from({ length: ex.sets }, (_, i) => ({
+        setsOf(ex).map((set, i) => ({
           ptExerciseId: ex.id!,
           setNumber: i + 1,
-          done: isPtSetDone(ex.id!, i + 1, id),
+          done: set.done,
+          // Pinned now, against the prescription as it stands today. A later
+          // edit to the routine must not rewrite what this run says happened.
+          ...resolvePtCheck(ex, set),
         })),
       )
 
@@ -194,7 +203,7 @@ export default function PtRun() {
           <For each={groups()}>{group => {
             const [open, setOpen] = createSignal(true)
             const panelId = `pt-group-${group.routine.id}`
-            const groupTotal = () => group.exercises.reduce((sum, ex) => sum + ex.sets, 0)
+            const groupTotal = () => setsIn(group.exercises)
             // A single routine is already named and counted by the page Rule, so
             // grouping it under a second identical header says everything twice.
             // The fold earns its place only once there is more than one routine
@@ -210,7 +219,7 @@ export default function PtRun() {
                   class="w-full flex items-baseline gap-2 mb-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                 >
                   <span class="text-text text-sm uppercase tracking-widest">
-                    {group.routine.name} . {groupDone(group.exercises)}/{groupTotal()} sets
+                    {group.routine.name} . {doneIn(group.exercises)}/{groupTotal()} sets
                   </span>
                   <FoldGlyph expanded={open()} class="text-faint text-xs ml-auto" />
                 </button>
@@ -239,8 +248,9 @@ export default function PtRun() {
                       </Show>
 
                       <div class="flex flex-wrap gap-2 mb-2">
-                        <Index each={Array.from({ length: exercise.sets }, (_, i) => i + 1)}>
-                          {setNumber => {
+                        <Index each={setsOf(exercise)}>
+                          {(_set, index) => {
+                            const setNumber = () => index + 1
                             const checked = () => isPtSetDone(exercise.id!, setNumber(), exercise.routineId)
                             return (
                               <button

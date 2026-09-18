@@ -24,12 +24,21 @@ beforeEach(() => {
   resetPtPersistenceError()
 })
 
+/**
+ * The ticked sets as `exerciseId:setNumber`, which is how the store held them
+ * before it recorded per-set values. Assertions read better in that shape than
+ * against the set lists, and deriving it keeps them off the representation.
+ */
+const doneKeys = (run: { sets: Record<string, { done: boolean }[]> } | undefined): string[] =>
+  Object.entries(run?.sets ?? {})
+    .flatMap(([id, list]) => list.flatMap((set, i) => set.done ? [`${id}:${i + 1}`] : []))
+
 describe('startPtRun', () => {
   it('records the routine and a start time', () => {
     startPtRun(4)
     expect(ptRun.routineId).toBe(4)
     expect(ptRun.startedAt).toBeGreaterThan(0)
-    expect(ptRun.done).toEqual([])
+    expect(doneKeys(ptRun)).toEqual([])
   })
 
   it('keeps independent progress and resumes the original notes and start time', () => {
@@ -42,18 +51,18 @@ describe('startPtRun', () => {
     startPtRun(2)
 
     expect(ptRun.routineId).toBe(2)
-    expect(ptRun.done).toEqual([])
+    expect(doneKeys(ptRun)).toEqual([])
     expect(ptRun.exerciseNotes).toEqual({})
     expect(ptRun.notes).toBe('')
     togglePtSet(20, 1)
     startPtRun(1)
     expect(ptRun.startedAt).toBe(startedAt)
-    expect(ptRun.done).toEqual(['10:1'])
+    expect(doneKeys(ptRun)).toEqual(['10:1'])
     expect(ptRun.exerciseNotes).toEqual({ 10: 'note' })
     expect(ptRun.notes).toBe('session note')
     clearPtRun()
     expect(getPtRun(1)).toBeUndefined()
-    expect(getPtRun(2)?.done).toEqual(['20:1'])
+    expect(doneKeys(getPtRun(2))).toEqual(['20:1'])
   })
 })
 
@@ -65,7 +74,7 @@ describe('togglePtSet', () => {
     expect(isPtSetDone(7, 2)).toBe(true)
     togglePtSet(7, 2)
     expect(isPtSetDone(7, 2)).toBe(false)
-    expect(ptRun.done).toEqual([])
+    expect(doneKeys(ptRun)).toEqual([])
   })
 
   it('keys by exercise AND set, so set 1 of two exercises are independent', () => {
@@ -110,7 +119,7 @@ describe('clearPtRun', () => {
 
     expect(ptRun.routineId).toBeNull()
     expect(ptRun.startedAt).toBeNull()
-    expect(ptRun.done).toEqual([])
+    expect(doneKeys(ptRun)).toEqual([])
     expect(ptRun.notes).toBe('')
     expect(ptRun.exerciseNotes).toEqual({})
   })
@@ -144,9 +153,9 @@ describe('setupPtRunPersistence', () => {
     await flush()
 
     const raw = JSON.parse(localStorage.getItem('pt-run')!) as { v: number; state: Record<string, unknown> }
-    expect(raw.v).toBe(1)
+    expect(raw.v).toBe(2)
     expect(raw.state.routineId).toBe(2)
-    expect(raw.state.done).toEqual(['9:1'])
+    expect(doneKeys(raw.state as unknown as { sets: Record<string, { done: boolean }[]> })).toEqual(['9:1'])
   })
 
   it('does not throw out of the effect when the write fails', async () => {
@@ -200,14 +209,51 @@ describe('loadFromStorage', () => {
 
   it('restores a run in progress', async () => {
     localStorage.setItem('pt-run', JSON.stringify({
-      v: 1,
-      state: { routineId: 3, startedAt: 1000, done: ['4:1'], exerciseNotes: { 4: 'x' }, notes: 'n' },
+      v: 2,
+      state: {
+        routineId: 3, startedAt: 1000,
+        sets: { 4: [{ done: true, reps: 12 }] },
+        exerciseNotes: { 4: 'x' }, notes: 'n',
+      },
     }))
     const store = await import('./pt-store')
     expect(store.ptRun.routineId).toBe(3)
-    expect(store.ptRun.done).toEqual(['4:1'])
+    expect(doneKeys(store.ptRun)).toEqual(['4:1'])
+    expect(store.ptSetsFor(4)).toEqual([{ done: true, reps: 12 }])
     expect(store.ptRun.notes).toBe('n')
     expect(store.getPtExerciseNote(4)).toBe('x')
+  })
+
+  // A rehab session is done on the floor over half an hour; shipping an update
+  // in the middle of one must not cost the user the sets they already ticked.
+  it('migrates a v1 draft rather than discarding it', async () => {
+    localStorage.setItem('pt-run', JSON.stringify({
+      v: 1,
+      state: { routineId: 3, startedAt: 1000, done: ['4:2'], exerciseNotes: { 4: 'x' }, notes: 'n' },
+      paused: { 7: { routineId: 7, startedAt: 900, done: ['9:1'], exerciseNotes: {}, notes: 'p' } },
+    }))
+    const store = await import('./pt-store')
+
+    expect(store.ptRun.routineId).toBe(3)
+    expect(store.ptRun.startedAt).toBe(1000)
+    expect(store.ptRun.notes).toBe('n')
+    expect(store.getPtExerciseNote(4)).toBe('x')
+    // Set 2 was ticked, so the rebuilt list reaches it and set 1 sits unticked
+    // ahead of it — a v1 draft only ever recorded the ticks.
+    expect(store.ptSetsFor(4)).toEqual([{ done: false }, { done: true }])
+    expect(doneKeys(store.ptRun)).toEqual(['4:2'])
+    // Parked runs are persisted too, and migrate the same way.
+    expect(doneKeys(store.getPtRun(7))).toEqual(['9:1'])
+    expect(store.getPtRun(7)?.notes).toBe('p')
+  })
+
+  it('discards a draft from a version it has no migration for', async () => {
+    localStorage.setItem('pt-run', JSON.stringify({
+      v: 99,
+      state: { routineId: 3, startedAt: 1000, sets: { 4: [{ done: true }] }, exerciseNotes: {}, notes: '' },
+    }))
+    const store = await import('./pt-store')
+    expect(store.ptRun.routineId).toBeNull()
   })
 
   it('persists and restores multiple runs, including notes and start times', async () => {
@@ -224,13 +270,13 @@ describe('loadFromStorage', () => {
       await new Promise(r => setTimeout(r, 0))
       vi.resetModules()
       const restored = await import('./pt-store')
-      expect(restored.getPtRun(2)?.done).toEqual(['20:1'])
+      expect(doneKeys(restored.getPtRun(2))).toEqual(['20:1'])
       restored.startPtRun(1)
       expect(restored.ptRun.startedAt).toBe(startedAt)
-      expect(restored.ptRun.done).toEqual(['10:2'])
+      expect(doneKeys(restored.ptRun)).toEqual(['10:2'])
       expect(restored.ptRun.notes).toBe('knee notes')
       expect(restored.getPtExerciseNote(10)).toBe('lighter band')
-      expect(restored.getPtRun(2)?.done).toEqual(['20:1'])
+      expect(doneKeys(restored.getPtRun(2))).toEqual(['20:1'])
     } finally {
       dispose()
     }
@@ -243,10 +289,10 @@ describe('loadFromStorage', () => {
       paused: { 1: { routineId: 1 }, 2: { routineId: 3 }, 4: null, 5: { routineId: 5, done: 42 } },
     }))
     const store = await import('./pt-store')
-    expect(store.getPtRun(1)?.done).toEqual(['10:1'])
+    expect(doneKeys(store.getPtRun(1))).toEqual(['10:1'])
     expect(store.getPtRun(2)).toBeUndefined()
     expect(store.getPtRun(4)).toBeUndefined()
-    expect(store.getPtRun(5)?.done).toEqual([])
+    expect(doneKeys(store.getPtRun(5))).toEqual([])
   })
 
   it('returns defaults on malformed JSON', async () => {
@@ -265,7 +311,7 @@ describe('loadFromStorage', () => {
     localStorage.setItem('pt-run', JSON.stringify({ v: 1, state: [1, 2] }))
     const store = await import('./pt-store')
     expect(store.ptRun.routineId).toBeNull()
-    expect(store.ptRun.done).toEqual([])
+    expect(doneKeys(store.ptRun)).toEqual([])
   })
 
   it('drops keys outside the allowlist', async () => {
@@ -292,7 +338,7 @@ describe('loadFromStorage', () => {
     const store = await import('./pt-store')
     expect(store.ptRun.routineId).toBeNull()
     expect(store.ptRun.startedAt).toBeNull()
-    expect(store.ptRun.done).toEqual([])
+    expect(doneKeys(store.ptRun)).toEqual([])
     expect(store.ptRun.exerciseNotes).toEqual({})
     expect(store.ptRun.notes).toBe('')
   })
