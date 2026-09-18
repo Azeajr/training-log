@@ -353,6 +353,69 @@ export interface PtRunCheck {
   ptExerciseId: number
   setNumber: number
   done: boolean
+  /**
+   * What was actually done. Every field is written as given, including when it
+   * matches the prescription — see `resolvePtCheck`, which is what callers use
+   * to fill these in.
+   */
+  reps?: number | null
+  seconds?: number | null
+  distance?: number | null
+  distanceUnit?: PtDistanceUnit | null
+  weight?: number | null
+  band?: string | null
+  equipmentHeight?: number | null
+  equipmentHeightUnit?: 'in' | 'cm' | null
+}
+
+/** The prescription fields a set resolves against. */
+type PtPrescription = Pick<PtExercise,
+  'measure' | 'targetReps' | 'targetSeconds' | 'targetDistance' | 'distanceUnit' |
+  'resistanceKind' | 'resistanceWeight' | 'resistanceBand' | 'equipmentHeight' | 'equipmentHeightUnit'>
+
+/** A per-set override. Anything left undefined falls back to the prescription. */
+type PtSetActuals = Partial<Omit<PtRunCheck, 'ptExerciseId' | 'setNumber' | 'done'>>
+
+/**
+ * Pin what a set actually was, resolving anything the user did not override
+ * against the prescription.
+ *
+ * Resolved at save time and stored in full, deliberately. The prescription is
+ * editable — `savePtRoutine` updates exercises in place — so a row that merely
+ * pointed at it would silently change meaning when the routine changed, and
+ * switching an exercise's measure (which nulls the off-measure targets) would
+ * leave finished runs describing work nobody did.
+ *
+ * Only the fields belonging to the exercise's measure and resistance kind are
+ * filled; the rest are explicitly null, never undefined, because
+ * `SQLiteTable.update` drops undefined keys and would leave a stale value behind.
+ */
+export function resolvePtCheck(exercise: PtPrescription, actuals: PtSetActuals = {}): Required<PtSetActuals> {
+  const pick = <T,>(override: T | undefined, prescribed: T): T => override === undefined ? prescribed : override
+  const height = pick(actuals.equipmentHeight, exercise.equipmentHeight ?? null)
+  return {
+    reps: exercise.measure === 'reps' ? pick(actuals.reps, exercise.targetReps ?? null) : null,
+    seconds: exercise.measure === 'time' ? pick(actuals.seconds, exercise.targetSeconds ?? null) : null,
+    distance: exercise.measure === 'distance' ? pick(actuals.distance, exercise.targetDistance ?? null) : null,
+    distanceUnit: exercise.measure === 'distance' ? pick(actuals.distanceUnit, exercise.distanceUnit ?? null) : null,
+    weight: exercise.resistanceKind === 'weight' ? pick(actuals.weight, exercise.resistanceWeight ?? null) : null,
+    band: exercise.resistanceKind === 'band' ? pick(actuals.band, exercise.resistanceBand ?? null) : null,
+    equipmentHeight: height,
+    equipmentHeightUnit: height == null ? null : pick(actuals.equipmentHeightUnit, exercise.equipmentHeightUnit ?? 'in'),
+  }
+}
+
+/**
+ * What a recorded set was, for display.
+ *
+ * A row written before PT recorded anything but a tick has every actual null;
+ * those and only those fall back to the exercise's current prescription, which
+ * is the best available answer for a run that never captured its own.
+ */
+export function ptCheckActuals(check: PtRunCheck, exercise: PtPrescription): Required<PtSetActuals> {
+  const recorded = check.reps ?? check.seconds ?? check.distance ??
+    check.weight ?? check.band ?? check.equipmentHeight
+  return recorded == null ? resolvePtCheck(exercise) : resolvePtCheck(exercise, check)
 }
 
 export interface PtRunInput {
@@ -401,6 +464,14 @@ async function writePtRun(db: TrainingDB, run: PtRunInput): Promise<number> {
     ptExerciseId: c.ptExerciseId,
     setNumber: c.setNumber,
     done: c.done,
+    reps: c.reps ?? null,
+    seconds: c.seconds ?? null,
+    distance: c.distance ?? null,
+    distanceUnit: c.distanceUnit ?? null,
+    weight: c.weight ?? null,
+    band: c.band ?? null,
+    equipmentHeight: c.equipmentHeight ?? null,
+    equipmentHeightUnit: c.equipmentHeightUnit ?? null,
   })))
   if (exerciseNotes.length > 0) {
     await db.ptNotes.bulkAdd(exerciseNotes.map(n => ({ ...n, sessionId })))

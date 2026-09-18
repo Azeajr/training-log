@@ -1,37 +1,75 @@
 import { createStore, produce, reconcile, unwrap } from 'solid-js/store'
 import { batch, createEffect, createSignal } from 'solid-js'
+import type { PtDistanceUnit } from '../types/domain'
+
+// Set lists are positional and their members carry no id, so reconcile must
+// match by index. Left at its default it keys on `id`, sees undefined on every
+// member, and treats them as interchangeable.
+const RECONCILE_BY_INDEX = { key: null } as const
+
+/**
+ * One set of one exercise within a run: whether it is done, and how it differed
+ * from the prescription.
+ *
+ * Absent and null mean different things, and the difference is load-bearing.
+ * **Absent** is "not overridden" — the set is as prescribed, and resolves
+ * against the exercise at save time. **Null** is an explicit "none", which is
+ * how a step-up done at floor level records that it had no box even though the
+ * routine prescribes one. JSON omits undefined keys, so this survives a
+ * round-trip through localStorage without any extra encoding.
+ */
+export interface PtRunSet {
+  done: boolean
+  reps?: number | null
+  seconds?: number | null
+  distance?: number | null
+  distanceUnit?: PtDistanceUnit | null
+  weight?: number | null
+  band?: string | null
+  equipmentHeight?: number | null
+  equipmentHeightUnit?: 'in' | 'cm' | null
+}
 
 /**
  * The in-progress PT session, with a draft per included routine.
  *
  * Deliberately shaped unlike `workout-store`: there is no `activeSession`,
- * because a PT run has no database row until it is finished. Ticking a box
- * moves a key in `done` and nothing else, so DISCARD is a `clearPtRun()` with
+ * because a PT run has no database row until it is finished. Logging a set
+ * moves a value in `sets` and nothing else, so DISCARD is a `clearPtRun()` with
  * no row to delete and no status to reconcile — the whole store-vs-DB drift
  * class in COMMON_MISTAKES #5 has nothing to act on here.
  *
  * It still persists to localStorage, for the ordinary reason: a rehab session
  * is done on the floor with the phone locking between exercises, and a reload
- * must not lose which sets were already ticked.
+ * must not lose what was already recorded.
  */
 interface PtRunState {
   routineId: number | null
   /** Epoch ms the run began; becomes the session's date on commit. */
   startedAt: number | null
-  /** Ticked sets, as `${ptExerciseId}:${setNumber}`. */
-  done: string[]
+  /**
+   * Sets per exercise, keyed by ptExercise id (a string — JSON has no numeric
+   * keys). Position is the set number, so index 0 is set 1. The list is the
+   * authority on how many sets a run has: it starts as long as the prescription
+   * but the user can add to and delete from it.
+   */
+  sets: Record<string, PtRunSet[]>
   /** Per-exercise note, keyed by ptExercise id (as a string — JSON has no numeric keys). */
   exerciseNotes: Record<string, string>
   notes: string
 }
 
 const STORAGE_KEY = 'pt-run'
-const STORAGE_VERSION = 1
+// 2: `done: string[]` of "exerciseId:setNumber" became `sets`, which carries
+// what was actually done per set. `migrateV1` converts rather than discarding —
+// a rehab session is done on the floor and an app update mid-run must not cost
+// the user their ticks.
+const STORAGE_VERSION = 2
 
 const PERSISTED_KEYS = [
   'routineId',
   'startedAt',
-  'done',
+  'sets',
   'exerciseNotes',
   'notes',
 ] as const satisfies readonly (keyof PtRunState)[]
@@ -42,10 +80,26 @@ const isPlainObject = (v: unknown): boolean =>
 // Per-key shape checks, for the same reason workout-store has them: a
 // wrong-typed value under an allowlisted key must be dropped rather than
 // grafted onto the reactive store, where the next render would crash on it.
+const isNumOrNull = (v: unknown): boolean => v == null || typeof v === 'number'
+const isStrOrNull = (v: unknown): boolean => v == null || typeof v === 'string'
+
+// Deep, not shallow: a set list reaches the reactive store as objects the run
+// screen reads field by field, so a malformed member has to be rejected here
+// rather than crash the next render.
+const isPtRunSet = (v: unknown): boolean => {
+  if (!isPlainObject(v)) return false
+  const s = v as Record<string, unknown>
+  return typeof s.done === 'boolean'
+    && isNumOrNull(s.reps) && isNumOrNull(s.seconds) && isNumOrNull(s.distance)
+    && isStrOrNull(s.distanceUnit) && isNumOrNull(s.weight) && isStrOrNull(s.band)
+    && isNumOrNull(s.equipmentHeight) && isStrOrNull(s.equipmentHeightUnit)
+}
+
 const PERSISTED_VALIDATORS: Record<(typeof PERSISTED_KEYS)[number], (v: unknown) => boolean> = {
   routineId: v => v === null || Number.isInteger(v),
   startedAt: v => v === null || typeof v === 'number',
-  done: v => Array.isArray(v) && v.every(x => typeof x === 'string'),
+  sets: v => isPlainObject(v)
+    && Object.values(v as object).every(list => Array.isArray(list) && list.every(isPtRunSet)),
   exerciseNotes: v => isPlainObject(v) && Object.values(v as object).every(x => typeof x === 'string'),
   notes: v => typeof v === 'string',
 }
@@ -62,18 +116,43 @@ function validateState(state: unknown): Partial<PtRunState> {
   return out
 }
 
+/**
+ * v1 → v2: `done: string[]` of `${ptExerciseId}:${setNumber}` becomes `sets`.
+ *
+ * A v1 draft recorded only the ticked sets, so the lists rebuilt here reach as
+ * far as the highest tick and no further. That is not the run's real length —
+ * the run screen extends each list to the exercise's prescription on load, and
+ * a set it cannot account for stays untouched.
+ */
+function migrateV1(state: unknown): unknown {
+  if (!isPlainObject(state)) return state
+  const { done, ...rest } = state as Record<string, unknown>
+  const sets: Record<string, PtRunSet[]> = {}
+  for (const entry of Array.isArray(done) ? done : []) {
+    if (typeof entry !== 'string') continue
+    const [idPart, numberPart] = entry.split(':')
+    const setNumber = Number(numberPart)
+    if (!Number.isInteger(Number(idPart)) || !Number.isInteger(setNumber) || setNumber < 1) continue
+    const list = (sets[idPart] ??= [])
+    while (list.length < setNumber) list.push(emptySet())
+    list[setNumber - 1] = { ...emptySet(), done: true }
+  }
+  return { ...rest, sets }
+}
+
 function loadFromStorage(): { current: Partial<PtRunState>; paused: Record<string, PtRunState> } {
   const empty = { current: {}, paused: {} }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return empty
     const parsed = JSON.parse(raw) as { v?: number; state?: unknown; paused?: unknown }
-    if (parsed.v !== STORAGE_VERSION) return empty
-    const current = validateState(parsed.state)
+    if (parsed.v !== STORAGE_VERSION && parsed.v !== 1) return empty
+    const migrate = (s: unknown): unknown => parsed.v === 1 ? migrateV1(s) : s
+    const current = validateState(migrate(parsed.state))
     const paused: Record<string, PtRunState> = {}
     if (isPlainObject(parsed.paused)) {
       for (const [id, value] of Object.entries(parsed.paused as object)) {
-        const run = validateState(value)
+        const run = validateState(migrate(value))
         if (run.routineId != null && String(run.routineId) === id && run.routineId !== current.routineId) {
           paused[id] = { ...emptyState(), ...run }
         }
@@ -85,11 +164,18 @@ function loadFromStorage(): { current: Partial<PtRunState>; paused: Record<strin
   }
 }
 
-// Factory, not a shared constant: `done` is mutated in place by produce().
+/**
+ * A set as prescribed and not yet done. Factory — these are mutated by produce().
+ *
+ * Carries no override keys at all, which is what "as prescribed" means here.
+ */
+export const emptySet = (): PtRunSet => ({ done: false })
+
+// Factory, not a shared constant: `sets` is mutated in place by produce().
 const emptyState = (): PtRunState => ({
   routineId: null,
   startedAt: null,
-  done: [],
+  sets: {},
   exerciseNotes: {},
   notes: '',
 })
@@ -133,7 +219,7 @@ export function setupPtRunPersistence() {
         state: {
           routineId: ptRun.routineId,
           startedAt: ptRun.startedAt,
-          done: ptRun.done,
+          sets: ptRun.sets,
           exerciseNotes: ptRun.exerciseNotes,
           notes: ptRun.notes,
         },
@@ -150,8 +236,6 @@ export function resetPtPersistenceError(): void {
   setPtPersistenceError(null)
 }
 
-const key = (ptExerciseId: number, setNumber: number): string => `${ptExerciseId}:${setNumber}`
-
 export function startPtRun(routineId: number): void {
   if (ptRun.routineId === routineId) return
   batch(() => {
@@ -161,38 +245,63 @@ export function startPtRun(routineId: number): void {
     const resumed = pausedRuns[String(routineId)]
     const next = resumed ? structuredClone(unwrap(resumed)) : { ...emptyState(), routineId, startedAt: Date.now() }
     setPausedRuns(produce(runs => { delete runs[String(routineId)] }))
-    setPtRun(reconcile(next))
+    setPtRun(reconcile(next, RECONCILE_BY_INDEX))
   })
 }
 
 export function clearPtRun(routineId: number | null = ptRun.routineId): void {
   batch(() => {
     if (routineId !== null) setPausedRuns(produce(runs => { delete runs[String(routineId)] }))
-    if (ptRun.routineId === routineId) setPtRun(reconcile(emptyState()))
+    if (ptRun.routineId === routineId) setPtRun(reconcile(emptyState(), RECONCILE_BY_INDEX))
   })
 }
 
 /** Reset all drafts, for test isolation. */
 export function clearAllPtRuns(): void {
   batch(() => {
-    setPausedRuns(reconcile({}))
-    setPtRun(reconcile(emptyState()))
+    setPausedRuns(reconcile({}, RECONCILE_BY_INDEX))
+    setPtRun(reconcile(emptyState(), RECONCILE_BY_INDEX))
+  })
+}
+
+/** Applies `update` to whichever run owns `routineId` — the live one or a parked one. */
+function mutateRun(routineId: number | null, update: (state: PtRunState) => void): void {
+  const fn = produce(update)
+  if (routineId === ptRun.routineId) setPtRun(fn)
+  else if (routineId !== null && getPtRun(routineId)) setPausedRuns(String(routineId), fn)
+}
+
+/** The sets of one exercise, in set-number order. Empty until the run seeds them. */
+export function ptSetsFor(ptExerciseId: number, routineId = ptRun.routineId): PtRunSet[] {
+  return (routineId === null ? ptRun : getPtRun(routineId))?.sets[String(ptExerciseId)] ?? []
+}
+
+/**
+ * Grow an exercise's set list to its prescribed length, leaving what is already
+ * there alone.
+ *
+ * Called on load, and deliberately one-way: it never shrinks. A run that added a
+ * fourth set keeps it, and so does one restored from a v1 draft that only knew
+ * about the sets which had been ticked.
+ */
+export function ensurePtSets(ptExerciseId: number, count: number, routineId = ptRun.routineId): void {
+  if (ptSetsFor(ptExerciseId, routineId).length >= count) return
+  mutateRun(routineId, state => {
+    const list = (state.sets[String(ptExerciseId)] ??= [])
+    while (list.length < count) list.push(emptySet())
   })
 }
 
 export function isPtSetDone(ptExerciseId: number, setNumber: number, routineId = ptRun.routineId): boolean {
-  return (routineId === null ? ptRun : getPtRun(routineId))?.done.includes(key(ptExerciseId, setNumber)) ?? false
+  return ptSetsFor(ptExerciseId, routineId)[setNumber - 1]?.done ?? false
 }
 
 export function togglePtSet(ptExerciseId: number, setNumber: number, routineId = ptRun.routineId): void {
-  const k = key(ptExerciseId, setNumber)
-  const update = produce<PtRunState>(state => {
-    const at = state.done.indexOf(k)
-    if (at === -1) state.done.push(k)
-    else state.done.splice(at, 1)
+  mutateRun(routineId, state => {
+    const list = (state.sets[String(ptExerciseId)] ??= [])
+    while (list.length < setNumber) list.push(emptySet())
+    list[setNumber - 1].done = !list[setNumber - 1].done
   })
-  if (routineId === ptRun.routineId) setPtRun(update)
-  else if (routineId !== null && getPtRun(routineId)) setPausedRuns(String(routineId), update)
 }
 
 export function setPtExerciseNote(ptExerciseId: number, note: string, routineId = ptRun.routineId): void {

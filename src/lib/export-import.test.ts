@@ -1225,7 +1225,7 @@ describe('PT backup round trip', () => {
       date: new Date(2026, 8, 16),
       notes: 'good',
       checks: [
-        { ptExerciseId: exercise.id!, setNumber: 1, done: true },
+        { ptExerciseId: exercise.id!, setNumber: 1, done: true, distance: 60, distanceUnit: 'm', weight: 200, equipmentHeight: 12, equipmentHeightUnit: 'cm' },
         { ptExerciseId: exercise.id!, setNumber: 2, done: false },
       ],
       exerciseNotes: { [exercise.id!]: 'heavier' },
@@ -1251,6 +1251,12 @@ describe('PT backup round trip', () => {
     })
     const checks = await db.ptSetChecks.toArray()
     expect(checks.filter(c => c.done)).toHaveLength(1)
+    // What each set actually was survives too — without it in the COLS
+    // allowlist, pickCols drops these on the way back in and a restored backup
+    // silently forgets everything but the tick.
+    expect(checks.find(c => c.setNumber === 1)).toMatchObject({
+      distance: 60, distanceUnit: 'm', weight: 200, equipmentHeight: 12, equipmentHeightUnit: 'cm',
+    })
     // The boolean survives the INTEGER column round trip rather than coming
     // back as 1/0 and reading as truthy for both.
     expect(checks.every(c => typeof c.done === 'boolean')).toBe(true)

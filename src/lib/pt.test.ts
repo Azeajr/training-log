@@ -22,6 +22,8 @@ import {
   ptCleanupCount,
   normalizeVideoUrl,
   PtValidationError,
+  ptCheckActuals,
+  resolvePtCheck,
   savePtRoutine,
   unarchivePtRoutine,
   validatePtExercise,
@@ -328,6 +330,62 @@ describe('savePtRoutine', () => {
     // …but the run that performed it still renders its name.
     const detail = await getPtSessionDetail(db, sessionId)
     expect(detail!.exercises.map(e => e.exercise.name)).toEqual(['Backward sled walk'])
+  })
+})
+
+describe('recorded actuals', () => {
+  it('resolves a set against the prescription, overriding only what differs', () => {
+    const ex = validatePtExercise(repsDraft({
+      resistanceKind: 'weight', resistanceWeight: 10,
+      equipmentHeight: 6, equipmentHeightUnit: 'in',
+    }), 1, 0)
+
+    expect(resolvePtCheck(ex)).toMatchObject({ reps: 15, weight: 10, equipmentHeight: 6, equipmentHeightUnit: 'in' })
+    expect(resolvePtCheck(ex, { equipmentHeight: 12 })).toMatchObject({ reps: 15, weight: 10, equipmentHeight: 12 })
+    // Explicit null is a step taken at floor level, not "as prescribed".
+    expect(resolvePtCheck(ex, { equipmentHeight: null })).toMatchObject({ equipmentHeight: null, equipmentHeightUnit: null })
+    // Fields outside the measure and resistance kind are nulled, never left
+    // undefined — SQLiteTable.update drops undefined keys and would keep a stale
+    // value from whatever the row held before.
+    expect(resolvePtCheck(ex)).toMatchObject({ seconds: null, distance: null, distanceUnit: null, band: null })
+  })
+
+  /**
+   * The regression that decided the design: pointing a recorded set at the
+   * prescription instead of copying it means editing the routine silently
+   * rewrites history.
+   */
+  it('keeps what a run recorded when the routine is edited afterwards', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft({ targetReps: 10 })] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    const sessionId = await commitPtRun(db, {
+      routineId: id,
+      date: new Date('2026-09-10'),
+      checks: [{
+        ptExerciseId: exercise.id!, setNumber: 1, done: true,
+        ...resolvePtCheck(exercise),
+      }],
+    })
+
+    await savePtRoutine(db, {
+      id, name: 'Rehab',
+      exercises: [{ ...repsDraft({ targetReps: 25, resistanceBand: 'green' }), id: exercise.id }],
+    })
+
+    const detail = await getPtSessionDetail(db, sessionId)
+    const check = detail!.exercises[0].checks[0]
+    expect(check.reps).toBe(10)
+    expect(check.band).toBe('red')
+    expect(ptCheckActuals(check, (await getPtRoutine(db, id))!.exercises[0]))
+      .toMatchObject({ reps: 10, band: 'red' })
+  })
+
+  it('falls back to the prescription only for a row that recorded nothing', async () => {
+    const ex = validatePtExercise(repsDraft({ targetReps: 12 }), 1, 0)
+    const legacy = { ptExerciseId: 1, setNumber: 1, done: true }
+
+    expect(ptCheckActuals(legacy, ex)).toMatchObject({ reps: 12, band: 'red' })
+    expect(ptCheckActuals({ ...legacy, reps: 8 }, ex)).toMatchObject({ reps: 8 })
   })
 })
 

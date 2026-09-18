@@ -38,6 +38,10 @@ const sledDraft = (over: Partial<PtExerciseDraft> = {}): PtExerciseDraft => ({
   ...over,
 })
 
+/** The sets recorded as done, across every exercise of a run. */
+const doneSets = (run: { sets: Record<string, { done: boolean }[]> } | undefined) =>
+  Object.values(run?.sets ?? {}).flat().filter(s => s.done)
+
 function renderRun(routineId?: number) {
   const api = createConfirmation()
   window.history.pushState({}, '', routineId === undefined ? '/pt/run' : `/pt/${routineId}/run`)
@@ -80,7 +84,7 @@ describe('PtRun screen', () => {
     expect(document.getElementById(`pt-group-${knee}`)?.hasAttribute('hidden')).toBe(true)
 
     // Folding is a view concern — the run underneath it is untouched.
-    expect(getPtRun(knee)?.done).toHaveLength(1)
+    expect(doneSets(getPtRun(knee))).toHaveLength(1)
     fireEvent.click(fold)
     expect(document.getElementById(`pt-group-${knee}`)?.hasAttribute('hidden')).toBe(false)
     expect(checkbox(/Knee bends set 1/).getAttribute('aria-checked')).toBe('true')
@@ -96,8 +100,8 @@ describe('PtRun screen', () => {
     fireEvent.click(checkbox(/Band pull-apart set 2/))
     fireEvent.input(screen.getByLabelText('Notes for Knee'), { target: { value: 'knee note' } })
     fireEvent.input(screen.getByLabelText('Note for Band pull-apart'), { target: { value: 'green band' } })
-    expect(getPtRun(knee)?.done).toHaveLength(1)
-    expect(getPtRun(shoulder)?.done).toHaveLength(1)
+    expect(doneSets(getPtRun(knee))).toHaveLength(1)
+    expect(doneSets(getPtRun(shoulder))).toHaveLength(1)
     // One foldable group per routine, both open, each owning its panel.
     const folds = screen.getAllByRole('button', { expanded: true })
     expect(folds.map(f => f.getAttribute('aria-controls'))).toEqual([`pt-group-${knee}`, `pt-group-${shoulder}`])
@@ -133,8 +137,8 @@ describe('PtRun screen', () => {
     await waitFor(() => expect(toast()).toContain('disk full'))
     expect(await db.ptSessions.count()).toBe(0)
     expect(await db.ptSetChecks.count()).toBe(0)
-    expect(getPtRun(knee)?.done).toHaveLength(1)
-    expect(getPtRun(shoulder)?.done).toHaveLength(1)
+    expect(doneSets(getPtRun(knee))).toHaveLength(1)
+    expect(doneSets(getPtRun(shoulder))).toHaveLength(1)
     spy.mockRestore()
     fireEvent.click(screen.getByText('FINISH SESSION'))
     await waitFor(() => expect(ptSessionRoutineIds()).toEqual([]))
@@ -180,7 +184,7 @@ describe('PtRun screen', () => {
 
     await waitFor(() => expect(checkbox(/set 1/).getAttribute('aria-checked')).toBe('true'))
     expect(ptRun.routineId).toBe(id)
-    expect(ptRun.done).toHaveLength(1)
+    expect(doneSets(ptRun)).toHaveLength(1)
     expect(await db.ptSessions.count()).toBe(0)
     expect(await db.ptSetChecks.count()).toBe(0)
   })
@@ -229,7 +233,7 @@ describe('PtRun screen', () => {
 
     await screen.findByText('Band pull-apart')
     await waitFor(() => expect(ptRun.routineId).toBe(id))
-    expect(ptRun.done).toEqual([])
+    expect(doneSets(ptRun)).toEqual([])
   })
 
   it('writes the session, every check and the notes on FINISH', async () => {
@@ -300,7 +304,7 @@ describe('PtRun screen', () => {
 
     await waitFor(() => expect(toast()).toMatch(/could not save that run/i))
     expect(toast()).toContain('disk full')
-    expect(ptRun.done).toHaveLength(1)
+    expect(doneSets(ptRun)).toHaveLength(1)
     expect(mockNavigate).not.toHaveBeenCalled()
     spy.mockRestore()
   })
