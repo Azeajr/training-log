@@ -1,7 +1,7 @@
 import { createSignal, For, Show } from 'solid-js'
 import type { PtExercise } from '../../types/domain'
-import { formatPtResistance, formatPtTarget, resolvePtCheck } from '../../lib/pt'
-import { addPtSet, removePtSet, setPtSetFields, type PtRunSet } from '../../store/pt-store'
+import { formatPtResistance, formatPtTarget, ptActualParts, resolvePtCheck } from '../../lib/pt'
+import type { PtRunSet } from '../../store/pt-store'
 import { FieldRow } from '../forms/SetLogControls'
 import SetReadout from '../forms/SetReadout'
 import Stepper from '../forms/Stepper'
@@ -11,6 +11,14 @@ import InlineConfirm from '../ui/InlineConfirm'
 interface Props {
   exercise: PtExercise
   sets: PtRunSet[]
+  /**
+   * Apply a patch to one set. The caller owns where the sets live — the live run
+   * writes to `pt-store`, an edit of a recorded run to local state — and both
+   * route through the same pure helpers so carry-forward behaves identically.
+   */
+  onPatch: (setNumber: number, fields: Partial<PtRunSet>) => void
+  onAdd: () => void
+  onRemove: (setNumber: number) => void
 }
 
 const INPUT_CLASS = 'bg-surface border border-border text-text px-2 py-1 text-sm focus:outline-none focus:border-accent'
@@ -24,18 +32,10 @@ const INPUT_CLASS = 'bg-surface border border-border text-text px-2 py-1 text-sm
  * shows.
  */
 function describe(exercise: PtExercise, set: PtRunSet): { weight: number | null; value: string } {
-  const actual = resolvePtCheck(exercise, set)
-  const merged = {
-    ...exercise,
-    targetReps: actual.reps, targetSeconds: actual.seconds,
-    targetDistance: actual.distance, distanceUnit: actual.distanceUnit,
-    resistanceWeight: null, resistanceBand: actual.band,
-  }
-  const height = actual.equipmentHeight == null
-    ? '' : `${actual.equipmentHeight} ${actual.equipmentHeightUnit ?? 'in'} high`
+  const parts = ptActualParts(exercise, resolvePtCheck(exercise, set))
   return {
-    weight: actual.weight,
-    value: [formatPtTarget(merged), formatPtResistance(merged), height].filter(Boolean).join(' . '),
+    weight: parts.weight,
+    value: [parts.target, parts.resistance, parts.height].filter(Boolean).join(' . '),
   }
 }
 
@@ -50,11 +50,9 @@ function describe(exercise: PtExercise, set: PtRunSet): { weight: number | null;
 export default function PtSetList(props: Props) {
   const [editing, setEditing] = createSignal<number | null>(null)
   const exercise = () => props.exercise
-  const routineId = () => props.exercise.routineId
   const activeIndex = () => props.sets.findIndex(s => !s.done)
 
-  const patch = (index: number, fields: Partial<PtRunSet>) =>
-    setPtSetFields(exercise().id!, index + 1, fields, routineId())
+  const patch = (index: number, fields: Partial<PtRunSet>) => props.onPatch(index + 1, fields)
 
   // Seeded from what the set already holds, falling back to the prescription,
   // so opening the editor on an untouched set shows what it would record.
@@ -101,7 +99,7 @@ export default function PtSetList(props: Props) {
                       label="✕"
                       ariaLabel={`Remove ${exercise().name} set ${i() + 1}`}
                       confirmText="remove set?"
-                      onConfirm={() => removePtSet(exercise().id!, i() + 1, routineId())}
+                      onConfirm={() => props.onRemove(i() + 1)}
                       class="ml-auto"
                     />
                   }
@@ -189,7 +187,7 @@ export default function PtSetList(props: Props) {
       </For>
 
       <button
-        onClick={() => addPtSet(exercise().id!, routineId())}
+        onClick={() => props.onAdd()}
         class="w-full text-left mt-1 text-faint text-xs font-mono hover:text-accent tracking-widest"
       >
         + ADD SET

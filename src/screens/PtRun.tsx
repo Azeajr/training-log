@@ -14,7 +14,10 @@ import {
   getPtExerciseNote,
   getPtRun,
   ptSessionRoutineIds,
+  addPtSet,
   ensurePtSets,
+  removePtSet,
+  setPtSetFields,
   ptSetsFor,
   ptExerciseNotesForCommit,
   ptPersistenceError,
@@ -244,7 +247,13 @@ export default function PtRun() {
                         </a>
                       </Show>
 
-                      <PtSetList exercise={exercise} sets={setsOf(exercise)} />
+                      <PtSetList
+                        exercise={exercise}
+                        sets={setsOf(exercise)}
+                        onPatch={(setNumber, fields) => setPtSetFields(exercise.id!, setNumber, fields, exercise.routineId)}
+                        onAdd={() => addPtSet(exercise.id!, exercise.routineId)}
+                        onRemove={setNumber => removePtSet(exercise.id!, setNumber, exercise.routineId)}
+                      />
 
                       <SubLabel class="mb-1">NOTE</SubLabel>
                       <NotesField

@@ -100,6 +100,45 @@ test.describe('PT checklist', () => {
     await expect(page.getByText('3 x 10 reps . 10 lb', { exact: true })).toBeVisible()
   })
 
+  test('corrects a recorded run from history and keeps the correction', async ({ page }) => {
+    await page.goto('/pt/new')
+    await page.getByLabel('Routine name').fill('Knee')
+    await page.getByLabel('Exercise 1 name').fill('Step down')
+    await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await page.getByRole('button', { name: 'START', exact: true }).click()
+
+    // Log all three sets as prescribed, then finish.
+    for (const n of [1, 2, 3]) {
+      await page.getByRole('checkbox', { name: new RegExp(`Step down set ${n}`) }).click()
+    }
+    await page.getByRole('button', { name: 'FINISH', exact: true }).click()
+    await page.getByRole('button', { name: /Knee.*3\/3/ }).click()
+
+    await page.getByRole('button', { name: 'EDIT RUN', exact: true }).click()
+    const setOne = page.getByRole('checkbox', { name: /Step down set 1/ })
+    await setOne.locator('..').getByRole('button', { name: /reps/ }).click()
+    await page.getByLabel('Decrease set 1 reps').click()
+    // Wait for the stepper to actually hold 9 before logging — clicking LOG in
+    // the same tick races the change and saves the original value.
+    await expect(page.getByLabel(/Edit set 1 reps, currently 9/)).toBeVisible()
+    await page.getByRole('button', { name: 'LOG', exact: true }).click()
+    // The editor holds the correction before it is written.
+    await expect(page.getByText('× 9 reps')).toBeVisible()
+    await page.getByRole('button', { name: 'SAVE CHANGES', exact: true }).click()
+
+    // Back to the read-only detail, which is the signal the write landed.
+    await expect(page.getByRole('button', { name: 'EDIT RUN', exact: true })).toBeVisible()
+    await expect(page.getByText('9 reps')).toBeVisible()
+
+    // And it survives a reload, so it came from the database and not the view.
+    await page.reload()
+    await page.getByRole('button', { name: /Knee.*3\/3/ }).click()
+    await expect(page.getByText('STEP DOWN')).toBeVisible()
+    await expect(page.getByText('9 reps')).toBeVisible()
+    // Only set 1 changed; the other two still read as prescribed.
+    await expect(page.getByText('10 reps', { exact: true })).toHaveCount(2)
+  })
+
   test('archives a routine and restores it, keeping the run history', async ({ page }) => {
     await page.goto('/pt/new')
     await page.getByLabel('Routine name').fill('Knee block')

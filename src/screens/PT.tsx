@@ -5,6 +5,7 @@ import type { PtRoutine } from '../types/domain'
 import {
   deletePtRoutine,
   deletePtSession,
+  formatPtCheck,
   formatPtPrescription,
   getPtSessionDetail,
   listArchivedPtRoutines,
@@ -22,6 +23,7 @@ import { formatDateShort } from '../lib/format'
 import Rule from '../components/layout/Rule'
 import AsyncErrorBox from '../components/ui/AsyncErrorBox'
 import FoldGlyph from '../components/ui/FoldGlyph'
+import PtSessionEditor from '../components/pt/PtSessionEditor'
 import SectionLabel from '../components/layout/SectionLabel'
 import InlineConfirm from '../components/ui/InlineConfirm'
 
@@ -45,6 +47,7 @@ export default function PT() {
   const [history, setHistory] = createSignal<PtSessionSummary[]>([])
   const [openSession, setOpenSession] = createSignal<number | null>(null)
   const [detail, setDetail] = createSignal<PtSessionDetail | null>(null)
+  const [editing, setEditing] = createSignal(false)
 
   const read = createAsyncRead()
 
@@ -107,17 +110,31 @@ export default function PT() {
     }
   }
 
-  const toggleDetail = async (sessionId: number) => {
-    if (openSession() === sessionId) {
-      setOpenSession(null)
-      return
-    }
-    setOpenSession(sessionId)
+  /** Re-read one run's detail, and the history list its counts come from. */
+  const reopenSession = async (sessionId: number) => {
     setDetail(null)
     try {
       const loaded = await getPtSessionDetail(db, sessionId)
       // Guarded: a second tap while this one is in flight must not publish the
       // first run's exercises under the second run's heading.
+      if (openSession() === sessionId) setDetail(loaded)
+      await read.run(load)
+    } catch (err) {
+      showToast(`Could not load that run: ${message(err)}`)
+    }
+  }
+
+  const toggleDetail = async (sessionId: number) => {
+    if (openSession() === sessionId) {
+      setOpenSession(null)
+      setEditing(false)
+      return
+    }
+    setOpenSession(sessionId)
+    setEditing(false)
+    setDetail(null)
+    try {
+      const loaded = await getPtSessionDetail(db, sessionId)
       if (openSession() === sessionId) setDetail(loaded)
     } catch (err) {
       showToast(`Could not load that run: ${message(err)}`)
@@ -306,6 +323,19 @@ export default function PT() {
                   <Show when={openSession() === summary.session.id}>
                     <div id={`pt-session-${summary.session.id}`} class="pl-16 pt-2 pb-1">
                       <Show when={detail()} fallback={<p class={LOADING_CLASS}>Loading…</p>}>
+                        <Show when={!editing()} fallback={
+                          <PtSessionEditor
+                            detail={detail()!}
+                            onSaved={() => { setEditing(false); void reopenSession(summary.session.id!) }}
+                            onCancel={() => setEditing(false)}
+                          />
+                        }>
+                        <button
+                          onClick={() => setEditing(true)}
+                          class="border border-border text-muted px-3 py-1 mb-2 text-xs tracking-widest uppercase"
+                        >
+                          EDIT RUN
+                        </button>
                         <For each={detail()!.exercises}>
                           {row => (
                             <div class="mb-2">
@@ -318,6 +348,22 @@ export default function PT() {
                                 </span>
                               </div>
                               <div class="text-faint text-xs">{formatPtPrescription(row.exercise)}</div>
+                              {/* What was actually done, set by set — the
+                                  prescription above is the plan, and the two
+                                  differ whenever equipment or effort changed
+                                  mid-run. */}
+                              <For each={row.checks}>
+                                {(check, setIndex) => (
+                                  <div class="flex gap-2 text-xs">
+                                    <span class={check.done ? 'text-accent' : 'text-faint'}>
+                                      {check.done ? '[x]' : '[ ]'} {setIndex() + 1}
+                                    </span>
+                                    <span class={check.done ? 'text-text-dim' : 'text-faint'}>
+                                      {formatPtCheck(check, row.exercise)}
+                                    </span>
+                                  </div>
+                                )}
+                              </For>
                               <Show when={row.note}>
                                 <div class="text-text-dim text-xs whitespace-pre-wrap">{row.note}</div>
                               </Show>
@@ -329,6 +375,7 @@ export default function PT() {
                             <SectionLabel tone="text-faint" class="mb-1">NOTES</SectionLabel>
                             <p class="text-text-dim text-xs whitespace-pre-wrap">{detail()!.session.notes}</p>
                           </div>
+                        </Show>
                         </Show>
                       </Show>
                     </div>
