@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import { Router, Route } from '@solidjs/router'
 import PT from './PT'
 import { db } from '../db/index'
-import { archivePtRoutine, commitPtRun, getPtRoutine, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
+import { archivePtRoutine, commitPtRun, getPtRoutine, resolvePtCheck, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
 import { clearAllPtRuns as clearPtRun, getPtRun, startPtRun, togglePtSet } from '../store/pt-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
@@ -201,6 +201,40 @@ describe('PT screen', () => {
     await screen.findByText('used the green band')
     expect(document.body.textContent).toContain('2 x 15 reps . red band')
     expect(document.body.textContent).toContain('felt fine')
+  })
+
+  it('edits a recorded run in place and writes the change back', async () => {
+    const id = await savePtRoutine(db, {
+      name: 'Knee',
+      exercises: [repsDraft({ name: 'Step down', sets: 2, targetReps: 10, resistanceKind: 'none' })],
+    })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    await commitPtRun(db, {
+      routineId: id,
+      date: new Date(2026, 8, 16),
+      checks: [1, 2].map(setNumber => ({
+        ptExerciseId: exercise.id!, setNumber, done: true, ...resolvePtCheck(exercise),
+      })),
+    })
+
+    renderPT()
+    fireEvent.click(await screen.findByText('Sep 16'))
+    fireEvent.click(await screen.findByText('EDIT RUN'))
+
+    // Correct set 1 down a rep. Scoped by name: the routine list's "Include"
+    // inputs are checkboxes too.
+    const row = await screen.findByRole('checkbox', { name: /Step down set 1/ })
+    fireEvent.click(row.parentElement!.querySelector('button:not([role])')!)
+    fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
+    fireEvent.click(screen.getByText('LOG'))
+    fireEvent.click(screen.getByText('SAVE CHANGES'))
+
+    await waitFor(async () => {
+      const checks = (await db.ptSetChecks.toArray()).sort((a, b) => a.setNumber - b.setNumber)
+      expect(checks.map(c => c.reps)).toEqual([9, 10])
+    })
+    // Rewritten, not appended: still two sets for the one exercise.
+    expect(await db.ptSetChecks.count()).toBe(2)
   })
 
   it('collapses an expanded run on a second tap', async () => {

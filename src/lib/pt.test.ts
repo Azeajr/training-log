@@ -26,6 +26,7 @@ import {
   resolvePtCheck,
   savePtRoutine,
   unarchivePtRoutine,
+  updatePtSession,
   validatePtExercise,
   type PtExerciseDraft,
 } from './pt'
@@ -386,6 +387,123 @@ describe('recorded actuals', () => {
 
     expect(ptCheckActuals(legacy, ex)).toMatchObject({ reps: 12, band: 'red' })
     expect(ptCheckActuals({ ...legacy, reps: 8 }, ex)).toMatchObject({ reps: 8 })
+  })
+})
+
+describe('updatePtSession', () => {
+  const seedRun = async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft({ sets: 3 }), sledDraft()] })
+    const [reps, sled] = (await getPtRoutine(db, id))!.exercises
+    const sessionId = await commitPtRun(db, {
+      routineId: id,
+      date: new Date('2026-09-18'),
+      checks: [
+        ...[1, 2, 3].map(setNumber => ({ ptExerciseId: reps.id!, setNumber, done: true, ...resolvePtCheck(reps) })),
+        { ptExerciseId: sled.id!, setNumber: 1, done: true, ...resolvePtCheck(sled) },
+      ],
+      exerciseNotes: { [reps.id!]: 'tight' },
+    })
+    return { sessionId, reps, sled }
+  }
+
+  const setsOf = async (sessionId: number, exerciseId: number) =>
+    (await db.ptSetChecks.where('sessionId').equals(sessionId).toArray())
+      .filter(c => c.ptExerciseId === exerciseId)
+      .sort((a, b) => a.setNumber - b.setNumber)
+
+  it('rewrites one exercise and leaves the rest of the run alone', async () => {
+    const { sessionId, reps, sled } = await seedRun()
+
+    await updatePtSession(db, {
+      sessionId,
+      exercises: [{
+        ptExerciseId: reps.id!,
+        checks: [{ setNumber: 1, done: true, ...resolvePtCheck(reps, { reps: 8 }) }],
+        note: 'tight',
+      }],
+    })
+
+    expect((await setsOf(sessionId, reps.id!)).map(c => c.reps)).toEqual([8])
+    expect(await setsOf(sessionId, sled.id!)).toHaveLength(1)
+  })
+
+  /**
+   * The reason this rewrites rather than diffing by set number: renumbering
+   * survivors would transiently collide with the UNIQUE index on
+   * (sessionId, ptExerciseId, setNumber).
+   */
+  it('removes a middle set and renumbers without tripping the unique index', async () => {
+    const { sessionId, reps } = await seedRun()
+
+    await updatePtSession(db, {
+      sessionId,
+      exercises: [{
+        ptExerciseId: reps.id!,
+        checks: [
+          { setNumber: 1, done: true, ...resolvePtCheck(reps, { reps: 1 }) },
+          { setNumber: 2, done: true, ...resolvePtCheck(reps, { reps: 3 }) },
+        ],
+      }],
+    })
+
+    const rows = await setsOf(sessionId, reps.id!)
+    expect(rows.map(c => c.setNumber)).toEqual([1, 2])
+    expect(rows.map(c => c.reps)).toEqual([1, 3])
+  })
+
+  it('drops the note when an exercise is edited out of the run entirely', async () => {
+    const { sessionId, reps } = await seedRun()
+
+    await updatePtSession(db, { sessionId, exercises: [{ ptExerciseId: reps.id!, checks: [] }] })
+
+    expect(await setsOf(sessionId, reps.id!)).toHaveLength(0)
+    expect((await db.ptNotes.where('sessionId').equals(sessionId).toArray())).toHaveLength(0)
+  })
+
+  /**
+   * An import can leave checks whose exercise no longer resolves, and
+   * `getPtSessionDetail` hides them — so a caller editing what it can see must
+   * not take them with it.
+   */
+  it('leaves an orphaned check alone, having never shown it to the caller', async () => {
+    const { sessionId, reps } = await seedRun()
+    await db.ptSetChecks.add({ sessionId, ptExerciseId: 9999, setNumber: 1, done: true })
+
+    await updatePtSession(db, {
+      sessionId,
+      exercises: [{ ptExerciseId: reps.id!, checks: [{ setNumber: 1, done: true, ...resolvePtCheck(reps) }] }],
+    })
+
+    expect(await setsOf(sessionId, 9999)).toHaveLength(1)
+  })
+
+  it('updates the session note', async () => {
+    const { sessionId } = await seedRun()
+    await updatePtSession(db, { sessionId, notes: '  felt better  ', exercises: [] })
+    expect((await db.ptSessions.get(sessionId))?.notes).toBe('felt better')
+    await updatePtSession(db, { sessionId, notes: '   ', exercises: [] })
+    expect((await db.ptSessions.get(sessionId))?.notes).toBeNull()
+  })
+
+  it('refuses to empty a run, and rolls the whole edit back when it would', async () => {
+    const { sessionId, reps, sled } = await seedRun()
+
+    await expect(updatePtSession(db, {
+      sessionId,
+      exercises: [
+        { ptExerciseId: reps.id!, checks: [] },
+        { ptExerciseId: sled.id!, checks: [] },
+      ],
+    })).rejects.toThrow(PtValidationError)
+
+    // Nothing was kept: the reps sets deleted before the failing check are back.
+    expect(await setsOf(sessionId, reps.id!)).toHaveLength(3)
+    expect(await setsOf(sessionId, sled.id!)).toHaveLength(1)
+  })
+
+  it('rejects an edit to a run that is already gone', async () => {
+    await expect(updatePtSession(db, { sessionId: 4242, exercises: [] }))
+      .rejects.toThrow(PtValidationError)
   })
 })
 

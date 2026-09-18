@@ -412,6 +412,43 @@ export function resolvePtCheck(exercise: PtPrescription, actuals: PtSetActuals =
  * those and only those fall back to the exercise's current prescription, which
  * is the best available answer for a run that never captured its own.
  */
+/**
+ * A recorded set's values broken into the pieces a readout needs.
+ *
+ * One place owns how an actual is rendered, so the run screen (which puts the
+ * weight in `SetReadout`'s own slot) and the history detail (which wants one
+ * line) cannot drift apart.
+ */
+export function ptActualParts(
+  exercise: PtPrescription,
+  actuals: Required<PtSetActuals>,
+): { weight: number | null; target: string; resistance: string; height: string } {
+  const merged = {
+    ...exercise,
+    targetReps: actuals.reps, targetSeconds: actuals.seconds,
+    targetDistance: actuals.distance, distanceUnit: actuals.distanceUnit,
+    resistanceWeight: null, resistanceBand: actuals.band,
+  }
+  return {
+    weight: actuals.weight,
+    target: formatPtTarget(merged),
+    resistance: formatPtResistance(merged),
+    height: actuals.equipmentHeight == null
+      ? '' : `${actuals.equipmentHeight} ${actuals.equipmentHeightUnit ?? 'in'} high`,
+  }
+}
+
+/** One recorded set on one line: "10 lb . 10 reps . 6 in high". */
+export function formatPtCheck(check: PtRunCheck, exercise: PtPrescription): string {
+  const parts = ptActualParts(exercise, ptCheckActuals(check, exercise))
+  return [
+    parts.weight == null ? '' : `${parts.weight} lb`,
+    parts.target,
+    parts.resistance,
+    parts.height,
+  ].filter(Boolean).join(' . ')
+}
+
 export function ptCheckActuals(check: PtRunCheck, exercise: PtPrescription): Required<PtSetActuals> {
   const recorded = check.reps ?? check.seconds ?? check.distance ??
     check.weight ?? check.band ?? check.equipmentHeight
@@ -561,6 +598,90 @@ export async function getPtSessionDetail(db: TrainingDB, sessionId: number): Pro
     }))
 
   return { session, routineName: routine?.name ?? 'Deleted routine', exercises: rows }
+}
+
+/** One exercise's sets as they should stand after an edit. */
+export interface PtSessionExerciseEdit {
+  ptExerciseId: number
+  /** The complete set list. An empty list removes the exercise from the run. */
+  checks: Omit<PtRunCheck, 'ptExerciseId'>[]
+  note?: string | null
+}
+
+export interface PtSessionEdit {
+  sessionId: number
+  notes?: string | null
+  /** Only the exercises named here are touched; the rest of the run is left alone. */
+  exercises: PtSessionExerciseEdit[]
+}
+
+/**
+ * Rewrite what a recorded run says happened.
+ *
+ * Each exercise's checks are deleted and re-inserted rather than diffed by set
+ * number, because `idx_ptSetChecks_session_exercise_set` is UNIQUE: renumbering
+ * survivors after a middle set is removed would transiently collide with a row
+ * that has not moved yet. Re-inserting from scratch never holds two rows for one
+ * set number, at the cost of fresh ids — which nothing references.
+ *
+ * The delete is scoped to the (session, exercise) pairs in the payload and never
+ * to the session alone. `getPtSessionDetail` hides checks whose exercise no
+ * longer resolves and an import can create exactly those, so a session-wide
+ * delete would quietly take rows the caller never saw and could not have meant.
+ */
+export async function updatePtSession(db: TrainingDB, edit: PtSessionEdit): Promise<void> {
+  await db.transaction(async () => {
+    const session = await db.ptSessions.get(edit.sessionId)
+    if (!session) throw new PtValidationError('That run no longer exists')
+
+    if (edit.notes !== undefined) {
+      await db.ptSessions.update(edit.sessionId, { notes: (edit.notes ?? '').trim() || null })
+    }
+
+    for (const exercise of edit.exercises) {
+      const scoped = () => db.ptSetChecks
+        .where('sessionId').equals(edit.sessionId)
+        .filter(c => c.ptExerciseId === exercise.ptExerciseId)
+
+      await scoped().delete()
+      if (exercise.checks.length > 0) {
+        await db.ptSetChecks.bulkAdd(exercise.checks.map(c => ({
+          sessionId: edit.sessionId,
+          ptExerciseId: exercise.ptExerciseId,
+          setNumber: c.setNumber,
+          done: c.done,
+          reps: c.reps ?? null,
+          seconds: c.seconds ?? null,
+          distance: c.distance ?? null,
+          distanceUnit: c.distanceUnit ?? null,
+          weight: c.weight ?? null,
+          band: c.band ?? null,
+          equipmentHeight: c.equipmentHeight ?? null,
+          equipmentHeightUnit: c.equipmentHeightUnit ?? null,
+        })))
+      }
+
+      // The note follows the sets. An exercise edited down to nothing is no
+      // longer part of the run, and a note about work the run no longer records
+      // would survive as an orphan nothing renders.
+      const note = exercise.checks.length === 0 ? '' : (exercise.note ?? '').trim()
+      await db.ptNotes
+        .where('sessionId').equals(edit.sessionId)
+        .filter(n => n.ptExerciseId === exercise.ptExerciseId)
+        .delete()
+      if (note !== '') {
+        await db.ptNotes.add({ sessionId: edit.sessionId, ptExerciseId: exercise.ptExerciseId, notes: note })
+      }
+    }
+
+    // A run with nothing left in it is a delete, and should go through the path
+    // that also removes the session row rather than leaving a heading over
+    // nothing. Throwing here rolls the whole edit back.
+    const remaining = await db.ptSetChecks.where('sessionId').equals(edit.sessionId).toArray()
+    if (remaining.length === 0) {
+      throw new PtValidationError('That would empty the run — delete it instead')
+    }
+  })
 }
 
 export async function deletePtSession(db: TrainingDB, sessionId: number): Promise<void> {

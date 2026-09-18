@@ -336,34 +336,51 @@ export function setPtSetFields(
   routineId = ptRun.routineId,
 ): void {
   mutateRun(routineId, state => {
-    const list = (state.sets[String(ptExerciseId)] ??= [])
-    while (list.length < setNumber) list.push(emptySet())
-    Object.assign(list[setNumber - 1], patch)
-
-    const carried = carriedOnly(patch)
-    if (Object.keys(carried).length === 0) return
-    for (let i = setNumber; i < list.length && !list[i].done; i++) {
-      Object.assign(list[i], carried)
-    }
+    state.sets[String(ptExerciseId)] = applyPtSetPatch(state.sets[String(ptExerciseId)] ?? [], setNumber, patch)
   })
 }
 
 /** Append a set, inheriting the equipment the last one was done with. */
 export function addPtSet(ptExerciseId: number, routineId = ptRun.routineId): void {
   mutateRun(routineId, state => {
-    const list = (state.sets[String(ptExerciseId)] ??= [])
-    list.push({ ...carriedOnly(list[list.length - 1] ?? {}), done: false })
+    state.sets[String(ptExerciseId)] = withPtSetAdded(state.sets[String(ptExerciseId)] ?? [])
   })
 }
 
 /** Drop a set. The ones after it move up, so set numbers stay contiguous. */
 export function removePtSet(ptExerciseId: number, setNumber: number, routineId = ptRun.routineId): void {
   mutateRun(routineId, state => {
-    const list = state.sets[String(ptExerciseId)]
-    if (!list || setNumber < 1 || setNumber > list.length) return
-    list.splice(setNumber - 1, 1)
+    state.sets[String(ptExerciseId)] = withPtSetRemoved(state.sets[String(ptExerciseId)] ?? [], setNumber)
   })
 }
+
+/*
+ * The three edits above, as pure functions over a set list.
+ *
+ * A recorded run is edited from the PT screen against local state rather than
+ * this store, and it has to behave identically — carry-forward especially. The
+ * rule lives here once and both callers apply it.
+ */
+
+export function applyPtSetPatch(sets: PtRunSet[], setNumber: number, patch: Partial<PtRunSet>): PtRunSet[] {
+  const next = sets.map(set => ({ ...set }))
+  while (next.length < setNumber) next.push(emptySet())
+  Object.assign(next[setNumber - 1], patch)
+
+  const carried = carriedOnly(patch)
+  if (Object.keys(carried).length > 0) {
+    for (let i = setNumber; i < next.length && !next[i].done; i++) Object.assign(next[i], carried)
+  }
+  return next
+}
+
+export const withPtSetAdded = (sets: PtRunSet[]): PtRunSet[] =>
+  [...sets.map(set => ({ ...set })), { ...carriedOnly(sets[sets.length - 1] ?? {}), done: false }]
+
+export const withPtSetRemoved = (sets: PtRunSet[], setNumber: number): PtRunSet[] =>
+  setNumber < 1 || setNumber > sets.length
+    ? sets
+    : sets.filter((_, i) => i !== setNumber - 1).map(set => ({ ...set }))
 
 export function setPtExerciseNote(ptExerciseId: number, note: string, routineId = ptRun.routineId): void {
   if (routineId === ptRun.routineId) setPtRun('exerciseNotes', String(ptExerciseId), note)
