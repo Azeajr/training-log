@@ -141,9 +141,16 @@ export default function PtSetList(props: Props) {
 
               <Show when={exercise().resistanceKind === 'weight'}>
                 <FieldRow label="wt">
+                  {/* Zero is "unloaded", not "loaded with nothing" — the same
+                      reading the height field below takes, and the one
+                      `validatePtExercise` enforces on the prescription by
+                      refusing a weighted exercise with no weight. Stored as an
+                      explicit null so the set reads "× 10 reps" rather than
+                      "0lb × 10 reps", which is how a set dropped to bodyweight
+                      on an otherwise loaded exercise should read. */}
                   <Stepper
                     value={valueOf(i()).weight ?? 0}
-                    onChange={v => patch(i(), { weight: v })}
+                    onChange={v => patch(i(), { weight: v === 0 ? null : v })}
                     step={2.5} min={0} fieldLabel={`set ${i() + 1} weight`}
                   />
                 </FieldRow>

@@ -10,6 +10,7 @@ import {
   deletePtRoutine,
   deletePtSession,
   formatPtPrescription,
+  formatPtCheck,
   formatPtResistance,
   formatPtTarget,
   getPtRoutine,
@@ -345,6 +346,12 @@ describe('recorded actuals', () => {
     expect(resolvePtCheck(ex, { equipmentHeight: 12 })).toMatchObject({ reps: 15, weight: 10, equipmentHeight: 12 })
     // Explicit null is a step taken at floor level, not "as prescribed".
     expect(resolvePtCheck(ex, { equipmentHeight: null })).toMatchObject({ equipmentHeight: null, equipmentHeightUnit: null })
+    // Same for weight: a set dropped to bodyweight on an otherwise loaded
+    // exercise records no weight, which is what the prescription itself
+    // requires — `validatePtExercise` refuses a weighted exercise with none.
+    expect(resolvePtCheck(ex, { weight: null })).toMatchObject({ weight: null })
+    expect(formatPtCheck({ ptExerciseId: 1, setNumber: 1, done: true, ...resolvePtCheck(ex, { weight: null }) }, ex))
+      .toBe('15 reps . 6 in high')
     // Fields outside the measure and resistance kind are nulled, never left
     // undefined — SQLiteTable.update drops undefined keys and would keep a stale
     // value from whatever the row held before.
