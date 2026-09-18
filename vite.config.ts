@@ -2,7 +2,9 @@ import { defineConfig } from 'vitest/config'
 import solid from 'vite-plugin-solid'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { PWA_MANIFEST } from './src/pwa-manifest'
+// Extension included deliberately: Vite's native config loader, which becomes
+// the default in a later major, cannot resolve an extensionless import here.
+import { PWA_MANIFEST } from './src/pwa-manifest.ts'
 
 export default defineConfig(() => {
   return {
