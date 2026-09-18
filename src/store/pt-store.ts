@@ -304,6 +304,67 @@ export function togglePtSet(ptExerciseId: number, setNumber: number, routineId =
   })
 }
 
+/**
+ * Equipment, as opposed to effort.
+ *
+ * Swapping to a lighter band or a taller box is a change to the rest of the
+ * session, not to one set — you do not re-rig between every rep. Reps, hold time
+ * and distance are what you managed on that set alone and never carry.
+ */
+const CARRIED_FIELDS = ['weight', 'band', 'equipmentHeight', 'equipmentHeightUnit', 'distanceUnit'] as const
+
+const carriedOnly = (patch: Partial<PtRunSet>): Partial<PtRunSet> => {
+  const out: Partial<PtRunSet> = {}
+  for (const field of CARRIED_FIELDS) {
+    if (field in patch) (out as Record<string, unknown>)[field] = patch[field]
+  }
+  return out
+}
+
+/**
+ * Record what a set was, carrying an equipment change forward.
+ *
+ * The patch writes through to later sets that are not yet done, and stops at the
+ * first one that is: a set already recorded is a fact about what happened, not a
+ * default waiting to be overwritten. Sets can be completed in any order, so this
+ * is defined on done-ness rather than on position.
+ */
+export function setPtSetFields(
+  ptExerciseId: number,
+  setNumber: number,
+  patch: Partial<PtRunSet>,
+  routineId = ptRun.routineId,
+): void {
+  mutateRun(routineId, state => {
+    const list = (state.sets[String(ptExerciseId)] ??= [])
+    while (list.length < setNumber) list.push(emptySet())
+    Object.assign(list[setNumber - 1], patch)
+
+    const carried = carriedOnly(patch)
+    if (Object.keys(carried).length === 0) return
+    for (let i = setNumber; i < list.length && !list[i].done; i++) {
+      Object.assign(list[i], carried)
+    }
+  })
+}
+
+/** Append a set, inheriting the equipment the last one was done with. */
+export function addPtSet(ptExerciseId: number, routineId = ptRun.routineId): void {
+  mutateRun(routineId, state => {
+    const list = (state.sets[String(ptExerciseId)] ??= [])
+    list.push({ ...carriedOnly(list[list.length - 1] ?? {}), done: false })
+  })
+}
+
+/** Drop a set. The ones after it move up, so set numbers stay contiguous. */
+export function removePtSet(ptExerciseId: number, setNumber: number, routineId = ptRun.routineId): void {
+  mutateRun(routineId, state => {
+    const list = state.sets[String(ptExerciseId)]
+    if (!list || setNumber < 1 || setNumber > list.length) return
+    list.splice(setNumber - 1, 1)
+  })
+}
+
 export function setPtExerciseNote(ptExerciseId: number, note: string, routineId = ptRun.routineId): void {
   if (routineId === ptRun.routineId) setPtRun('exerciseNotes', String(ptExerciseId), note)
   else if (routineId !== null && getPtRun(routineId)) setPausedRuns(String(routineId), 'exerciseNotes', String(ptExerciseId), note)

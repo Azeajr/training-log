@@ -210,6 +210,51 @@ describe('PtRun screen', () => {
     await waitFor(() => expect(checkbox(/set 1/).getAttribute('aria-checked')).toBe('false'))
   })
 
+  /**
+   * The point of per-set editing: a set logged wrong is noticed while the next
+   * one is already under way, and having to finish the exercise first is how a
+   * wrong number ends up saved.
+   */
+  it('corrects an already-recorded set while a later one is still to come', async () => {
+    const id = await savePtRoutine(db, {
+      name: 'Rehab',
+      exercises: [repsDraft({ name: 'Step down', sets: 3, targetReps: 10, resistanceKind: 'none' })],
+    })
+    renderRun(id)
+    await screen.findByText('Step down')
+
+    fireEvent.click(checkbox(/Step down set 1/))
+    await waitFor(() => expect(checkbox(/Step down set 1/).getAttribute('aria-checked')).toBe('true'))
+
+    // Open set 1 again from its own readout — every set reads the same, so the
+    // row is found via its tick rather than by the shared text.
+    const row = checkbox(/Step down set 1/).parentElement!
+    fireEvent.click(within(row).getByRole('button', { name: /× 10 reps/ }))
+    fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
+    fireEvent.click(screen.getByText('LOG'))
+
+    await waitFor(() => expect(document.body.textContent).toContain('9 reps'))
+    // Set 1 stays done, and the correction did not spill onto the rest.
+    expect(checkbox(/Step down set 1/).getAttribute('aria-checked')).toBe('true')
+    expect(checkbox(/Step down set 2/).getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('adds a set beyond the prescription and removes one again', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft({ sets: 2 })] })
+    renderRun(id)
+    await screen.findByText('Band pull-apart')
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+
+    fireEvent.click(screen.getByText('+ ADD SET'))
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(3))
+    // The header counts the run's sets, not the prescription's.
+    expect(document.body.textContent).toContain('0/3')
+
+    fireEvent.click(screen.getByLabelText('Remove Band pull-apart set 3'))
+    fireEvent.click(screen.getByLabelText('Yes, remove band pull-apart set 3'))
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(2))
+  })
+
   it('resumes a run already under way for this routine', async () => {
     const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
     const exercise = (await getPtRoutine(db, id))!.exercises[0]
