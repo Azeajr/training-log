@@ -28,11 +28,16 @@ import { useConfirmation } from '../hooks/use-confirmation'
 import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
 import Rule from '../components/layout/Rule'
+import AsyncErrorBox from '../components/ui/AsyncErrorBox'
+import FoldGlyph from '../components/ui/FoldGlyph'
 import SectionLabel from '../components/layout/SectionLabel'
 import SubLabel from '../components/layout/SubLabel'
+import NotesField from '../components/forms/NotesField'
 
 const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
+
+const NOTE_CLASS = 'w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs focus:outline-none focus:border-accent resize-none'
 
 /**
  * Run selected PT routines together, keeping each routine's history separate.
@@ -155,16 +160,11 @@ export default function PtRun() {
       when={!read.error()}
       fallback={
         <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
-          <div role="alert" class="border border-danger px-3 py-2">
-            <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not load routine</div>
-            <div class="text-text-dim text-sm mb-2 break-words">{read.error()}</div>
-            <button
-              onClick={() => void read.retry()}
-              class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
-            >
-              RETRY
-            </button>
-          </div>
+          <AsyncErrorBox
+            title="Could not load routine"
+            error={read.error()!}
+            onRetry={() => void read.retry()}
+          />
         </div>
       }
     >
@@ -191,11 +191,31 @@ export default function PtRun() {
           </Show>
 
           <fieldset disabled={finishing()} class="min-w-0">
-          <For each={groups()}>{group => (
-            <details open aria-label={`${group.routine.name} routine`} class="mb-4 border border-border p-3">
-              <summary class="cursor-pointer text-text text-sm uppercase tracking-widest mb-3">
-                {group.routine.name} · {groupDone(group.exercises)}/{group.exercises.reduce((sum, ex) => sum + ex.sets, 0)} sets
-              </summary>
+          <For each={groups()}>{group => {
+            const [open, setOpen] = createSignal(true)
+            const panelId = `pt-group-${group.routine.id}`
+            const groupTotal = () => group.exercises.reduce((sum, ex) => sum + ex.sets, 0)
+            // A single routine is already named and counted by the page Rule, so
+            // grouping it under a second identical header says everything twice.
+            // The fold earns its place only once there is more than one routine
+            // to fold past.
+            const grouped = () => groups().length > 1
+            return (
+            <div class={grouped() ? 'mb-4 border border-border p-3' : undefined}>
+              <Show when={grouped()}>
+                <button
+                  onClick={() => setOpen(v => !v)}
+                  aria-expanded={open()}
+                  aria-controls={panelId}
+                  class="w-full flex items-baseline gap-2 mb-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  <span class="text-text text-sm uppercase tracking-widest">
+                    {group.routine.name} . {groupDone(group.exercises)}/{groupTotal()} sets
+                  </span>
+                  <FoldGlyph expanded={open()} class="text-faint text-xs ml-auto" />
+                </button>
+              </Show>
+              <div id={panelId} hidden={grouped() && !open()}>
                 <For each={group.exercises}>
                   {exercise => (
                     <div class="border border-border px-3 py-3 mb-3">
@@ -230,7 +250,7 @@ export default function PtRun() {
                                   formatPtResistance(exercise) ? `, ${formatPtResistance(exercise)}` : ''
                                 }`}
                                 onClick={() => togglePtSet(exercise.id!, setNumber(), exercise.routineId)}
-                                class={`border px-3 py-2 text-xs tracking-widest ${
+                                class={`border px-3 py-2 text-xs font-mono tracking-widest transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
                                   checked()
                                     ? 'border-accent text-accent bg-surface-high'
                                     : 'border-border text-muted hover:border-accent hover:text-accent'
@@ -245,13 +265,13 @@ export default function PtRun() {
                       </div>
 
                       <SubLabel class="mb-1">NOTE</SubLabel>
-                      <input
-                        type="text"
+                      <NotesField
                         value={getPtExerciseNote(exercise.id!, exercise.routineId)}
-                        onInput={e => setPtExerciseNote(exercise.id!, e.currentTarget.value, exercise.routineId)}
+                        onInput={v => setPtExerciseNote(exercise.id!, v, exercise.routineId)}
+                        rows={2}
                         placeholder="Swapped to the green band"
-                        aria-label={`Note for ${exercise.name}`}
-                        class="w-full bg-surface border border-border text-text px-2 py-1 text-sm focus:outline-none focus:border-accent"
+                        ariaLabel={`Note for ${exercise.name}`}
+                        textareaClass={NOTE_CLASS}
                       />
                     </div>
                   )}
@@ -259,17 +279,19 @@ export default function PtRun() {
 
                 <div class="mb-6">
                   <SectionLabel class="mb-1">{groups().length > 1 ? 'ROUTINE NOTES' : 'SESSION NOTES'}</SectionLabel>
-                  <textarea
+                  <NotesField
                     value={getPtRun(group.routine.id!)?.notes ?? ''}
-                    onInput={e => setPtNotes(e.currentTarget.value, group.routine.id!)}
+                    onInput={v => setPtNotes(v, group.routine.id!)}
                     rows={2}
                     placeholder="Shoulder felt better than Tuesday"
-                    aria-label={groups().length === 1 ? 'Session notes' : `Notes for ${group.routine.name}`}
-                    class="w-full bg-surface border border-border text-text px-2 py-1 text-sm focus:outline-none focus:border-accent"
+                    ariaLabel={groups().length === 1 ? 'Session notes' : `Notes for ${group.routine.name}`}
+                    textareaClass={NOTE_CLASS}
                   />
                 </div>
-            </details>
-          )}</For>
+              </div>
+            </div>
+            )
+          }}</For>
           </fieldset>
 
           <div class="flex gap-2">

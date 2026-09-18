@@ -66,6 +66,26 @@ beforeEach(async () => {
 afterEach(drain)
 
 describe('PtRun screen', () => {
+  it('folds a routine group away without losing its ticks', async () => {
+    const knee = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft({ name: 'Knee bends' })] })
+    const shoulder = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
+    startPtSession([knee, shoulder])
+    renderRun()
+    await screen.findByText('Knee bends')
+    fireEvent.click(checkbox(/Knee bends set 1/))
+
+    const fold = screen.getAllByRole('button', { expanded: true })[0]
+    fireEvent.click(fold)
+    expect(fold.getAttribute('aria-expanded')).toBe('false')
+    expect(document.getElementById(`pt-group-${knee}`)?.hasAttribute('hidden')).toBe(true)
+
+    // Folding is a view concern — the run underneath it is untouched.
+    expect(getPtRun(knee)?.done).toHaveLength(1)
+    fireEvent.click(fold)
+    expect(document.getElementById(`pt-group-${knee}`)?.hasAttribute('hidden')).toBe(false)
+    expect(checkbox(/Knee bends set 1/).getAttribute('aria-checked')).toBe('true')
+  })
+
   it('runs selected routines on one screen and saves their histories together', async () => {
     const knee = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft({ name: 'Knee bends' })] })
     const shoulder = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
@@ -78,7 +98,9 @@ describe('PtRun screen', () => {
     fireEvent.input(screen.getByLabelText('Note for Band pull-apart'), { target: { value: 'green band' } })
     expect(getPtRun(knee)?.done).toHaveLength(1)
     expect(getPtRun(shoulder)?.done).toHaveLength(1)
-    expect(document.querySelectorAll('details')).toHaveLength(2)
+    // One foldable group per routine, both open, each owning its panel.
+    const folds = screen.getAllByRole('button', { expanded: true })
+    expect(folds.map(f => f.getAttribute('aria-controls'))).toEqual([`pt-group-${knee}`, `pt-group-${shoulder}`])
 
     fireEvent.click(screen.getByText('BACK TO ROUTINES'))
     view.unmount()

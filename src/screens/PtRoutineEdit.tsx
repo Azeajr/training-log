@@ -19,6 +19,9 @@ import { useConfirmation } from '../hooks/use-confirmation'
 import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
 import Rule from '../components/layout/Rule'
+import AsyncErrorBox from '../components/ui/AsyncErrorBox'
+import FoldGlyph from '../components/ui/FoldGlyph'
+import NotesField from '../components/forms/NotesField'
 import SectionLabel from '../components/layout/SectionLabel'
 import SubLabel from '../components/layout/SubLabel'
 import Stepper from '../components/forms/Stepper'
@@ -197,16 +200,11 @@ export default function PtRoutineEdit() {
       when={!read.error()}
       fallback={
         <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
-          <div role="alert" class="border border-danger px-3 py-2">
-            <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not load routine</div>
-            <div class="text-text-dim text-sm mb-2 break-words">{read.error()}</div>
-            <button
-              onClick={() => void read.retry()}
-              class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
-            >
-              RETRY
-            </button>
-          </div>
+          <AsyncErrorBox
+            title="Could not load routine"
+            error={read.error()!}
+            onRetry={() => void read.retry()}
+          />
         </div>
       }
     >
@@ -227,13 +225,13 @@ export default function PtRoutineEdit() {
 
         <div class="mb-6">
           <SectionLabel class="mb-1">NOTES</SectionLabel>
-          <textarea
+          <NotesField
             value={notes()}
-            onInput={e => setNotes(e.currentTarget.value)}
+            onInput={setNotes}
             rows={2}
             placeholder="From the clinic, 3x/week"
-            aria-label="Routine notes"
-            class={INPUT_CLASS}
+            ariaLabel="Routine notes"
+            textareaClass={INPUT_CLASS}
           />
         </div>
 
@@ -246,12 +244,16 @@ export default function PtRoutineEdit() {
                 <button
                   onClick={() => setOpenIndex(openIndex() === index ? null : index)}
                   aria-expanded={openIndex() === index}
-                  class="flex-1 text-left min-w-0"
+                  aria-controls={`pt-exercise-${index}`}
+                  class="flex-1 text-left min-w-0 flex items-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                 >
-                  <div class="text-text text-sm uppercase tracking-widest truncate">
-                    {draft().name.trim() === '' ? `EXERCISE ${index + 1}` : draft().name}
-                  </div>
-                  <div class="text-faint text-xs">{formatPtPrescription(draft())}</div>
+                  <FoldGlyph expanded={openIndex() === index} class="text-faint text-xs shrink-0" />
+                  <span class="min-w-0">
+                    <span class="block text-text text-sm uppercase tracking-widest truncate">
+                      {draft().name.trim() === '' ? `EXERCISE ${index + 1}` : draft().name}
+                    </span>
+                    <span class="block text-faint text-xs">{formatPtPrescription(draft())}</span>
+                  </span>
                 </button>
                 <div class="flex items-center gap-1 shrink-0">
                   <button
@@ -280,7 +282,7 @@ export default function PtRoutineEdit() {
               </div>
 
               <Show when={openIndex() === index}>
-                <div class="border-t border-border px-3 py-3 space-y-3">
+                <div id={`pt-exercise-${index}`} class="border-t border-border px-3 py-3 space-y-3">
                   <div>
                     <SubLabel class="mb-1">NAME</SubLabel>
                     <input

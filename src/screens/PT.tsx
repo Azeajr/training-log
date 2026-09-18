@@ -20,6 +20,8 @@ import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
 import { formatDateShort } from '../lib/format'
 import Rule from '../components/layout/Rule'
+import AsyncErrorBox from '../components/ui/AsyncErrorBox'
+import FoldGlyph from '../components/ui/FoldGlyph'
 import SectionLabel from '../components/layout/SectionLabel'
 import InlineConfirm from '../components/ui/InlineConfirm'
 
@@ -27,6 +29,11 @@ const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
 
 const HISTORY_LIMIT = 30
+
+// One loading voice per screen. The app has several shapes of "Loading…" by
+// context (full-screen fallback vs embedded), and a screen that uses two of
+// them reads as two different screens.
+const LOADING_CLASS = 'text-muted text-xs uppercase tracking-widest'
 
 export default function PT() {
   const navigate = useNavigate()
@@ -122,16 +129,11 @@ export default function PT() {
       when={!read.error()}
       fallback={
         <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
-          <div role="alert" class="border border-danger px-3 py-2">
-            <div class="text-danger text-xs uppercase tracking-widest mb-1">Could not load PT</div>
-            <div class="text-text-dim text-sm mb-2 break-words">{read.error()}</div>
-            <button
-              onClick={() => void read.retry()}
-              class="border border-danger text-danger px-3 py-1 text-xs tracking-widest uppercase"
-            >
-              RETRY
-            </button>
-          </div>
+          <AsyncErrorBox
+            title="Could not load PT"
+            error={read.error()!}
+            onRetry={() => void read.retry()}
+          />
         </div>
       }
     >
@@ -141,7 +143,7 @@ export default function PT() {
             onClick={() => navigate('/pt/run')}
             class="block w-full text-left border border-warn text-warn px-4 py-3 text-xs tracking-widest uppercase mb-6"
           >
-            RESUME PT SESSION · {ptSessionRoutineIds().length} routine{ptSessionRoutineIds().length === 1 ? '' : 's'}
+            RESUME PT SESSION . {ptSessionRoutineIds().length} routine{ptSessionRoutineIds().length === 1 ? '' : 's'}
           </button>
         </Show>
 
@@ -149,7 +151,7 @@ export default function PT() {
 
         <Show
           when={!read.loading() || routines().length > 0}
-          fallback={<p class="text-muted text-xs uppercase tracking-widest mb-6">Loading…</p>}
+          fallback={<p class={`${LOADING_CLASS} mb-6`}>Loading…</p>}
         >
           <Show
             when={routines().length > 0}
@@ -279,8 +281,10 @@ export default function PT() {
                     <button
                       onClick={() => void toggleDetail(summary.session.id!)}
                       aria-expanded={openSession() === summary.session.id}
-                      class="flex-1 text-left flex items-center justify-between gap-3 text-sm"
+                      aria-controls={`pt-session-${summary.session.id}`}
+                      class="flex-1 text-left flex items-center justify-between gap-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                     >
+                      <FoldGlyph expanded={openSession() === summary.session.id} class="text-faint text-xs shrink-0" />
                       <span class="text-faint text-xs tracking-widest w-16 shrink-0">
                         {formatDateShort(summary.session.date)}
                       </span>
@@ -300,8 +304,8 @@ export default function PT() {
                   </div>
 
                   <Show when={openSession() === summary.session.id}>
-                    <div class="pl-16 pt-2 pb-1">
-                      <Show when={detail()} fallback={<p class="text-muted text-xs tracking-widest">Loading…</p>}>
+                    <div id={`pt-session-${summary.session.id}`} class="pl-16 pt-2 pb-1">
+                      <Show when={detail()} fallback={<p class={LOADING_CLASS}>Loading…</p>}>
                         <For each={detail()!.exercises}>
                           {row => (
                             <div class="mb-2">

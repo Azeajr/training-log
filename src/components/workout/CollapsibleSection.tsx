@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on, Show, type JSX } from 'solid-js'
 import SectionLabel from '../layout/SectionLabel'
+import FoldGlyph from '../ui/FoldGlyph'
 
 let seq = 0
 
@@ -99,7 +100,7 @@ export default function CollapsibleSection(props: Props) {
                 <span class="text-text">{props.label}</span>
                 <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
               </SectionLabel>
-              <FoldGlyph expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs ml-auto" />
+              <FoldSummary expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs ml-auto" />
             </button>
           }
         >
@@ -112,7 +113,7 @@ export default function CollapsibleSection(props: Props) {
               aria-label={`${expanded() ? 'Collapse' : 'Expand'} ${props.label}`}
               class="flex items-baseline gap-2 ml-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             >
-              <FoldGlyph expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs" />
+              <FoldSummary expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs" />
             </button>
           </div>
         </Show>
@@ -125,16 +126,15 @@ export default function CollapsibleSection(props: Props) {
 }
 
 // Summary chip + fold triangle, shared by both complete-branch layouts above.
-// Triangles, not −/+: the steppers on this page are already covered in −/+
-// glyphs, and a second meaning for the same character is confusing on screen
-// and ambiguous to anything querying by text.
-function FoldGlyph(props: { expanded: boolean; summary?: string; summaryClass: string; glyphClass: string }) {
+// The triangle itself lives in `ui/FoldGlyph` — every collapsible in the app
+// draws from the same one; the "N done" summary is this page's own.
+function FoldSummary(props: { expanded: boolean; summary?: string; summaryClass: string; glyphClass: string }) {
   return (
     <>
       <Show when={!props.expanded && props.summary}>
         <span class={props.summaryClass}>{props.summary} done</span>
       </Show>
-      <span class={props.glyphClass} aria-hidden="true">{props.expanded ? '▾' : '▸'}</span>
+      <FoldGlyph expanded={props.expanded} class={props.glyphClass} />
     </>
   )
 }
