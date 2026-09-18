@@ -2,12 +2,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createRoot } from 'solid-js'
 import {
+  addPtSet,
   clearPtRun,
   clearAllPtRuns,
   getPtRun,
   getPtExerciseNote,
+  ensurePtSets,
   isPtSetDone,
   ptExerciseNotesForCommit,
+  ptSetsFor,
+  removePtSet,
+  setPtSetFields,
   ptPersistenceError,
   ptRun,
   resetPtPersistenceError,
@@ -89,6 +94,98 @@ describe('togglePtSet', () => {
     startPtRun(1)
     togglePtSet(1, 11)
     expect(isPtSetDone(11, 1)).toBe(false)
+  })
+})
+
+describe('setPtSetFields', () => {
+  const seed = (count = 3) => { startPtRun(1); ensurePtSets(7, count) }
+
+  it('records what one set was without touching its effort on later sets', () => {
+    seed()
+    setPtSetFields(7, 1, { reps: 8 })
+    expect(ptSetsFor(7)[0]).toMatchObject({ reps: 8 })
+    // Reps are what you managed on that set, not a change to the session.
+    expect(ptSetsFor(7)[1].reps).toBeUndefined()
+  })
+
+  it('carries an equipment change forward to the sets still to come', () => {
+    seed()
+    setPtSetFields(7, 1, { equipmentHeight: 12, equipmentHeightUnit: 'cm' })
+    expect(ptSetsFor(7).map(s => s.equipmentHeight)).toEqual([12, 12, 12])
+  })
+
+  it('stops carrying at a set already done, which is a fact and not a default', () => {
+    seed(4)
+    // Recording set 3 on red carries to set 4, which is still to come.
+    setPtSetFields(7, 3, { done: true, band: 'red' })
+    expect(ptSetsFor(7).map(s => s.band)).toEqual([undefined, undefined, 'red', 'red'])
+
+    // Going back to fix set 1 reaches set 2 and stops dead at set 3: that one is
+    // already recorded, so neither it nor anything behind it is rewritten.
+    setPtSetFields(7, 1, { band: 'green' })
+    expect(ptSetsFor(7).map(s => s.band)).toEqual(['green', 'green', 'red', 'red'])
+  })
+
+  it('applies to a parked routine without disturbing the live one', () => {
+    startPtRun(1)
+    ensurePtSets(7, 2)
+    startPtRun(2)
+    ensurePtSets(9, 2)
+    setPtSetFields(7, 1, { weight: 25 }, 1)
+    expect(getPtRun(1)?.sets['7'][0]).toMatchObject({ weight: 25 })
+    expect(ptSetsFor(9)[0].weight).toBeUndefined()
+  })
+})
+
+describe('addPtSet and removePtSet', () => {
+  it('adds a set that inherits the equipment but not the effort', () => {
+    startPtRun(1)
+    ensurePtSets(7, 1)
+    setPtSetFields(7, 1, { done: true, reps: 9, weight: 20, equipmentHeight: 6, equipmentHeightUnit: 'in' })
+
+    addPtSet(7)
+
+    expect(ptSetsFor(7)).toHaveLength(2)
+    expect(ptSetsFor(7)[1]).toMatchObject({ done: false, weight: 20, equipmentHeight: 6 })
+    expect(ptSetsFor(7)[1].reps).toBeUndefined()
+  })
+
+  it('closes the gap when a middle set is removed, so numbering stays contiguous', () => {
+    startPtRun(1)
+    ensurePtSets(7, 3)
+    setPtSetFields(7, 1, { reps: 1 })
+    setPtSetFields(7, 3, { reps: 3 })
+
+    removePtSet(7, 2)
+
+    expect(ptSetsFor(7).map(s => s.reps)).toEqual([1, 3])
+  })
+
+  it('ignores a set number that is not there', () => {
+    startPtRun(1)
+    ensurePtSets(7, 2)
+    removePtSet(7, 5)
+    removePtSet(7, 0)
+    expect(ptSetsFor(7)).toHaveLength(2)
+  })
+})
+
+describe('ensurePtSets', () => {
+  it('grows to the prescription but never shrinks a run that added sets', () => {
+    startPtRun(1)
+    ensurePtSets(7, 3)
+    addPtSet(7)
+    ensurePtSets(7, 3)
+    expect(ptSetsFor(7)).toHaveLength(4)
+  })
+
+  it('leaves what is already recorded alone', () => {
+    startPtRun(1)
+    ensurePtSets(7, 1)
+    setPtSetFields(7, 1, { done: true, reps: 11 })
+    ensurePtSets(7, 3)
+    expect(ptSetsFor(7)[0]).toMatchObject({ done: true, reps: 11 })
+    expect(ptSetsFor(7)).toHaveLength(3)
   })
 })
 

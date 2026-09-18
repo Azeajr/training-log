@@ -1,12 +1,10 @@
-import { batch, createMemo, createSignal, For, Index, Show } from 'solid-js'
+import { batch, createMemo, createSignal, For, Show } from 'solid-js'
 import { useNavigate, useParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { PtExercise } from '../types/domain'
 import {
   commitPtSession,
   formatPtPrescription,
-  formatPtResistance,
-  formatPtTarget,
   getPtRoutine,
   resolvePtCheck,
   type PtRoutineDetail,
@@ -16,7 +14,6 @@ import {
   getPtExerciseNote,
   getPtRun,
   ptSessionRoutineIds,
-  isPtSetDone,
   ensurePtSets,
   ptSetsFor,
   ptExerciseNotesForCommit,
@@ -24,7 +21,6 @@ import {
   setPtExerciseNote,
   setPtNotes,
   startPtRun,
-  togglePtSet,
 } from '../store/pt-store'
 import { createAsyncRead } from '../lib/async-read'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -36,6 +32,7 @@ import FoldGlyph from '../components/ui/FoldGlyph'
 import SectionLabel from '../components/layout/SectionLabel'
 import SubLabel from '../components/layout/SubLabel'
 import NotesField from '../components/forms/NotesField'
+import PtSetList from '../components/pt/PtSetList'
 
 const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
@@ -247,32 +244,7 @@ export default function PtRun() {
                         </a>
                       </Show>
 
-                      <div class="flex flex-wrap gap-2 mb-2">
-                        <Index each={setsOf(exercise)}>
-                          {(_set, index) => {
-                            const setNumber = () => index + 1
-                            const checked = () => isPtSetDone(exercise.id!, setNumber(), exercise.routineId)
-                            return (
-                              <button
-                                role="checkbox"
-                                aria-checked={checked()}
-                                aria-label={`${exercise.name} set ${setNumber()}, ${formatPtTarget(exercise)}${
-                                  formatPtResistance(exercise) ? `, ${formatPtResistance(exercise)}` : ''
-                                }`}
-                                onClick={() => togglePtSet(exercise.id!, setNumber(), exercise.routineId)}
-                                class={`border px-3 py-2 text-xs font-mono tracking-widest transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
-                                  checked()
-                                    ? 'border-accent text-accent bg-surface-high'
-                                    : 'border-border text-muted hover:border-accent hover:text-accent'
-                                }`}
-                              >
-                                <span aria-hidden="true">{checked() ? '[x]' : '[ ]'} </span>
-                                {setNumber()}
-                              </button>
-                            )
-                          }}
-                        </Index>
-                      </div>
+                      <PtSetList exercise={exercise} sets={setsOf(exercise)} />
 
                       <SubLabel class="mb-1">NOTE</SubLabel>
                       <NotesField
