@@ -1199,9 +1199,61 @@ describe('exportPtCsv', () => {
     await commitPtRun(db, { routineId, date: new Date(), checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }] })
     await exportPtCsv(db)
     const lines = (await capturedBlob!.text()).split('\n')
-    expect(lines[0]).toMatch(/"equipment_height","equipment_height_unit"$/)
-    expect(lines[1]).toMatch(/"6.5","in"$/)
+    expect(lines[0]).toContain('"equipment_height","equipment_height_unit"')
+    expect(lines[1]).toContain('"6.5","in"')
     expect(lines[1].split(',')).toHaveLength(lines[0].split(',').length)
+  })
+
+  it('exports what each set actually was, beside what it was prescribed', async () => {
+    const { routineId, band } = await seedPt()
+    await commitPtRun(db, {
+      routineId,
+      date: new Date(),
+      checks: [
+        { ptExerciseId: band.id!, setNumber: 1, done: true, reps: 8, band: 'green', equipmentHeight: 12, equipmentHeightUnit: 'cm' },
+        { ptExerciseId: band.id!, setNumber: 2, done: true, reps: 15, band: 'red' },
+      ],
+    })
+
+    await exportPtCsv(db)
+    const lines = (await capturedBlob!.text()).split('\n')
+    const header = lines[0].split(',')
+    const cell = (line: string, column: string) => line.split(',')[header.indexOf(`"${column}"`)]
+
+    // The prescription says 15 reps on a red band; set 1 was 8 on a green one.
+    expect(cell(lines[1], 'target_reps')).toBe('"15"')
+    expect(cell(lines[1], 'actual_reps')).toBe('"8"')
+    expect(cell(lines[1], 'actual_band')).toBe('"green"')
+    expect(cell(lines[1], 'actual_equipment_height')).toBe('"12"')
+    expect(cell(lines[2], 'actual_reps')).toBe('"15"')
+  })
+
+  it('falls back to the prescription for a set recorded before actuals existed', async () => {
+    const { routineId, band } = await seedPt()
+    const sessionId = await commitPtRun(db, {
+      routineId, date: new Date(),
+      checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }],
+    })
+    // A tick-only row, as every run wrote before per-set values existed.
+    const check = (await db.ptSetChecks.where('sessionId').equals(sessionId).toArray())[0]
+    expect(check.reps).toBeNull()
+
+    await exportPtCsv(db)
+    const lines = (await capturedBlob!.text()).split('\n')
+    const header = lines[0].split(',')
+    expect(lines[1].split(',')[header.indexOf('"actual_reps"')]).toBe('"15"')
+  })
+
+  it('keeps a run with no checks the same width as every other row', async () => {
+    const { routineId } = await seedPt()
+    await db.ptSessions.add({ routineId, date: new Date(), notes: 'nothing ticked' })
+
+    await exportPtCsv(db)
+    const lines = (await capturedBlob!.text()).split('\n').filter(Boolean)
+    const header = lines[0].split(',')
+    for (const line of lines) expect(line.split(',')).toHaveLength(header.length)
+    const empty = lines.find(l => l.includes('nothing ticked'))!
+    expect(empty.split(',')[header.indexOf('"session_notes"')]).toBe('"nothing ticked"')
   })
 })
 

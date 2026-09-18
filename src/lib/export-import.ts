@@ -1,4 +1,6 @@
 import type { TrainingDB } from '../db/index'
+import type { PtExercise, PtSetCheck } from '../types/domain'
+import { ptCheckActuals } from './pt'
 import { formatDateIso } from './format'
 import { refreshTrainingMaxPresence } from './training-max'
 
@@ -363,6 +365,12 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
     'resistance_kind', 'resistance_weight_lb', 'resistance_band',
     'exercise_notes', 'session_notes',
     'equipment_height', 'equipment_height_unit',
+    // What the set actually was, beside what it was prescribed to be. Without
+    // these the sheet reads every set back off the CURRENT prescription, so a
+    // routine edited since would rewrite its own history in the export, and a
+    // set done on a taller box would be indistinguishable from one that wasn't.
+    'actual_reps', 'actual_seconds', 'actual_distance', 'actual_distance_unit',
+    'actual_weight_lb', 'actual_band', 'actual_equipment_height', 'actual_equipment_height_unit',
   ]]
 
   // Chronological, then by the routine's own exercise order, then set number —
@@ -382,7 +390,11 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
     // the only record that it happened, and dropping it would make the sheet
     // disagree with the history list about how many runs there were.
     if (sessionChecks.length === 0) {
-      rows.push([dateStr, name, '', '', '', '', '', '', '', '', '', '', '', '', session.notes ?? '', '', ''])
+      // Positional, so it has to grow with the header above — a short row here
+      // is what makes every later column slip one to the left.
+      const blanks = rows[0].length - 2
+      rows.push([dateStr, name, ...Array<string>(blanks).fill('')])
+      rows[rows.length - 1][rows[0].indexOf('session_notes')] = session.notes ?? ''
       continue
     }
 
@@ -406,12 +418,30 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
         session.notes ?? '',
         exercise?.equipmentHeight != null ? String(exercise.equipmentHeight) : '',
         exercise?.equipmentHeightUnit ?? '',
+        ...actualCells(check, exercise),
       ])
     }
   }
 
   const csv = rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n')
   triggerDownload(csv, `training-log-pt-${formatDateIso(new Date())}.csv`, 'text/csv')
+}
+
+/**
+ * The eight actual_* cells for one recorded set.
+ *
+ * Resolved through `ptCheckActuals`, so a row written before PT recorded
+ * anything but a tick still exports the prescription it was done under rather
+ * than eight blanks. An orphaned check whose exercise no longer resolves has
+ * nothing to resolve against and exports what it stored, or nothing.
+ */
+function actualCells(check: PtSetCheck, exercise: PtExercise | undefined): string[] {
+  const actuals = exercise ? ptCheckActuals(check, exercise) : check
+  const text = (v: number | string | null | undefined) => v == null ? '' : String(v)
+  return [
+    text(actuals.reps), text(actuals.seconds), text(actuals.distance), text(actuals.distanceUnit),
+    text(actuals.weight), text(actuals.band), text(actuals.equipmentHeight), text(actuals.equipmentHeightUnit),
+  ]
 }
 
 function triggerDownload(content: string, filename: string, mimeType: string): void {
