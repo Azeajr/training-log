@@ -239,6 +239,32 @@ describe('PtRun screen', () => {
     expect(checkbox(/Step down set 2/).getAttribute('aria-checked')).toBe('false')
   })
 
+  it('records a set dropped to bodyweight as carrying no weight at all', async () => {
+    const id = await savePtRoutine(db, {
+      name: 'Rehab',
+      exercises: [repsDraft({
+        name: 'Step up', sets: 2, targetReps: 10,
+        resistanceKind: 'weight', resistanceWeight: 10,
+      })],
+    })
+    renderRun(id)
+    await screen.findByText('Step up')
+
+    const row = checkbox(/Step up set 1/).parentElement!
+    expect(row.textContent).toContain('10lb')
+    fireEvent.click(within(row).getByRole('button', { name: /10 reps/ }))
+
+    // Down from 10 in 2.5 steps: zero means unloaded, not "loaded with nothing".
+    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByLabelText('Decrease set 1 weight'))
+    fireEvent.click(screen.getByText('LOG'))
+
+    await waitFor(() => expect(checkbox(/Step up set 1/).parentElement!.textContent).not.toContain('lb'))
+    // And it carries, like any other equipment change: putting the weight down
+    // is not something you undo between sets, so set 2 is unloaded too until
+    // something says otherwise.
+    expect(checkbox(/Step up set 2/).parentElement!.textContent).not.toContain('lb')
+  })
+
   it('adds a set beyond the prescription and removes one again', async () => {
     const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft({ sets: 2 })] })
     renderRun(id)
