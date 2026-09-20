@@ -1156,7 +1156,9 @@ export default function Workout() {
                       </button>
                     }
                   >
-                    <AccessoryLog accessory={acc()!} exercise={exercises().find(e => e.id === acc()!.exerciseId)} onExerciseClick={id => setHistoryExerciseId(id)} />
+                    <AccessoryLog accessory={acc()!} exercise={exercises().find(e => e.id === acc()!.exerciseId)} onExerciseClick={id => setHistoryExerciseId(id)}
+                      onBandProfileSaved={bandProfile => setExercises(list => list.map(e =>
+                        e.id === acc()!.exerciseId ? { ...e, bandProfile } : e))} />
                     <button
                       onClick={() => setPickerSlot(section)}
                       class="text-faint text-xs font-mono hover:text-accent tracking-widest pl-2"
@@ -1175,7 +1177,9 @@ export default function Workout() {
               <For each={extraAccessories()}>
                 {acc => (
                   <div data-section={`assist-extra-${acc.exerciseId}`}>
-                    <AccessoryLog accessory={acc} exercise={exercises().find(e => e.id === acc.exerciseId)} onExerciseClick={id => setHistoryExerciseId(id)} />
+                    <AccessoryLog accessory={acc} exercise={exercises().find(e => e.id === acc.exerciseId)} onExerciseClick={id => setHistoryExerciseId(id)}
+                      onBandProfileSaved={bandProfile => setExercises(list => list.map(e =>
+                        e.id === acc.exerciseId ? { ...e, bandProfile } : e))} />
                   </div>
                 )}
               </For>

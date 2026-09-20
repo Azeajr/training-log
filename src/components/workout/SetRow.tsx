@@ -66,10 +66,25 @@ export default function SetRow(props: Props) {
   const suggest = () => {
     if (props.bandProfile) applyBandLoad(suggestBandLoad(props.bandProfile, props.set.weight, settings.plates))
   }
-  createEffect(on(() => [props.bandProfile, props.set.weight, props.isActive] as const, () => {
+  createEffect(on(() => [props.bandProfile, props.set.weight, props.isActive] as const, (_now, prior) => {
     if (props.isCompleted || !props.isActive) return
     const profile = props.bandProfile
-    if (!profile) { setBandLoad(null); setBandTouched(false); return }
+    if (!profile) {
+      // Bands were just switched off. The number in the stepper is one
+      // `applyBandLoad` derived, not one the user typed, so `weightTouched` —
+      // which it set on their behalf — has to come off with it. Leaving it on
+      // stranded the row at the last effective load for the rest of the
+      // session: the stepper reappeared reading 148.5 against a prescribed
+      // 150, the plate readout came back showing plates for 148.5, and the
+      // effect below could never take the weight back because every cascade
+      // from an earlier set was still being read as the user's own edit.
+      if (prior?.[0]) {
+        setWeightTouched(false)
+        setWeight(props.set.weight)
+        props.onWeightChange?.(props.set.weight)
+      }
+      setBandLoad(null); setBandTouched(false); return
+    }
     // A deliberate choice survives the prescription moving under it. This effect
     // re-runs whenever `props.set.weight` cascades — which it does every time an
     // earlier set is edited — and re-suggesting there threw away the band the

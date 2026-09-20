@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library'
+import { createSignal } from 'solid-js'
 import AccessoryLog from './AccessoryLog'
 import { defaultBandProfile } from '../../lib/band-loading'
-import type { Exercise } from '../../types/domain'
+import type { Exercise, BandProfile } from '../../types/domain'
 import { workout, addAccessory, clearSession, type ActiveAccessory } from '../../store/workout-store'
 import { ACCESSORY_SETS } from '../../lib/calc'
 
@@ -205,4 +206,25 @@ it('records band changes per set and per drop round, carrying the last choice fo
   expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Purple')
   view.unmount()
   clearSession()
+})
+
+// `weight` only ever moves through `changeBandLoad` here, so when the profile
+// went away nothing took it off the last effective load — the stepper came back
+// reading the banded figure against the prescription and stayed there.
+it('hands the weight back to the prescription when bands are turned off', async () => {
+  addAccessory({ ...accessory([]), exerciseName: 'Pull-ups', calculatedWeight: 145 })
+  const [profile, setProfile] = createSignal<BandProfile | null>(defaultBandProfile('Pull-ups')!)
+  render(() => (
+    <AccessoryLog accessory={workout.activeAccessories[0]}
+      exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: profile() }} />
+  ))
+  // The headline load, beside the "3x10 @" label — not one of the per-set readouts.
+  const header = () => screen.getByText(/x\d+ @$/).nextElementSibling!.textContent!.replace(/[^\d.]/g, '')
+  expect(screen.getByRole('combobox', { name: 'band' })).toBeInTheDocument()
+  expect(header()).not.toBe('145')
+
+  setProfile(null)
+  await Promise.resolve()
+  expect(screen.queryByRole('combobox', { name: 'band' })).not.toBeInTheDocument()
+  expect(header()).toBe('145')
 })

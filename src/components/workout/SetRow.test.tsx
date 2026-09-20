@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, fireEvent } from '@solidjs/testing-library'
 import { createSignal } from 'solid-js'
 import { bandProfileFor, defaultBandProfile, makeBandLoad } from '../../lib/band-loading'
+import type { BandProfile } from '../../types/domain'
 import SetRow from './SetRow'
 
 const baseSet = { type: 'main' as const, setNumber: 1, weight: 100, reps: 5, isAmrap: false }
@@ -152,5 +153,55 @@ describe('band profiles are opt-in', () => {
         onLog={() => {}} onEdit={() => {}} />
     ))
     expect(queryByLabelText('Increase weight')).toBeInTheDocument()
+  })
+})
+
+describe('turning bands off mid-session', () => {
+  // `applyBandLoad` sets `weightTouched` on the user's behalf — the number in
+  // the stepper is one it derived, not one they typed. Leaving that flag on
+  // when the profile went away stranded the row at the last effective load for
+  // the rest of the session.
+  const render150 = () => {
+    const [profile, setProfile] = createSignal<BandProfile | null>(defaultBandProfile('Chin-ups')!)
+    const [prescribed, setPrescribed] = createSignal(150)
+    const reported: number[] = []
+    const view = render(() => (
+      <SetRow set={{ ...baseSet, weight: prescribed() }} isActive isCompleted={false}
+        bandProfile={profile()} onWeightChange={w => reported.push(w)}
+        onLog={() => {}} onEdit={() => {}} />
+    ))
+    const shown = () => view.getByTestId('active-weight').textContent!.replace(/[^\d.]/g, '')
+    return { setProfile, setPrescribed, reported, shown, view }
+  }
+
+  it('hands the weight back to the prescription', async () => {
+    const { setProfile, reported, shown } = render150()
+    // 191 raw − 42.5 assistance on the suggested band, not the prescribed 150.
+    expect(shown()).not.toBe('150')
+    setProfile(null)
+    await Promise.resolve()
+    expect(shown()).toBe('150')
+    // The parent was told the band figure; it has to be told the way back too.
+    expect(reported.at(-1)).toBe(150)
+  })
+
+  it('lets later cascades move the weight again', async () => {
+    const { setProfile, setPrescribed, shown } = render150()
+    setProfile(null)
+    setPrescribed(165)
+    await Promise.resolve()
+    expect(shown()).toBe('165')
+  })
+
+  it('leaves a weight the user dialled in alone', async () => {
+    // Only a DERIVED weight is handed back. Someone who turned bands off and
+    // then set a number has touched it for real.
+    const { setProfile, setPrescribed, shown, view } = render150()
+    setProfile(null)
+    await Promise.resolve()
+    fireEvent.click(view.getByLabelText('Increase weight'))
+    setPrescribed(165)
+    await Promise.resolve()
+    expect(shown()).not.toBe('165')
   })
 })

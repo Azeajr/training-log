@@ -2153,3 +2153,23 @@ it('persists effective main-lift load and the exact band setup across raw-load e
   expect((await db.sets.toArray())[0]).toMatchObject({ weight: 141, bandLoad: { rawLoad: 191 } })
   expect((await db.lifts.get(1))?.bandProfile?.rawLoad).toBe(192)
 })
+
+// Band settings write to the exercise ROW. Workout holds a copy of that row in
+// `exercises()` and does not refetch, so a save kept locally inside one
+// AccessoryLog was invisible to every other logger on the same exercise until a
+// reload — the two disagreed about whether bands were even on.
+it('a band profile saved from an accessory reaches the exercise list', async () => {
+  startSession(BENCH)
+  await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+  addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 150, loggedSets: [] })
+  renderWorkout()
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Band settings for Chinup' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /Use raw load and bands/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+  expect((await db.exercises.get(10))?.bandProfile).toMatchObject({ enabled: true, rawLoad: 191 })
+  // The logger follows the row it was saved to, without a reload.
+  expect(await screen.findByRole('combobox', { name: 'band' })).toBeInTheDocument()
+})

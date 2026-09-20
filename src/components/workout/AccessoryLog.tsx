@@ -24,11 +24,16 @@ interface Props {
   accessory: ActiveAccessory
   exercise: Exercise | undefined
   onExerciseClick?: (exerciseId: number) => void
+  // Band settings save to the exercise ROW, which the parent holds a copy of
+  // and does not refetch. Kept as a local override instead, the save was
+  // invisible to every other logger on the same exercise until a reload, so
+  // the two disagreed about whether bands were even on. The parent owns the
+  // list; this hands the new profile back to it.
+  onBandProfileSaved?: (profile: BandProfile) => void
 }
 
 export default function AccessoryLog(props: Props) {
-  const [profileOverride, setProfileOverride] = createSignal<BandProfile>()
-  const entity = () => props.exercise ? { ...props.exercise, bandProfile: profileOverride() ?? props.exercise.bandProfile } : undefined
+  const entity = () => props.exercise
   const profile = createMemo(() => bandProfileFor(entity()))
   const [bandLoad, setBandLoad] = createSignal<BandLoad | null>(null)
   const [editBandLoad, setEditBandLoad] = createSignal<BandLoad | null>(null)
@@ -53,8 +58,16 @@ export default function AccessoryLog(props: Props) {
   const [weight, setWeight] = createSignal(initWeight())
   const changeBandLoad = (load: BandLoad) => { setBandLoad(load); setWeight(effectiveBandLoad(load)) }
   const suggest = () => { if (profile()) changeBandLoad(suggestBandLoad(profile()!, props.accessory.calculatedWeight, settings.plates)) }
-  createEffect(on(profile, p => {
-    if (!p) { setBandLoad(null); return }
+  createEffect(on(profile, (p, previous) => {
+    if (!p) {
+      // Bands off. `weight` only ever moves through `changeBandLoad` here, so
+      // nothing else would ever take it off the last effective load — the
+      // stepper came back reading 148.5 against a prescribed 150 and stayed
+      // there. Back to where `initWeight` would have put it: the last logged
+      // set, or the prescription.
+      if (previous) setWeight(initWeight())
+      setBandLoad(null); return
+    }
     const last = props.accessory.loggedSets.at(-1)?.bandLoad
     const current = bandLoad() ?? last
     if (current) changeBandLoad(makeBandLoad(p, current.band, current.addedWeight))
@@ -151,7 +164,7 @@ export default function AccessoryLog(props: Props) {
           </button>
         </Show>
         <Show when={entity()}>
-          <BandSettings label="bands" entity={entity()!} kind="exercise" onSaved={setProfileOverride} />
+          <BandSettings label="bands" entity={entity()!} kind="exercise" onSaved={props.onBandProfileSaved} />
         </Show>
         <Show when={done()}>
           <button type="button" aria-expanded={expanded()} aria-controls={contentId}
