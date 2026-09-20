@@ -1,3 +1,4 @@
+import { seedBandProfiles } from '../lib/band-loading'
 import { db } from './index'
 import { SETTINGS_DEFAULTS } from '../store/settings-store'
 
@@ -84,6 +85,8 @@ async function _seedDatabase() {
       await db.exercises.update(ex.id!, { category: 'legs' })
     }
   }
+
+  await seedBandProfiles(db)
 
   // Seed settings if missing
   const settingsCount = await db.settings.count()

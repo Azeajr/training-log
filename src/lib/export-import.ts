@@ -1,3 +1,5 @@
+import { validBandLoad, validBandProfile, defaultBandProfile } from './band-loading'
+import type { BandLoad } from '../types/domain'
 import type { TrainingDB } from '../db/index'
 import type { PtExercise, PtSetCheck } from '../types/domain'
 import { ptCheckActuals } from './pt'
@@ -104,15 +106,15 @@ export async function importJson(db: TrainingDB, file: File): Promise<void> {
 // the guard prevents bad keys from reaching the INSERT, this layer just
 // gives a friendlier "ignore unknown column" experience for legacy backups.
 const COLS = {
-  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived', 'usesBarbell', 'plateMode', 'implementBase'],
+  lifts: ['id', 'name', 'order', 'progressionIncrement', 'baseWeight', 'liftType', 'archived', 'usesBarbell', 'plateMode', 'implementBase', 'bandProfile'],
   trainingMaxes: ['id', 'liftId', 'weight', 'setAt', 'source', 'cycleId'],
   cycles: ['id', 'number', 'startDate', 'endDate', 'closedThroughWeek'],
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
-  sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId'],
-  exercises: ['id', 'name', 'type', 'category', 'archived', 'usesBarbell', 'plateMode', 'implementBase'],
+  sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId', 'bandLoad'],
+  exercises: ['id', 'name', 'type', 'category', 'archived', 'usesBarbell', 'plateMode', 'implementBase', 'bandProfile'],
   liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order'],
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
-  accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance'],
+  accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance', 'dropRounds', 'bandLoad'],
   accessoryNotes: ['id', 'sessionId', 'exerciseId', 'notes'],
   assistanceDefaults: ['id', 'liftId', 'section', 'exerciseId'],
   // `hasDeloadWeek` belongs here: it was missing, so an import dropped it and
@@ -175,6 +177,23 @@ function validateImportShape(d: Record<string, unknown>): void {
           throw new Error(`Invalid backup: "sessions" has a week of ${String(r.week)}; expected 1-4`)
         }
       }
+      if (name === 'accessorySets' && r.dropRounds != null) {
+        if (!Array.isArray(r.dropRounds) || r.dropRounds.some(round =>
+          round == null || typeof round !== 'object' ||
+          !Number.isFinite(round.weight) || !Number.isInteger(round.reps) || round.reps < 0
+        )) {
+          throw new Error('Invalid backup: accessory drop rounds require finite weights and nonnegative integer reps')
+        }
+      }
+      if ((name === 'lifts' || name === 'exercises') && r.bandProfile != null && !validBandProfile(r.bandProfile)) {
+        throw new Error('Invalid backup: invalid band calibration')
+      }
+      if ((name === 'sets' || name === 'accessorySets') && r.bandLoad != null && !validBandLoad(r.bandLoad)) {
+        throw new Error('Invalid backup: invalid band load')
+      }
+      if (name === 'accessorySets' && Array.isArray(r.dropRounds) && r.dropRounds.some(round => round.bandLoad != null && !validBandLoad(round.bandLoad))) {
+        throw new Error('Invalid backup: invalid drop-round band load')
+      }
       const id = r.id
       if (id == null) continue
       const key = String(id)
@@ -232,6 +251,10 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       let parsed = parseDates<Record<string, unknown>>(pickCols(rows, COLS[key]), dates)
       // Migrate the legacy 'single_leg' category to 'legs' so importing an old
       // backup lands on the current tag set (mirrors the boot-time seed migration).
+      if (key === 'lifts' || key === 'exercises') {
+        parsed = parsed.map(r => r.bandProfile == null && typeof r.name === 'string'
+          ? { ...r, bandProfile: defaultBandProfile(r.name) } : r)
+      }
       if (key === 'exercises') {
         parsed = parsed.map(r => r.category === 'single_leg' ? { ...r, category: 'legs' } : r)
       }
@@ -280,6 +303,12 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
     ['date', 'lift', 'week', 'type', 'set_number', 'weight_lb', 'reps', 'duration_s', 'distance_m', 'is_amrap', 'session_notes', 'exercise_name', 'accessory_notes'],
   ]
 
+  const hasBands = sets.some(s => s.bandLoad) || accessorySets.some(s => s.bandLoad || s.dropRounds?.some(r => r.bandLoad))
+  if (hasBands) rows[0].push('band', 'raw_load_lb', 'band_assistance_lb', 'added_weight_lb')
+  const bandColumns = (load?: BandLoad | null): string[] => !hasBands ? [] : load
+    ? [load.band ?? 'None', String(load.rawLoad), String(load.assistance), String(load.addedWeight)]
+    : ['', '', '', '']
+
   for (const session of sessions) {
     if (session.status !== 'completed') continue
     const sessionSets = sets.filter(s => s.sessionId === session.id)
@@ -297,7 +326,7 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
         rows.push([
           dateStr, liftName, String(session.week), s.type, String(s.setNumber),
           String(s.weight), String(s.reps), '', '',
-          s.isAmrap ? 'true' : 'false', session.notes ?? '', '', '',
+          s.isAmrap ? 'true' : 'false', session.notes ?? '', '', '', ...bandColumns(s.bandLoad),
         ])
       }
       for (const a of sessionAccessorySets) {
@@ -306,8 +335,15 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
           a.weight != null ? String(a.weight) : '', a.reps != null ? String(a.reps) : '',
           a.duration != null ? String(a.duration) : '', a.distance != null ? String(a.distance) : '',
           'false', session.notes ?? '', exerciseMap[a.exerciseId] ?? String(a.exerciseId),
-          notesByExercise.get(a.exerciseId) ?? '',
+          notesByExercise.get(a.exerciseId) ?? '', ...bandColumns(a.bandLoad),
         ])
+        for (const round of a.dropRounds ?? []) {
+          rows.push([
+            dateStr, liftName, String(session.week), 'accessory_drop', String(a.setNumber),
+            String(round.weight), String(round.reps), '', '', 'false',
+            session.notes ?? '', exerciseMap[a.exerciseId] ?? String(a.exerciseId), '', ...bandColumns(round.bandLoad),
+          ])
+        }
       }
       // A note-only accessory (no logged sets) still gets a row — otherwise
       // its note would exist in the JSON backup but silently vanish from CSV.
@@ -321,6 +357,7 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
     }
   }
 
+  if (hasBands) for (const row of rows) while (row.length < rows[0].length) row.push('')
   const csv = rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n')
   triggerDownload(
     csv,

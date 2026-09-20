@@ -67,6 +67,7 @@ export default function LiftSetsByType(props: Props) {
                   alignWeight
                   tone="text-text-dim"
                   class="pl-2"
+                  bandLoad={s.bandLoad}
                   weight={s.weight}
                   value={`${s.reps}`}
                   badges={s.isAmrap ? <span class="text-warn ml-1">AMRAP</span> : undefined}

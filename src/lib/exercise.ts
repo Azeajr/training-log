@@ -1,3 +1,4 @@
+import { defaultBandProfile } from './band-loading'
 import type { TrainingDB } from '../db/index'
 import type { ExerciseCategory, PlateMode } from '../types/domain'
 import { syncAssistanceDefaultsForCategory } from './assistance'
@@ -35,7 +36,7 @@ export async function createExercise(
   const trimmedName = name.trim()
   await assertUniqueExerciseName(db, trimmedName)
   try {
-    return await db.exercises.add({ name: trimmedName, type, category })
+    return await db.exercises.add({ name: trimmedName, type, category, bandProfile: defaultBandProfile(trimmedName) })
   } catch (err) {
     if (isNameConflict(err)) throw new ExerciseNameConflictError(trimmedName)
     throw err

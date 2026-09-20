@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest'
-import { render, screen, fireEvent } from '@solidjs/testing-library'
+import { describe, it, expect, afterEach } from 'vitest'
+import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library'
 import AccessoryLog from './AccessoryLog'
 import type { Exercise } from '../../types/domain'
-import type { ActiveAccessory } from '../../store/workout-store'
+import { workout, addAccessory, clearSession, type ActiveAccessory } from '../../store/workout-store'
+import { ACCESSORY_SETS } from '../../lib/calc'
 
 const TIMED: Exercise = { id: 1, name: 'Plank', type: 'timed', category: 'core' }
 
@@ -127,4 +128,75 @@ describe('AccessoryLog before its exercise resolves (F56)', () => {
     expect(screen.queryByRole('button', { name: /Increase reps/ })).toBeNull()
     expect(screen.getByRole('button', { name: /Increase .*minutes/ })).toBeInTheDocument()
   })
+})
+
+
+describe('assistance completion and drop rounds', () => {
+  afterEach(() => { cleanup(); clearSession() })
+  const setup = (count = 0) => {
+    addAccessory(accessory(Array.from({ length: count }, (_, i) => ({
+      setNumber: i + 1, weight: 0, reps: 10, duration: null, distance: null,
+    }))))
+    return render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ ...TIMED, type: 'reps' }} />)
+  }
+
+  it('collapses on completion, reopens for an extra set, and collapses again', () => {
+    setup(ACCESSORY_SETS - 1)
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    expect(screen.getByRole('button', { name: 'Expand Plank' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: '+ ADD SET' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Plank' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ ADD SET' }))
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    expect(workout.activeAccessories[0].loggedSets).toHaveLength(ACCESSORY_SETS + 1)
+    expect(screen.getByRole('button', { name: 'Expand Plank' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('starts completed exercises collapsed and reopens when undone below the target', () => {
+    setup(ACCESSORY_SETS)
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Plank' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo last Plank set' }))
+    fireEvent.click(screen.getByRole('button', { name: /Yes/ }))
+    expect(screen.getByRole('button', { name: 'LOG' })).toBeVisible()
+    expect(screen.queryByText('Complete')).toBeNull()
+  })
+
+  it('keeps ordinary weight entry nonnegative', () => {
+    setup()
+    expect(screen.getByRole('button', { name: 'Decrease weight' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    expect(workout.activeAccessories[0].loggedSets[0].weight).toBe(0)
+  })
+
+  it('keeps any number of drop rounds in one set and preserves them when editing', () => {
+    setup()
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Increase drop 1 weight' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease drop 2 reps' }))
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    const sets = () => workout.activeAccessories[0].loggedSets
+    expect(sets()).toHaveLength(1)
+    expect(sets()[0].dropRounds).toEqual([{ weight: 2.5, reps: 10, bandLoad: null }, { weight: 0, reps: 9, bandLoad: null }, { weight: 0, reps: 10, bandLoad: null }])
+    fireEvent.click(screen.getByRole('button', { name: /Set 1:/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove drop 3' }))
+    fireEvent.click(screen.getByRole('button', { name: 'SAVE' }))
+    expect(sets()[0].dropRounds).toHaveLength(2)
+    expect(sets()[0].dropRounds?.[0].weight).toBe(2.5)
+  })
+})
+
+
+it('records band changes per set and per drop round, carrying the last choice forward', () => {
+  addAccessory({ ...accessory([]), exerciseName: 'Pull-ups', calculatedWeight: 145 })
+  const view = render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ id: 1, name: 'Pull-ups', type: 'reps' }} />)
+  expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Green')
+  fireEvent.change(screen.getByRole('combobox', { name: 'band' }), { target: { value: 'Purple' } })
+  fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
+  expect(screen.getByRole('combobox', { name: 'drop 1 band' })).toHaveValue('Purple')
+  fireEvent.change(screen.getByRole('combobox', { name: 'drop 1 band' }), { target: { value: 'Green' } })
+  fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+  expect(workout.activeAccessories[0].loggedSets[0]).toMatchObject({ weight: 160, bandLoad: { band: 'Purple', assistance: 31 }, dropRounds: [{ weight: 145, bandLoad: { band: 'Green' } }] })
+  expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Purple')
+  view.unmount()
+  clearSession()
 })

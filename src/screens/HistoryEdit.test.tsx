@@ -861,3 +861,18 @@ describe('HistoryEdit — cross sets', () => {
     expect(sets.find(s => s.liftId === rowId)?.reps).toBe(8)
   })
 })
+
+
+it('edits recorded band loads without recalibrating untouched rounds', async () => {
+  const { sessionId } = await seedSession()
+  const exerciseId = await db.exercises.add({ name: 'Chin-ups', type: 'reps' })
+  const bandLoad = { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 }
+  const id = await db.accessorySets.add({ sessionId, exerciseId, setNumber: 1, weight: 145, reps: 10, duration: null, distance: null, bandLoad,
+    dropRounds: [{ weight: 145, reps: 8, bandLoad }, { weight: 85, reps: 6, bandLoad: { ...bandLoad, band: 'Orange', assistance: 104 } }] })
+  renderHistoryEdit(sessionId)
+  fireEvent.click(await screen.findByRole('button', { name: 'Increase drop 1 added weight' }))
+  fireEvent.click(screen.getByText('SAVE'))
+  await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
+  expect(await db.accessorySets.get(id)).toMatchObject({ weight: 145, bandLoad,
+    dropRounds: [{ weight: 145, bandLoad: { ...bandLoad, addedWeight: 2.5 } }, { weight: 85, bandLoad: { ...bandLoad, band: 'Orange', assistance: 104 } }] })
+})

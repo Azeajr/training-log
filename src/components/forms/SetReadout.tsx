@@ -1,7 +1,9 @@
+import type { BandLoad } from '../../types/domain'
 import type { JSX } from 'solid-js'
 import { Show } from 'solid-js'
 
 interface Props {
+  bandLoad?: BandLoad | null
   weight: number | null | undefined
   // Pre-formatted value: reps ("5"), AMRAP ("5+"), time ("30s"), distance
   // ("100ft"), or "" to omit the "× value" entirely.
@@ -28,7 +30,7 @@ export default function SetReadout(props: Props) {
   const lg = () => props.size === 'lg'
   const hover = () => (props.onClick ? 'hover:text-text-dim' : '')
   const rowClass = () =>
-    `flex gap-3 ${lg() ? 'items-baseline' : 'items-center text-sm'} ${props.tone ?? (lg() ? 'text-text' : 'text-muted')} ${props.class ?? ''}`
+    `flex flex-wrap gap-3 ${lg() ? 'items-baseline' : 'items-center text-sm'} ${props.tone ?? (lg() ? 'text-text' : 'text-muted')} ${props.class ?? ''}`
 
   // The readout itself, without the trailing slot. Kept separate because the
   // trailing slot holds an InlineConfirm at the real call sites, and a <button>
@@ -48,6 +50,9 @@ export default function SetReadout(props: Props) {
       <Show when={props.value !== ''}>
         <span class={`${lg() ? 'text-xl text-text' : ''} ${hover()}`}>× {props.value}</span>
       </Show>
+      <Show when={props.bandLoad}>
+        <span class="text-faint text-xs">{props.bandLoad!.band ?? 'Unassisted'} · raw {props.bandLoad!.rawLoad}lb · +{props.bandLoad!.addedWeight}lb</span>
+      </Show>
       {props.badges}
     </>
   )
@@ -66,7 +71,7 @@ export default function SetReadout(props: Props) {
         <button
           type="button"
           onClick={() => props.onClick!()}
-          class={`flex gap-3 ${lg() ? 'items-baseline' : 'items-center'} text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+          class={`flex flex-wrap gap-3 ${lg() ? 'items-baseline' : 'items-center'} text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
         >
           {readout()}
         </button>

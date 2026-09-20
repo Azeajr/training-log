@@ -1,7 +1,9 @@
+import BandLoadControls from '../components/forms/BandLoadControls'
+import { bandProfileFor, effectiveBandLoad } from '../lib/band-loading'
 import { createSignal, onMount, For, Index, Show } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
-import type { Exercise } from '../types/domain'
+import type { Exercise, DropRound, BandLoad, BandProfile } from '../types/domain'
 import { SET_TYPE_EDIT_ORDER } from '../lib/calc'
 import { formatDateLong } from '../lib/format'
 import DurationInput from '../components/forms/DurationInput'
@@ -9,11 +11,13 @@ import Rule from '../components/layout/Rule'
 import SectionLabel from '../components/layout/SectionLabel'
 import Stepper from '../components/forms/Stepper'
 import NotesField from '../components/forms/NotesField'
+import DropRoundsEditor from '../components/forms/DropRoundsEditor'
 import Modal from '../components/modals/Modal'
 
 type PickerMode = { kind: 'add' } | { kind: 'swap'; accIdx: number } | null
 
 interface EditSet {
+  bandLoad?: BandLoad | null
   id: number
   type: string
   /** The movement a cross set trained; absent on every other type. */
@@ -25,6 +29,8 @@ interface EditSet {
 }
 
 interface EditAccSet {
+  bandLoad?: BandLoad | null
+  dropRounds?: DropRound[] | null
   id?: number
   setNumber: number
   weight: number | null
@@ -54,6 +60,8 @@ export default function HistoryEdit() {
   })()
 
   const [sessionInfo, setSessionInfo] = createSignal<{ liftName: string; week: number; date: string } | null>(null)
+  const [liftProfiles, setLiftProfiles] = createSignal<Map<number, BandProfile | null>>(new Map())
+  const [exerciseProfiles, setExerciseProfiles] = createSignal<Map<number, BandProfile | null>>(new Map())
   const [liftNames, setLiftNames] = createSignal<Map<number, string>>(new Map())
   const [liftId, setLiftId] = createSignal<number | null>(null)
   const [editSets, setEditSets] = createSignal<EditSet[]>([])
@@ -96,7 +104,9 @@ export default function HistoryEdit() {
     // distinguished by nothing but their liftId, so merged under a bare CROSS
     // heading the user cannot tell which row is which — and editing the wrong
     // one is data corruption, not just a confusing label (F10).
-    setLiftNames(new Map((await db.lifts.toArray()).map(l => [l.id!, l.name])))
+    const allLifts = await db.lifts.toArray()
+    setLiftNames(new Map(allLifts.map(l => [l.id!, l.name])))
+    setLiftProfiles(new Map(allLifts.map(l => [l.id!, bandProfileFor(l)])))
 
     setEditSets(dbSets.map(s => ({
       id: s.id!,
@@ -104,6 +114,7 @@ export default function HistoryEdit() {
       liftId: s.liftId,
       setNumber: s.setNumber,
       weight: s.weight,
+      bandLoad: s.bandLoad ?? null,
       reps: s.reps,
       isAmrap: s.isAmrap,
     })))
@@ -111,6 +122,7 @@ export default function HistoryEdit() {
     const dbAccSets = await db.accessorySets.where('sessionId').equals(sid).toArray()
     const dbAccNotes = await db.accessoryNotes.where('sessionId').equals(sid).toArray()
     const allExercises = await db.exercises.toArray()
+    setExerciseProfiles(new Map(allExercises.map(e => [e.id!, bandProfileFor(e)])))
     const notesByExercise = new Map(dbAccNotes.map(n => [n.exerciseId, n.notes]))
 
     const grouped = new Map<number, EditAccSet[]>()
@@ -120,9 +132,11 @@ export default function HistoryEdit() {
         id: s.id,
         setNumber: s.setNumber,
         weight: s.weight,
+        bandLoad: s.bandLoad ?? null,
         reps: s.reps,
         duration: s.duration,
         distance: s.distance,
+        dropRounds: s.dropRounds ?? null,
       })
     }
     // An accessory whose only footprint is a note (no logged sets) still needs
@@ -261,6 +275,8 @@ export default function HistoryEdit() {
       if (old?.id != null) {
         await db.accessorySets.update(old.id, {
           weight: s.weight, reps: s.reps, duration: s.duration, distance: s.distance,
+          bandLoad: s.bandLoad ?? null,
+          dropRounds: s.dropRounds ?? null,
         })
       } else {
         toInsert.push(s)
@@ -277,9 +293,11 @@ export default function HistoryEdit() {
         exerciseId: acc.exerciseId,
         setNumber: s.setNumber,
         weight: s.weight,
+        bandLoad: s.bandLoad ?? null,
         reps: s.reps,
         duration: s.duration,
         distance: s.distance,
+        dropRounds: s.dropRounds ?? null,
       })))
     }
 
@@ -302,7 +320,7 @@ export default function HistoryEdit() {
     try {
       await db.transaction(async () => {
         await Promise.all(editSets().map(s =>
-          db.sets.update(s.id, { weight: s.weight, reps: s.reps })
+          db.sets.update(s.id, { weight: s.weight, reps: s.reps, bandLoad: s.bandLoad ?? null })
         ))
         for (const exId of deletedAccessoryIds()) {
           await db.accessorySets
@@ -366,7 +384,10 @@ export default function HistoryEdit() {
                     <Index each={rows()}>
                       {row => (
                         <div class="flex items-center gap-2 py-1.5 flex-wrap">
-                          <Stepper value={row().s.weight} onChange={v => updateSet(row().i, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />
+                          <Show when={row().s.bandLoad} fallback={<Stepper value={row().s.weight} onChange={v => updateSet(row().i, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />}>
+                            <BandLoadControls profile={liftProfiles().get(row().s.liftId ?? liftId()!)} value={row().s.bandLoad!}
+                              onChange={bandLoad => setEditSets(prev => prev.map((s, i) => i === row().i ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s))} />
+                          </Show>
                           <span class="text-muted text-xs">lb ×</span>
                           <Stepper value={row().s.reps} onChange={v => updateSet(row().i, 'reps', v)} step={1} min={0} fieldLabel="reps" />
                           <Show when={row().s.isAmrap}>
@@ -418,14 +439,32 @@ export default function HistoryEdit() {
                         <span class="text-muted text-xs w-10">Set {setRow().setNumber}</span>
                         <Show when={accAcc().exerciseType === 'reps'}>
                           <>
-                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />
+                            <Show when={setRow().bandLoad} fallback={<Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />}>
+                              <BandLoadControls profile={exerciseProfiles().get(accAcc().exerciseId)} value={setRow().bandLoad!}
+                                onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />
+                            </Show>
                             <span class="text-muted text-xs">lb ×</span>
                             <Stepper value={setRow().reps ?? 0} onChange={v => updateAccSet(ai, si, 'reps', v)} step={1} min={0} fieldLabel="reps" />
+                            <div class="w-full">
+                              <DropRoundsEditor
+                                profile={exerciseProfiles().get(accAcc().exerciseId)}
+                                bandLoad={setRow().bandLoad}
+                                rounds={setRow().dropRounds ?? []}
+                                weight={setRow().weight ?? 0}
+                                reps={setRow().reps ?? 0}
+                                onChange={rounds => setEditAccessories(prev => prev.map((acc, idx) => idx === ai
+                                  ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, dropRounds: rounds } : s) }
+                                  : acc))}
+                              />
+                            </div>
                           </>
                         </Show>
                         <Show when={accAcc().exerciseType === 'timed'}>
                           <>
-                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />
+                            <Show when={setRow().bandLoad} fallback={<Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />}>
+                              <BandLoadControls profile={exerciseProfiles().get(accAcc().exerciseId)} value={setRow().bandLoad!}
+                                onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />
+                            </Show>
                             <span class="text-muted text-xs">lb ×</span>
                             <DurationInput
                               value={setRow().duration}
@@ -436,7 +475,10 @@ export default function HistoryEdit() {
                         </Show>
                         <Show when={accAcc().exerciseType === 'distance'}>
                           <>
-                            <Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />
+                            <Show when={setRow().bandLoad} fallback={<Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />}>
+                              <BandLoadControls profile={exerciseProfiles().get(accAcc().exerciseId)} value={setRow().bandLoad!}
+                                onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />
+                            </Show>
                             <span class="text-muted text-xs">lb ×</span>
                             <Stepper value={setRow().distance ?? 0} onChange={v => updateAccSet(ai, si, 'distance', v)} step={1} min={0} fieldLabel="distance" />
                           </>

@@ -1,5 +1,7 @@
-import { createSignal, createEffect, Show, Switch, Match } from 'solid-js'
-import type { Set } from '../../types/domain'
+import { createSignal, createEffect, on, Show, Switch, Match } from 'solid-js'
+import type { Set, BandLoad, BandProfile } from '../../types/domain'
+import BandLoadControls from '../forms/BandLoadControls'
+import { effectiveBandLoad, suggestBandLoad } from '../../lib/band-loading'
 import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../../lib/calc'
 import { estimated1RM } from '../../lib/calc'
@@ -17,9 +19,12 @@ interface Props {
   isCompleted: boolean
   loggedReps?: number
   loggedWeight?: number
+  bandProfile?: BandProfile | null
+  loggedBandLoad?: BandLoad | null
+  previousBandLoad?: BandLoad | null
   amrapTargets?: AmrapTarget[]
-  onLog: (reps: number, weight: number) => void
-  onEdit: (reps: number, weight: number) => void
+  onLog: (reps: number, weight: number, bandLoad?: BandLoad | null) => void
+  onEdit: (reps: number, weight: number, bandLoad?: BandLoad | null) => void
   onWeightChange?: (weight: number) => void
   onDelete?: () => void
   // Resolved plate-loading for this set, or null/undefined for no readout
@@ -45,6 +50,26 @@ export default function SetRow(props: Props) {
   const [editReps, setEditReps] = createSignal(props.loggedReps ?? props.set.reps)
   const [editWeight, setEditWeight] = createSignal(props.loggedWeight ?? props.set.weight)
 
+  const [bandLoad, setBandLoad] = createSignal<BandLoad | null>(null)
+  const [editBandLoad, setEditBandLoad] = createSignal<BandLoad | null>(null)
+  const changeBandLoad = (load: BandLoad) => {
+    setBandLoad(load)
+    setWeight(effectiveBandLoad(load))
+    setWeightTouched(true)
+    props.onWeightChange?.(effectiveBandLoad(load))
+  }
+  const suggest = () => {
+    if (props.bandProfile) changeBandLoad(suggestBandLoad(props.bandProfile, props.set.weight, settings.plates))
+  }
+  createEffect(on(() => [props.bandProfile, props.set.weight, props.isActive] as const, () => {
+    if (props.isCompleted || !props.isActive) return
+    if (!props.bandProfile) { setBandLoad(null); return }
+    const previous = props.previousBandLoad
+    if (previous && previous.rawLoad === props.bandProfile.rawLoad && effectiveBandLoad(previous) === props.set.weight) {
+      changeBandLoad({ ...previous })
+    } else suggest()
+  }))
+
   const isAmrap = () => props.set.isAmrap ?? false
 
   createEffect(() => {
@@ -53,6 +78,7 @@ export default function SetRow(props: Props) {
   })
 
   const startEdit = () => {
+    setEditBandLoad(props.loggedBandLoad ? { ...props.loggedBandLoad } : null)
     setEditing(true)
     setEditReps(props.loggedReps ?? props.set.reps)
     setEditWeight(props.loggedWeight ?? props.set.weight)
@@ -79,7 +105,7 @@ export default function SetRow(props: Props) {
               </>
             }
           />
-          <Show when={props.loading}>
+          <Show when={props.loading && !props.bandProfile}>
             <PlateDisplay weight={weight()} loading={props.loading!} />
           </Show>
           <Show when={isAmrap() && props.amrapTargets && props.amrapTargets.length > 0}>
@@ -87,8 +113,9 @@ export default function SetRow(props: Props) {
           </Show>
           <SetLogControls
             weight={weight()}
+            weightControls={bandLoad() ? <BandLoadControls target={props.set.weight} profile={props.bandProfile} value={bandLoad()!} onChange={changeBandLoad} onSuggest={suggest} /> : undefined}
             onWeightChange={v => { setWeightTouched(true); setWeight(v); props.onWeightChange?.(v) }}
-            onLog={() => { props.onLog(reps(), weight()); setReps(props.set.reps); setWeightTouched(false) }}
+            onLog={() => { props.onLog(reps(), weight(), bandLoad()); setReps(props.set.reps); setWeightTouched(false) }}
           >
             <FieldRow label="reps">
               <Stepper value={reps()} onChange={setReps} step={1} min={0} label="reps" fieldLabel="reps" emphasized={isAmrap()} />
@@ -125,11 +152,13 @@ export default function SetRow(props: Props) {
       {/* Completed — inline edit form */}
       <Match when={editing()}>
         <div class="flex items-center gap-3 py-3 pl-3 border-l-4 border-accent flex-wrap">
-          <Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} label="edit-weight" fieldLabel="weight" />
+          <Show when={editBandLoad()} fallback={<Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} label="edit-weight" fieldLabel="weight" />}>
+            <BandLoadControls profile={props.bandProfile} value={editBandLoad()!} onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
+          </Show>
           <span class="text-text-dim font-mono text-sm">×</span>
           <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} label="edit-reps" fieldLabel="reps" />
           <button
-            onClick={() => { props.onEdit(editReps(), editWeight()); setEditing(false) }}
+            onClick={() => { props.onEdit(editReps(), editWeight(), editBandLoad()); setEditing(false) }}
             class="border border-accent text-accent px-3 py-2 text-xs font-mono tracking-widest"
           >
             SAVE
@@ -141,6 +170,7 @@ export default function SetRow(props: Props) {
       {/* Completed — read-only view */}
       <Match when={true}>
         <SetReadout
+          bandLoad={props.loggedBandLoad}
           weight={props.loggedWeight ?? props.set.weight}
           value={`${props.loggedReps ?? ''}`}
           alignWeight

@@ -49,14 +49,20 @@ export default function ExerciseSetsBlock(props: Props) {
       </Show>
       <For each={props.sets}>
         {s => (
-          <SetReadout
-            size="sm"
-            alignWeight
-            tone="text-text-dim"
-            class="pl-2"
-            weight={s.weight != null && s.weight > 0 ? s.weight : null}
-            value={accessorySetValue(s)}
-          />
+          <>
+            <SetReadout
+              size="sm"
+              alignWeight
+              tone="text-text-dim"
+              class="pl-2"
+              bandLoad={s.bandLoad}
+              weight={s.weight != null && s.weight !== 0 ? s.weight : null}
+              value={accessorySetValue(s)}
+            />
+            <For each={s.dropRounds ?? []}>
+              {(round, i) => <SetReadout size="sm" class="pl-4" bandLoad={round.bandLoad} weight={round.weight} value={String(round.reps)} leading={<span>Drop {i() + 1}</span>} />}
+            </For>
+          </>
         )}
       </For>
       <Show when={props.note}>
