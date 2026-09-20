@@ -4,6 +4,46 @@ import type { BandLoad, BandProfile, PlateConfig } from '../types/domain'
 
 export const BAND_NAMES = ['Orange', 'Green', 'Purple', 'Red'] as const
 
+const bandProfileFrom = (rawLoad: number, measured: readonly number[]): BandProfile => ({
+  enabled: true, rawLoad, maxAddedWeight: null,
+  bands: BAND_NAMES.map((name, i) => ({ name, assistance: rawLoad - measured[i] })),
+})
+
+/**
+ * Measured calibrations per movement, as effective load with each band on.
+ *
+ * `rawLoad` is the movement's UNASSISTED load, not anyone's bodyweight — the
+ * nordic figure is nothing like a scale weight, and the same four physical
+ * bands assist the two movements very differently (105 vs 75 on Orange)
+ * because a stiff band's assistance depends on how far it is stretched at the
+ * working position. Assistance is derived as `rawLoad - measured`, so these
+ * stay written the way they were taken.
+ *
+ * `superseded` holds calibrations an earlier build shipped. They are never
+ * offered to anyone; `seededBandProfiles` needs them to recognise a profile the
+ * old boot seed wrote, because a database seeded before a measurement was
+ * corrected would otherwise be stranded with band loading still forced on.
+ */
+const CALIBRATIONS = {
+  pulling: {
+    rawLoad: 191,
+    measured: [86, 141, 161, 181],
+    superseded: [[87, 143, 160, 181]],
+  },
+  nordic: {
+    rawLoad: 145,
+    measured: [70, 105, 115, 135],
+    superseded: [],
+  },
+} as const satisfies Record<string, { rawLoad: number; measured: readonly number[]; superseded: readonly (readonly number[])[] }>
+
+const calibrationFor = (name: string) => {
+  const key = name.toLowerCase().replace(/[^a-z]/g, '')
+  if (['chinup', 'chinups', 'pullup', 'pullups'].includes(key)) return CALIBRATIONS.pulling
+  if (['nordic', 'nordiccurl', 'nordiccurls'].includes(key)) return CALIBRATIONS.nordic
+  return null
+}
+
 /**
  * A starting calibration for a movement that is commonly band-assisted.
  *
@@ -14,14 +54,16 @@ export const BAND_NAMES = ['Orange', 'Green', 'Purple', 'Red'] as const
  * (neutral grip)" was not. `bandProfileFor` no longer consults it.
  */
 export function defaultBandProfile(name: string): BandProfile | null {
-  const key = name.toLowerCase().replace(/[^a-z]/g, '')
-  const pulling = ['chinup', 'chinups', 'pullup', 'pullups'].includes(key)
-  const nordic = ['nordic', 'nordiccurl', 'nordiccurls'].includes(key)
-  if (!pulling && !nordic) return null
-  const rawLoad = pulling ? 191 : 145
-  const measured = pulling ? [87, 143, 160, 181] : [70, 105, 115, 135]
-  return { enabled: true, rawLoad, maxAddedWeight: null,
-    bands: BAND_NAMES.map((name, i) => ({ name, assistance: rawLoad - measured[i] })) }
+  const calibration = calibrationFor(name)
+  return calibration ? bandProfileFrom(calibration.rawLoad, calibration.measured) : null
+}
+
+/** Every profile the boot seed could have written for this name, current or not. */
+function seededBandProfiles(name: string): BandProfile[] {
+  const calibration = calibrationFor(name)
+  if (!calibration) return []
+  return [calibration.measured, ...calibration.superseded]
+    .map(measured => bandProfileFrom(calibration.rawLoad, measured))
 }
 
 /**
@@ -144,8 +186,8 @@ export function validBandProfile(value: unknown): value is BandProfile {
  */
 export async function clearSeededBandProfiles(db: TrainingDB): Promise<void> {
   const isUntouchedSeed = (entity: { name: string; bandProfile?: BandProfile | null }): boolean => {
-    const seeded = defaultBandProfile(entity.name)
-    return seeded != null && JSON.stringify(entity.bandProfile) === JSON.stringify(seeded)
+    const saved = JSON.stringify(entity.bandProfile)
+    return seededBandProfiles(entity.name).some(seeded => JSON.stringify(seeded) === saved)
   }
   for (const table of [db.lifts, db.exercises]) {
     for (const entity of await table.toArray()) {

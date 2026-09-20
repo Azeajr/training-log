@@ -198,8 +198,10 @@ it('records band changes per set and per drop round, carrying the last choice fo
   expect(screen.getByRole('combobox', { name: 'drop 1 band' })).toHaveValue('Purple')
   fireEvent.change(screen.getByRole('combobox', { name: 'drop 1 band' }), { target: { value: 'Green' } })
   fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
-  // Purple 191−31 = 160 for the set; the round switched to Green is 191−48 = 143.
-  expect(workout.activeAccessories[0].loggedSets[0]).toMatchObject({ weight: 160, bandLoad: { band: 'Purple', assistance: 31 }, dropRounds: [{ weight: 143, bandLoad: { band: 'Green' } }] })
+  // Suggest opens on Green +2.5 for the prescribed 145, and switching band keeps
+  // the plates on the belt: Purple is 191−30+2.5 = 163.5, the round switched
+  // back to Green is 191−50+2.5 = 143.5.
+  expect(workout.activeAccessories[0].loggedSets[0]).toMatchObject({ weight: 163.5, bandLoad: { band: 'Purple', assistance: 30 }, dropRounds: [{ weight: 143.5, bandLoad: { band: 'Green' } }] })
   expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Purple')
   view.unmount()
   clearSession()

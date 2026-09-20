@@ -19,11 +19,11 @@ test('main-lift bands survive reload and raw-load recalibration on mobile', asyn
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   await page.getByRole('combobox', { name: 'band', exact: true }).first().selectOption('Green')
-  // 191 raw − 48 assistance = 143, the measured load itself, not 145 off a grid.
-  await expect(page.getByTestId('active-weight')).toHaveText('143lb')
+  // 191 raw − 50 assistance = 141, the measured load itself, not a grid value.
+  await expect(page.getByTestId('active-weight')).toHaveText('141lb')
   await page.getByRole('button', { name: 'LOG', exact: true }).first().click()
   await expect.poll(async () => (await getWorkoutState(page))?.loggedSets).toMatchObject([
-    { weight: 143, bandLoad: { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 } },
+    { weight: 141, bandLoad: { band: 'Green', rawLoad: 191, assistance: 50, addedWeight: 0 } },
   ])
   // Rest starts after the SQLite write succeeds; wait before testing reload.
   await expect(page.getByRole('button', { name: 'SKIP REST', exact: true })).toBeVisible()
@@ -36,7 +36,7 @@ test('main-lift bands survive reload and raw-load recalibration on mobile', asyn
   await page.getByRole('button', { name: 'SAVE BAND SETTINGS', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await page.getByRole('combobox', { name: 'band', exact: true }).first().selectOption('Green')
-  await expect(page.getByTestId('active-weight')).toHaveText('153lb')
-  await expect.poll(async () => (await getWorkoutState(page))?.loggedSets).toMatchObject([{ weight: 143, bandLoad: { rawLoad: 191 } }])
+  await expect(page.getByTestId('active-weight')).toHaveText('151lb')
+  await expect.poll(async () => (await getWorkoutState(page))?.loggedSets).toMatchObject([{ weight: 141, bandLoad: { rawLoad: 191 } }])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })

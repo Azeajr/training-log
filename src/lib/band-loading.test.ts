@@ -10,19 +10,19 @@ describe('band loading', () => {
     // The measured loads themselves, not a 5lb-grid approximation of them: the
     // calibration records 87 and 143, and `effectiveBandLoad` used to round
     // them to 85 and 145 — corrupting the very numbers the user measured.
-    expect(effectiveBandLoad(makeBandLoad(chin, 'Orange'))).toBe(87)
-    expect(effectiveBandLoad(makeBandLoad(chin, 'Green'))).toBe(143)
+    expect(effectiveBandLoad(makeBandLoad(chin, 'Orange'))).toBe(86)
+    expect(effectiveBandLoad(makeBandLoad(chin, 'Green'))).toBe(141)
     expect(effectiveBandLoad(makeBandLoad(defaultBandProfile('Nordic curls')!, 'Green'))).toBe(105)
     chin.bands[0].assistance = 0
-    expect(pull().bands[0].assistance).toBe(104)
+    expect(pull().bands[0].assistance).toBe(105)
     expect(bandProfileFor({ name: 'Pull-up', bandProfile: { ...chin, enabled: false } })).toBeNull()
     expect(bandProfileFor({ name: 'Bench' })).toBeNull()
   })
   it('keeps assistance fixed when raw load changes, and adds plates exactly', () => {
     const profile = { ...pull(), rawLoad: 201 }
     const load = makeBandLoad(profile, 'Green', 10)
-    expect(load).toEqual({ band: 'Green', rawLoad: 201, assistance: 48, addedWeight: 10 })
-    expect(effectiveBandLoad(load)).toBe(163)
+    expect(load).toEqual({ band: 'Green', rawLoad: 201, assistance: 50, addedWeight: 10 })
+    expect(effectiveBandLoad(load)).toBe(161)
     expect(effectiveBandLoad(makeBandLoad(pull(), null, 25))).toBe(216)
     // 2.5 in, 2.5 out. A 5lb grid here swallowed every other press of the
     // added-weight stepper, so two sessions a plate apart logged the same
@@ -35,12 +35,15 @@ describe('band loading', () => {
     expect(availableBeltLoads(plates, 5)).toEqual([0, 2.5, 5])
   })
   it('chooses closest effective load, then least added weight', () => {
-    expect(suggestBandLoad(pull(), 150, plates)).toMatchObject({ band: 'Green', addedWeight: 5 })
-    expect(suggestBandLoad(pull(), 145, plates)).toMatchObject({ band: 'Green', addedWeight: 0 })
+    expect(suggestBandLoad(pull(), 150, plates)).toMatchObject({ band: 'Green', addedWeight: 7.5 })
+    expect(suggestBandLoad(pull(), 145, plates)).toMatchObject({ band: 'Green', addedWeight: 2.5 })
     const profile = { ...pull(), rawLoad: 150, bands: [{ name: 'Light', assistance: 10 }] }
     // 150 with no plates beats 140 + 5 for a midpoint target, even though heavier.
     expect(suggestBandLoad(profile, 147.5, [{ weight: 5, count: 1 }])).toMatchObject({ band: null, addedWeight: 0 })
-    expect(suggestBandLoad({ ...pull(), maxAddedWeight: 0 }, 150, plates)).toMatchObject({ band: 'Green', addedWeight: 0 })
+    // With no plate allowed the nearest two are Green 141 (9 under) and Purple
+    // 161 (11 over). Both count as hitting a 150 target, so least assistance
+    // decides and the LESS assisted band wins.
+    expect(suggestBandLoad({ ...pull(), maxAddedWeight: 0 }, 150, plates)).toMatchObject({ band: 'Purple', addedWeight: 0 })
   })
   it('can progress from assisted to unassisted to weighted', () => {
     expect(suggestBandLoad(pull(), 145, plates).band).toBe('Green')

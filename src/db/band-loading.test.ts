@@ -27,6 +27,20 @@ it('preserves legacy rows through additive migration, unseeds name-matched profi
   const bandLoad = makeBandLoad(profile, 'Green', 5)
   const id = await db.sets.add({ sessionId: 1, type: 'main', setNumber: 2, weight: 150, reps: 8, isAmrap: true, bandLoad })
   await db.accessorySets.add({ sessionId: 1, exerciseId: 1, setNumber: 1, weight: 150, reps: 8, duration: null, distance: null, bandLoad, dropRounds: [{ weight: 145, reps: 6, bandLoad: { ...bandLoad, addedWeight: 0 } }] })
+  // ...and so is a profile it wrote under an EARLIER calibration. Correcting a
+  // measurement must not strand databases seeded before the correction with
+  // band loading still forced on, which is what matching only today's template
+  // would do.
+  const supersededBands = [
+    { name: 'Orange', assistance: 104 }, { name: 'Green', assistance: 48 },
+    { name: 'Purple', assistance: 31 }, { name: 'Red', assistance: 10 },
+  ]
+  const superseded = { ...profile, bands: supersededBands }
+  expect(supersededBands).not.toEqual(profile.bands)
+  await db.lifts.update(liftId, { bandProfile: superseded })
+  await clearSeededBandProfiles(db)
+  expect((await db.lifts.get(liftId))?.bandProfile).toBeNull()
+
   // Once the user has saved a calibration of their own it is theirs, whatever
   // the lift happens to be called. Same for one they deliberately turned off.
   await db.lifts.update(liftId, { bandProfile: { ...profile, rawLoad: 220 } })

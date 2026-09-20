@@ -69,8 +69,9 @@ describe('band-assisted main sets', () => {
     fireEvent.change(getByRole('combobox', { name: 'band' }), { target: { value: 'Red' } })
     fireEvent.click(getByRole('button', { name: 'Increase added weight' }))
     fireEvent.click(getByRole('button', { name: 'LOG' }))
-    // 191 raw − 10 assistance + 2.5 added = 183.5 exactly, not 185 on a 5lb grid.
-    expect(onLog).toHaveBeenCalledWith(5, 183.5, { band: 'Red', rawLoad: 191, assistance: 10, addedWeight: 2.5 })
+    // Suggest opens on Green +2.5; switching band keeps the added weight, and
+    // one more press makes it 5. 191 raw − 10 assistance + 5 added = 186 exactly.
+    expect(onLog).toHaveBeenCalledWith(5, 186, { band: 'Red', rawLoad: 191, assistance: 10, addedWeight: 5 })
   })
   it('keeps a band the user picked when the prescription cascades', () => {
     // `props.set.weight` moves under this row every time an EARLIER set is
@@ -83,12 +84,13 @@ describe('band-assisted main sets', () => {
       bandProfile={defaultBandProfile('Chin-ups')} onLog={onLog} onEdit={() => {}} />)
     fireEvent.change(getByRole('combobox', { name: 'band' }), { target: { value: 'Purple' } })
 
-    // 143 is exactly Green/0, so an unguarded effect re-suggests Green here.
-    setWeight(143)
+    // 141 is exactly Green/0, so an unguarded effect re-suggests Green here.
+    setWeight(141)
 
     expect(getByRole('combobox', { name: 'band' })).toHaveValue('Purple')
     fireEvent.click(getByRole('button', { name: 'LOG' }))
-    expect(onLog).toHaveBeenCalledWith(5, 160, expect.objectContaining({ band: 'Purple' }))
+    // Purple keeps the 2.5 suggest opened with: 191 − 30 + 2.5 = 163.5.
+    expect(onLog).toHaveBeenCalledWith(5, 163.5, expect.objectContaining({ band: 'Purple' }))
   })
 
   it('retains recorded raw load when editing after recalibration', () => {

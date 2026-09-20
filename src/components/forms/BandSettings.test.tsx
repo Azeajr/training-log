@@ -24,7 +24,7 @@ it('saves raw-load changes with fixed assistance and keeps each exercise indepen
   fireEvent.click(screen.getByRole('button', { name: 'Increase Green measured load' }))
   fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-  expect((await db.exercises.get(id))?.bandProfile?.bands.find(b => b.name === 'Green')?.assistance).toBe(47)
+  expect((await db.exercises.get(id))?.bandProfile?.bands.find(b => b.name === 'Green')?.assistance).toBe(49)
 })
 
 describe('BandLoadControls band selection', () => {
