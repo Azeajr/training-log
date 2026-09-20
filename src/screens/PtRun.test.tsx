@@ -491,3 +491,95 @@ describe('a parked draft whose routine is gone', () => {
     expect(ptSessionRoutineIds()).toHaveLength(0)
   })
 })
+
+const timeDraft = (over: Partial<PtExerciseDraft> = {}): PtExerciseDraft => ({
+  name: 'Side plank',
+  sets: 2,
+  measure: 'time',
+  targetSeconds: 30,
+  resistanceKind: 'none',
+  ...over,
+})
+
+// A hold is a core rehab prescription, and until now `measure: 'time'` was only
+// ever tested on its rejection path — no test built a valid one, so neither the
+// validator's success branch nor the per-set time editor ran at all.
+describe('timed holds', () => {
+  it('saves a valid hold and nulls the off-measure targets', async () => {
+    const id = await savePtRoutine(db, { name: 'Core', exercises: [timeDraft()] })
+    const [exercise] = (await getPtRoutine(db, id))!.exercises
+    expect(exercise).toMatchObject({
+      measure: 'time', targetSeconds: 30,
+      targetReps: null, targetDistance: null, distanceUnit: null,
+    })
+  })
+
+  it('records a hold shorter than prescribed, per set', async () => {
+    const id = await savePtRoutine(db, { name: 'Core', exercises: [timeDraft()] })
+    renderRun(id)
+    await screen.findByText('Side plank')
+
+    const row = checkbox(/Side plank set 1/).parentElement!
+    fireEvent.click(within(row).getByRole('button', { name: /0:30/ }))
+    // 30s prescribed, 22s managed.
+    for (let i = 0; i < 8; i++) fireEvent.click(screen.getByLabelText('Decrease set 1 seconds'))
+    fireEvent.click(screen.getByText('LOG'))
+
+    await waitFor(() =>
+      expect(checkbox(/Side plank set 1/).parentElement!.textContent).toContain('0:22'))
+    // Effort, not equipment — what set 1 managed says nothing about set 2.
+    expect(checkbox(/Side plank set 2/).parentElement!.textContent).toContain('0:30')
+  })
+
+  it('records a distance short of the prescription, per set', async () => {
+    const id = await savePtRoutine(db, { name: 'Sled', exercises: [sledDraft({ sets: 2 })] })
+    renderRun(id)
+    await screen.findByText('Backward sled walk')
+
+    const row = checkbox(/Backward sled walk set 1/).parentElement!
+    fireEvent.click(within(row).getByRole('button', { name: /50 yd/ }))
+    for (let i = 0; i < 10; i++) fireEvent.click(screen.getByLabelText('Decrease set 1 distance'))
+    fireEvent.click(screen.getByText('LOG'))
+
+    await waitFor(() =>
+      expect(checkbox(/Backward sled walk set 1/).parentElement!.textContent).toContain('40 yd'))
+  })
+
+  it('records a band swap and carries it forward', async () => {
+    const id = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft({ sets: 2 })] })
+    renderRun(id)
+    await screen.findByText('Band pull-apart')
+
+    const row = checkbox(/Band pull-apart set 1/).parentElement!
+    fireEvent.click(within(row).getByRole('button', { name: /red band/ }))
+    fireEvent.input(screen.getByLabelText('Set 1 band'), { target: { value: 'green' } })
+    fireEvent.click(screen.getByText('LOG'))
+
+    await waitFor(() =>
+      expect(checkbox(/Band pull-apart set 1/).parentElement!.textContent).toContain('green band'))
+    // Equipment, so it carries to the sets still to come.
+    expect(checkbox(/Band pull-apart set 2/).parentElement!.textContent).toContain('green band')
+  })
+
+  it('zeroes the equipment height to record a step taken at floor level', async () => {
+    const id = await savePtRoutine(db, {
+      name: 'Rehab',
+      exercises: [repsDraft({ name: 'Step down', measure: 'reps', targetReps: 10, resistanceKind: 'none', equipmentHeight: 6, equipmentHeightUnit: 'in' })],
+    })
+    renderRun(id)
+    await screen.findByText('Step down')
+
+    const row = checkbox(/Step down set 1/).parentElement!
+    expect(row.textContent).toContain('6 in high')
+    fireEvent.click(within(row).getByRole('button', { name: /10 reps/ }))
+
+    // Zero is "no box", the same reading the weight field takes — not a box of
+    // height nothing. Both the height and its unit have to clear together.
+    for (let i = 0; i < 6; i++) fireEvent.click(screen.getByLabelText('Decrease set 1 equipment height'))
+    fireEvent.click(screen.getByText('LOG'))
+
+    await waitFor(() =>
+      expect(checkbox(/Step down set 1/).parentElement!.textContent).not.toContain('high'))
+    expect(checkbox(/Step down set 2/).parentElement!.textContent).not.toContain('high')
+  })
+})
