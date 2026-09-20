@@ -873,6 +873,8 @@ it('edits recorded band loads without recalibrating untouched rounds', async () 
   fireEvent.click(await screen.findByRole('button', { name: 'Increase drop 1 added weight' }))
   fireEvent.click(screen.getByText('SAVE'))
   await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
+  // 191 raw − 48 assistance + 2.5 added = 145.5 exactly. The top set and the
+  // second round keep the weights they were recorded with, untouched.
   expect(await db.accessorySets.get(id)).toMatchObject({ weight: 145, bandLoad,
-    dropRounds: [{ weight: 145, bandLoad: { ...bandLoad, addedWeight: 2.5 } }, { weight: 85, bandLoad: { ...bandLoad, band: 'Orange', assistance: 104 } }] })
+    dropRounds: [{ weight: 145.5, bandLoad: { ...bandLoad, addedWeight: 2.5 } }, { weight: 85, bandLoad: { ...bandLoad, band: 'Orange', assistance: 104 } }] })
 })

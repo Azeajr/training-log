@@ -236,7 +236,7 @@ export default function AccessoryLog(props: Props) {
                 <div class="flex items-center gap-2 pl-2 py-1 flex-wrap">
                   <span class="text-warn text-xs">Set {i() + 1}:</span>
                   <Show when={editBandLoad()} fallback={<Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} fieldLabel="weight" />}>
-                    <BandLoadControls profile={profile()} value={editBandLoad()!} onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
+                    <BandLoadControls profile={profile()} loading={loading() ?? undefined} value={editBandLoad()!} onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
                   </Show>
                   <span class="text-muted text-xs">lb ×</span>
                   <Show when={type() === 'reps'}>
@@ -257,7 +257,7 @@ export default function AccessoryLog(props: Props) {
                     <Stepper value={editDistance()} onChange={setEditDistance} step={1} min={0} fieldLabel="distance" />
                   </Show>
                   <Show when={type() === 'reps'}>
-                    <DropRoundsEditor profile={profile()} bandLoad={editBandLoad()} rounds={editDropRounds()} onChange={setEditDropRounds} weight={editWeight()} reps={editReps()} />
+                    <DropRoundsEditor profile={profile()} loading={loading() ?? undefined} bandLoad={editBandLoad()} rounds={editDropRounds()} onChange={setEditDropRounds} weight={editWeight()} reps={editReps()} />
                   </Show>
                   <button onClick={() => saveEditSet(i())} class="border border-accent text-accent px-2 py-0.5 font-mono text-xs">SAVE</button>
                   <button onClick={() => setEditingSetIdx(null)} class="text-muted text-xs">cancel</button>
@@ -285,7 +285,7 @@ export default function AccessoryLog(props: Props) {
             </Show>
             <SetLogControls
               weight={weight()}
-              weightControls={bandLoad() ? <BandLoadControls target={props.accessory.calculatedWeight} profile={profile()} value={bandLoad()!} onChange={changeBandLoad} onSuggest={suggest} /> : undefined}
+              weightControls={bandLoad() ? <BandLoadControls target={props.accessory.calculatedWeight} profile={profile()} loading={loading() ?? undefined} value={bandLoad()!} onChange={changeBandLoad} onSuggest={suggest} /> : undefined}
               onWeightChange={setWeight}
               onLog={() => { handleLog(); setAddingExtra(false) }}
             >
@@ -293,7 +293,7 @@ export default function AccessoryLog(props: Props) {
                 <FieldRow label="reps">
                   <Stepper value={reps()} onChange={setReps} step={1} min={0} fieldLabel="reps" />
                 </FieldRow>
-                <DropRoundsEditor profile={profile()} bandLoad={bandLoad()} rounds={dropRounds()} onChange={setDropRounds} weight={weight()} reps={reps()} />
+                <DropRoundsEditor profile={profile()} loading={loading() ?? undefined} bandLoad={bandLoad()} rounds={dropRounds()} onChange={setDropRounds} weight={weight()} reps={reps()} />
               </Show>
               <Show when={type() === 'timed'}>
                 <FieldRow label="time">

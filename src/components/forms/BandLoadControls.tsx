@@ -1,5 +1,6 @@
 import { For, Show } from 'solid-js'
 import type { BandLoad, BandProfile } from '../../types/domain'
+import type { PlateLoading } from '../../lib/plate-loading'
 import { effectiveBandLoad, makeBandLoad } from '../../lib/band-loading'
 import Stepper from './Stepper'
 import PlateDisplay from './PlateDisplay'
@@ -11,13 +12,45 @@ export default function BandLoadControls(props: {
   label?: string
   target?: number
   onSuggest?: () => void
+  /**
+   * How the ADDED weight is loaded. Base is always 0 — the implement's own
+   * weight is part of `rawLoad`, never of what you hang on top of it — but the
+   * mode follows the lift: belt plates are singles, plates slid onto a bar are
+   * paired. Hardcoding 'total' here showed a paired lift's added weight as
+   * singles, which is half the plates it actually needs.
+   */
+  loading?: PlateLoading
 }) {
-  const choices = () => props.profile?.bands ?? (props.value.band ? [{ name: props.value.band, assistance: props.value.assistance }] : [])
+  // Captured ONCE, at mount, not derived from props.value. This is the band the
+  // set was logged under back when the calibration still had it. The moment the
+  // user selects something else `props.value` stops carrying it, so a reactive
+  // version would drop the option exactly when it is needed to get back — and
+  // `makeBandLoad` would then miss the lookup and silently reset the set to
+  // "None" with zero assistance, changing its effective load by the whole
+  // assistance value.
+  const fromProfile = props.profile?.bands ?? []
+  const recorded = props.value.band && !fromProfile.some(b => b.name === props.value.band)
+    ? { name: props.value.band, assistance: props.value.assistance }
+    : null
+
+  const choices = () => {
+    const list = props.profile?.bands ?? []
+    return recorded ? [...list, recorded] : list
+  }
   const changeBand = (band: string) => {
     if ((band || null) === props.value.band) return
-    const profile = props.profile ?? { enabled: true, rawLoad: props.value.rawLoad, bands: choices(), maxAddedWeight: null }
-    props.onChange(makeBandLoad({ ...profile, rawLoad: props.value.rawLoad }, band || null, props.value.addedWeight))
+    props.onChange(makeBandLoad(
+      {
+        enabled: true,
+        rawLoad: props.value.rawLoad,
+        maxAddedWeight: props.profile?.maxAddedWeight ?? null,
+        bands: choices(),
+      },
+      band || null,
+      props.value.addedWeight,
+    ))
   }
+  const addedLoading = (): PlateLoading => ({ mode: props.loading?.mode ?? 'total', base: 0 })
   return (
     <div class="flex flex-col gap-2 w-full text-sm">
       <Show when={props.target != null}><span class="text-muted text-xs">Prescribed: {props.target}lb effective</span></Show>
@@ -25,10 +58,9 @@ export default function BandLoadControls(props: {
         <select aria-label={`${props.label ?? ''} band`.trim()} value={props.value.band ?? ''}
           onChange={e => changeBand(e.currentTarget.value)} class="bg-surface border border-border p-2 text-text">
           <option value="">None</option>
-          <For each={choices()}>{b => <option value={b.name}>{b.name}</option>}</For>
-          <Show when={props.value.band && !choices().some(b => b.name === props.value.band)}>
-            <option value={props.value.band!}>{props.value.band} (recorded)</option>
-          </Show>
+          <For each={choices()}>{b =>
+            <option value={b.name}>{b.name}{recorded && b.name === recorded.name ? ' (recorded)' : ''}</option>
+          }</For>
         </select>
       </label>
       <div class="flex items-center gap-2 flex-wrap">
@@ -36,7 +68,7 @@ export default function BandLoadControls(props: {
         <Stepper value={props.value.addedWeight} onChange={addedWeight => props.onChange({ ...props.value, addedWeight })}
           step={2.5} min={0} fieldLabel={`${props.label ?? ''} added weight`.trim()} />
       </div>
-      <PlateDisplay weight={props.value.addedWeight} loading={{ mode: 'total', base: 0 }} />
+      <PlateDisplay weight={props.value.addedWeight} loading={addedLoading()} />
       <div class="text-muted text-xs">Raw {props.value.rawLoad}lb − assistance {props.value.assistance}lb + added {props.value.addedWeight}lb = {effectiveBandLoad(props.value)}lb effective</div>
       <Show when={props.onSuggest}><button type="button" onClick={props.onSuggest} class="text-accent text-xs text-left">USE SUGGESTED LOAD</button></Show>
     </div>

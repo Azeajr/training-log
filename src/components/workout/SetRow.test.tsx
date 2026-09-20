@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, fireEvent } from '@solidjs/testing-library'
+import { createSignal } from 'solid-js'
 import { defaultBandProfile, makeBandLoad } from '../../lib/band-loading'
 import SetRow from './SetRow'
 
@@ -68,8 +69,28 @@ describe('band-assisted main sets', () => {
     fireEvent.change(getByRole('combobox', { name: 'band' }), { target: { value: 'Red' } })
     fireEvent.click(getByRole('button', { name: 'Increase added weight' }))
     fireEvent.click(getByRole('button', { name: 'LOG' }))
-    expect(onLog).toHaveBeenCalledWith(5, 185, { band: 'Red', rawLoad: 191, assistance: 10, addedWeight: 2.5 })
+    // 191 raw − 10 assistance + 2.5 added = 183.5 exactly, not 185 on a 5lb grid.
+    expect(onLog).toHaveBeenCalledWith(5, 183.5, { band: 'Red', rawLoad: 191, assistance: 10, addedWeight: 2.5 })
   })
+  it('keeps a band the user picked when the prescription cascades', () => {
+    // `props.set.weight` moves under this row every time an EARLIER set is
+    // edited. Re-suggesting on that threw away the band already dialled in,
+    // mid-exercise and silently. Same guarantee `weightTouched` gives the
+    // plain weight stepper.
+    const [weight, setWeight] = createSignal(145)
+    const onLog = vi.fn()
+    const { getByRole } = render(() => <SetRow set={{ ...baseSet, weight: weight() }} isActive isCompleted={false}
+      bandProfile={defaultBandProfile('Chin-ups')} onLog={onLog} onEdit={() => {}} />)
+    fireEvent.change(getByRole('combobox', { name: 'band' }), { target: { value: 'Purple' } })
+
+    // 143 is exactly Green/0, so an unguarded effect re-suggests Green here.
+    setWeight(143)
+
+    expect(getByRole('combobox', { name: 'band' })).toHaveValue('Purple')
+    fireEvent.click(getByRole('button', { name: 'LOG' }))
+    expect(onLog).toHaveBeenCalledWith(5, 160, expect.objectContaining({ band: 'Purple' }))
+  })
+
   it('retains recorded raw load when editing after recalibration', () => {
     const original = makeBandLoad(defaultBandProfile('Chin-ups')!, 'Green')
     const onEdit = vi.fn()

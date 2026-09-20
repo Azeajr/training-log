@@ -7,20 +7,28 @@ const plates = [{ weight: 45, count: 2 }, { weight: 10, count: 2 }, { weight: 5,
 describe('band loading', () => {
   it('keeps the original measurements and independent profiles', () => {
     const chin = defaultBandProfile('Chinups')!
-    expect(effectiveBandLoad(makeBandLoad(chin, 'Orange'))).toBe(85)
-    expect(effectiveBandLoad(makeBandLoad(chin, 'Green'))).toBe(145)
+    // The measured loads themselves, not a 5lb-grid approximation of them: the
+    // calibration records 87 and 143, and `effectiveBandLoad` used to round
+    // them to 85 and 145 — corrupting the very numbers the user measured.
+    expect(effectiveBandLoad(makeBandLoad(chin, 'Orange'))).toBe(87)
+    expect(effectiveBandLoad(makeBandLoad(chin, 'Green'))).toBe(143)
     expect(effectiveBandLoad(makeBandLoad(defaultBandProfile('Nordic curls')!, 'Green'))).toBe(105)
     chin.bands[0].assistance = 0
     expect(pull().bands[0].assistance).toBe(104)
     expect(bandProfileFor({ name: 'Pull-up', bandProfile: { ...chin, enabled: false } })).toBeNull()
     expect(bandProfileFor({ name: 'Bench' })).toBeNull()
   })
-  it('keeps assistance fixed when raw load changes; adds plates before rounding', () => {
+  it('keeps assistance fixed when raw load changes, and adds plates exactly', () => {
     const profile = { ...pull(), rawLoad: 201 }
     const load = makeBandLoad(profile, 'Green', 10)
     expect(load).toEqual({ band: 'Green', rawLoad: 201, assistance: 48, addedWeight: 10 })
-    expect(effectiveBandLoad(load)).toBe(165)
-    expect(effectiveBandLoad(makeBandLoad(pull(), null, 25))).toBe(215)
+    expect(effectiveBandLoad(load)).toBe(163)
+    expect(effectiveBandLoad(makeBandLoad(pull(), null, 25))).toBe(216)
+    // 2.5 in, 2.5 out. A 5lb grid here swallowed every other press of the
+    // added-weight stepper, so two sessions a plate apart logged the same
+    // `sets.weight` and read back identical to e1RM, records and the TM prompt.
+    const step = (added: number) => effectiveBandLoad(makeBandLoad(pull(), null, added))
+    expect([0, 2.5, 5, 7.5].map(step)).toEqual([191, 193.5, 196, 198.5])
   })
   it('uses single plates and respects counts and the optional cap', () => {
     expect(availableBeltLoads([{ weight: 25, count: 1 }, { weight: 10, count: 2 }], null)).toEqual([0, 10, 20, 25, 35, 45])

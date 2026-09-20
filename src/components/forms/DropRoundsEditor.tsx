@@ -2,11 +2,14 @@ import BandLoadControls from './BandLoadControls'
 import { effectiveBandLoad } from '../../lib/band-loading'
 import { Index, Show } from 'solid-js'
 import type { DropRound, BandLoad, BandProfile } from '../../types/domain'
+import type { PlateLoading } from '../../lib/plate-loading'
 import Stepper from './Stepper'
 
 export default function DropRoundsEditor(props: {
   profile?: BandProfile | null
   bandLoad?: BandLoad | null
+  /** Passed through to each round's band control — see BandLoadControls. */
+  loading?: PlateLoading
   rounds: DropRound[]
   onChange: (rounds: DropRound[]) => void
   weight: number
@@ -21,7 +24,7 @@ export default function DropRoundsEditor(props: {
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-muted text-xs">Drop {i + 1}</span>
             <Show when={round().bandLoad} fallback={<Stepper value={round().weight} onChange={v => update(i, 'weight', v)} step={2.5} min={0} fieldLabel={`drop ${i + 1} weight`} />}>
-              <BandLoadControls profile={props.profile} value={round().bandLoad!} label={`drop ${i + 1}`}
+              <BandLoadControls profile={props.profile} loading={props.loading} value={round().bandLoad!} label={`drop ${i + 1}`}
                 onChange={bandLoad => props.onChange(props.rounds.map((r, n) => n === i ? { ...r, bandLoad, weight: effectiveBandLoad(bandLoad) } : r))} />
             </Show>
             <span class="text-muted text-xs">lb ×</span>

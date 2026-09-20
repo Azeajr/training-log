@@ -1,6 +1,6 @@
 import type { TrainingDB } from '../db'
 import type { BandLoad, BandProfile, PlateConfig } from '../types/domain'
-import { roundToNearest5 } from './calc'
+
 
 export const BAND_NAMES = ['Orange', 'Green', 'Purple', 'Red'] as const
 
@@ -21,8 +21,24 @@ export function bandProfileFor(entity: { name: string; bandProfile?: BandProfile
   return profile?.enabled ? profile : null
 }
 
+/**
+ * What the set actually weighed, exactly.
+ *
+ * Deliberately NOT snapped to the nearest 5. This is a RECORD of a load that
+ * has already happened, not a prescription being proposed: the number is
+ * whatever was on the belt. Rounding it here cost the log its resolution —
+ * `addedWeight` steps by 2.5, so a 5lb grid swallowed every other press and two
+ * sessions genuinely 2.5lb apart read back identical to `sets.weight`, which is
+ * what e1RM, records and the TM prompt all read.
+ *
+ * `suggestBandLoad` still lands on loadable numbers, because it can only choose
+ * combinations the plate inventory can actually make.
+ *
+ * Hundredths, matching `calcPlates`: plate weights go to 1.25 and repeated
+ * addition of floats does not stay exact.
+ */
 export const effectiveBandLoad = (load: BandLoad): number =>
-  roundToNearest5(Math.max(0, load.rawLoad + load.addedWeight - load.assistance))
+  Math.round(Math.max(0, load.rawLoad + load.addedWeight - load.assistance) * 100) / 100
 
 export function makeBandLoad(profile: BandProfile, band: string | null, addedWeight = 0): BandLoad {
   const choice = profile.bands.find(b => b.name === band)
@@ -45,23 +61,41 @@ export function availableBeltLoads(plates: PlateConfig[], cap: number | null): n
   return [...loads].sort((a, b) => a - b).map(w => w / 100)
 }
 
+/** Loads this close to the target count as hitting it — one plate step. */
+const SUGGEST_TOLERANCE_LB = 2.5
+
+/**
+ * The simplest setup that lands on the target.
+ *
+ * Ranked by distance ONLY down to `SUGGEST_TOLERANCE_LB`, then by least
+ * assistance, then by least added weight. Nearest-load-wins on its own is
+ * arithmetic rather than training advice: a band and a loaded belt pull in
+ * opposite directions, so once the effective load is exact rather than snapped
+ * to a 5lb grid, the closest candidate at a 190 target is "Purple band plus
+ * 30lb hanging off you" (exactly 190) rather than "unassisted" (191). Nobody
+ * rigs a band in order to carry more weight. Preferring the least assisted
+ * option inside the tolerance band says the useful thing instead, and dropping
+ * 2.5lb of plate to save half a pound of accuracy falls out of the same rule.
+ */
 export function suggestBandLoad(profile: BandProfile, target: number, plates: PlateConfig[]): BandLoad {
-  let best = makeBandLoad(profile, null)
-  let error = Infinity
   const addedLoads = availableBeltLoads(plates, profile.maxAddedWeight)
-  // None wins the final tie; then calibrated band order is stable.
+  const candidates: BandLoad[] = []
   for (const band of [null, ...profile.bands.map(b => b.name)]) {
     for (const added of addedLoads) {
       const candidate = makeBandLoad(profile, band, added)
       if (candidate.rawLoad + added - candidate.assistance < 0) continue
-      const distance = Math.abs(effectiveBandLoad(candidate) - target)
-      if (distance < error || (distance === error && added < best.addedWeight)) {
-        best = candidate
-        error = distance
-      }
+      candidates.push(candidate)
     }
   }
-  return best
+  if (candidates.length === 0) return makeBandLoad(profile, null)
+
+  const distance = (c: BandLoad) => Math.abs(effectiveBandLoad(c) - target)
+  const closest = Math.min(...candidates.map(distance))
+  return candidates
+    .filter(c => distance(c) <= closest + SUGGEST_TOLERANCE_LB)
+    .reduce((best, c) => c.assistance !== best.assistance
+      ? (c.assistance < best.assistance ? c : best)
+      : (c.addedWeight < best.addedWeight ? c : best))
 }
 
 export function validBandLoad(value: unknown): value is BandLoad {
