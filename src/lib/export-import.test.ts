@@ -1228,20 +1228,43 @@ describe('exportPtCsv', () => {
     expect(cell(lines[2], 'actual_reps')).toBe('"15"')
   })
 
-  it('falls back to the prescription for a set recorded before actuals existed', async () => {
-    const { routineId, band } = await seedPt()
-    const sessionId = await commitPtRun(db, {
-      routineId, date: new Date(),
-      checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }],
-    })
-    // A tick-only row, as every run wrote before per-set values existed.
-    const check = (await db.ptSetChecks.where('sessionId').equals(sessionId).toArray())[0]
-    expect(check.reps).toBeNull()
-
+  const actualReps = async () => {
     await exportPtCsv(db)
     const lines = (await capturedBlob!.text()).split('\n')
     const header = lines[0].split(',')
-    expect(lines[1].split(',')[header.indexOf('"actual_reps"')]).toBe('"15"')
+    return lines[1].split(',')[header.indexOf('"actual_reps"')]
+  }
+
+  it('falls back to the prescription for a set recorded before actuals existed', async () => {
+    const { routineId, band } = await seedPt()
+    const sessionId = await db.ptSessions.add({ routineId, date: new Date(), notes: null })
+    // A tick-only row exactly as runs wrote them before per-set values existed:
+    // every actual null AND no `recorded` flag, because the column did not exist.
+    await db.ptSetChecks.add({ sessionId, ptExerciseId: band.id!, setNumber: 1, done: true })
+
+    expect(await actualReps()).toBe('"15"')
+  })
+
+  it('does not rewrite a real record whose values all happen to be null', async () => {
+    // A bodyweight set of an unloaded exercise with no box resolves all eight
+    // actuals to null while being a perfectly real record of what was done.
+    // Inferring "legacy" from the values alone re-rendered it as the CURRENT
+    // prescription, so editing the routine rewrote finished history.
+    const routineId = await savePtRoutine(db, {
+      name: 'Knee rehab',
+      exercises: [{ name: 'Bodyweight squat', sets: 1, measure: 'reps', targetReps: 20, resistanceKind: 'none' }],
+    })
+    const exercise = (await getPtRoutine(db, routineId))!.exercises[0]
+    await commitPtRun(db, {
+      routineId, date: new Date(),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true, reps: null }],
+    })
+    const check = (await db.ptSetChecks.toArray()).at(-1)!
+    expect(check.reps).toBeNull()
+    expect(check.recorded).toBe(true)
+
+    // The run recorded no reps. It must not read back as the prescribed 20.
+    expect(await actualReps()).toBe('""')
   })
 
   it('keeps a run with no checks the same width as every other row', async () => {

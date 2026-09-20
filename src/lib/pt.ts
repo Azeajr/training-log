@@ -366,6 +366,8 @@ export interface PtRunCheck {
   band?: string | null
   equipmentHeight?: number | null
   equipmentHeightUnit?: 'in' | 'cm' | null
+  /** Set by the writers below; see `PtSetCheck.recorded`. */
+  recorded?: boolean
 }
 
 /** The prescription fields a set resolves against. */
@@ -374,7 +376,8 @@ type PtPrescription = Pick<PtExercise,
   'resistanceKind' | 'resistanceWeight' | 'resistanceBand' | 'equipmentHeight' | 'equipmentHeightUnit'>
 
 /** A per-set override. Anything left undefined falls back to the prescription. */
-type PtSetActuals = Partial<Omit<PtRunCheck, 'ptExerciseId' | 'setNumber' | 'done'>>
+// 'recorded' is provenance, not one of the values a set resolves.
+type PtSetActuals = Partial<Omit<PtRunCheck, 'ptExerciseId' | 'setNumber' | 'done' | 'recorded'>>
 
 /**
  * Pin what a set actually was, resolving anything the user did not override
@@ -449,10 +452,31 @@ export function formatPtCheck(check: PtRunCheck, exercise: PtPrescription): stri
   ].filter(Boolean).join(' . ')
 }
 
+/**
+ * What a recorded set was, for display.
+ *
+ * Reads the explicit `recorded` flag. It used to ask whether every actual was
+ * null and call that a legacy row, which is not a safe inference: a bodyweight
+ * set of an unloaded exercise with no box resolves all eight to null while
+ * being a perfectly real record, and an import can carry exactly that row. Such
+ * a set was silently re-rendered as the exercise's CURRENT prescription, in the
+ * history detail and in the CSV export, so editing a routine rewrote the past.
+ */
 export function ptCheckActuals(check: PtRunCheck, exercise: PtPrescription): Required<PtSetActuals> {
-  const recorded = check.reps ?? check.seconds ?? check.distance ??
-    check.weight ?? check.band ?? check.equipmentHeight
-  return recorded == null ? resolvePtCheck(exercise) : resolvePtCheck(exercise, check)
+  return isRecordedPtCheck(check) ? resolvePtCheck(exercise, check) : resolvePtCheck(exercise)
+}
+
+/**
+ * Whether a check carries its own actuals.
+ *
+ * The flag when there is one. Rows written before the flag existed are read the
+ * old way, which is right for exactly those rows — PT wrote nothing but a tick
+ * back then, so all-null really did mean "nothing was recorded".
+ */
+export function isRecordedPtCheck(check: PtRunCheck): boolean {
+  if (check.recorded != null) return check.recorded
+  return (check.reps ?? check.seconds ?? check.distance ??
+    check.weight ?? check.band ?? check.equipmentHeight) != null
 }
 
 export interface PtRunInput {
@@ -509,6 +533,7 @@ async function writePtRun(db: TrainingDB, run: PtRunInput): Promise<number> {
     band: c.band ?? null,
     equipmentHeight: c.equipmentHeight ?? null,
     equipmentHeightUnit: c.equipmentHeightUnit ?? null,
+    recorded: true,
   })))
   if (exerciseNotes.length > 0) {
     await db.ptNotes.bulkAdd(exerciseNotes.map(n => ({ ...n, sessionId })))
@@ -658,6 +683,7 @@ export async function updatePtSession(db: TrainingDB, edit: PtSessionEdit): Prom
           band: c.band ?? null,
           equipmentHeight: c.equipmentHeight ?? null,
           equipmentHeightUnit: c.equipmentHeightUnit ?? null,
+          recorded: true,
         })))
       }
 

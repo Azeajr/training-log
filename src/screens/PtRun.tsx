@@ -79,14 +79,35 @@ export default function PtRun() {
       return
     }
     const ids = [...new Set([...ptSessionRoutineIds(), ...(id === null ? [] : [id])])]
-    const details = await Promise.all(ids.map(id => getPtRoutine(db, id)))
+    const loaded = await Promise.all(
+      ids.map(async routineId => ({ routineId, detail: await getPtRoutine(db, routineId) })),
+    )
     if (!isCurrent()) return
-    if (!details.length || details.some(detail => !detail || detail.exercises.length === 0)) {
-      showToast(details.some(detail => !detail) ? 'That routine no longer exists.' : 'That routine has no exercises yet.')
+
+    // A parked draft whose routine cannot be loaded is dropped, not treated as
+    // a reason to refuse the whole session. Every id here is either the one the
+    // user just asked for or one carried in from `pt-store`, and the store
+    // outlives the database: an IMPORT clears every table and leaves the
+    // localStorage draft pointing at routine ids that no longer exist. Failing
+    // the load on any bad id meant one stale draft bounced the user back to /pt
+    // from every routine they tried to start, forever, with no way to clear the
+    // draft because the routine it names is not on the list to delete.
+    const usable = loaded.filter(r => r.detail && r.detail.exercises.length > 0)
+    for (const { routineId } of loaded.filter(r => !usable.includes(r))) clearPtRun(routineId)
+
+    if (usable.length === 0) {
+      showToast(loaded.some(r => !r.detail) ? 'That routine no longer exists.' : 'That routine has no exercises yet.')
       navigate('/pt', { replace: true })
       return
     }
-    if (id !== null) startPtRun(id)
+    if (loaded.length > usable.length) {
+      showToast(`Dropped ${loaded.length - usable.length} routine that no longer exists.`)
+    }
+    const details = usable.map(r => r.detail)
+    // Only start the requested run once it is known to be one of the usable
+    // ones — starting it first would park the live draft under a routine that
+    // is about to be cleared.
+    if (id !== null && usable.some(r => r.routineId === id)) startPtRun(id)
     const sorted = (details as PtRoutineDetail[]).sort((a, b) => a.routine.order - b.routine.order)
     // Seed each exercise's set list to its prescribed length. Only the screen
     // knows the prescription, so the store cannot do this for itself — and it

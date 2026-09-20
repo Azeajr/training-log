@@ -456,3 +456,38 @@ describe('PtRun screen', () => {
     await screen.findByText('Band pull-apart')
   })
 })
+
+describe('a parked draft whose routine is gone', () => {
+  it('does not block starting a healthy routine', async () => {
+    // An IMPORT clears every table and leaves the `pt-store` localStorage draft
+    // pointing at routine ids that no longer exist. Refusing the whole load on
+    // one bad id bounced the user back to /pt from every routine they tried,
+    // with no way out: the stale routine is not on the list to delete.
+    const gone = await savePtRoutine(db, { name: 'Old', exercises: [repsDraft()] })
+    startPtSession([gone])
+    await db.ptRoutines.clear()
+    await db.ptExercises.clear()
+    const good = await savePtRoutine(db, { name: 'Good', exercises: [repsDraft({ name: 'Rows' })] })
+    expect(ptSessionRoutineIds()).toContain(gone)
+
+    renderRun(good)
+
+    expect(await screen.findByText('Rows')).toBeInTheDocument()
+    expect(mockNavigate).not.toHaveBeenCalledWith('/pt', { replace: true })
+    // The dead draft is dropped rather than left to fail again next time.
+    expect(ptSessionRoutineIds()).not.toContain(gone)
+  })
+
+  it('still redirects when nothing at all resolves', async () => {
+    const gone = await savePtRoutine(db, { name: 'Old', exercises: [repsDraft()] })
+    startPtSession([gone])
+    await db.ptRoutines.clear()
+    await db.ptExercises.clear()
+
+    renderRun()
+    await drain()
+
+    expect(mockNavigate).toHaveBeenCalledWith('/pt', { replace: true })
+    expect(ptSessionRoutineIds()).toHaveLength(0)
+  })
+})

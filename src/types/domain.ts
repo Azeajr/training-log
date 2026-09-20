@@ -338,9 +338,8 @@ export interface PtSetCheck {
    *
    * These are filled even when they match the prescription, because the
    * prescription is editable: raising an exercise's target later must not
-   * rewrite what a finished run says happened. All eight null together means a
-   * row from before PT recorded anything but a tick, and only those fall back to
-   * the exercise's own fields.
+   * rewrite what a finished run says happened. The `recorded` flag below, not
+   * the values themselves, says whether these are this run's own record.
    */
   reps?: number | null
   seconds?: number | null
@@ -350,6 +349,17 @@ export interface PtSetCheck {
   band?: string | null
   equipmentHeight?: number | null
   equipmentHeightUnit?: 'in' | 'cm' | null
+  /**
+   * True when the eight fields above are this set's own record of what happened.
+   *
+   * Absent on rows written before PT recorded anything but a tick, and ONLY
+   * those fall back to the exercise's current prescription. Stated rather than
+   * inferred from "are they all null": a bodyweight set of an unloaded, un-boxed
+   * exercise resolves every one of them to null legitimately, so the inference
+   * would quietly relabel a real record as a legacy row and render today's
+   * prescription as history.
+   */
+  recorded?: boolean
 }
 
 /** Free-text note on one exercise within one run ("switched to green band"). */
