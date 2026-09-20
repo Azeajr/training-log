@@ -1,3 +1,4 @@
+import { defaultBandProfile } from '../lib/band-loading'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@solidjs/testing-library'
 import { Router, Route } from '@solidjs/router'
@@ -242,11 +243,11 @@ describe('Workout screen — with active session', () => {
     })
   })
 
-  it('COMPLETE SESSION saves accessory sets from active accessories', async () => {
+  it('COMPLETE SESSION saves assisted drop sets from active accessories', async () => {
     startSession(BENCH)
     await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
     addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 50, loggedSets: [] })
-    logAccessorySet(10, { setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
+    logAccessorySet(10, { setNumber: 1, weight: -20, reps: 8, duration: null, distance: null, dropRounds: [{ weight: -40, reps: 6 }, { weight: -60, reps: 5 }] })
 
     renderWorkout()
     fireEvent.click(await findFinishButton())
@@ -256,6 +257,8 @@ describe('Workout screen — with active session', () => {
       expect(accSets).toHaveLength(1)
       expect(accSets[0].reps).toBe(8)
       expect(accSets[0].exerciseId).toBe(10)
+      expect(accSets[0].weight).toBe(-20)
+      expect(accSets[0].dropRounds).toEqual([{ weight: -40, reps: 6 }, { weight: -60, reps: 5 }])
     })
   })
 
@@ -2130,4 +2133,22 @@ describe('Workout screen — cross work with no remaining block', () => {
     await screen.findByText('LOG')
     expect(screen.queryByText(/CROSS-LIFT SUPPLEMENTAL/)).not.toBeInTheDocument()
   })
+})
+
+
+it('persists effective main-lift load and the exact band setup across raw-load edits', async () => {
+  await db.lifts.update(1, { name: 'Chin-ups', bandProfile: defaultBandProfile('Chin-ups') })
+  startSession(BENCH)
+  renderWorkout()
+  const picker = await screen.findByRole('combobox', { name: 'band' })
+  fireEvent.change(picker, { target: { value: 'Green' } })
+  fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+  await waitFor(async () => expect(await db.sets.count()).toBe(1))
+  expect((await db.sets.toArray())[0]).toMatchObject({ weight: 145, bandLoad: { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 } })
+  fireEvent.click(screen.getByRole('button', { name: 'Band settings for Chin-ups' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Increase raw load' }))
+  fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect((await db.sets.toArray())[0]).toMatchObject({ weight: 145, bandLoad: { rawLoad: 191 } })
+  expect((await db.lifts.get(1))?.bandProfile?.rawLoad).toBe(192)
 })

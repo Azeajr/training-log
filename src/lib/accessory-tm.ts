@@ -30,11 +30,12 @@ export function getAccessoryTmRecommendations(
     exerciseName: string
     tm: number
     calculatedWeight: number
-    loggedSets: ReadonlyArray<{ weight?: number | null }>
+    loggedSets: ReadonlyArray<{ weight?: number | null; dropRounds?: unknown[] | null }>
   }>,
 ): AccessoryTmRecommendation[] {
   const out: AccessoryTmRecommendation[] = []
   for (const acc of accessories) {
+    if (acc.loggedSets.some(s => s.dropRounds?.length || (s.weight ?? 0) < 0)) continue
     const weights = acc.loggedSets
       .map(s => s.weight)
       .filter((w): w is number => w != null && w > 0)

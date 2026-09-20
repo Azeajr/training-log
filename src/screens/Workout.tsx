@@ -1,3 +1,6 @@
+import type { BandLoad, BandProfile } from '../types/domain'
+import BandSettings from '../components/forms/BandSettings'
+import { bandProfileFor } from '../lib/band-loading'
 import { createSignal, createEffect, on, For, Index, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
@@ -50,6 +53,7 @@ interface LoadedCrossBlock {
   movementLiftId: number
   movementName: string
   movementLoading: PlateLoading | null
+  movement: Lift
   weightMode: 'fsl' | 'percent'
   percent: number | null
   sets: number
@@ -65,10 +69,11 @@ function SetSection(props: {
   forceAmrapFalse?: boolean
   amrapTargets?: () => AmrapTarget[]
   onWeightChange?: (weight: number) => void
-  onLog: (idx: number, reps: number, weight: number) => void
-  onEdit: (idx: number, reps: number, weight: number) => void
+  onLog: (idx: number, reps: number, weight: number, bandLoad?: BandLoad | null) => void
+  onEdit: (idx: number, reps: number, weight: number, bandLoad?: BandLoad | null) => void
   onDelete: () => void
   loading?: PlateLoading | null
+  bandProfile?: BandProfile | null
   // Reports the active row's element up to the page so Workout can scroll to it.
   onActiveRef?: (el: HTMLDivElement) => void
 }) {
@@ -90,9 +95,12 @@ function SetSection(props: {
             isCompleted={globalIdx() < workout.currentSetIndex}
             loggedReps={workout.loggedSets[globalIdx()]?.reps}
             loggedWeight={workout.loggedSets[globalIdx()]?.weight}
+            loggedBandLoad={workout.loggedSets[globalIdx()]?.bandLoad}
+            previousBandLoad={workout.loggedSets[globalIdx() - 1]?.bandLoad}
+            bandProfile={props.bandProfile}
             amrapTargets={(s() as MainSet).isAmrap && props.amrapTargets ? props.amrapTargets() : undefined}
-            onLog={(reps, weight) => props.onLog(globalIdx(), reps, weight)}
-            onEdit={(reps, weight) => props.onEdit(globalIdx(), reps, weight)}
+            onLog={(reps, weight, bandLoad) => props.onLog(globalIdx(), reps, weight, bandLoad)}
+            onEdit={(reps, weight, bandLoad) => props.onEdit(globalIdx(), reps, weight, bandLoad)}
             onWeightChange={(s() as MainSet).isAmrap ? props.onWeightChange : undefined}
             onDelete={globalIdx() === workout.currentSetIndex - 1 ? props.onDelete : undefined}
             loading={props.loading}
@@ -249,6 +257,7 @@ export default function Workout() {
           movementLiftId: b.movementLiftId,
           movementName: mLift.name,
           movementLoading: resolveLiftLoading(mLift, settings.barWeight),
+        movement: mLift,
           weightMode: b.weightMode,
           percent: b.percent,
           sets: b.sets,
@@ -274,6 +283,7 @@ export default function Workout() {
         movementLiftId: s.liftId,
         movementName: mLift.name,
         movementLoading: resolveLiftLoading(mLift, settings.barWeight),
+        movement: mLift,
         weightMode: 'percent',
         percent: null,
         sets: 0,
@@ -391,10 +401,10 @@ export default function Workout() {
     }
   }
 
-  const handleLog = (setIndex: number, reps: number, weight: number) =>
-    setMutations.run(() => logSetAt(setIndex, reps, weight))
+  const handleLog = (setIndex: number, reps: number, weight: number, bandLoad?: BandLoad | null) =>
+    setMutations.run(() => logSetAt(setIndex, reps, weight, bandLoad))
 
-  const logSetAt = async (setIndex: number, reps: number, weight: number) => {
+  const logSetAt = async (setIndex: number, reps: number, weight: number, bandLoad?: BandLoad | null) => {
     const s = allSets()[setIndex]
     const sessionId = workout.activeSession!.id!
     const setData = {
@@ -403,6 +413,7 @@ export default function Workout() {
       setNumber: s.setNumber,
       weight,
       reps,
+      bandLoad: bandLoad ?? null,
       isAmrap: (s as MainSet).isAmrap ?? false,
     }
     const prevAllSets = allSets()
@@ -434,7 +445,7 @@ export default function Workout() {
         // Guarded inside the closure as well as outside it: the banner hides an
         // inapplicable retry, but the callback is held by whoever recorded it
         // and must refuse on its own terms.
-        async () => { if (applies()) await handleLog(setIndex, reps, weight) },
+        async () => { if (applies()) await handleLog(setIndex, reps, weight, bandLoad) },
         applies)
       return
     }
@@ -450,29 +461,30 @@ export default function Workout() {
     startRest(restTypeAfterSet(reps, s.reps))
   }
 
-  const handleEdit = (setIndex: number, reps: number, weight: number) =>
-    setMutations.run(() => editSetAt(setIndex, reps, weight))
+  const handleEdit = (setIndex: number, reps: number, weight: number, bandLoad?: BandLoad | null) =>
+    setMutations.run(() => editSetAt(setIndex, reps, weight, bandLoad))
 
-  const editSetAt = async (setIndex: number, reps: number, weight: number) => {
+  const editSetAt = async (setIndex: number, reps: number, weight: number, bandLoad?: BandLoad | null) => {
     const sessionId = workout.activeSession?.id
     const prev = workout.loggedSets[setIndex]
     if (!prev) return
     // Snapshot before editSet: `prev` is a store proxy, so it reflects the
     // edit once applied — reading it in the catch would "revert" to the new values.
     const { id, type, setNumber, reps: prevReps, weight: prevWeight } = prev
-    editSet(setIndex, { reps, weight })
+    const prevBandLoad = prev.bandLoad ? { ...prev.bandLoad } : null
+    editSet(setIndex, { reps, weight, bandLoad: bandLoad ?? null })
     if (!id) return
     try {
-      await db.sets.update(id, { reps, weight })
+      await db.sets.update(id, { reps, weight, bandLoad: bandLoad ?? null })
     } catch (err) {
-      editSet(setIndex, { reps: prevReps, weight: prevWeight })
+      editSet(setIndex, { reps: prevReps, weight: prevWeight, bandLoad: prevBandLoad ?? null })
       // An edit's identity is the row it edits, which is immutable — so the
       // retry finds that row again by id rather than trusting the position it
       // had when the edit failed.
       const rowIndex = () => workout.loggedSets.findIndex(s => s.id === id)
       const applies = () => workout.activeSession?.id === sessionId && rowIndex() !== -1
       reportSaveFailure(err, 'edit', `Edit to ${setLabel(type)} set ${setNumber} · ${weight}lb × ${reps}`,
-        async () => { if (applies()) await handleEdit(rowIndex(), reps, weight) },
+        async () => { if (applies()) await handleEdit(rowIndex(), reps, weight, bandLoad) },
         applies)
       return
     }
@@ -499,12 +511,12 @@ export default function Workout() {
   // never touching currentSetIndex. Mirrors handleLog's optimistic add + rollback.
   const handleLogCross = (
     section: { block: LoadedCrossBlock; sets: CrossSet[] },
-    localIdx: number, reps: number, weight: number,
-  ) => setMutations.run(() => logCrossSetAt(section, localIdx, reps, weight))
+    localIdx: number, reps: number, weight: number, bandLoad?: BandLoad | null,
+  ) => setMutations.run(() => logCrossSetAt(section, localIdx, reps, weight, bandLoad))
 
   const logCrossSetAt = async (
     section: { block: LoadedCrossBlock; sets: CrossSet[] },
-    localIdx: number, reps: number, weight: number,
+    localIdx: number, reps: number, weight: number, bandLoad?: BandLoad | null,
   ) => {
     const s = section.sets[localIdx]
     const sessionId = workout.activeSession!.id!
@@ -514,6 +526,7 @@ export default function Workout() {
       setNumber: s.setNumber,
       weight,
       reps,
+      bandLoad: bandLoad ?? null,
       isAmrap: false,
       liftId: section.block.movementLiftId,
     }
@@ -534,7 +547,7 @@ export default function Workout() {
       const applies = () => workout.activeSession?.id === sessionId
         && workout.loggedCrossSets.filter(c => c.liftId === section.block.movementLiftId).length === localIdx
       reportSaveFailure(err, 'set', `${section.block.movementName} set ${s.setNumber} · ${weight}lb × ${reps}`,
-        async () => { if (applies()) await handleLogCross(section, localIdx, reps, weight) },
+        async () => { if (applies()) await handleLogCross(section, localIdx, reps, weight, bandLoad) },
         applies)
       return
     }
@@ -545,11 +558,11 @@ export default function Workout() {
   }
 
   const handleEditCross = (
-    section: { block: LoadedCrossBlock }, localIdx: number, reps: number, weight: number,
-  ) => setMutations.run(() => editCrossSetAt(section, localIdx, reps, weight))
+    section: { block: LoadedCrossBlock }, localIdx: number, reps: number, weight: number, bandLoad?: BandLoad | null,
+  ) => setMutations.run(() => editCrossSetAt(section, localIdx, reps, weight, bandLoad))
 
   const editCrossSetAt = async (
-    section: { block: LoadedCrossBlock }, localIdx: number, reps: number, weight: number,
+    section: { block: LoadedCrossBlock }, localIdx: number, reps: number, weight: number, bandLoad?: BandLoad | null,
   ) => {
     const sessionId = workout.activeSession?.id
     const liftId = section.block.movementLiftId
@@ -558,13 +571,15 @@ export default function Workout() {
     const absIdx = matches[localIdx]
     if (absIdx == null) return
     const { id, reps: prevReps, weight: prevWeight } = workout.loggedCrossSets[absIdx]
-    editCrossSet(absIdx, { reps, weight })
+    const previousBand = workout.loggedCrossSets[absIdx].bandLoad
+    const prevBandLoad = previousBand ? { ...previousBand } : null
+    editCrossSet(absIdx, { reps, weight, bandLoad: bandLoad ?? null })
     rebuildAllSets()
     if (!id) return
     try {
-      await db.sets.update(id, { reps, weight })
+      await db.sets.update(id, { reps, weight, bandLoad: bandLoad ?? null })
     } catch (err) {
-      editCrossSet(absIdx, { reps: prevReps, weight: prevWeight })
+      editCrossSet(absIdx, { reps: prevReps, weight: prevWeight, bandLoad: prevBandLoad ?? null })
       rebuildAllSets()
       // Same as the linear edit: the row id is the identity, so the retry
       // re-finds its position within the block rather than trusting the old one.
@@ -573,7 +588,7 @@ export default function Workout() {
         .findIndex(s => s.id === id)
       const applies = () => workout.activeSession?.id === sessionId && blockIndex() !== -1
       reportSaveFailure(err, 'edit', `Edit to ${section.block.movementName} set ${localIdx + 1} · ${weight}lb × ${reps}`,
-        async () => { if (applies()) await handleEditCross(section, blockIndex(), reps, weight) },
+        async () => { if (applies()) await handleEditCross(section, blockIndex(), reps, weight, bandLoad) },
         applies)
     }
   }
@@ -698,6 +713,8 @@ export default function Workout() {
           reps: s.reps ?? null,
           duration: s.duration ?? null,
           distance: s.distance ?? null,
+          dropRounds: s.dropRounds ?? null,
+          bandLoad: s.bandLoad ?? null,
         }))
     )
     // Independent of toSave — a note with no logged sets is still meaningful
@@ -966,6 +983,9 @@ export default function Workout() {
           </div>
         </Show>
 
+        <Show when={lift()}>
+          <BandSettings entity={lift()!} kind="lift" label="EDIT RAW LOAD / BANDS" onSaved={bandProfile => setLift(l => ({ ...l!, bandProfile }))} />
+        </Show>
         <SaveFailureBanner sessionId={workout.activeSession!.id} />
 
         <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start mb-6">
@@ -980,6 +1000,7 @@ export default function Workout() {
               sets={warmupSets}
               offset={() => 0}
               loading={ownLoading()}
+              bandProfile={bandProfileFor(lift())}
               forceAmrapFalse
               onLog={handleLog}
               onEdit={handleEdit}
@@ -999,6 +1020,7 @@ export default function Workout() {
                 sets={mainSets}
                 offset={() => setOffset('main')}
                 loading={ownLoading()}
+              bandProfile={bandProfileFor(lift())}
                 amrapTargets={amrapTargets}
                 onWeightChange={handleAmrapWeightChange}
                 onLog={handleLog}
@@ -1019,6 +1041,7 @@ export default function Workout() {
                   sets={jokerSetsRendered}
                   offset={() => setOffset('joker')}
                   loading={ownLoading()}
+              bandProfile={bandProfileFor(lift())}
                   onLog={handleLog}
                   onEdit={handleEdit}
                   onDelete={handleDeleteSet}
@@ -1051,6 +1074,7 @@ export default function Workout() {
                   sets={fslSets}
                   offset={() => setOffset('fsl')}
                   loading={ownLoading()}
+              bandProfile={bandProfileFor(lift())}
                   forceAmrapFalse
                   onLog={handleLog}
                   onEdit={handleEdit}
@@ -1089,11 +1113,15 @@ export default function Workout() {
                     label={splitLabel(crossLabelFor(section().block))[0]}
                     labelMeta={splitLabel(crossLabelFor(section().block))[1]}
                     loading={section().block.movementLoading}
+                    bandProfile={bandProfileFor(section().block.movement)}
+                    movement={section().block.movement}
+                    onBandProfileSaved={bandProfile => setCrossBlocks(blocks => blocks.map(b => b.movementLiftId === section().block.movementLiftId
+                      ? { ...b, movement: { ...b.movement, bandProfile } } : b))}
                     sets={section().sets}
                     cursor={section().cursor}
                     logged={section().logged}
-                    onLog={(li, reps, weight) => void handleLogCross(section(), li, reps, weight)}
-                    onEdit={(li, reps, weight) => void handleEditCross(section(), li, reps, weight)}
+                    onLog={(li, reps, weight, bandLoad) => void handleLogCross(section(), li, reps, weight, bandLoad)}
+                    onEdit={(li, reps, weight, bandLoad) => void handleEditCross(section(), li, reps, weight, bandLoad)}
                     onDelete={() => void handleDeleteCross(section())}
                     onLabelClick={() => setLiftHistoryId(section().block.movementLiftId)}
                   />

@@ -1341,3 +1341,51 @@ describe('PT backup round trip', () => {
     expect((await db.ptRoutines.get(routineId))?.archived).toBe(true)
   })
 })
+
+
+describe('drop sets and band assistance backups', () => {
+  it('round-trips grouped rounds through SQLite and JSON, alongside legacy sets', async () => {
+    const cycleId = await seedBase()
+    const exerciseId = await db.exercises.add({ name: 'Assisted pull-up', type: 'reps' })
+    const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date(), status: 'completed', notes: null })
+    const dropRounds = [{ weight: -40, reps: 8 }, { weight: -60, reps: 6 }]
+    await db.accessorySets.add({ sessionId, exerciseId, setNumber: 1, weight: -30, reps: 10, duration: null, distance: null, dropRounds })
+    await db.accessorySets.add({ sessionId, exerciseId, setNumber: 2, weight: 0, reps: 5, duration: null, distance: null })
+    await exportJson(db)
+    const backup = JSON.parse(await capturedBlob!.text())
+    await importFromRawData(db, backup)
+    const restored = await db.accessorySets.orderBy('setNumber').toArray()
+    expect(restored).toHaveLength(2)
+    expect(restored[0]).toMatchObject({ weight: -30, dropRounds })
+    expect(restored[1].dropRounds).toBeNull()
+    await exportCsv(db)
+    const csv = await capturedBlob!.text()
+    expect(csv).toContain('accessory_drop')
+    expect(csv).toContain('-40')
+    expect(csv).toContain('-60')
+  })
+})
+
+
+it('rejects malformed drop rounds before replacing existing data', async () => {
+  await seedBase()
+  await expect(importFromRawData(db, { accessorySets: [{ id: 1, dropRounds: [{ weight: -30, reps: 'bad' }] }] })).rejects.toThrow('drop rounds')
+  expect(await db.lifts.count()).toBe(1)
+})
+
+
+it('exports band setup on main, assistance, and drop rows, with consistent CSV columns', async () => {
+  const cycleId = await seedBase()
+  const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'completed' })
+  const bandLoad = { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 5 }
+  await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 150, reps: 8, isAmrap: true, bandLoad })
+  await db.accessorySets.add({ sessionId, exerciseId: 1, setNumber: 1, weight: 150, reps: 8, duration: null, distance: null, bandLoad,
+    dropRounds: [{ weight: 145, reps: 6, bandLoad: { ...bandLoad, addedWeight: 0 } }] })
+  await db.accessoryNotes.add({ sessionId, exerciseId: 2, notes: 'note only' })
+  await exportCsv(db)
+  const lines = (await capturedBlob!.text()).split('\n').map(line => line.split(','))
+  expect(lines[0].slice(-4)).toEqual(['"band"', '"raw_load_lb"', '"band_assistance_lb"', '"added_weight_lb"'])
+  expect(lines[1].slice(-4)).toEqual(['"Green"', '"191"', '"48"', '"5"'])
+  expect(lines[3].slice(-4)).toEqual(['"Green"', '"191"', '"48"', '"0"'])
+  expect(lines.every(line => line.length === lines[0].length)).toBe(true)
+})

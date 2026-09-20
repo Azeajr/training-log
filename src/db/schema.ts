@@ -172,6 +172,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ptNotes_session_exercise ON ptNotes(sessio
 `
 
 export const ADDITIVE_MIGRATIONS = [
+  // Optional JSON calibration/snapshots; old rows remain unchanged and readable.
+  `ALTER TABLE lifts ADD COLUMN bandProfile TEXT`,
+  `ALTER TABLE exercises ADD COLUMN bandProfile TEXT`,
+  `ALTER TABLE sets ADD COLUMN bandLoad TEXT`,
+  `ALTER TABLE accessorySets ADD COLUMN bandLoad TEXT`,
+  `ALTER TABLE accessorySets ADD COLUMN dropRounds TEXT`,
   `ALTER TABLE settings ADD COLUMN supplementalTemplate TEXT`,
   `ALTER TABLE lifts ADD COLUMN archived INTEGER`,
   `ALTER TABLE cycles ADD COLUMN closedThroughWeek INTEGER`,

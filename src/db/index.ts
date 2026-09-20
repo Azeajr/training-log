@@ -23,17 +23,17 @@ import type {
 export type { SQLiteTable } from './sqlite-table'
 
 class TrainingSQLiteDB {
-  lifts = new SQLiteTable<Lift>('lifts', { boolFields: ['archived', 'usesBarbell'] })
+  lifts = new SQLiteTable<Lift>('lifts', { boolFields: ['archived', 'usesBarbell'], jsonFields: ['bandProfile'] })
   trainingMaxes = new SQLiteTable<TrainingMax>('trainingMaxes', { dateFields: ['setAt'] })
   cycles = new SQLiteTable<Cycle>('cycles', { dateFields: ['startDate', 'endDate'] })
   sessions = new SQLiteTable<Session>('sessions', { dateFields: ['date'] })
-  sets = new SQLiteTable<Set>('sets', { boolFields: ['isAmrap'] })
-  exercises = new SQLiteTable<Exercise>('exercises', { boolFields: ['archived', 'usesBarbell'] })
+  sets = new SQLiteTable<Set>('sets', { boolFields: ['isAmrap'], jsonFields: ['bandLoad'] })
+  exercises = new SQLiteTable<Exercise>('exercises', { boolFields: ['archived', 'usesBarbell'], jsonFields: ['bandProfile'] })
   liftSupplementals = new SQLiteTable<LiftSupplemental>('liftSupplementals')
   accessoryTrainingMaxes = new SQLiteTable<AccessoryTrainingMax>('accessoryTrainingMaxes', {
     dateFields: ['setAt'],
   })
-  accessorySets = new SQLiteTable<AccessorySet>('accessorySets')
+  accessorySets = new SQLiteTable<AccessorySet>('accessorySets', { jsonFields: ['dropRounds', 'bandLoad'] })
   accessoryNotes = new SQLiteTable<AccessoryNote>('accessoryNotes')
   assistanceDefaults = new SQLiteTable<AssistanceDefault>('assistanceDefaults')
   ptRoutines = new SQLiteTable<PtRoutine>('ptRoutines', { boolFields: ['archived'] })

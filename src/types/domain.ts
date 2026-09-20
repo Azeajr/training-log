@@ -20,7 +20,23 @@ export type HighRepDiscount = 'off' | 'mild' | 'moderate' | 'aggressive'
 //            plate machine): target − base, plates as singles, "plates: …"
 export type PlateMode = 'none' | 'paired' | 'total'
 
+export interface BandProfile {
+  enabled: boolean
+  rawLoad: number
+  bands: { name: string; assistance: number }[]
+  maxAddedWeight: number | null
+}
+
+/** Immutable setup captured with a logged set; weight holds the effective load. */
+export interface BandLoad {
+  band: string | null
+  rawLoad: number
+  assistance: number
+  addedWeight: number
+}
+
 export interface Lift {
+  bandProfile?: BandProfile | null
   id?: number
   name: string
   order: number
@@ -98,6 +114,7 @@ export interface Session {
 }
 
 export interface Set {
+  bandLoad?: BandLoad | null
   id?: number
   sessionId: number
   type: 'warmup' | 'main' | 'joker' | 'cross' | SupplementalSetType
@@ -121,6 +138,7 @@ export type ExerciseCategory = 'push' | 'pull' | 'legs' | 'core'
 export type AssistanceSection = 'push' | 'pull' | 'legs_core'
 
 export interface Exercise {
+  bandProfile?: BandProfile | null
   id?: number
   name: string
   type: 'reps' | 'timed' | 'distance'
@@ -143,7 +161,16 @@ export interface AccessoryTrainingMax {
   setAt: Date
 }
 
+export interface DropRound {
+  bandLoad?: BandLoad | null
+  weight: number
+  reps: number
+}
+
 export interface AccessorySet {
+  bandLoad?: BandLoad | null
+  /** Additional rounds after the initial weight/reps, all within this set. */
+  dropRounds?: DropRound[] | null
   id?: number
   sessionId: number
   exerciseId: number

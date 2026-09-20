@@ -17,6 +17,8 @@ interface Props {
   weight: number
   onWeightChange: (v: number) => void
   weightStep?: number
+  weightMin?: number
+  weightControls?: JSX.Element
   // Value FieldRow(s): reps for main/cross, reps|time|distance for accessory.
   children: JSX.Element
   onLog: () => void
@@ -30,16 +32,16 @@ interface Props {
 export default function SetLogControls(props: Props) {
   return (
     <div class="mt-3 flex flex-col gap-2">
-      <FieldRow label="wt">
+      {props.weightControls ?? <FieldRow label="wt">
         <Stepper
           value={props.weight}
           onChange={props.onWeightChange}
           step={props.weightStep ?? 2.5}
-          min={0}
+          min={props.weightMin ?? 0}
           label="weight"
           fieldLabel="weight"
         />
-      </FieldRow>
+      </FieldRow>}
       {props.children}
       <button
         onClick={props.onLog}
