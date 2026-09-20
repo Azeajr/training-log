@@ -954,7 +954,13 @@ export default function Workout() {
         </div>
       }
     >
-      <div class="p-4 md:p-8 font-mono pb-48 max-w-3xl mx-auto">
+      {/* px/pt, never the `p-8` shorthand: `md:p-8` is emitted after `pb-48`
+          in the stylesheet and at equal specificity, so the shorthand quietly
+          reset padding-bottom from 12rem to 2rem at >=48rem. SessionBar is
+          `fixed` at `bottom-[var(--nav-h)]`, so the last ~100px of the page
+          went under it on desktop and "session options" — the only route to
+          SKIP LIFT and EXIT WITHOUT SAVING — could not be tapped at all. */}
+      <div class="p-4 md:px-8 md:pt-8 font-mono pb-48 max-w-3xl mx-auto">
         <button
           onClick={() => setLiftHistoryId(workout.activeSession!.liftId)}
           class="w-full text-left cursor-pointer mb-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"

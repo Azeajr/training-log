@@ -282,3 +282,27 @@ test.describe('rest type wiring on log', () => {
     await pollRestType(page).toBe('fail')
   })
 })
+
+test.describe('session options reachable under the fixed session bar', () => {
+  // SessionBar is `fixed` at `bottom-[var(--nav-h)]`, so the page needs bottom
+  // padding to clear it. `md:p-8` is emitted after `pb-48` at equal specificity,
+  // so the shorthand reset padding-bottom to 2rem at >=48rem and the last ~100px
+  // of the page — which is exactly where "session options" lives — went under the
+  // bar. Playwright's click actionability catches it: an occluded element fails
+  // the hit-target check rather than silently doing nothing.
+  for (const [label, width, height] of [['desktop', 1280, 800], ['mobile', 390, 844]] as const) {
+    test(`${label}: session options opens SKIP LIFT and EXIT WITHOUT SAVING`, async ({ page }) => {
+      await page.setViewportSize({ width, height })
+      await startWorkout(page)
+
+      const trigger = page.getByRole('button', { name: /session options/ })
+      await trigger.scrollIntoViewIfNeeded()
+      await trigger.click()
+
+      await expect(page.getByRole('button', { name: 'EXIT WITHOUT SAVING' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'SKIP LIFT' })).toBeVisible()
+      await page.getByRole('button', { name: 'EXIT WITHOUT SAVING' }).click()
+      await expect(page.getByRole('button', { name: 'EXIT', exact: true })).toBeVisible()
+    })
+  }
+})
