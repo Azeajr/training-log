@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, fireEvent } from '@solidjs/testing-library'
 import { createSignal } from 'solid-js'
-import { defaultBandProfile, makeBandLoad } from '../../lib/band-loading'
+import { bandProfileFor, defaultBandProfile, makeBandLoad } from '../../lib/band-loading'
 import SetRow from './SetRow'
 
 const baseSet = { type: 'main' as const, setNumber: 1, weight: 100, reps: 5, isAmrap: false }
@@ -100,5 +100,55 @@ describe('band-assisted main sets', () => {
     fireEvent.click(getByRole('button', { name: 'Increase reps' }))
     fireEvent.click(getByText('SAVE'))
     expect(onEdit).toHaveBeenCalledWith(6, 145, original)
+  })
+})
+
+describe('band profiles are opt-in', () => {
+  const totalBase0 = { mode: 'total' as const, base: 0 }
+
+  it('a chin-up with no saved profile keeps its weight stepper', () => {
+    // The whole symptom: equipment TOTAL / base 0 is the belt-and-chin setup,
+    // and a profile switched on by name alone replaced the weight stepper with
+    // band controls on a lift set up to log a plain total.
+    const { queryByLabelText, queryByRole, container } = render(() => (
+      <SetRow set={{ ...baseSet, weight: 145 }} isActive isCompleted={false}
+        loading={totalBase0} bandProfile={bandProfileFor({ name: 'Chin-ups' })}
+        onLog={() => {}} onEdit={() => {}} />
+    ))
+    expect(queryByLabelText('Increase weight')).toBeInTheDocument()
+    expect(queryByRole('combobox', { name: 'band' })).not.toBeInTheDocument()
+    expect(container.textContent).toContain('plates:')
+  })
+
+  it('logs nothing about bands until a profile is saved', () => {
+    const onLog = vi.fn()
+    const { getByRole } = render(() => (
+      <SetRow set={{ ...baseSet, weight: 145 }} isActive isCompleted={false}
+        loading={totalBase0} bandProfile={bandProfileFor({ name: 'Chin-ups' })}
+        onLog={onLog} onEdit={() => {}} />
+    ))
+    fireEvent.click(getByRole('button', { name: 'LOG' }))
+    // Not a suggested Orange band at 191 raw that nobody asked for.
+    expect(onLog).toHaveBeenCalledWith(5, 145, null)
+  })
+
+  it('a saved, enabled profile does switch the controls over', () => {
+    const { queryByRole } = render(() => (
+      <SetRow set={{ ...baseSet, weight: 145 }} isActive isCompleted={false}
+        loading={totalBase0}
+        bandProfile={bandProfileFor({ name: 'Chin-ups', bandProfile: defaultBandProfile('Chin-ups') })}
+        onLog={() => {}} onEdit={() => {}} />
+    ))
+    expect(queryByRole('combobox', { name: 'band' })).toBeInTheDocument()
+  })
+
+  it('a profile the user turned off stays off', () => {
+    const off = { ...defaultBandProfile('Chin-ups')!, enabled: false }
+    const { queryByLabelText } = render(() => (
+      <SetRow set={{ ...baseSet, weight: 145 }} isActive isCompleted={false}
+        loading={totalBase0} bandProfile={bandProfileFor({ name: 'Chin-ups', bandProfile: off })}
+        onLog={() => {}} onEdit={() => {}} />
+    ))
+    expect(queryByLabelText('Increase weight')).toBeInTheDocument()
   })
 })

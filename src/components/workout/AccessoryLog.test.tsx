@@ -2,6 +2,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library'
 import AccessoryLog from './AccessoryLog'
+import { defaultBandProfile } from '../../lib/band-loading'
 import type { Exercise } from '../../types/domain'
 import { workout, addAccessory, clearSession, type ActiveAccessory } from '../../store/workout-store'
 import { ACCESSORY_SETS } from '../../lib/calc'
@@ -188,7 +189,9 @@ describe('assistance completion and drop rounds', () => {
 
 it('records band changes per set and per drop round, carrying the last choice forward', () => {
   addAccessory({ ...accessory([]), exerciseName: 'Pull-ups', calculatedWeight: 145 })
-  const view = render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ id: 1, name: 'Pull-ups', type: 'reps' }} />)
+  // Bands are opt-in now: the profile is saved on the exercise, not inferred
+  // from its name, so the test hands one over the way band settings would.
+  const view = render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: defaultBandProfile('Pull-ups') }} />)
   expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Green')
   fireEvent.change(screen.getByRole('combobox', { name: 'band' }), { target: { value: 'Purple' } })
   fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))

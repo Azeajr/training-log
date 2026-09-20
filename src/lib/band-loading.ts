@@ -4,6 +4,15 @@ import type { BandLoad, BandProfile, PlateConfig } from '../types/domain'
 
 export const BAND_NAMES = ['Orange', 'Green', 'Purple', 'Red'] as const
 
+/**
+ * A starting calibration for a movement that is commonly band-assisted.
+ *
+ * A TEMPLATE, offered when the user opens band settings — never applied on its
+ * own. Matching on the name alone and switching the feature on was wrong twice
+ * over: it swapped a chin-up's weight stepper for band controls without being
+ * asked, and it decided by spelling, so "Chin-ups" was banded and "Chinup
+ * (neutral grip)" was not. `bandProfileFor` no longer consults it.
+ */
 export function defaultBandProfile(name: string): BandProfile | null {
   const key = name.toLowerCase().replace(/[^a-z]/g, '')
   const pulling = ['chinup', 'chinups', 'pullup', 'pullups'].includes(key)
@@ -15,9 +24,16 @@ export function defaultBandProfile(name: string): BandProfile | null {
     bands: BAND_NAMES.map((name, i) => ({ name, assistance: rawLoad - measured[i] })) }
 }
 
+/**
+ * The band profile in force for an entity, or null for ordinary loading.
+ *
+ * Saved profiles only. Bands change what the logger looks like — they replace
+ * the weight stepper entirely — so they stay off until the user ticks "Use raw
+ * load and bands" in band settings. `defaultBandProfile` fills that dialog in
+ * when it opens; it does not decide the answer.
+ */
 export function bandProfileFor(entity: { name: string; bandProfile?: BandProfile | null } | null | undefined): BandProfile | null {
-  if (!entity) return null
-  const profile = entity.bandProfile ?? defaultBandProfile(entity.name)
+  const profile = entity?.bandProfile
   return profile?.enabled ? profile : null
 }
 
@@ -115,13 +131,26 @@ export function validBandProfile(value: unknown): value is BandProfile {
 }
 
 
-/** Add supplied initial calibrations once; never overwrite a saved or disabled profile. */
-export async function seedBandProfiles(db: TrainingDB): Promise<void> {
+/**
+ * Undo the name-matched profiles an earlier build wrote on boot.
+ *
+ * That seed turned band loading ON for anything spelled like a chin-up, which
+ * replaced the weight stepper with band controls on a lift the user had set up
+ * to log a plain total. Only a profile identical to the template it came from
+ * is cleared — once the user has opened band settings and saved, the row is
+ * theirs and is left exactly as it stands, enabled or not.
+ *
+ * Idempotent, and a no-op on a database that never ran the seeding build.
+ */
+export async function clearSeededBandProfiles(db: TrainingDB): Promise<void> {
+  const isUntouchedSeed = (entity: { name: string; bandProfile?: BandProfile | null }): boolean => {
+    const seeded = defaultBandProfile(entity.name)
+    return seeded != null && JSON.stringify(entity.bandProfile) === JSON.stringify(seeded)
+  }
   for (const table of [db.lifts, db.exercises]) {
     for (const entity of await table.toArray()) {
-      if (entity.bandProfile != null || entity.id == null) continue
-      const bandProfile = defaultBandProfile(entity.name)
-      if (bandProfile) await table.update(entity.id, { bandProfile })
+      if (entity.id == null || !isUntouchedSeed(entity)) continue
+      await table.update(entity.id, { bandProfile: null })
     }
   }
 }

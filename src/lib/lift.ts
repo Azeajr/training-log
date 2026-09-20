@@ -1,4 +1,3 @@
-import { defaultBandProfile } from './band-loading'
 import type { TrainingDB } from '../db/index'
 import { discardPendingSessionRows } from './session'
 import type { Lift, LiftSupplemental } from '../types/domain'
@@ -9,7 +8,7 @@ export async function createLift(
 ): Promise<number> {
   const lifts = await db.lifts.toArray()
   const nextOrder = lifts.reduce((m, l) => Math.max(m, l.order), 0) + 1
-  return db.lifts.add({ ...fields, order: nextOrder, archived: false, bandProfile: defaultBandProfile(fields.name) })
+  return db.lifts.add({ ...fields, order: nextOrder, archived: false })
 }
 
 export async function updateLift(db: TrainingDB, id: number, patch: Partial<Lift>): Promise<void> {

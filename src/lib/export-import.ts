@@ -1,4 +1,4 @@
-import { validBandLoad, validBandProfile, defaultBandProfile } from './band-loading'
+import { validBandLoad, validBandProfile } from './band-loading'
 import type { BandLoad } from '../types/domain'
 import type { TrainingDB } from '../db/index'
 import type { PtExercise, PtSetCheck } from '../types/domain'
@@ -251,10 +251,6 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       let parsed = parseDates<Record<string, unknown>>(pickCols(rows, COLS[key]), dates)
       // Migrate the legacy 'single_leg' category to 'legs' so importing an old
       // backup lands on the current tag set (mirrors the boot-time seed migration).
-      if (key === 'lifts' || key === 'exercises') {
-        parsed = parsed.map(r => r.bandProfile == null && typeof r.name === 'string'
-          ? { ...r, bandProfile: defaultBandProfile(r.name) } : r)
-      }
       if (key === 'exercises') {
         parsed = parsed.map(r => r.category === 'single_leg' ? { ...r, category: 'legs' } : r)
       }
