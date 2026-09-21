@@ -63,8 +63,8 @@ export default function SetRow(props: Props) {
   }
   /** A band the USER picked. Outranks anything re-derived below. */
   const changeBandLoad = (load: BandLoad) => { setBandTouched(true); applyBandLoad(load) }
-  const suggest = () => {
-    if (props.bandProfile) applyBandLoad(suggestBandLoad(props.bandProfile, props.set.weight, settings.plates))
+  const suggest = (target: number) => {
+    if (props.bandProfile) applyBandLoad(suggestBandLoad(props.bandProfile, target, settings.plates))
   }
   createEffect(on(() => [props.bandProfile, props.set.weight, props.isActive] as const, (_now, prior) => {
     if (props.isCompleted || !props.isActive) return
@@ -95,7 +95,7 @@ export default function SetRow(props: Props) {
     const previous = props.previousBandLoad
     if (previous && previous.rawLoad === profile.rawLoad && effectiveBandLoad(previous) === props.set.weight) {
       applyBandLoad({ ...previous })
-    } else suggest()
+    } else suggest(props.set.weight)
   }))
 
   const isAmrap = () => props.set.isAmrap ?? false
@@ -181,7 +181,16 @@ export default function SetRow(props: Props) {
       <Match when={editing()}>
         <div class="flex items-center gap-3 py-3 pl-3 border-l-4 border-accent flex-wrap">
           <Show when={editBandLoad()} fallback={<Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} label="edit-weight" fieldLabel="weight" />}>
-            <BandLoadControls profile={props.bandProfile} value={editBandLoad()!} loading={props.loading ?? undefined} onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
+            {/* The set carries its own prescription, so the edit row can name
+                it — unlike history, which only has today's. */}
+            <BandLoadControls profile={props.bandProfile} value={editBandLoad()!} loading={props.loading ?? undefined}
+              target={props.set.weight}
+              onSuggest={target => {
+                if (!props.bandProfile) return
+                const load = suggestBandLoad(props.bandProfile, target, settings.plates)
+                setEditBandLoad(load); setEditWeight(effectiveBandLoad(load))
+              }}
+              onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
           </Show>
           <span class="text-text-dim font-mono text-sm">×</span>
           <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} label="edit-reps" fieldLabel="reps" />

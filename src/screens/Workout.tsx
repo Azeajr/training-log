@@ -1067,10 +1067,17 @@ export default function Workout() {
           </div>
         </Show>
 
-        <Show when={lift()}>
-          <BandSettings entity={lift()!} kind="lift" label="EDIT RAW LOAD / BANDS" onSaved={bandProfile => setLift(l => ({ ...l!, bandProfile }))} />
-        </Show>
         <SaveFailureBanner sessionId={workout.activeSession!.id} />
+
+        {/* Only for a movement that actually uses bands — about two, by the
+            calibration table's own account. Gated on the entity's saved profile
+            and never on its name; setup lives in Settings, which is the opt-in
+            route and keeps this reachable when the profile is off. It also sits
+            BELOW the save-failure banner now: a control nobody on this screen
+            wants was pushing a write error down the page. */}
+        <Show when={bandProfileFor(lift())}>
+          <BandSettings entity={lift()!} kind="lift" onSaved={bandProfile => setLift(l => ({ ...l!, bandProfile }))} />
+        </Show>
 
         <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start mb-6">
           <CollapsibleSection

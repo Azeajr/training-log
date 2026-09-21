@@ -878,3 +878,72 @@ it('edits recorded band loads without recalibrating untouched rounds', async () 
   expect(await db.accessorySets.get(id)).toMatchObject({ weight: 145, bandLoad,
     dropRounds: [{ weight: 145.5, bandLoad: { ...bandLoad, addedWeight: 2.5 } }, { weight: 85, bandLoad: { ...bandLoad, band: 'Orange', assistance: 104 } }] })
 })
+
+// ── C2 ──────────────────────────────────────────────────────────────────────
+// Four of the six orphan-`lb` sites are here: the main-set row and the reps,
+// timed and distance accessory branches. `BandLoadControls` ends in its own
+// unit, so a banded row read "… = 143.5lb effective   lb ×".
+describe('HistoryEdit — the load separator carries exactly one unit', () => {
+  beforeEach(async () => {
+    await Promise.all([
+      db.lifts.clear(), db.cycles.clear(), db.sessions.clear(),
+      db.sets.clear(), db.exercises.clear(),
+      db.accessorySets.clear(), db.accessoryNotes.clear(),
+    ])
+    mockNavigate.mockClear()
+  })
+
+  afterEach(drain)
+
+  const bandLoad = { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 }
+  const text = () => (document.body.textContent ?? '').replace(/\s+/g, ' ')
+
+  /** A completed session whose main set carries a band load. */
+  async function seedBandedMain() {
+    const liftId = await db.lifts.add({ name: 'Chin-ups', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 143, reps: 5, isAmrap: false, bandLoad })
+    return sessionId
+  }
+
+  async function seedBandedAccessory(type: 'reps' | 'timed' | 'distance') {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const exerciseId = await db.exercises.add({ name: 'Chin-ups', type })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.accessorySets.add({
+      sessionId, exerciseId, setNumber: 1, weight: 143,
+      reps: type === 'reps' ? 10 : null,
+      duration: type === 'timed' ? 60 : null,
+      distance: type === 'distance' ? 40 : null,
+      bandLoad,
+    })
+    return sessionId
+  }
+
+  it('shows no orphan unit on a banded main set', async () => {
+    renderHistoryEdit(await seedBandedMain())
+    await screen.findByText(/effective/)
+    expect(text()).not.toMatch(/effective\s*lb/)
+  })
+
+  it('keeps the unit on a plain-weight main set', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const cycleId = await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    const sessionId = await db.sessions.add({ cycleId, liftId, week: 1, date: new Date(), notes: null, status: 'completed' })
+    await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 100, reps: 5, isAmrap: false })
+
+    renderHistoryEdit(sessionId)
+    await screen.findByText('MAIN')
+    expect(text()).toContain('lb ×')
+  })
+
+  for (const type of ['reps', 'timed', 'distance'] as const) {
+    it(`shows no orphan unit on a banded ${type} accessory`, async () => {
+      renderHistoryEdit(await seedBandedAccessory(type))
+      await screen.findByText(/effective/)
+      expect(text()).not.toMatch(/effective\s*lb/)
+    })
+  }
+})

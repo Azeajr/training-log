@@ -1,5 +1,5 @@
 import BandLoadControls from '../components/forms/BandLoadControls'
-import { bandProfileFor, effectiveBandLoad } from '../lib/band-loading'
+import { bandProfileFor, effectiveBandLoad, suggestBandLoad } from '../lib/band-loading'
 import { resolveLiftLoading, resolveExerciseLoading, type PlateLoading } from '../lib/plate-loading'
 import { settings } from '../store/settings-store'
 import { createSignal, onMount, For, Index, Show } from 'solid-js'
@@ -393,11 +393,24 @@ export default function HistoryEdit() {
                     <Index each={rows()}>
                       {row => (
                         <div class="flex items-center gap-2 py-1.5 flex-wrap">
-                          <Show when={row().s.bandLoad} fallback={<Stepper value={row().s.weight} onChange={v => updateSet(row().i, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />}>
+                          <Show
+                            when={row().s.bandLoad}
+                            fallback={<><Stepper value={row().s.weight} onChange={v => updateSet(row().i, 'weight', v)} step={2.5} min={0} fieldLabel="weight" /><span class="text-muted text-xs">lb ×</span></>}
+                          >
+                            {/* No target is passed: the prescription available
+                                here is TODAY's, and a set logged weeks ago was
+                                not aimed at it. The user names one instead. */}
                             <BandLoadControls profile={liftProfiles().get(row().s.liftId ?? liftId()!)} loading={liftLoadings().get(row().s.liftId ?? liftId()!) ?? undefined} value={row().s.bandLoad!}
+                              onSuggest={target => {
+                                const profile = liftProfiles().get(row().s.liftId ?? liftId()!)
+                                if (!profile) return
+                                const bandLoad = suggestBandLoad(profile, target, settings.plates)
+                                setEditSets(prev => prev.map((s, i) => i === row().i ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s))
+                              }}
                               onChange={bandLoad => setEditSets(prev => prev.map((s, i) => i === row().i ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s))} />
+                            {/* Bare — the band summary already ends in its own "lb". */}
+                            <span class="text-muted text-xs">×</span>
                           </Show>
-                          <span class="text-muted text-xs">lb ×</span>
                           <Stepper value={row().s.reps} onChange={v => updateSet(row().i, 'reps', v)} step={1} min={0} fieldLabel="reps" />
                           <Show when={row().s.isAmrap}>
                             <span class="text-warn text-xs tracking-widest">AMRAP</span>
@@ -448,11 +461,21 @@ export default function HistoryEdit() {
                         <span class="text-muted text-xs w-10">Set {setRow().setNumber}</span>
                         <Show when={accAcc().exerciseType === 'reps'}>
                           <>
-                            <Show when={setRow().bandLoad} fallback={<Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />}>
+                            <Show
+                              when={setRow().bandLoad}
+                              fallback={<><Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" /><span class="text-muted text-xs">lb ×</span></>}
+                            >
                               <BandLoadControls profile={exerciseProfiles().get(accAcc().exerciseId)} loading={exerciseLoadings().get(accAcc().exerciseId) ?? undefined} value={setRow().bandLoad!}
+                                onSuggest={target => {
+                                  const profile = exerciseProfiles().get(accAcc().exerciseId)
+                                  if (!profile) return
+                                  const bandLoad = suggestBandLoad(profile, target, settings.plates)
+                                  setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))
+                                }}
                                 onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />
+                              {/* Bare — the band summary already ends in its own "lb". */}
+                              <span class="text-muted text-xs">×</span>
                             </Show>
-                            <span class="text-muted text-xs">lb ×</span>
                             <Stepper value={setRow().reps ?? 0} onChange={v => updateAccSet(ai, si, 'reps', v)} step={1} min={0} fieldLabel="reps" />
                             <div class="w-full">
                               <DropRoundsEditor
@@ -471,11 +494,21 @@ export default function HistoryEdit() {
                         </Show>
                         <Show when={accAcc().exerciseType === 'timed'}>
                           <>
-                            <Show when={setRow().bandLoad} fallback={<Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />}>
+                            <Show
+                              when={setRow().bandLoad}
+                              fallback={<><Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" /><span class="text-muted text-xs">lb ×</span></>}
+                            >
                               <BandLoadControls profile={exerciseProfiles().get(accAcc().exerciseId)} loading={exerciseLoadings().get(accAcc().exerciseId) ?? undefined} value={setRow().bandLoad!}
+                                onSuggest={target => {
+                                  const profile = exerciseProfiles().get(accAcc().exerciseId)
+                                  if (!profile) return
+                                  const bandLoad = suggestBandLoad(profile, target, settings.plates)
+                                  setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))
+                                }}
                                 onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />
+                              {/* Bare — the band summary already ends in its own "lb". */}
+                              <span class="text-muted text-xs">×</span>
                             </Show>
-                            <span class="text-muted text-xs">lb ×</span>
                             <DurationInput
                               value={setRow().duration}
                               onChange={val => updateAccSet(ai, si, 'duration', val)}
@@ -485,11 +518,21 @@ export default function HistoryEdit() {
                         </Show>
                         <Show when={accAcc().exerciseType === 'distance'}>
                           <>
-                            <Show when={setRow().bandLoad} fallback={<Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" />}>
+                            <Show
+                              when={setRow().bandLoad}
+                              fallback={<><Stepper value={setRow().weight ?? 0} onChange={v => updateAccSet(ai, si, 'weight', v)} step={2.5} min={0} fieldLabel="weight" /><span class="text-muted text-xs">lb ×</span></>}
+                            >
                               <BandLoadControls profile={exerciseProfiles().get(accAcc().exerciseId)} loading={exerciseLoadings().get(accAcc().exerciseId) ?? undefined} value={setRow().bandLoad!}
+                                onSuggest={target => {
+                                  const profile = exerciseProfiles().get(accAcc().exerciseId)
+                                  if (!profile) return
+                                  const bandLoad = suggestBandLoad(profile, target, settings.plates)
+                                  setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))
+                                }}
                                 onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />
+                              {/* Bare — the band summary already ends in its own "lb". */}
+                              <span class="text-muted text-xs">×</span>
                             </Show>
-                            <span class="text-muted text-xs">lb ×</span>
                             <Stepper value={setRow().distance ?? 0} onChange={v => updateAccSet(ai, si, 'distance', v)} step={1} min={0} fieldLabel="distance" />
                           </>
                         </Show>

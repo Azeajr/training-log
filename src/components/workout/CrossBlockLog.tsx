@@ -1,3 +1,4 @@
+import { bandProfileFor } from '../../lib/band-loading'
 import BandSettings from '../forms/BandSettings'
 import { For, Show } from 'solid-js'
 import type { CrossSet } from '../../lib/calc'
@@ -45,7 +46,10 @@ export default function CrossBlockLog(props: Props) {
       anchor={props.anchor}
       onLabelClick={props.onLabelClick}
     >
-      <Show when={props.movement}><BandSettings entity={props.movement!} kind="lift" label="EDIT RAW LOAD / BANDS" onSaved={props.onBandProfileSaved} /></Show>
+      {/* Gated like the main lift's: every cross block carried one of these. */}
+      <Show when={bandProfileFor(props.movement)}>
+        <BandSettings entity={props.movement!} kind="lift" onSaved={props.onBandProfileSaved} />
+      </Show>
       <For each={props.sets}>
         {(s, i) => (
           <SetRow

@@ -57,7 +57,7 @@ export default function AccessoryLog(props: Props) {
 
   const [weight, setWeight] = createSignal(initWeight())
   const changeBandLoad = (load: BandLoad) => { setBandLoad(load); setWeight(effectiveBandLoad(load)) }
-  const suggest = () => { if (profile()) changeBandLoad(suggestBandLoad(profile()!, props.accessory.calculatedWeight, settings.plates)) }
+  const suggest = (target: number) => { if (profile()) changeBandLoad(suggestBandLoad(profile()!, target, settings.plates)) }
   createEffect(on(profile, (p, previous) => {
     if (!p) {
       // Bands off. `weight` only ever moves through `changeBandLoad` here, so
@@ -71,7 +71,7 @@ export default function AccessoryLog(props: Props) {
     const last = props.accessory.loggedSets.at(-1)?.bandLoad
     const current = bandLoad() ?? last
     if (current) changeBandLoad(makeBandLoad(p, current.band, current.addedWeight))
-    else suggest()
+    else suggest(props.accessory.calculatedWeight)
   }))
   const [reps, setReps] = createSignal(ACCESSORY_REPS)
   const [duration, setDuration] = createSignal<number | null>(null)
@@ -163,8 +163,11 @@ export default function AccessoryLog(props: Props) {
             <span class="text-muted text-xs font-mono ml-1">{weight()}lb</span>
           </button>
         </Show>
-        <Show when={entity()}>
-          <BandSettings label="bands" entity={entity()!} kind="exercise" onSaved={props.onBandProfileSaved} />
+        {/* The same gate, and it matters more here: a session logs several
+            accessories and every one of them carried this. Settings reaches an
+            exercise's profile exactly as it reaches a lift's. */}
+        <Show when={bandProfileFor(entity())}>
+          <BandSettings entity={entity()!} kind="exercise" onSaved={props.onBandProfileSaved} />
         </Show>
         <Show when={done()}>
           <button type="button" aria-expanded={expanded()} aria-controls={contentId}
@@ -248,10 +251,21 @@ export default function AccessoryLog(props: Props) {
               >
                 <div class="flex items-center gap-2 pl-2 py-1 flex-wrap">
                   <span class="text-warn text-xs">Set {i() + 1}:</span>
-                  <Show when={editBandLoad()} fallback={<Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} fieldLabel="weight" />}>
-                    <BandLoadControls profile={profile()} loading={loading() ?? undefined} value={editBandLoad()!} onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
+                  <Show
+                    when={editBandLoad()}
+                    fallback={<><Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} fieldLabel="weight" /><span class="text-muted text-xs">lb ×</span></>}
+                  >
+                    <BandLoadControls profile={profile()} loading={loading() ?? undefined} value={editBandLoad()!}
+                      target={props.accessory.calculatedWeight}
+                      onSuggest={target => {
+                        if (!profile()) return
+                        const load = suggestBandLoad(profile()!, target, settings.plates)
+                        setEditBandLoad(load); setEditWeight(effectiveBandLoad(load))
+                      }}
+                      onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
+                    {/* Bare — the band summary already ends in its own "lb". */}
+                    <span class="text-muted text-xs">×</span>
                   </Show>
-                  <span class="text-muted text-xs">lb ×</span>
                   <Show when={type() === 'reps'}>
                     <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} fieldLabel="reps" />
                   </Show>

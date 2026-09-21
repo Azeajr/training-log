@@ -228,3 +228,92 @@ it('hands the weight back to the prescription when bands are turned off', async 
   expect(screen.queryByRole('combobox', { name: 'band' })).not.toBeInTheDocument()
   expect(header()).toBe('145')
 })
+
+// ── C2 ──────────────────────────────────────────────────────────────────────
+// The `lb ×` separator sat OUTSIDE the Show that swaps the weight stepper for
+// BandLoadControls, which ends in its own unit — so a banded row read
+// "… = 86lb effective   lb ×   10". The unit belongs to the plain-weight
+// branch; the band branch needs the multiplication sign alone.
+describe('the load separator carries exactly one unit', () => {
+  afterEach(() => { cleanup(); clearSession() })
+
+  const banded = () => ({
+    id: 1, name: 'Pull-ups', type: 'reps' as const,
+    bandProfile: defaultBandProfile('Pull-ups'),
+  })
+
+  /** Text between the load control and the reps control, whitespace normalised. */
+  const separatorText = () =>
+    (document.body.textContent ?? '').replace(/\s+/g, ' ')
+
+  it('shows no orphan unit after a band summary, in the active row and the editor', () => {
+    addAccessory({ ...accessory([]), exerciseName: 'Pull-ups', calculatedWeight: 145 })
+    render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={banded()} />)
+
+    expect(separatorText()).toContain('effective')
+    expect(separatorText()).not.toMatch(/effective\s*lb/)
+
+    // And again on the edit row of a logged set, which has its own copy.
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    fireEvent.click(screen.getByRole('button', { name: /Set 1:/ }))
+    expect(separatorText()).not.toMatch(/effective\s*lb/)
+  })
+
+  it('keeps the unit on a plain-weight row, which has nothing else to carry it', () => {
+    addAccessory(accessory([]))
+    render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ ...TIMED, type: 'reps' }} />)
+
+    // The edit row is where this separator lives; the active row's own weight
+    // control is labelled `wt` and carries no separator at all.
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    fireEvent.click(screen.getByRole('button', { name: /Set 1:/ }))
+    expect(separatorText()).toContain('lb ×')
+  })
+
+  it('applies to a drop round in both modes', () => {
+    addAccessory({ ...accessory([]), exerciseName: 'Pull-ups', calculatedWeight: 145 })
+    render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={banded()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
+    expect(screen.getByRole('combobox', { name: 'drop 1 band' })).toBeTruthy()
+    expect(separatorText()).not.toMatch(/effective\s*lb/)
+  })
+})
+
+// ── C1 ──────────────────────────────────────────────────────────────────────
+// Every accessory header carried a band shortcut, and a session logs several.
+describe('the accessory band shortcut is gated on the profile', () => {
+  afterEach(() => { cleanup(); clearSession() })
+
+  it('renders none for an ordinary accessory', () => {
+    addAccessory(accessory([]))
+    render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ ...TIMED, type: 'reps' }} />)
+
+    expect(screen.queryByRole('button', { name: /^Band settings for/ })).toBeNull()
+  })
+
+  it('renders one for a band-assisted accessory', () => {
+    addAccessory({ ...accessory([]), exerciseName: 'Pull-ups' })
+    render(() => (
+      <AccessoryLog
+        accessory={workout.activeAccessories[0]}
+        exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: defaultBandProfile('Pull-ups') }}
+      />
+    ))
+
+    expect(screen.getByRole('button', { name: 'Band settings for Pull-ups' })).toBeTruthy()
+  })
+
+  it('renders none when the profile is saved but switched off', () => {
+    const off: BandProfile = { ...defaultBandProfile('Pull-ups')!, enabled: false }
+    addAccessory({ ...accessory([]), exerciseName: 'Pull-ups' })
+    render(() => (
+      <AccessoryLog
+        accessory={workout.activeAccessories[0]}
+        exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: off }}
+      />
+    ))
+
+    expect(screen.queryByRole('button', { name: /^Band settings for/ })).toBeNull()
+  })
+})

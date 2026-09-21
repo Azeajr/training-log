@@ -1,5 +1,6 @@
 import BandLoadControls from './BandLoadControls'
-import { effectiveBandLoad } from '../../lib/band-loading'
+import { effectiveBandLoad, suggestBandLoad } from '../../lib/band-loading'
+import { settings } from '../../store/settings-store'
 import { Index, Show } from 'solid-js'
 import type { DropRound, BandLoad, BandProfile } from '../../types/domain'
 import type { PlateLoading } from '../../lib/plate-loading'
@@ -23,11 +24,22 @@ export default function DropRoundsEditor(props: {
         {(round, i) => (
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-muted text-xs">Drop {i + 1}</span>
-            <Show when={round().bandLoad} fallback={<Stepper value={round().weight} onChange={v => update(i, 'weight', v)} step={2.5} min={0} fieldLabel={`drop ${i + 1} weight`} />}>
+            <Show
+              when={round().bandLoad}
+              fallback={<><Stepper value={round().weight} onChange={v => update(i, 'weight', v)} step={2.5} min={0} fieldLabel={`drop ${i + 1} weight`} /><span class="text-muted text-xs">lb ×</span></>}
+            >
+              {/* A drop round has no prescription — it is defined by dropping
+                  to a lower load, and it was the one band control with no way
+                  to ask for one. The user names the load they want. */}
               <BandLoadControls profile={props.profile} loading={props.loading} value={round().bandLoad!} label={`drop ${i + 1}`}
+                onSuggest={props.profile ? target => {
+                  const bandLoad = suggestBandLoad(props.profile!, target, settings.plates)
+                  props.onChange(props.rounds.map((r, n) => n === i ? { ...r, bandLoad, weight: effectiveBandLoad(bandLoad) } : r))
+                } : undefined}
                 onChange={bandLoad => props.onChange(props.rounds.map((r, n) => n === i ? { ...r, bandLoad, weight: effectiveBandLoad(bandLoad) } : r))} />
+              {/* Bare — the band summary already ends in its own "lb". */}
+              <span class="text-muted text-xs">×</span>
             </Show>
-            <span class="text-muted text-xs">lb ×</span>
             <Stepper value={round().reps} onChange={v => update(i, 'reps', v)} min={0} fieldLabel={`drop ${i + 1} reps`} />
             <button type="button" aria-label={`Remove drop ${i + 1}`} onClick={() => props.onChange(props.rounds.filter((_, n) => n !== i))} class="text-muted text-xs">remove</button>
           </div>
@@ -36,7 +48,19 @@ export default function DropRoundsEditor(props: {
       <button type="button" class="text-left text-accent text-xs tracking-widest" onClick={() => {
         const last = props.rounds.at(-1)
         const previousBand = last?.bandLoad ?? props.bandLoad
-        props.onChange([...props.rounds, { weight: last?.weight ?? props.weight, reps: last?.reps ?? props.reps, bandLoad: previousBand ? { ...previousBand } : null }])
+        // Deep on `calibration`, the way `makeBandLoad` builds one: a spread
+        // shares that array by reference, and a BandLoad is a record of what a
+        // set was, not a view onto a profile that is still editable. Absent
+        // stays absent — a load written before snapshots existed falls back to
+        // the live profile in BandLoadControls, and an empty array would
+        // suppress that fallback and leave the row with no bands to pick from.
+        props.onChange([...props.rounds, {
+          weight: last?.weight ?? props.weight,
+          reps: last?.reps ?? props.reps,
+          bandLoad: previousBand
+            ? { ...previousBand, calibration: previousBand.calibration?.map(b => ({ ...b })) }
+            : null,
+        }])
       }}>+ ADD DROP ROUND</button>
     </div>
   )

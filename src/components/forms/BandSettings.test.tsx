@@ -84,13 +84,55 @@ describe('band settings state', () => {
     const box = screen.getByRole('checkbox', { name: /Use raw load and bands/ }) as HTMLInputElement
     expect(box.checked).toBe(false)
     // The measured calibration still prefills the numbers — it just doesn't
-    // answer the question the checkbox asks.
-    expect(screen.getByText('Orange measured lb')).toBeInTheDocument()
+    // answer the question the checkbox asks. The name is an input since D3.
+    expect(screen.getByLabelText('band 1 name')).toHaveValue('Orange')
 
     fireEvent.click(box)
     fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect((await db.exercises.get(id))?.bandProfile).toMatchObject({ enabled: true, rawLoad: 145 })
+  })
+
+  /**
+   * C6. Every field here opens at 0 for a movement with no template and wants a
+   * number in the 70–191 range — 191 taps, or a long press. Tapping the value
+   * has always opened a numeric keypad; it rendered as a plain readout nobody
+   * thought to press. `emphasized` is what says it is editable.
+   */
+  it('marks every calibration field as directly editable', async () => {
+    // Its own name: this file shares one database and exercise names are unique.
+    const id = await db.exercises.add({ name: 'Nordic curl', type: 'reps' })
+    render(() => <BandSettings entity={{ id, name: 'Nordic curl', type: 'reps' }} kind="exercise" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Band settings for Nordic curl' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Limit suggested added weight/ }))
+
+    const fields = ['raw load', 'Orange measured load', 'Green measured load',
+      'Purple measured load', 'Red measured load', 'maximum added weight']
+    for (const field of fields) {
+      const value = screen.getByRole('button', { name: new RegExp(`^Edit ${field},`) })
+      expect(value.className, field).toContain('border-accent')
+    }
+  })
+
+  /** Steps and bounds are untouched: these are measurements, not increments. */
+  it('still moves one pound at a time, and still clamps to the raw load', async () => {
+    const id = await db.exercises.add({ name: 'Pullup', type: 'reps' })
+    render(() => <BandSettings entity={{ id, name: 'Pullup', type: 'reps' }} kind="exercise" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Band settings for Pullup' }))
+
+    // 191 is the pulling calibration's raw load. One tap is still one pound.
+    fireEvent.click(screen.getByRole('button', { name: 'Increase raw load' }))
+    expect(screen.getByRole('button', { name: /^Edit raw load,/ }).textContent).toBe('192')
+
+    // The measured load still cannot exceed the raw load it is measured
+    // against. Raising the raw load holds each band's assistance fixed, so Red
+    // followed it from 181 to 182 — ten pounds below the new ceiling, near
+    // enough to walk there rather than hammer the button a hundred times, which
+    // is slow enough under coverage to time the test out.
+    const red = () => screen.getByRole('button', { name: /^Edit Red measured load,/ })
+    expect(red().textContent).toBe('182')
+    for (let i = 0; i < 20; i++) fireEvent.click(screen.getByRole('button', { name: 'Increase Red measured load' }))
+    expect(Number(red().textContent)).toBe(192)
   })
 
   // The measured stepper clamps what it DISPLAYS to the raw load. Leaving the
@@ -212,4 +254,115 @@ it('still clears a profile the seeding build wrote', async () => {
   const id = await db.exercises.add({ name: 'Pullups', type: 'reps', bandProfile: defaultBandProfile('Pullups')! })
   await clearSeededBandProfiles(db)
   expect((await db.exercises.get(id))?.bandProfile).toBeNull()
+})
+
+// ── D3 ──────────────────────────────────────────────────────────────────────
+// `BAND_NAMES` is four colours with no rename, add or remove in the form, so
+// anyone on another brand calibrates four mislabelled rows. The model already
+// allowed any name — `BandCalibration.name` is a free string and
+// `BandLoadControls` resolves a recorded set by it — only this form did not.
+describe('band names', () => {
+  const openFor = async (name: string, bandProfile?: BandProfile) => {
+    const id = await db.exercises.add({ name, type: 'reps', bandProfile })
+    render(() => <BandSettings entity={{ id, name, type: 'reps', bandProfile }} kind="exercise" />)
+    fireEvent.click(screen.getByRole('button', { name: `Band settings for ${name}` }))
+    return id
+  }
+
+  const nameInput = (n: number) => screen.getByLabelText(`band ${n} name`) as HTMLInputElement
+  const saveSettings = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  }
+
+  it('renames, adds and removes bands, and keeps them through a reload', async () => {
+    const id = await openFor('D3 rename', defaultBandProfile('Pull-ups')!)
+
+    fireEvent.input(nameInput(1), { target: { value: 'Rogue monster mini' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove band 4' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ ADD BAND' }))
+    fireEvent.input(nameInput(4), { target: { value: 'Elitefts pro short' } })
+    await saveSettings()
+
+    const saved = (await db.exercises.get(id))!.bandProfile!
+    expect(saved.bands.map(b => b.name)).toEqual([
+      'Rogue monster mini', 'Green', 'Purple', 'Elitefts pro short',
+    ])
+    // Renaming a row leaves its measurement where it was.
+    expect(saved.bands[0].assistance).toBe(105)
+  })
+
+  /**
+   * The trap. A row's identity was its NAME, so rebuilding the list on every
+   * keystroke replaced the row — remounting the input and taking the caret with
+   * it after one character.
+   */
+  it('keeps the caret in the field while a name is being typed', async () => {
+    await openFor('D3 focus', defaultBandProfile('Pull-ups')!)
+
+    const input = nameInput(1)
+    input.focus()
+    for (const value of ['O', 'Or', 'Ora', 'Oran']) {
+      fireEvent.input(input, { target: { value } })
+      expect(document.activeElement).toBe(input)
+    }
+    expect(nameInput(1)).toBe(input)
+    expect(nameInput(1).value).toBe('Oran')
+  })
+
+  it('refuses a blank name in the form, not at save', async () => {
+    const id = await openFor('D3 blank', defaultBandProfile('Pull-ups')!)
+
+    fireEvent.input(nameInput(2), { target: { value: '  ' } })
+    expect(screen.getByRole('alert').textContent).toMatch(/needs a name/i)
+    expect(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' })).toBeDisabled()
+
+    fireEvent.input(nameInput(2), { target: { value: 'Green' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    await saveSettings()
+    expect((await db.exercises.get(id))!.bandProfile!.bands).toHaveLength(4)
+  })
+
+  it('refuses two bands sharing a name', async () => {
+    await openFor('D3 duplicate', defaultBandProfile('Pull-ups')!)
+
+    fireEvent.input(nameInput(2), { target: { value: 'Orange' } })
+    expect(screen.getByRole('alert').textContent).toMatch(/cannot share a name/i)
+    expect(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' })).toBeDisabled()
+  })
+
+  it('trims a name on the way out, so a stray space is not a second band', async () => {
+    const id = await openFor('D3 trim', defaultBandProfile('Pull-ups')!)
+
+    fireEvent.input(nameInput(1), { target: { value: '  Olive  ' } })
+    await saveSettings()
+
+    expect((await db.exercises.get(id))!.bandProfile!.bands[0].name).toBe('Olive')
+  })
+})
+
+// A rename changes what is on offer from now on. It says nothing about a set
+// that already happened, and the recorded pairing has to stay selectable.
+describe('a set recorded under a band that has since been renamed', () => {
+  const recorded: BandLoad = {
+    band: 'Green', rawLoad: 191, assistance: 50, addedWeight: 0,
+    calibration: [{ name: 'Orange', assistance: 105 }, { name: 'Green', assistance: 50 }],
+  }
+  const renamed: BandProfile = {
+    enabled: true, rawLoad: 191, maxAddedWeight: null,
+    bands: [{ name: 'Orange', assistance: 105 }, { name: 'Olive', assistance: 50 }],
+  }
+
+  it('keeps the recorded name, its assistance and its effective load', () => {
+    const [value, setValue] = createSignal<BandLoad>(recorded)
+    render(() => <BandLoadControls profile={renamed} value={value()} onChange={setValue} />)
+
+    expect(effectiveBandLoad(value())).toBe(141)
+    const options = [...screen.getByRole('combobox', { name: 'band' }).querySelectorAll('option')]
+      .map(o => o.textContent)
+    // Marked, because the live profile no longer has a band by that name —
+    // the snapshot agrees about the assistance, so nothing else would say so.
+    expect(options).toContain('Green (recorded)')
+    expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Green')
+  })
 })

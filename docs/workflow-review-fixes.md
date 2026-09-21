@@ -128,23 +128,28 @@ from source here.
 | **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `fixed` | `PT.test.tsx` ×5; 4 red at A3, the 5th guards the save-error behaviour A5 must not break |
 | **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×9, 7 red at A2; 15 existing finish tests updated to the new contract |
 | **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×2 red at `d222835` (`1/0` single, `2/0` combined) |
-| **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `open` | |
-| **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `open` | |
-| **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `open` | |
-| **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `open` | |
+| **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `fixed` | `band-loading.test.ts` ×7, `BandLoadControls.test.tsx` ×5; landed with C3 |
+| **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×3, `AccessoryLog.test.tsx` ×3; 4 red at C2 |
+| **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `fixed` | `AccessoryLog.test.tsx` ×3, `HistoryEdit.test.tsx` ×5; 5 red at E1 |
+| **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `fixed` | `BandLoadControls.test.tsx` ×5; 6 of the file's 10 red at D1 |
 | **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
 | **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `open` | |
-| **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `open` | |
+| **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×2, 1 red at C1 (the other guards the unchanged step and bounds) |
 | **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `open` | |
 | **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `open` | |
 | **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `open` | |
 | **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `fixed` | `PtRoutineEdit.test.tsx` ×9 red at A4, `pt-routine-draft.test.ts` ×13 (new helper) |
-| **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `open` | |
+| **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `fixed` | `band-entry-points.test.tsx` ×5 (new file), 2 red at C6 |
 | **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `open` | |
-| **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
-| **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
+| **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
+| **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 14 `open`, 0 `wip`, 8 `fixed`.** Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 6 `open`, 0 `wip`, 16 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
+
+**Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
+"one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
+each item still gets its own failing test first and its own ledger row update in the commit
+that carries its code.
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -1178,7 +1183,7 @@ gained the missing half of its assertion: no `logged` under the error.
 
 ## B3 · An unreachable band target is shown without saying it is unreachable
 
-**State:** `open` · **P2** · Sources: EF#5, CX#16 · Batch 4, **with C3**
+**State:** `fixed` · **P2** · Sources: EF#5, CX#16 · Batch 4, **with C3**
 
 ### Problem
 
@@ -1289,13 +1294,45 @@ corresponding messages in `BandLoadControls.test.tsx`:
 6. Nearest candidate above target, below target, and an equal-distance tie: the named
    nearest load and signed difference are accurate even when `selected` is different.
 
+### As built (B3 and C3 together)
+
+`suggestBandLoadDetailed` returns the structure as specified and `suggestBandLoad` is a
+one-line wrapper over it, so the selection is byte-identical by construction rather than by
+a parallel implementation that has to be kept in step. `BandLoadControls` derives the two
+messages independently and suppresses `USE SUGGESTED LOAD` only when the target is out of
+range.
+
+**Where a target comes from**, by surface:
+
+| Surface | Target |
+|---|---|
+| `SetRow` active and edit rows | the set's own recorded prescription |
+| `AccessoryLog` active and edit rows | the accessory's prescribed weight for this session |
+| `HistoryEdit`, all four branches | none — the user names one |
+| `DropRoundsEditor` | none — the user names one |
+
+The explicit target lives in `BandLoadControls` rather than in each of the six call sites:
+they pass `onSuggest`, the control asks for the number. `SUGGEST A LOAD…` reveals a
+`Target effective load` stepper seeded from the load currently on screen, so nothing claims
+a prescription that does not exist and nothing appears until the user asks. `onSuggest` now
+takes the target as an argument, which is what lets one signature serve both cases.
+
+**Not built: the direct route into band settings or plate configuration** from an
+out-of-range message. Every one of the six call sites would need to mount and position a
+`BandSettings` dialog from inside a nested control, and the message already names the limit
+and which side it is on. Worth its own item rather than a wide change made in passing.
+
+**One e2e spec moved with C1's gate**, in its own commit: `bands.spec.ts` opted a lift in
+from the workout screen, which is the entry point C1 removes. It now does it in Settings and
+pins D1's wording at the one row that shows both labels.
+
 ---
 
 # C — Friction on the hot path
 
 ## C1 · Band settings sits on every lift's logging screen
 
-**State:** `open` · **P2** · Sources: UI#1, CX#13 · Batch 4
+**State:** `fixed` · **P2** · Sources: UI#1, CX#13 · Batch 4
 
 ### Problem
 
@@ -1375,11 +1412,23 @@ describes behaviour to **preserve**, not another bug. A `?.enabled` on top of
 `Workout.test.tsx` / `AccessoryLog.test.tsx` — an ordinary squat and an ordinary accessory render no band shortcut; an enabled band-assisted
 movement does; disabling the profile removes it and Settings still reaches it.
 
+### As built
+
+Gated as written, on `bandProfileFor` and never on a name, at all three sites; the Workout
+control also moved below `SaveFailureBanner`. The label is `BANDS`, which D1 then makes
+derived rather than passed.
+
+**One existing test changed with the policy.** `a band profile saved from an accessory
+reaches the exercise list` set a profile up for the first time *from the accessory header* —
+the entry point this item removes, since setting one up is what Settings is for. It now
+edits the profile of an exercise that already has one, which is the case the shortcut still
+serves, and still asserts the save reaches the exercise row and the live logger.
+
 ---
 
 ## C2 · Orphan `lb` after the band controls
 
-**State:** `open` · **P3** · Sources: UI#2, CX#14 · Batch 4
+**State:** `fixed` · **P3** · Sources: UI#2, CX#14 · Batch 4
 
 ### Problem
 
@@ -1431,11 +1480,20 @@ Plus a focused visual check of each of the six sites in both modes, including re
 and distance accessories in history. Every load has one unit and one multiplication
 separator.
 
+### As built
+
+All six sites moved as written. One observation the plan's table does not cover:
+**`SetRow.tsx` has the mirror defect.** Its `×` is also outside the `Show`, but bare — so
+the band branch reads correctly (which is why the plan called it "the one site that got it
+right") while its plain-weight branch renders no unit at all. Left alone: the plan names six
+sites and blesses this one, and changing it is a visible edit to the main logger's edit row
+rather than the silent cleanup C2 is. Worth its own decision if it ever bothers anyone.
+
 ---
 
 ## C3 · Suggest and target are missing everywhere except the active logger
 
-**State:** `open` · **P2** · Sources: UI#5, CX#17 · Batch 4, **with B3**
+**State:** `fixed` · **P2** · Sources: UI#5, CX#17 · Batch 4, **with B3**
 
 ### Problem
 
@@ -1625,7 +1683,7 @@ likewise.
 
 ## C6 · The band calibration form's direct entry is invisible
 
-**State:** `open` · **P3** · Sources: UI#4, CX#15 · Batch 4
+**State:** `fixed` · **P3** · Sources: UI#4, CX#15 · Batch 4
 
 ### Problem
 
@@ -1672,6 +1730,15 @@ The heading "no direct entry" also overstated it: tap-to-type already works. Thi
 Type 191 directly into raw load. Adjust to 192 with one tap. Measured-load bounds
 (`max={draft()!.rawLoad}`) and the raw-load clamp (`setRawLoad`, `:39`) still apply.
 Cancelling leaves the saved profile unchanged. No general `Stepper` redesign.
+
+### As built
+
+`emphasized` on all six fields — raw load, the four measured loads and the added-weight cap
+— and nothing else. `step={5}` stays withdrawn.
+
+Two tests rather than one: the first asserts every field is marked editable, the second
+asserts the steps and bounds did **not** move, which is the half of this change that is
+about restraint. Only the first is red against the old code, by construction.
 
 ---
 
@@ -1878,7 +1945,7 @@ restores the previous test's draft.
 
 ## D1 · One dialog, three labels
 
-**State:** `open` · **P3** · Sources: UI#7, CX#18 · Batch 4
+**State:** `fixed` · **P3** · Sources: UI#7, CX#18 · Batch 4
 
 Three labels for one dialog:
 
@@ -1942,6 +2009,34 @@ survive rewording the label, which is the point: the defect is divergence, not t
    saved-but-disabled profiles share the existing-profile label; an absent profile gets
    the setup label. For the single-label option, assert equality across all three states.
 
+### As built
+
+**The first wording wins: `BANDS` with a profile, `SET UP BANDS` without.** It is chosen at
+the point of use rather than passed, so the `label` prop is gone entirely — which is a
+stronger answer to "the unreachable default" than making it required, and removes the way
+the three spellings diverged in the first place. After C1 the three logging entry points
+only render with a profile, so in practice only the two Settings rows ever say
+`SET UP BANDS`.
+
+The form also now says what raw load *is* — "what this movement weighs with no band on …
+not your bodyweight" — which the existing paragraph never did.
+
+Two deviations in the tests:
+
+- **A new file, `band-entry-points.test.tsx`, rather than `BandSettings.test.tsx`.** The
+  helper needs a clean database per test and `BandSettings.test.tsx` has no reset and shares
+  one database across its cases. Clearing tables underneath those would have been the more
+  invasive choice.
+- **The entry points are collected by label, not by role.** Settings renders its lists
+  inside collapsible sections and a role query drops whatever is folded away — it found one
+  of the two Settings rows for that reason alone. Whether a section happens to be open is
+  not what this measures.
+
+Two of the five are red against the pre-D1 code, which is the right number: the `disabled`
+and `absent` states show only the two Settings rows, and those two already agreed with each
+other. The divergence was between Settings and the logging screens, which is the `enabled`
+case, plus the setup-versus-edit distinction that did not exist at all.
+
 ---
 
 ## D2 · "Log after all drop rounds." is always shown
@@ -1974,7 +2069,7 @@ conditional rendering, not wording, so it carries a test rather than a visual ch
 
 ## D3 · Band names are hardcoded
 
-**State:** `open` · **P3** · Sources: UI#8, CX#19 · Batch 4, last
+**State:** `fixed` · **P3** · Sources: UI#8, CX#19 · Batch 4, last
 
 ### Problem
 
@@ -2022,13 +2117,35 @@ Rename, add and remove bands, then reload. Duplicate and blank names rejected **
 form**. Old logged sets and their exports retain their recorded name, assistance and
 effective load.
 
+### As built
+
+**The stable local identity is the row's POSITION, through `Index`, rather than an invented
+id.** `For` keys on the item, so any immutable update replaces the row and remounts its
+input — which is the bug. `Index` keys on position and hands the row down as an accessor, so
+a rename updates the value in place. It is the idiom this repo already reaches for when a
+`For` over a rebuilt array cost it a mount, and it needs no key field on a persisted type.
+
+Names are trimmed on the way out: a trailing space is invisible in the input and would make
+an otherwise-identical name a different selection key.
+
+**Point 4 needed the extra path the plan predicted.** `BandLoadControls` marks a recorded
+pairing `(recorded)` when the snapshot and the row DISAGREE about assistance, and a pure
+rename disagrees about nothing — the snapshot still lists the old name at the old
+assistance, so the check passed while the live profile had no such band at all. It now also
+marks a band the live profile no longer lists by that name.
+
+The measured stepper's accessible name still carries the band's own name and falls back to
+the position while the field is blank, so a screen reader hears "Olive measured load" rather
+than "band 2 measured load". One existing test asserted the name as static text and now
+asserts the input's value instead.
+
 ---
 
 # E — Found while comparing
 
 ## E1 · `DropRoundsEditor` shallow-copies a `BandLoad`
 
-**State:** `open` · **P3** · In neither proposal · Batch 4, **first**
+**State:** `fixed` · **P3** · In neither proposal · Batch 4, **first**
 
 ### Problem
 

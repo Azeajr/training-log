@@ -140,7 +140,39 @@ const SUGGEST_TOLERANCE_LB = 2.5
  * option inside the tolerance band says the useful thing instead, and dropping
  * 2.5lb of plate to save half a pound of accuracy falls out of the same rule.
  */
-export function suggestBandLoad(profile: BandProfile, target: number, plates: PlateConfig[]): BandLoad {
+/**
+ * A suggestion and the reasoning behind it.
+ *
+ * `selected` is what the algorithm picks, unchanged. The rest exists because a
+ * suggestion that misses its target does so for two INDEPENDENT reasons, and a
+ * control that conflates them says the wrong thing:
+ *
+ * - The target may be outside what this setup can reach at all. Only a band can
+ *   take load off, so nothing below the strongest band's assisted load is
+ *   achievable, however the plates are arranged.
+ * - Preference may have taken a less accurate candidate on purpose. The
+ *   tolerance rule is `closest + 2.5`, not `target ± 2.5`, so the selection
+ *   makes no promise of being near the target — see `suggestBandLoad` for why
+ *   that is the useful behaviour rather than a bug.
+ *
+ * Both can be true at once, and neither may be: a target can fall in an
+ * increment gap AND have a simpler candidate preferred over the nearest one.
+ * Never call a target unreachable because `selected` missed it.
+ */
+export interface BandSuggestion {
+  /** The load the existing algorithm selects. Unchanged behaviour. */
+  selected: BandLoad
+  /** Minimum achievable |effective − target| across ALL candidates. */
+  nearestDistance: number
+  /** Effective load of a nearest candidate; equal-distance ties prefer the lower load. */
+  nearestEffectiveLoad: number
+  minAchievable: number
+  maxAchievable: number
+  /** True when preference took a candidate further from the target than the nearest. */
+  preferenceUsed: boolean
+}
+
+export function suggestBandLoadDetailed(profile: BandProfile, target: number, plates: PlateConfig[]): BandSuggestion {
   const addedLoads = availableBeltLoads(plates, profile.maxAddedWeight)
   const candidates: BandLoad[] = []
   for (const band of [null, ...profile.bands.map(b => b.name)]) {
@@ -150,15 +182,48 @@ export function suggestBandLoad(profile: BandProfile, target: number, plates: Pl
       candidates.push(candidate)
     }
   }
-  if (candidates.length === 0) return makeBandLoad(profile, null)
+  if (candidates.length === 0) {
+    const selected = makeBandLoad(profile, null)
+    const load = effectiveBandLoad(selected)
+    return {
+      selected,
+      nearestDistance: Math.abs(load - target),
+      nearestEffectiveLoad: load,
+      minAchievable: load,
+      maxAchievable: load,
+      preferenceUsed: false,
+    }
+  }
 
+  const loads = candidates.map(effectiveBandLoad)
   const distance = (c: BandLoad) => Math.abs(effectiveBandLoad(c) - target)
   const closest = Math.min(...candidates.map(distance))
-  return candidates
+
+  const selected = candidates
     .filter(c => distance(c) <= closest + SUGGEST_TOLERANCE_LB)
     .reduce((best, c) => c.assistance !== best.assistance
       ? (c.assistance < best.assistance ? c : best)
       : (c.addedWeight < best.addedWeight ? c : best))
+
+  // The lower load on a tie, so a caller reporting "2.5lb under" versus "2.5lb
+  // over" gets a stable answer rather than whichever candidate came first.
+  const nearestEffectiveLoad = loads
+    .filter(load => Math.abs(load - target) === closest)
+    .reduce((a, b) => Math.min(a, b))
+
+  return {
+    selected,
+    nearestDistance: closest,
+    nearestEffectiveLoad,
+    minAchievable: Math.min(...loads),
+    maxAchievable: Math.max(...loads),
+    preferenceUsed: distance(selected) > closest,
+  }
+}
+
+/** The selection alone, for callers with nothing to explain. */
+export function suggestBandLoad(profile: BandProfile, target: number, plates: PlateConfig[]): BandLoad {
+  return suggestBandLoadDetailed(profile, target, plates).selected
 }
 
 export function validBandLoad(value: unknown): value is BandLoad {
