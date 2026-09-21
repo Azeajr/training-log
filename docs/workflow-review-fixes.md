@@ -141,10 +141,10 @@ from source here.
 | **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `fixed` | `PtRoutineEdit.test.tsx` ×9 red at A4, `pt-routine-draft.test.ts` ×13 (new helper) |
 | **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `fixed` | `band-entry-points.test.tsx` ×5 (new file), 2 red at C6 |
 | **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `open` | |
-| **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
+| **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 7 `open`, 0 `wip`, 15 `fixed`.** Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 6 `open`, 0 `wip`, 16 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -2069,7 +2069,7 @@ conditional rendering, not wording, so it carries a test rather than a visual ch
 
 ## D3 · Band names are hardcoded
 
-**State:** `open` · **P3** · Sources: UI#8, CX#19 · Batch 4, last
+**State:** `fixed` · **P3** · Sources: UI#8, CX#19 · Batch 4, last
 
 ### Problem
 
@@ -2116,6 +2116,28 @@ lost focus are sufficient reason on their own.)
 Rename, add and remove bands, then reload. Duplicate and blank names rejected **in the
 form**. Old logged sets and their exports retain their recorded name, assistance and
 effective load.
+
+### As built
+
+**The stable local identity is the row's POSITION, through `Index`, rather than an invented
+id.** `For` keys on the item, so any immutable update replaces the row and remounts its
+input — which is the bug. `Index` keys on position and hands the row down as an accessor, so
+a rename updates the value in place. It is the idiom this repo already reaches for when a
+`For` over a rebuilt array cost it a mount, and it needs no key field on a persisted type.
+
+Names are trimmed on the way out: a trailing space is invisible in the input and would make
+an otherwise-identical name a different selection key.
+
+**Point 4 needed the extra path the plan predicted.** `BandLoadControls` marks a recorded
+pairing `(recorded)` when the snapshot and the row DISAGREE about assistance, and a pure
+rename disagrees about nothing — the snapshot still lists the old name at the old
+assistance, so the check passed while the live profile had no such band at all. It now also
+marks a band the live profile no longer lists by that name.
+
+The measured stepper's accessible name still carries the band's own name and falls back to
+the position while the field is blank, so a screen reader hears "Olive measured load" rather
+than "band 2 measured load". One existing test asserted the name as static text and now
+asserts the input's value instead.
 
 ---
 

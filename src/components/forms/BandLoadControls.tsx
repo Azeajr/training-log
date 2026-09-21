@@ -51,8 +51,16 @@ export default function BandLoadControls(props: {
   // But a band still listed under a different assistance loses just as much and
   // says nothing: before this, Green → Purple → Green on a legacy row wrote the
   // profile's Green and the set's own value was gone for good.
+  //
+  // A RENAME is the other way a recorded pairing goes missing, and it does not
+  // disagree about anything: band names are editable now, and the snapshot still
+  // lists the old name at the old assistance, so the check above is satisfied
+  // while the live profile has no such band at all. Marking it keeps the set's
+  // own name distinguishable from the ones currently on offer.
   const match = props.value.band ? atMount.find(b => b.name === props.value.band) : undefined
-  const recorded = props.value.band && match?.assistance !== props.value.assistance
+  const renamedAway = props.value.band != null && props.profile != null
+    && !props.profile.bands.some(b => b.name === props.value.band)
+  const recorded = props.value.band && (match?.assistance !== props.value.assistance || renamedAway)
     ? { name: props.value.band, assistance: props.value.assistance }
     : null
 
