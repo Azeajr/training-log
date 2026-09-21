@@ -139,12 +139,12 @@ from source here.
 | **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `open` | |
 | **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `open` | |
 | **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `fixed` | `PtRoutineEdit.test.tsx` ×9 red at A4, `pt-routine-draft.test.ts` ×13 (new helper) |
-| **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `open` | |
+| **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `fixed` | `band-entry-points.test.tsx` ×5 (new file), 2 red at C6 |
 | **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `open` | |
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 10 `open`, 0 `wip`, 12 `fixed`.** Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 9 `open`, 0 `wip`, 13 `fixed`.** Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1913,7 +1913,7 @@ restores the previous test's draft.
 
 ## D1 · One dialog, three labels
 
-**State:** `open` · **P3** · Sources: UI#7, CX#18 · Batch 4
+**State:** `fixed` · **P3** · Sources: UI#7, CX#18 · Batch 4
 
 Three labels for one dialog:
 
@@ -1976,6 +1976,34 @@ survive rewording the label, which is the point: the defect is divergence, not t
    not what either one says. For the `BANDS` / `SET UP BANDS` option, enabled and
    saved-but-disabled profiles share the existing-profile label; an absent profile gets
    the setup label. For the single-label option, assert equality across all three states.
+
+### As built
+
+**The first wording wins: `BANDS` with a profile, `SET UP BANDS` without.** It is chosen at
+the point of use rather than passed, so the `label` prop is gone entirely — which is a
+stronger answer to "the unreachable default" than making it required, and removes the way
+the three spellings diverged in the first place. After C1 the three logging entry points
+only render with a profile, so in practice only the two Settings rows ever say
+`SET UP BANDS`.
+
+The form also now says what raw load *is* — "what this movement weighs with no band on …
+not your bodyweight" — which the existing paragraph never did.
+
+Two deviations in the tests:
+
+- **A new file, `band-entry-points.test.tsx`, rather than `BandSettings.test.tsx`.** The
+  helper needs a clean database per test and `BandSettings.test.tsx` has no reset and shares
+  one database across its cases. Clearing tables underneath those would have been the more
+  invasive choice.
+- **The entry points are collected by label, not by role.** Settings renders its lists
+  inside collapsible sections and a role query drops whatever is folded away — it found one
+  of the two Settings rows for that reason alone. Whether a section happens to be open is
+  not what this measures.
+
+Two of the five are red against the pre-D1 code, which is the right number: the `disabled`
+and `absent` states show only the two Settings rows, and those two already agreed with each
+other. The divergence was between Settings and the logging screens, which is the `enabled`
+case, plus the setup-versus-edit distinction that did not exist at all.
 
 ---
 

@@ -48,7 +48,7 @@ export default function CrossBlockLog(props: Props) {
     >
       {/* Gated like the main lift's: every cross block carried one of these. */}
       <Show when={bandProfileFor(props.movement)}>
-        <BandSettings entity={props.movement!} kind="lift" label="BANDS" onSaved={props.onBandProfileSaved} />
+        <BandSettings entity={props.movement!} kind="lift" onSaved={props.onBandProfileSaved} />
       </Show>
       <For each={props.sets}>
         {(s, i) => (

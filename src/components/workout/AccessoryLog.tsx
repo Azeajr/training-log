@@ -167,7 +167,7 @@ export default function AccessoryLog(props: Props) {
             accessories and every one of them carried this. Settings reaches an
             exercise's profile exactly as it reaches a lift's. */}
         <Show when={bandProfileFor(entity())}>
-          <BandSettings label="BANDS" entity={entity()!} kind="exercise" onSaved={props.onBandProfileSaved} />
+          <BandSettings entity={entity()!} kind="exercise" onSaved={props.onBandProfileSaved} />
         </Show>
         <Show when={done()}>
           <button type="button" aria-expanded={expanded()} aria-controls={contentId}

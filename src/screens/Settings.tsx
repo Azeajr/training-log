@@ -544,7 +544,7 @@ export default function Settings() {
                   </div>
                   <span class="text-text uppercase tracking-widest text-xs flex-1">{l.name}</span>
                   <span class="text-faint text-xs">+{l.progressionIncrement}</span>
-                  <BandSettings label="bands" entity={l} kind="lift" onSaved={() => void load()} />
+                  <BandSettings entity={l} kind="lift" onSaved={() => void load()} />
                   <button onClick={() => setSetupLiftId(l.id!)} class="text-muted text-xs hover:text-accent">setup</button>
                   <button
                     onClick={() => { setEditingLift(l.id!); setEditLiftName(l.name); setEditLiftIncrement(l.progressionIncrement) }}
@@ -892,7 +892,7 @@ export default function Settings() {
                     </Show>
                   </span>
                   <div class="flex items-center gap-4">
-                    <BandSettings label="bands" entity={ex} kind="exercise" onSaved={() => void load()} />
+                    <BandSettings entity={ex} kind="exercise" onSaved={() => void load()} />
                     <button onClick={() => { setEditingEx(ex.id!); setEditExName(ex.name); setEditExCategory(ex.category ?? 'push'); setEditExPlateMode(ex.plateMode ?? (ex.usesBarbell === true ? 'paired' : 'none')); setEditExImplementBase(ex.implementBase ?? (ex.plateMode === 'total' ? 0 : settings.barWeight)); setEditExIncrement(accessoryIncrements()[ex.id!]?.incrementLb ?? DEFAULT_ACCESSORY_INCREMENT_LB) }} class="text-muted text-xs hover:text-accent">edit</button>
                     <button onClick={() => void handleArchiveExercise(ex.id!)} class="text-muted text-xs hover:text-danger">archive</button>
                   </div>

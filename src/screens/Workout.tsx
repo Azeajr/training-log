@@ -1076,7 +1076,7 @@ export default function Workout() {
             BELOW the save-failure banner now: a control nobody on this screen
             wants was pushing a write error down the page. */}
         <Show when={bandProfileFor(lift())}>
-          <BandSettings entity={lift()!} kind="lift" label="BANDS" onSaved={bandProfile => setLift(l => ({ ...l!, bandProfile }))} />
+          <BandSettings entity={lift()!} kind="lift" onSaved={bandProfile => setLift(l => ({ ...l!, bandProfile }))} />
         </Show>
 
         <div class="md:grid md:grid-cols-3 md:gap-8 md:items-start mb-6">

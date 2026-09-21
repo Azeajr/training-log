@@ -5,11 +5,23 @@ import { db } from '../../db'
 import Modal from '../modals/Modal'
 import Stepper from './Stepper'
 
+/**
+ * One dialog, one name for it.
+ *
+ * The label used to be passed in, and the five call sites spelled it three
+ * different ways — `bands`, `EDIT RAW LOAD / BANDS`, and a component default of
+ * `BAND / RAW LOAD` that nothing ever reached. "EDIT" was also wrong on a
+ * movement with no profile: there is nothing there to edit yet. Deriving it here
+ * is what stops the three from drifting apart again, and the only thing the
+ * wording still depends on is whether a profile exists.
+ */
+const entryLabel = (entity: Lift | Exercise): string =>
+  entity.bandProfile ? 'BANDS' : 'SET UP BANDS'
+
 export default function BandSettings(props: {
   entity: Lift | Exercise
   kind: 'lift' | 'exercise'
   onSaved?: (profile: BandProfile) => void
-  label?: string
 }) {
   const [draft, setDraft] = createSignal<BandProfile | null>(null)
   const [busy, setBusy] = createSignal(false)
@@ -59,7 +71,7 @@ export default function BandSettings(props: {
     finally { setBusy(false) }
   }
   return <>
-    <button type="button" onClick={open} class="text-accent text-xs py-2" aria-label={`Band settings for ${props.entity.name}`}>{props.label ?? 'BAND / RAW LOAD'}</button>
+    <button type="button" onClick={open} class="text-accent text-xs py-2" aria-label={`Band settings for ${props.entity.name}`}>{entryLabel(props.entity)}</button>
     <Show when={draft()}>
       <Modal title={`${props.entity.name} bands`} onClose={() => { if (!busy()) setDraft(null) }} busy={busy()} variant="sheet">
         <div class="p-4 flex flex-col gap-4 overflow-y-auto max-h-[80vh]">
@@ -74,6 +86,7 @@ export default function BandSettings(props: {
           <div class="flex flex-wrap items-center gap-2">Raw load (lb)
             <Stepper value={draft()!.rawLoad} onChange={setRawLoad} min={0} fieldLabel="raw load" emphasized />
           </div>
+          <p class="text-muted text-xs">Raw load is what this movement weighs with no band on — the load you are actually lifting unassisted, not your bodyweight. Each band's measured load below is what it weighs with that band on, at this raw load.</p>
           <p class="text-muted text-xs">Changing raw load keeps each band's assistance fixed. To recalibrate, enter its measured effective load below at the current raw load. Logged sets stay unchanged.</p>
           <For each={draft()!.bands.map(b => b.name)}>{name => {
             const band = () => draft()!.bands.find(b => b.name === name)!
