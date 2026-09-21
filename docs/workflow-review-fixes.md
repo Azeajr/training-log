@@ -138,13 +138,13 @@ from source here.
 | **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `open` | |
 | **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `open` | |
 | **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `open` | |
-| **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `open` | |
+| **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `fixed` | `PtRoutineEdit.test.tsx` ×9 red at A4, `pt-routine-draft.test.ts` ×13 (new helper) |
 | **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `open` | |
 | **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `open` | |
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
 
-**Totals: 22 items — 17 `open`, 0 `wip`, 5 `fixed`.**
+**Totals: 22 items — 16 `open`, 0 `wip`, 6 `fixed`.** Batches 1 and 2 are complete.
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -1749,7 +1749,7 @@ the copied draft creates no record. The action is absent when no prior drops exi
 
 ## C10 · PT routine drafts are lost on navigation
 
-**State:** `open` · **P2** · Sources: WF#4, CX#7 · Batch 2
+**State:** `fixed` · **P2** · Sources: WF#4, CX#7 · Batch 2
 
 ### Problem
 
@@ -1788,6 +1788,32 @@ versioned, allowlisted keys, per-key shape validators.
 Enter a partial multi-exercise routine, visit Today, use Back, and reload. Fields and
 ordering remain. A failed save retains the draft; a successful save and an explicit discard
 each clear it.
+
+### As built
+
+`src/store/pt-routine-draft.ts` is the helper: versioned payload, per-key deep validators in
+the shape `pt-store` uses, and plain read/write/clear functions rather than a reactive store —
+there is one reader, it reads once on mount, and nothing else in the app has an opinion about
+a half-written routine.
+
+- **A draft is parked only while it differs from what is saved**, compared through
+  `ptRoutineFingerprint`. That makes "a draft exists" mean "there is unsaved work", which is
+  what gives the stale check something worth asking about, and it means typing a change back
+  to its saved value takes the draft away again.
+- **The same fingerprint answers the stale question.** A draft stores the fingerprint of the
+  routine it was taken against; if the routine has moved since, restoring asks first
+  (`RESTORE` / `DISCARD`). A new routine has nothing behind it, so it never asks.
+- **`CANCEL` became `BACK`.** Leaving keeps the draft now, so a word promising to undo would
+  be a lie about where the work went. `DISCARD DRAFT` — shown only when there is one — is the
+  explicit discard, and `DONE` became `SAVE ROUTINE`.
+- **The persistence effect is gated on a `hydrated` flag.** Loading writes the saved routine
+  into the same signals the parked draft is about to be written into, and the effect watches
+  them: without the gate it fired on the loaded values, saw a form matching what is saved,
+  and deleted the draft one line before it would have been restored. The first version of
+  this change had exactly that bug and the tests caught it.
+
+`PtRoutineEdit.test.tsx`'s `beforeEach` now clears `localStorage`; without it the form
+restores the previous test's draft.
 
 ---
 
