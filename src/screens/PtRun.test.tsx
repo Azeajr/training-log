@@ -5,7 +5,7 @@ import PtRun from './PtRun'
 import { db } from '../db/index'
 import { getPtRoutine, savePtRoutine, type PtExerciseDraft } from '../lib/pt'
 import { clearAllPtRuns as clearPtRun, getPtRun, ptRun, startPtRun, startPtSession, ptSessionRoutineIds, togglePtSet } from '../store/pt-store'
-import { toast } from '../store/toast-store'
+import { showToast, toast } from '../store/toast-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 
@@ -65,6 +65,9 @@ beforeEach(async () => {
   ])
   clearPtRun()
   mockNavigate.mockClear()
+  // The toast is a module singleton and outlives a test. Left standing, a
+  // `waitFor` on its content passes against the PREVIOUS test's message.
+  showToast('')
 })
 
 afterEach(drain)
@@ -332,6 +335,39 @@ describe('PtRun screen', () => {
     expect(ptRun.routineId).toBeNull()
   })
 
+  /**
+   * The count the toast reports is read AFTER the store has been cleared, so
+   * the denominator has to be captured with the numerator. `total()` is a memo
+   * over the store's set lists; interpolated after `clearPtRun` it reads 0 and
+   * the run reports "1/0 done".
+   */
+  it('reports the run it just saved, not the store it just cleared', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft({ sets: 3 })] })
+
+    renderRun(id)
+    await screen.findByText('Band pull-apart')
+    fireEvent.click(checkbox(/set 1/))
+    fireEvent.click(screen.getByText('FINISH'))
+
+    await waitFor(() => expect(toast()).toContain('logged'))
+    expect(toast()).toBe('Rehab logged — 1/3 done.')
+  })
+
+  it('counts every routine of a combined session in the one toast', async () => {
+    const knee = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft({ name: 'Knee bends' })] })
+    const shoulder = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
+    startPtSession([knee, shoulder])
+
+    renderRun()
+    await screen.findByText('Knee bends')
+    fireEvent.click(checkbox(/Knee bends set 1/))
+    fireEvent.click(checkbox(/Band pull-apart set 2/))
+    fireEvent.click(screen.getByText('FINISH SESSION'))
+
+    await waitFor(() => expect(toast()).toContain('logged'))
+    expect(toast()).toBe('PT SESSION logged — 2/4 done.')
+  })
+
   it('dates the session from when the run started, not when it was saved', async () => {
     const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
     const startedAt = new Date(2026, 8, 16, 23, 30).getTime()
@@ -375,6 +411,8 @@ describe('PtRun screen', () => {
 
     await waitFor(() => expect(toast()).toMatch(/could not save that run/i))
     expect(toast()).toContain('disk full')
+    // The failure is the whole message: no "logged" underneath it.
+    expect(toast()).not.toContain('logged')
     expect(doneSets(ptRun)).toHaveLength(1)
     expect(mockNavigate).not.toHaveBeenCalled()
     spy.mockRestore()

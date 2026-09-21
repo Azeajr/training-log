@@ -127,7 +127,7 @@ from source here.
 | **A4** | P2 | PT draft model | EF#3 · CX#5 | `src/store/pt-store.ts` | `open` | |
 | **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `open` | |
 | **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `open` | |
-| **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `open` | |
+| **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×2 red at `d222835` (`1/0` single, `2/0` combined) |
 | **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `open` | |
 | **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `open` | |
 | **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
 
-**Totals: 22 items — 21 `open`, 0 `wip`, 1 `fixed`.**
+**Totals: 22 items — 20 `open`, 0 `wip`, 2 `fixed`.**
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -1005,7 +1005,7 @@ Today and History distinguish skipped from completed sessions.
 
 ## B2 · PT completion toast reports an impossible count
 
-**State:** `open` · **P3** · Sources: EF#7, CX#8 · Batch 1
+**State:** `fixed` · **P3** · Sources: EF#7, CX#8 · Batch 1
 
 ### Problem
 
@@ -1041,6 +1041,14 @@ showToast(`${routineName()} logged — ${completed}/${totalSets} done.`)
 
 `PtRun.test.tsx` — finishing 1 of 3 sets shows `1/3 done`, single-routine and multi-routine.
 A failed save shows no success message and leaves the draft intact.
+
+### As built
+
+As written, plus one thing the tests forced: the toast is a module singleton with no
+reset, so a `waitFor` on its content passed against the PREVIOUS test's message — the
+combined-session test read `Rehab logged — 1/0 done.` from the test before it and asserted
+nothing. `PtRun.test.tsx`'s `beforeEach` now clears it. The existing failed-save test
+gained the missing half of its assertion: no `logged` under the error.
 
 ---
 
