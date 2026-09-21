@@ -23,7 +23,7 @@ test.describe('PT checklist', () => {
 
     // Nothing is in the database yet — the editor holds a draft.
     await expect(page.getByText('3 x 10 reps . red band')).toBeVisible()
-    await page.getByRole('button', { name: 'DONE' }).click()
+    await page.getByRole('button', { name: 'SAVE ROUTINE' }).click()
 
     await expect(page.getByText('Shoulder rehab')).toBeVisible()
     await expect(page.getByText('1 exercise')).toBeVisible()
@@ -52,7 +52,7 @@ test.describe('PT checklist', () => {
     await page.goto('/pt/new')
     await page.getByLabel('Routine name').fill('Knee')
     await page.getByLabel('Exercise 1 name').fill('Wall slide')
-    await page.getByRole('button', { name: 'DONE' }).click()
+    await page.getByRole('button', { name: 'SAVE ROUTINE' }).click()
 
     await page.getByRole('button', { name: 'START', exact: true }).click()
     await page.getByRole('checkbox').first().click()
@@ -73,13 +73,13 @@ test.describe('PT checklist', () => {
     await page.getByLabel('Exercise 1 equipment height', { exact: true }).fill('6.5')
     const prescription = '3 x 10 reps . 10 lb . 6.5 in high'
     await expect(page.getByText(prescription, { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await page.getByRole('button', { name: 'SAVE ROUTINE', exact: true }).click()
     await page.getByRole('link', { name: 'EDIT', exact: true }).click()
     await page.reload()
     await stepDownRow.click()
     await expect(page.getByLabel('Exercise 1 equipment height', { exact: true })).toHaveValue('6.5')
     await expect(page.getByLabel('Exercise 1 equipment height unit')).toHaveValue('in')
-    await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await page.getByRole('button', { name: 'SAVE ROUTINE', exact: true }).click()
     await page.getByRole('button', { name: 'START', exact: true }).click()
     await expect(page.getByText(prescription, { exact: true })).toBeVisible()
     await page.getByRole('checkbox').first().click()
@@ -93,7 +93,7 @@ test.describe('PT checklist', () => {
     await page.getByLabel('Exercise 1 equipment height', { exact: true }).fill('15')
     await expect(page.getByText('3 x 10 reps . 10 lb . 15 cm high', { exact: true })).toBeVisible()
     await page.getByLabel('Exercise 1 equipment height', { exact: true }).fill('')
-    await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await page.getByRole('button', { name: 'SAVE ROUTINE', exact: true }).click()
     await page.getByRole('link', { name: 'EDIT', exact: true }).click()
     await stepDownRow.click()
     await expect(page.getByLabel('Exercise 1 equipment height', { exact: true })).toBeEmpty()
@@ -104,7 +104,7 @@ test.describe('PT checklist', () => {
     await page.goto('/pt/new')
     await page.getByLabel('Routine name').fill('Knee')
     await page.getByLabel('Exercise 1 name').fill('Step down')
-    await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await page.getByRole('button', { name: 'SAVE ROUTINE', exact: true }).click()
     await page.getByRole('button', { name: 'START', exact: true }).click()
 
     // Log all three sets as prescribed, then finish.
@@ -145,7 +145,7 @@ test.describe('PT checklist', () => {
     await page.goto('/pt/new')
     await page.getByLabel('Routine name').fill('Knee block')
     await page.getByLabel('Exercise 1 name').fill('Wall slide')
-    await page.getByRole('button', { name: 'DONE' }).click()
+    await page.getByRole('button', { name: 'SAVE ROUTINE' }).click()
 
     await page.getByRole('button', { name: 'START', exact: true }).click()
     await page.getByRole('checkbox').first().click()
@@ -172,7 +172,7 @@ test.describe('PT checklist', () => {
       await page.goto('/pt/new')
       await page.getByLabel('Routine name').fill(routine)
       await page.getByLabel('Exercise 1 name').fill(exercise)
-      await page.getByRole('button', { name: 'DONE', exact: true }).click()
+      await page.getByRole('button', { name: 'SAVE ROUTINE', exact: true }).click()
       await expect(page.getByLabel(`Include ${routine}`)).toBeVisible()
     }
 
@@ -214,8 +214,8 @@ test.describe('PT checklist', () => {
       await page.goto('/pt/new')
       await page.getByLabel('Routine name').fill(routine)
       await page.getByLabel('Exercise 1 name').fill(exercise)
-      await page.getByRole('button', { name: 'DONE', exact: true }).click()
-      // Wait for DONE's navigation before leaving the routines page.
+      await page.getByRole('button', { name: 'SAVE ROUTINE', exact: true }).click()
+      // Wait for the save's navigation before leaving the routines page.
       await expect(page.getByLabel(`Include ${routine}`)).toBeVisible()
     }
 
