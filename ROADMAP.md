@@ -2,6 +2,36 @@
 
 ## Done
 
+### Band Surfaces (2026-09-21)
+
+Eight items across the band-assisted loading UI. **E1, C2, C1, C6, D1, B3, C3
+and D3** of `docs/workflow-review-fixes.md`.
+
+- **Band settings appears only where bands are used.** The shortcut was on every
+  lift's logging screen, every cross block and every accessory header — and above
+  the save-failure banner, so a write error was pushed down the page by a control
+  nobody wanted there. It is gated on the saved profile now, never on a movement's
+  name, and Settings remains the way to set one up.
+- **One name for the dialog**, chosen where it is used: BANDS when a profile
+  exists, SET UP BANDS when none. Three spellings and an unreachable default are
+  gone, and the form now says what raw load actually is.
+- **A suggestion explains itself.** A 45lb prescription used to sit beside an 86lb
+  suggestion and a button that could not close the gap. The suggestion now reports
+  its reasoning, so the control can distinguish a target that is out of reach from
+  one that merely fell in an increment gap, and from the algorithm preferring a
+  simpler setup — independent facts that can all be true at once.
+- **Anywhere a load is edited can ask for a setup.** Both edit rows, all four
+  history branches and drop rounds had none. Where a set carries its own
+  prescription it is shown; where it does not — history, and drop rounds, which
+  are defined by dropping to a lower load — the user names a target rather than
+  being shown today's prescription as though it were the old one's.
+- **Band names can be renamed, added and removed.** The four colours are a starting
+  point, not the roster. Sets already logged keep the name, assistance and load
+  they were recorded with.
+- Plus a repeated unit after every band summary, a calibration form whose fields
+  never looked editable, and a drop round that shared its calibration array with
+  the round it was copied from.
+
 ### Assistance Swaps and FINISH Stop Losing Work (2026-09-21)
 
 Items **A2** and **B1** of `docs/workflow-review-fixes.md`.
