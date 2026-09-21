@@ -1,6 +1,6 @@
 import BandLoadControls from '../forms/BandLoadControls'
 import BandSettings from '../forms/BandSettings'
-import { bandProfileFor, effectiveBandLoad, makeBandLoad, suggestBandLoad } from '../../lib/band-loading'
+import { bandProfileFor, copyBandLoad, effectiveBandLoad, makeBandLoad, suggestBandLoad } from '../../lib/band-loading'
 import { createSignal, createMemo, createEffect, on, createUniqueId, For, Show } from 'solid-js'
 import { logAccessorySet, editAccessorySet, deleteLastAccessorySet, removeAccessory, startRest, setAccessoryNotes, type ActiveAccessory } from '../../store/workout-store'
 import type { AccessorySet, Exercise, DropRound, BandLoad, BandProfile } from '../../types/domain'
@@ -90,7 +90,7 @@ export default function AccessoryLog(props: Props) {
   const startEditSet = (i: number) => {
     const s = props.accessory.loggedSets[i]
     setEditBandLoad(s.bandLoad ? { ...s.bandLoad } : null)
-    setEditDropRounds(s.dropRounds?.map(r => ({ ...r, bandLoad: r.bandLoad ? { ...r.bandLoad } : null })) ?? [])
+    setEditDropRounds(s.dropRounds?.map(r => ({ ...r, bandLoad: r.bandLoad ? copyBandLoad(r.bandLoad) : null })) ?? [])
     setEditWeight(s.weight ?? 0)
     setEditReps(s.reps ?? 10)
     setEditDuration(s.duration ?? null)
@@ -109,6 +109,24 @@ export default function AccessoryLog(props: Props) {
     })
     setEditingSetIdx(null)
   }
+
+  /**
+   * The drop sequence the last logged set of this exercise used.
+   *
+   * `handleLog` clears the draft after every set, which is right — a set is a
+   * record, not a template — but it meant re-entering the same three-round drop
+   * set after set. Copying it is explicit and always will be: restoring it
+   * automatically would put rounds on screen that nobody has done yet.
+   */
+  const previousDrops = (): DropRound[] => props.accessory.loggedSets.at(-1)?.dropRounds ?? []
+
+  const copyPreviousDrops = () => setDropRounds(previousDrops().map(round => ({
+    ...round,
+    // Deep, so editing the copy cannot reach back into the logged set it came
+    // from — and so a calibration that has since changed stays the one this
+    // sequence was built under, which `BandLoadControls` marks `(recorded)`.
+    bandLoad: round.bandLoad ? copyBandLoad(round.bandLoad) : null,
+  })))
 
   // Logging changes no program state. A weight the user dialled in stands as
   // what they lifted; whether it should become the new training max is asked
@@ -321,6 +339,25 @@ export default function AccessoryLog(props: Props) {
                   <Stepper value={reps()} onChange={setReps} step={1} min={0} fieldLabel="reps" />
                 </FieldRow>
                 <DropRoundsEditor profile={profile()} loading={loading() ?? undefined} bandLoad={bandLoad()} rounds={dropRounds()} onChange={setDropRounds} weight={weight()} reps={reps()} />
+                <Show when={previousDrops().length > 0}>
+                  <Show
+                    when={dropRounds().length > 0}
+                    fallback={
+                      <button type="button" onClick={copyPreviousDrops} class="text-left text-accent text-xs tracking-widest">
+                        COPY PREVIOUS DROPS
+                      </button>
+                    }
+                  >
+                    {/* Replacing rounds already entered is a decision, so it is
+                        asked for rather than taken. */}
+                    <InlineConfirm
+                      label="COPY PREVIOUS DROPS"
+                      ariaLabel="Copy previous drops"
+                      confirmText="replace the rounds below?"
+                      onConfirm={copyPreviousDrops}
+                    />
+                  </Show>
+                </Show>
               </Show>
               <Show when={type() === 'timed'}>
                 <FieldRow label="time">

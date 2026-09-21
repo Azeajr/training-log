@@ -317,3 +317,98 @@ describe('the accessory band shortcut is gated on the profile', () => {
     expect(screen.queryByRole('button', { name: /^Band settings for/ })).toBeNull()
   })
 })
+
+// ── C9 ──────────────────────────────────────────────────────────────────────
+// `handleLog` clears the drop configuration after every set — right, because a
+// set is a record rather than a template, but it meant re-entering the same
+// three-round drop set after set.
+describe('copying a drop sequence forward', () => {
+  afterEach(() => { cleanup(); clearSession() })
+
+  const setup = (exercise: Exercise = { ...TIMED, type: 'reps' }) => {
+    addAccessory(accessory([]))
+    return render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={exercise} />)
+  }
+
+  const copyButton = () => screen.queryByRole('button', { name: /Copy previous drops|COPY PREVIOUS DROPS/ })
+
+  const logWithDrops = (rounds: number) => {
+    for (let i = 0; i < rounds; i++) fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+  }
+
+  it('is absent until a logged set of this exercise has drop rounds', () => {
+    setup()
+    expect(copyButton()).toBeNull()
+
+    // A set with no drops leaves nothing to copy.
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+    expect(copyButton()).toBeNull()
+  })
+
+  it('copies the previous set\'s rounds as an editable draft, logging nothing', () => {
+    setup()
+    logWithDrops(2)
+    expect(workout.activeAccessories[0].loggedSets).toHaveLength(1)
+
+    fireEvent.click(copyButton()!)
+
+    // On screen as a draft — two rounds to edit, and still one logged set.
+    expect(screen.getByRole('button', { name: 'Remove drop 2' })).toBeTruthy()
+    expect(workout.activeAccessories[0].loggedSets).toHaveLength(1)
+  })
+
+  it('leaves the set it copied from alone when the copy is edited', () => {
+    setup()
+    logWithDrops(2)
+    fireEvent.click(copyButton()!)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease drop 1 reps' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove drop 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+
+    const [first, second] = workout.activeAccessories[0].loggedSets
+    expect(first.dropRounds).toHaveLength(2)
+    expect(first.dropRounds![0].reps).toBe(10)
+    expect(second.dropRounds).toHaveLength(1)
+    expect(second.dropRounds![0].reps).toBe(9)
+  })
+
+  it('asks before replacing rounds already entered', () => {
+    setup()
+    logWithDrops(2)
+    fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease drop 1 reps' }))
+
+    // Not taken on the first press.
+    fireEvent.click(copyButton()!)
+    expect(screen.getByText('replace the rounds below?')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Edit drop 1 reps, currently 9' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Yes, copy previous drops/i }))
+    expect(screen.getByRole('button', { name: 'Remove drop 2' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Edit drop 1 reps, currently 10' })).toBeTruthy()
+  })
+
+  /** A copied band setup is a record of the calibration it was built under. */
+  it('gives the copy its own calibration snapshot', () => {
+    addAccessory({ ...accessory([]), exerciseName: 'Pull-ups', calculatedWeight: 145 })
+    render(() => (
+      <AccessoryLog
+        accessory={workout.activeAccessories[0]}
+        exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: defaultBandProfile('Pull-ups') }}
+      />
+    ))
+    logWithDrops(1)
+
+    fireEvent.click(copyButton()!)
+    fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
+
+    const [first, second] = workout.activeAccessories[0].loggedSets
+    const a = first.dropRounds![0].bandLoad!
+    const b = second.dropRounds![0].bandLoad!
+    expect(b).toEqual(a)
+    expect(b.calibration).not.toBe(a.calibration)
+    expect(b.calibration![0]).not.toBe(a.calibration![0])
+  })
+})

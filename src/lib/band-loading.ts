@@ -226,6 +226,18 @@ export function suggestBandLoad(profile: BandProfile, target: number, plates: Pl
   return suggestBandLoadDetailed(profile, target, plates).selected
 }
 
+/**
+ * A `BandLoad` copied deeply enough to be a separate record.
+ *
+ * `calibration` is an array, so a spread shares it by reference — and a
+ * BandLoad is what a set WAS, not a view onto a profile that is still
+ * editable. An absent calibration stays absent: a load written before snapshots
+ * existed carries none, and `BandLoadControls` falls back to the live profile
+ * for exactly those, which an empty array would suppress.
+ */
+export const copyBandLoad = (load: BandLoad): BandLoad =>
+  ({ ...load, calibration: load.calibration?.map(b => ({ ...b })) })
+
 export function validBandLoad(value: unknown): value is BandLoad {
   if (!value || typeof value !== 'object') return false
   const v = value as BandLoad
