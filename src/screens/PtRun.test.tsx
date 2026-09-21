@@ -449,6 +449,58 @@ describe('PtRun screen', () => {
     expect(ptRun.sets[String((await getPtRoutine(db, id))!.exercises[0].id!)][0].reps).toBe(14)
   })
 
+  // ── C7 ────────────────────────────────────────────────────────────────────
+  // DISCARD and FINISH sat at the bottom of a page that grows with every
+  // routine, exercise and set row — the only logging screen where finishing
+  // meant scrolling back to find the button.
+  describe('the action bar', () => {
+    const bar = () => screen.getByText(/DONE$/).closest('div')!.parentElement!
+
+    it('carries the session-wide count alongside the two actions', async () => {
+      const knee = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft({ name: 'Knee bends' })] })
+      const shoulder = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
+      startPtSession([knee, shoulder])
+
+      renderRun()
+      await screen.findByText('Knee bends')
+      fireEvent.click(checkbox(/Knee bends set 1/))
+
+      // Aggregate across both routines, not just the one on screen.
+      await waitFor(() => expect(bar().textContent).toContain('1/4 DONE'))
+      expect(within(bar()).getByText('FINISH SESSION')).toBeTruthy()
+      expect(within(bar()).getByText('DISCARD')).toBeTruthy()
+    })
+
+    it('keeps its own confirmation on DISCARD', async () => {
+      const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
+      renderRun(id)
+      await screen.findByText('Band pull-apart')
+      fireEvent.click(checkbox(/set 1/))
+
+      fireEvent.click(within(bar()).getByText('DISCARD'))
+      await screen.findByText(/Discard this PT session/)
+      expect(await db.ptSessions.count()).toBe(0)
+    })
+
+    it('stays usable after a failed save', async () => {
+      const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
+      const spy = vi.spyOn(db, 'transaction').mockRejectedValueOnce(new Error('disk full'))
+      renderRun(id)
+      await screen.findByText('Band pull-apart')
+      fireEvent.click(checkbox(/set 1/))
+
+      fireEvent.click(within(bar()).getByText('FINISH'))
+      await waitFor(() => expect(toast()).toContain('disk full'))
+      spy.mockRestore()
+
+      // Still on screen, still counting, and the draft is intact behind it.
+      expect(within(bar()).getByText('FINISH')).not.toBeDisabled()
+      expect(bar().textContent).toContain('1/2 DONE')
+      fireEvent.click(within(bar()).getByText('FINISH'))
+      await waitFor(async () => expect(await db.ptSessions.count()).toBe(1))
+    })
+  })
+
   /** Ticks are in the store and survive a reload. An open set edit is not. */
   it('warns before a reload that would take an unapplied set edit with it', async () => {
     const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })

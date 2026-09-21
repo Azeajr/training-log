@@ -515,6 +515,53 @@ describe('Workout screen — with active session', () => {
     })
   })
 
+  // ── C5 ────────────────────────────────────────────────────────────────────
+  // The rest timer took the whole strip, so a rest hid FINISH and every section
+  // link with it. Getting either back meant working out that SKIP REST was the
+  // way back to them.
+  describe('during rest', () => {
+    const startRestByLogging = async () => {
+      startSession(BENCH)
+      renderWorkout()
+      await logNSets(1)
+      await waitFor(() => expect(workout.isResting).toBe(true))
+    }
+
+    it('keeps the finish control and the section links on screen', async () => {
+      await startRestByLogging()
+
+      expect(screen.getByTestId('rest-timer-display')).toBeTruthy()
+      expect(getFinishButton()).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^MAIN / })).toBeTruthy()
+    })
+
+    it('does not stop the rest when a section link is used', async () => {
+      await startRestByLogging()
+
+      fireEvent.click(screen.getByRole('button', { name: /^MAIN / }))
+      await drain()
+
+      expect(workout.isResting).toBe(true)
+      expect(screen.getByTestId('rest-timer-display')).toBeTruthy()
+    })
+
+    /** Finishing mid-rest is allowed; backing out of it leaves the rest alone. */
+    it('leaves the rest running when an early-finish prompt is cancelled', async () => {
+      await startRestByLogging()
+
+      fireEvent.click(getFinishButton())
+      await screen.findByText(/Still outstanding/)
+      expect(workout.isResting).toBe(true)
+
+      fireEvent.click(screen.getByText('CONTINUE WORKOUT'))
+      await drain()
+
+      expect(workout.isResting).toBe(true)
+      expect((await db.sessions.get(1))?.status).toBe('pending')
+      expect(screen.getByTestId('rest-timer-display')).toBeTruthy()
+    })
+  })
+
   /*
    * B1. FINISH went straight to completion. Starting a lift and tapping it with
    * nothing logged marked the lift done on Today, selected the next one, and
@@ -883,8 +930,13 @@ describe('Workout screen — finished sections fold away', () => {
     await drain()
   })
 
+  // A section's fold control, which is the only button here that carries
+  // `aria-expanded`. Matching on the label alone also caught the session bar's
+  // segment link for the same block — which used to be hidden during rest and,
+  // since C5, is not.
   const sectionToggle = (label: string) =>
-    screen.queryAllByRole('button').find(b => b.textContent?.startsWith(label))
+    screen.queryAllByRole('button')
+      .find(b => b.hasAttribute('aria-expanded') && b.textContent?.startsWith(label))
 
   it('leaves an in-progress section open with no toggle', async () => {
     startSession(BENCH)

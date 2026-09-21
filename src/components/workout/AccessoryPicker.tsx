@@ -13,7 +13,10 @@ import {
 import { useConfirmation } from '../../hooks/use-confirmation'
 import { accessoryWeight, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
 import { getLatestAccessoryTms } from '../../lib/training-max'
-import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, setAssistanceDefault, ASSISTANCE_SECTIONS, ASSISTANCE_SUGGESTION_SESSIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
+import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, setAssistanceDefault, ASSISTANCE_SECTIONS, ASSISTANCE_SUGGESTION_SESSIONS, CATEGORY_LABEL, EXERCISE_CATEGORIES, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
+import { createExercise, ExerciseNameConflictError } from '../../lib/exercise'
+import type { ExerciseCategory } from '../../types/domain'
+import ToggleChip from '../ui/ToggleChip'
 import Stepper from '../forms/Stepper'
 import Modal from '../modals/Modal'
 
@@ -232,6 +235,54 @@ export default function AccessoryPicker(props: Props) {
     props.onClose()
   }
 
+  /*
+   * Creating an exercise without leaving the picker.
+   *
+   * The empty state used to say "Tag one in Settings", and exercise management
+   * lives inside an initially-collapsed section of a long page — so choosing
+   * an exercise for a slot became a separate configuration task: leave, find,
+   * create, come back, select. Advanced equipment configuration stays in
+   * Settings; this is the fields needed to log the thing.
+   */
+  const [creating, setCreating] = createSignal(false)
+  const [newName, setNewName] = createSignal('')
+  const [newType, setNewType] = createSignal<'reps' | 'timed' | 'distance'>('reps')
+  const [newCategory, setNewCategory] = createSignal<ExerciseCategory>('push')
+  const [createError, setCreateError] = createSignal('')
+
+  const openCreate = () => {
+    setNewName('')
+    setNewType('reps')
+    // Prefilled with a category that belongs to the slot being filled —
+    // correctable, because the picker cannot know which of legs/core it is.
+    setNewCategory(EXERCISE_CATEGORIES.find(c => sectionForCategory(c) === props.slot) ?? 'push')
+    setCreateError('')
+    setCreating(true)
+  }
+
+  const handleCreate = async () => {
+    const name = newName().trim()
+    if (!name) return
+    setCreateError('')
+    let id: number
+    try {
+      // The database has a case-insensitive unique index on the name, and
+      // `createExercise` turns a collision into a typed error. Shown here
+      // rather than swallowed, and nothing about the current selection has
+      // changed at this point.
+      id = await createExercise(db, name, newType(), newCategory())
+    } catch (err) {
+      if (err instanceof ExerciseNameConflictError) { setCreateError(err.message); return }
+      throw err
+    }
+    await load()
+    setCreating(false)
+    const row = rows().find(r => r.exercise.id === id)
+    // Straight on to selecting it, which goes through the same slot handling as
+    // any other row — including the TM sheet, since a new exercise has none.
+    if (row) await handleSelect(row)
+  }
+
   const handleSaveTm = async () => {
     const ex = settingTm()
     if (!ex || tmWeight() < 0) return
@@ -254,10 +305,73 @@ export default function AccessoryPicker(props: Props) {
     props.onClose()
   }
 
+  const newExerciseButton = () => (
+    <button
+      type="button"
+      onClick={openCreate}
+      class="w-full text-left px-3 py-2 border border-border-dim text-accent font-mono text-sm tracking-widest"
+    >
+      + NEW EXERCISE
+    </button>
+  )
+
   return (
     <Show
       when={settingTm()}
       fallback={
+        <Show
+          when={!creating()}
+          fallback={
+            <Modal variant="sheet" title="NEW EXERCISE" onClose={() => setCreating(false)} class="px-4 pb-4">
+              <div class="space-y-5">
+                <input
+                  type="text"
+                  value={newName()}
+                  onInput={e => { setNewName(e.currentTarget.value); setCreateError('') }}
+                  aria-label="New exercise name"
+                  placeholder="Close-grip bench"
+                  class="w-full bg-surface border border-border text-text px-2 py-2 text-sm focus:outline-none focus:border-accent"
+                />
+                <div class="flex flex-wrap gap-2">
+                  <For each={['reps', 'timed', 'distance'] as const}>
+                    {type => (
+                      <ToggleChip active={newType() === type} onClick={() => setNewType(type)}>
+                        {type.toUpperCase()}
+                      </ToggleChip>
+                    )}
+                  </For>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <For each={EXERCISE_CATEGORIES}>
+                    {category => (
+                      <ToggleChip active={newCategory() === category} onClick={() => { setNewCategory(category) }}>
+                        {CATEGORY_LABEL[category].toUpperCase()}
+                      </ToggleChip>
+                    )}
+                  </For>
+                </div>
+                <Show when={createError()}><p role="alert" class="text-warn text-xs">{createError()}</p></Show>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreating(false)}
+                    class="flex-1 border border-border text-muted px-3 py-3 text-xs tracking-widest uppercase"
+                  >
+                    BACK
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy() || newName().trim() === ''}
+                    onClick={() => { void guard(handleCreate)() }}
+                    class="flex-1 border border-accent text-accent px-3 py-3 text-xs tracking-widest uppercase disabled:opacity-40"
+                  >
+                    CREATE AND SELECT
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          }
+        >
         <Modal
           variant="sheet"
           title={props.slot === 'extra' ? 'SELECT ASSISTANCE EXERCISE' : `CHOOSE ${SECTION_LABEL[props.slot]}`}
@@ -269,7 +383,7 @@ export default function AccessoryPicker(props: Props) {
             fallback={
               <div class="space-y-1">
                 <Show when={slotRows().length === 0}>
-                  <div class="text-faint text-xs py-2">No {SECTION_LABEL[props.slot as Exclude<AssistanceSlot, 'extra'>]} exercises. Tag one in Settings.</div>
+                  <div class="text-faint text-xs py-2">No {SECTION_LABEL[props.slot as Exclude<AssistanceSlot, 'extra'>]} exercises yet.</div>
                 </Show>
                 <Show when={usedSlotRows().length > 0}>
                   <div class="text-faint text-[10px] uppercase tracking-widest pb-0.5">Used for this lift</div>
@@ -283,6 +397,8 @@ export default function AccessoryPicker(props: Props) {
                   </Show>
                 </Show>
                 <For each={restSlotRows()}>{row => renderRow(row)}</For>
+                {/* Also in the empty state, which is where it is needed most. */}
+                {newExerciseButton()}
               </div>
             }
           >
@@ -303,9 +419,11 @@ export default function AccessoryPicker(props: Props) {
                   <For each={grouped().uncategorized}>{row => renderRow(row)}</For>
                 </div>
               </Show>
+              {newExerciseButton()}
             </div>
           </Show>
         </Modal>
+        </Show>
       }
     >
       {ex => (

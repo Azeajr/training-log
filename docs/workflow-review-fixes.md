@@ -133,18 +133,18 @@ from source here.
 | **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `fixed` | `AccessoryLog.test.tsx` ×3, `HistoryEdit.test.tsx` ×5; 5 red at E1 |
 | **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `fixed` | `BandLoadControls.test.tsx` ×5; 6 of the file's 10 red at D1 |
 | **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
-| **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `open` | |
+| **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `fixed` | `Workout.test.tsx` ×3, all red at batch 4 |
 | **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×2, 1 red at C1 (the other guards the unchanged step and bounds) |
-| **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `open` | |
-| **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `open` | |
-| **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `open` | |
+| **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×3, all red at C5 |
+| **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `fixed` | `AccessoryPicker.test.tsx` ×4, all red at C9 |
+| **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `fixed` | `AccessoryLog.test.tsx` ×5, 4 red at C7 |
 | **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `fixed` | `PtRoutineEdit.test.tsx` ×9 red at A4, `pt-routine-draft.test.ts` ×13 (new helper) |
 | **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `fixed` | `band-entry-points.test.tsx` ×5 (new file), 2 red at C6 |
-| **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `open` | |
+| **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `fixed` | `AccessoryLog.test.tsx` ×2, 1 red at C8 |
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 6 `open`, 0 `wip`, 16 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 1 `open`, 0 `wip`, 21 `fixed`.** Batches 1–5 are complete; only C4 remains. Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1634,7 +1634,7 @@ warmups as outstanding.
 
 ## C5 · Resting hides FINISH and section navigation
 
-**State:** `open` · **P2** · Sources: WF#5, CX#11 · Batch 5, after B1
+**State:** `fixed` · **P2** · Sources: WF#5, CX#11 · Batch 5, after B1
 
 ### Problem
 
@@ -1678,6 +1678,23 @@ navigation if that scroller is navigation's only implementation.
 During rest at mobile width (390×844), jump to a section and start or cancel finishing
 without stopping the timer first. The last content row is unobscured. Desktop (1280×900)
 likewise.
+
+### As built
+
+A second row, not a rearrangement: the countdown stacks **above** the session strip. The
+fixed shell moved out into `components/layout/BottomBar` — position, background and top
+border in one place — so neither row draws a bar of its own and they stop replacing each
+other. `SessionBar` no longer imports `workout-store` at all, which is what lets C7 reuse it
+from PT.
+
+The reserved space is unchanged at `pb-48` (12rem). The two rows together come to roughly
+8rem, so the existing padding already covers the taller case; it is the measurement that
+matters, not equal heights, and nothing was squeezed to preserve the old height.
+
+One existing test moved with the change. `sectionToggle` found any button whose text starts
+with a section's label, which used to be unambiguous only because the session bar was hidden
+during rest — it now also matches that block's segment link. It matches on `aria-expanded`,
+which is what a fold control actually is.
 
 ---
 
@@ -1744,7 +1761,7 @@ about restraint. Only the first is red against the old code, by construction.
 
 ## C7 · PtRun has no sticky action bar
 
-**State:** `open` · **P2** · Sources: UI#6, CX#12 · Batch 5
+**State:** `fixed` · **P2** · Sources: UI#6, CX#12 · Batch 5
 
 ### Problem
 
@@ -1779,11 +1796,27 @@ A fixed bottom bar reusing `SessionBar`'s shell and the `--nav-h` padding contra
 FINISH is reachable from the middle of a long multi-routine PT run without scrolling. The
 final notes field is unobscured. A save failure leaves a usable draft and a usable action bar.
 
+### As built
+
+The shared shell is `components/layout/BottomBar`, extracted by C5 an item earlier and
+store-free by construction — PT imports the shell and nothing else, so no part of
+`workout-store` or its rest state comes with it. `SessionBar` itself is not reused: PT's bar
+carries two actions and one aggregate count rather than a scrollable segment strip, and
+sharing the component would have meant a prop for each difference.
+
+The count is `doneCount()/total()`, the session-wide memos the page heading already shows,
+so a multi-routine run aggregates rather than reporting the routine in view. B2's capture
+already applies — the finish toast reads both counts before the clear, from batch 1.
+
+The page's bottom padding is `pb-32` and the shorthand `p-4 md:p-8` is split into
+`p-4 md:px-8 md:pt-8`, for the reason spelled out on the Workout screen: `md:p-8` is emitted
+after `pb-*` at equal specificity and silently resets it at desktop width.
+
 ---
 
 ## C8 · Missing assistance exercises force a Settings detour
 
-**State:** `open` · **P2** · Sources: WF#6, CX#20 · Batch 5
+**State:** `fixed` · **P2** · Sources: WF#6, CX#20 · Batch 5
 
 ### Problem
 
@@ -1820,11 +1853,28 @@ slot being filled and returning to the slot with the new exercise selected.
 Create and select an exercise without leaving the workout. The new exercise appears in
 Settings and in future picker searches.
 
+### As built
+
+`+ NEW EXERCISE` sits at the end of the list in both modes and in the empty state, and opens
+a sub-sheet in the same slot as the training-max one. Three fields — name, measurement type,
+category — with the category prefilled to a category belonging to the slot and correctable,
+since the picker cannot know which of legs/core a thing is. Everything else about an
+exercise stays in Settings.
+
+Persistence is `createExercise` unchanged, so the case-insensitive unique index and the
+typed `ExerciseNameConflictError` come with it; the conflict is shown in the sheet and the
+form stays open to correct. Nothing about the current selection is touched until the insert
+succeeds, and creation runs straight on into `handleSelect` — which means the training-max
+sheet for a brand-new exercise, and A2's slot handling after it.
+
+The empty state's "Tag one in Settings." became "No PUSH exercises yet.", since the sentence
+told the user to go somewhere they no longer need to go.
+
 ---
 
 ## C9 · Repeating a drop-set sequence means rebuilding it every set
 
-**State:** `open` · **P3** · Sources: EF#6, CX#21 · Batch 5, **after E1**
+**State:** `fixed` · **P3** · Sources: EF#6, CX#21 · Batch 5, **after E1**
 
 ### Problem
 
@@ -1868,6 +1918,21 @@ the same exercise's previous logged set contains drop rounds:
 
 Copy, modify one round, log the next set: the first set is unchanged. Cancelling or clearing
 the copied draft creates no record. The action is absent when no prior drops exist.
+
+### As built
+
+As specified. Two notes:
+
+- **E1's deep copy is now a named helper**, `copyBandLoad` in `band-loading.ts`, rather than
+  the expression repeated at a third call site. It keeps E1's rule that an absent calibration
+  stays absent.
+- **The set editor's own copy used the shallow version too.** `AccessoryLog` copies a logged
+  set's drop rounds into its edit draft the same way, and that line spread the band load
+  without its calibration — the same class of defect E1 fixed one call site of. It goes
+  through `copyBandLoad` now.
+
+Replacing rounds already on screen goes through `InlineConfirm`, so the first press asks and
+the second copies.
 
 ---
 
@@ -2041,7 +2106,7 @@ case, plus the setup-versus-edit distinction that did not exist at all.
 
 ## D2 · "Log after all drop rounds." is always shown
 
-**State:** `open` · **P3** · Sources: UI#9, CX#22 · Batch 5
+**State:** `fixed` · **P3** · Sources: UI#9, CX#22 · Batch 5
 
 `AccessoryLog.tsx:322` renders it for every reps-measured accessory, drop rounds or not:
 
@@ -2064,6 +2129,12 @@ Removing the last round hides it again. Keep it next to the logging action.
 `AccessoryLog.test.tsx` — a reps accessory with no drop rounds renders no drop-specific
 instruction; adding a round shows it; removing the last round hides it again. This is
 conditional rendering, not wording, so it carries a test rather than a visual check.
+
+### As built
+
+As written. A second test pins the case the gate must not reach: a timed accessory has no
+drop rounds at all, so neither the instruction nor the control that would create one is
+there — only one of the two is red against the old code, and that is the honest split.
 
 ---
 

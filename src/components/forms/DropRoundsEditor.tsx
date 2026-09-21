@@ -1,5 +1,5 @@
 import BandLoadControls from './BandLoadControls'
-import { effectiveBandLoad, suggestBandLoad } from '../../lib/band-loading'
+import { copyBandLoad, effectiveBandLoad, suggestBandLoad } from '../../lib/band-loading'
 import { settings } from '../../store/settings-store'
 import { Index, Show } from 'solid-js'
 import type { DropRound, BandLoad, BandProfile } from '../../types/domain'
@@ -57,9 +57,7 @@ export default function DropRoundsEditor(props: {
         props.onChange([...props.rounds, {
           weight: last?.weight ?? props.weight,
           reps: last?.reps ?? props.reps,
-          bandLoad: previousBand
-            ? { ...previousBand, calibration: previousBand.calibration?.map(b => ({ ...b })) }
-            : null,
+          bandLoad: previousBand ? copyBandLoad(previousBand) : null,
         }])
       }}>+ ADD DROP ROUND</button>
     </div>
