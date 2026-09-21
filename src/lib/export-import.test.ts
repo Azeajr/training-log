@@ -4,6 +4,7 @@ import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import { retryPendingExport, exportJson, importFromRawData, exportCsv, exportPtCsv, importJson, MAX_IMPORT_BYTES } from './export-import'
 import { commitPtRun, getPtRoutine, savePtRoutine } from './pt'
+import { bandProfileFor, defaultBandProfile } from './band-loading'
 import { hasTrainingMaxes, refreshTrainingMaxPresence, resetTrainingMaxPresence } from './training-max'
 
 let capturedBlob: Blob | null = null
@@ -1228,20 +1229,43 @@ describe('exportPtCsv', () => {
     expect(cell(lines[2], 'actual_reps')).toBe('"15"')
   })
 
-  it('falls back to the prescription for a set recorded before actuals existed', async () => {
-    const { routineId, band } = await seedPt()
-    const sessionId = await commitPtRun(db, {
-      routineId, date: new Date(),
-      checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }],
-    })
-    // A tick-only row, as every run wrote before per-set values existed.
-    const check = (await db.ptSetChecks.where('sessionId').equals(sessionId).toArray())[0]
-    expect(check.reps).toBeNull()
-
+  const actualReps = async () => {
     await exportPtCsv(db)
     const lines = (await capturedBlob!.text()).split('\n')
     const header = lines[0].split(',')
-    expect(lines[1].split(',')[header.indexOf('"actual_reps"')]).toBe('"15"')
+    return lines[1].split(',')[header.indexOf('"actual_reps"')]
+  }
+
+  it('falls back to the prescription for a set recorded before actuals existed', async () => {
+    const { routineId, band } = await seedPt()
+    const sessionId = await db.ptSessions.add({ routineId, date: new Date(), notes: null })
+    // A tick-only row exactly as runs wrote them before per-set values existed:
+    // every actual null AND no `recorded` flag, because the column did not exist.
+    await db.ptSetChecks.add({ sessionId, ptExerciseId: band.id!, setNumber: 1, done: true })
+
+    expect(await actualReps()).toBe('"15"')
+  })
+
+  it('does not rewrite a real record whose values all happen to be null', async () => {
+    // A bodyweight set of an unloaded exercise with no box resolves all eight
+    // actuals to null while being a perfectly real record of what was done.
+    // Inferring "legacy" from the values alone re-rendered it as the CURRENT
+    // prescription, so editing the routine rewrote finished history.
+    const routineId = await savePtRoutine(db, {
+      name: 'Knee rehab',
+      exercises: [{ name: 'Bodyweight squat', sets: 1, measure: 'reps', targetReps: 20, resistanceKind: 'none' }],
+    })
+    const exercise = (await getPtRoutine(db, routineId))!.exercises[0]
+    await commitPtRun(db, {
+      routineId, date: new Date(),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true, reps: null }],
+    })
+    const check = (await db.ptSetChecks.toArray()).at(-1)!
+    expect(check.reps).toBeNull()
+    expect(check.recorded).toBe(true)
+
+    // The run recorded no reps. It must not read back as the prescribed 20.
+    expect(await actualReps()).toBe('""')
   })
 
   it('keeps a run with no checks the same width as every other row', async () => {
@@ -1388,4 +1412,35 @@ it('exports band setup on main, assistance, and drop rows, with consistent CSV c
   expect(lines[1].slice(-4)).toEqual(['"Green"', '"191"', '"48"', '"5"'])
   expect(lines[3].slice(-4)).toEqual(['"Green"', '"191"', '"48"', '"0"'])
   expect(lines.every(line => line.length === lines[0].length)).toBe(true)
+})
+
+describe('a backup carrying the boot seed\'s band profiles', () => {
+  // The undo lives in `seed()`, which runs at startup and not again. Restoring
+  // a backup taken from a database that ran the seeding build put those
+  // profiles straight back, and a profile REPLACES the weight stepper — so
+  // importing your own backup took the chin-up weight stepper away for the
+  // rest of the session, self-healing only on the next reload.
+  const seeded = defaultBandProfile('Chinups')!
+
+  it('clears the seeded profiles the payload restores', async () => {
+    await importFromRawData(db, {
+      lifts: [{ id: 8, name: 'CHINUPS', order: 4, liftType: 'upper', baseWeight: 0, progressionIncrement: 2.5, plateMode: 'total', bandProfile: seeded }],
+      exercises: [{ id: 1, name: 'Chinups', type: 'reps', category: 'pull', bandProfile: seeded }],
+    })
+    expect(bandProfileFor(await db.lifts.get(8))).toBeNull()
+    expect(bandProfileFor(await db.exercises.get(1))).toBeNull()
+  })
+
+  it('leaves a profile the user saved exactly as the backup carries it', async () => {
+    // One number away from the template is a calibration someone took, and a
+    // deliberately disabled one is a decision as much as an edit is.
+    const mine = { ...seeded, rawLoad: 205 }
+    const off = { ...defaultBandProfile('Nordic Curls')!, enabled: false }
+    await importFromRawData(db, {
+      lifts: [{ id: 8, name: 'CHINUPS', order: 4, liftType: 'upper', baseWeight: 0, progressionIncrement: 2.5, plateMode: 'total', bandProfile: mine }],
+      exercises: [{ id: 6, name: 'Nordic Curls', type: 'reps', category: 'legs', bandProfile: off }],
+    })
+    expect((await db.lifts.get(8))?.bandProfile).toEqual(mine)
+    expect((await db.exercises.get(6))?.bandProfile).toEqual(off)
+  })
 })

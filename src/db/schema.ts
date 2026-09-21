@@ -129,7 +129,8 @@ CREATE TABLE IF NOT EXISTS ptSetChecks (
   weight REAL,
   band TEXT,
   equipmentHeight REAL,
-  equipmentHeightUnit TEXT
+  equipmentHeightUnit TEXT,
+  recorded INTEGER
 );
 CREATE TABLE IF NOT EXISTS ptNotes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -289,6 +290,14 @@ export const ADDITIVE_MIGRATIONS = [
   `ALTER TABLE ptSetChecks ADD COLUMN band TEXT`,
   `ALTER TABLE ptSetChecks ADD COLUMN equipmentHeight REAL`,
   `ALTER TABLE ptSetChecks ADD COLUMN equipmentHeightUnit TEXT`,
+  // Says outright that the eight columns above are this set's own record,
+  // rather than leaving readers to infer it from "are they all NULL". That
+  // inference is not safe: a bodyweight set of an unloaded, un-boxed exercise
+  // legitimately resolves every one of them to NULL, and an import can carry
+  // exactly such a row. NULL here means a row written before PT recorded
+  // anything but a tick, which is the only case that falls back to the
+  // prescription.
+  `ALTER TABLE ptSetChecks ADD COLUMN recorded INTEGER`,
 ] as const
 
 export const ALL_TABLES = [

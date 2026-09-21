@@ -10,11 +10,25 @@ test('main-lift bands survive reload and raw-load recalibration on mobile', asyn
   await page.getByRole('button', { name: 'SAVE', exact: true }).click()
   await page.goto('/today')
   await startWorkout(page)
+  // Bands are opt-in: naming a lift "Chin-ups" does not switch them on, so
+  // there is no band picker until the calibration is accepted and saved. The
+  // dialog opens prefilled from the supplied measurements, but UNTICKED — a
+  // profile replaces the weight stepper, and a dialog that arrives already
+  // ticked is the same name-matching one layer up.
+  await expect(page.getByRole('combobox', { name: 'band', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Band settings for Chin-ups', exact: true }).click()
+  const optIn = page.getByRole('checkbox', { name: 'Use raw load and bands', exact: true })
+  await expect(optIn).not.toBeChecked()
+  await optIn.check()
+  await page.getByRole('button', { name: 'SAVE BAND SETTINGS', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
   await page.getByRole('combobox', { name: 'band', exact: true }).first().selectOption('Green')
-  await expect(page.getByTestId('active-weight')).toHaveText('145lb')
+  // 191 raw − 50 assistance = 141, the measured load itself, not a grid value.
+  await expect(page.getByTestId('active-weight')).toHaveText('141lb')
   await page.getByRole('button', { name: 'LOG', exact: true }).first().click()
   await expect.poll(async () => (await getWorkoutState(page))?.loggedSets).toMatchObject([
-    { weight: 145, bandLoad: { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 } },
+    { weight: 141, bandLoad: { band: 'Green', rawLoad: 191, assistance: 50, addedWeight: 0 } },
   ])
   // Rest starts after the SQLite write succeeds; wait before testing reload.
   await expect(page.getByRole('button', { name: 'SKIP REST', exact: true })).toBeVisible()
@@ -27,7 +41,7 @@ test('main-lift bands survive reload and raw-load recalibration on mobile', asyn
   await page.getByRole('button', { name: 'SAVE BAND SETTINGS', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await page.getByRole('combobox', { name: 'band', exact: true }).first().selectOption('Green')
-  await expect(page.getByTestId('active-weight')).toHaveText('155lb')
-  await expect.poll(async () => (await getWorkoutState(page))?.loggedSets).toMatchObject([{ weight: 145, bandLoad: { rawLoad: 191 } }])
+  await expect(page.getByTestId('active-weight')).toHaveText('151lb')
+  await expect.poll(async () => (await getWorkoutState(page))?.loggedSets).toMatchObject([{ weight: 141, bandLoad: { rawLoad: 191 } }])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })

@@ -1,4 +1,4 @@
-import { validBandLoad, validBandProfile, defaultBandProfile } from './band-loading'
+import { clearSeededBandProfiles, validBandLoad, validBandProfile } from './band-loading'
 import type { BandLoad } from '../types/domain'
 import type { TrainingDB } from '../db/index'
 import type { PtExercise, PtSetCheck } from '../types/domain'
@@ -123,7 +123,7 @@ const COLS = {
   ptRoutines: ['id', 'name', 'notes', 'order', 'archived'],
   ptExercises: ['id', 'routineId', 'name', 'description', 'videoUrl', 'sets', 'measure', 'targetReps', 'targetSeconds', 'targetDistance', 'distanceUnit', 'resistanceKind', 'resistanceWeight', 'resistanceBand', 'equipmentHeight', 'equipmentHeightUnit', 'order', 'archived'],
   ptSessions: ['id', 'routineId', 'date', 'notes'],
-  ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done', 'reps', 'seconds', 'distance', 'distanceUnit', 'weight', 'band', 'equipmentHeight', 'equipmentHeightUnit'],
+  ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done', 'reps', 'seconds', 'distance', 'distanceUnit', 'weight', 'band', 'equipmentHeight', 'equipmentHeightUnit', 'recorded'],
   ptNotes: ['id', 'sessionId', 'ptExerciseId', 'notes'],
   settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek'],
 } as const
@@ -251,10 +251,6 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       let parsed = parseDates<Record<string, unknown>>(pickCols(rows, COLS[key]), dates)
       // Migrate the legacy 'single_leg' category to 'legs' so importing an old
       // backup lands on the current tag set (mirrors the boot-time seed migration).
-      if (key === 'lifts' || key === 'exercises') {
-        parsed = parsed.map(r => r.bandProfile == null && typeof r.name === 'string'
-          ? { ...r, bandProfile: defaultBandProfile(r.name) } : r)
-      }
       if (key === 'exercises') {
         parsed = parsed.map(r => r.category === 'single_leg' ? { ...r, category: 'legs' } : r)
       }
@@ -280,6 +276,18 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
   // before the restore, and the payload may carry none. Re-derive rather than
   // assume, so a backup with no TMs correctly sends the user back to /setup.
   await refreshTrainingMaxPresence(db)
+  // Outside the transaction above: `db.transaction` is a serial queue and a
+  // nested call deadlocks.
+  //
+  // A backup taken from a database that ran the seeding build carries the
+  // profiles that build wrote, so restoring it verbatim puts band loading back
+  // on for anything spelled like a chin-up — and the undo lives in `seed()`,
+  // which does not run again until the app is reloaded. Importing your own
+  // backup therefore took the weight stepper away for the rest of the session.
+  // The same reasoning as the 'single_leg' migration above: a seed fixup has
+  // to run wherever rows arrive, not only at boot. Byte-identical rows only,
+  // so a profile the user saved is still theirs.
+  await clearSeededBandProfiles(db)
 }
 
 export async function exportCsv(db: TrainingDB): Promise<void> {

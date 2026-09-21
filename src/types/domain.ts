@@ -20,11 +20,26 @@ export type HighRepDiscount = 'off' | 'mild' | 'moderate' | 'aggressive'
 //            plate machine): target − base, plates as singles, "plates: …"
 export type PlateMode = 'none' | 'paired' | 'total'
 
+/** One band and what it takes off the raw load, as measured. */
+export interface BandCalibration { name: string; assistance: number }
+
 export interface BandProfile {
   enabled: boolean
   rawLoad: number
-  bands: { name: string; assistance: number }[]
+  bands: BandCalibration[]
   maxAddedWeight: number | null
+  /**
+   * A person saved this, as opposed to a build seeding it by name.
+   *
+   * `clearSeededBandProfiles` decided that by comparing against the templates
+   * the seed could have written, and someone who ticks the box and accepts the
+   * offered measurements unchanged produces those bytes exactly — so their
+   * opt-in was undone on the next start. Provenance is stated rather than
+   * inferred, the same way `ptSetChecks.recorded` replaced an all-null guess.
+   *
+   * Absent on seeded rows and on anything saved before this existed.
+   */
+  accepted?: true
 }
 
 /** Immutable setup captured with a logged set; weight holds the effective load. */
@@ -33,6 +48,18 @@ export interface BandLoad {
   rawLoad: number
   assistance: number
   addedWeight: number
+  /**
+   * Every band as it was measured when this set was recorded, not just the one
+   * used. `rawLoad` and `assistance` are already pinned to the record; without
+   * the rest of the table, changing which band a finished set used had nothing
+   * to read but the CURRENT profile, so the load came back priced under a
+   * calibration that did not exist yet — 191 raw with a re-measured assistance
+   * under it, a number from neither calibration.
+   *
+   * Optional: rows written before this carry nothing, and fall back to the live
+   * profile the way they always did.
+   */
+  calibration?: BandCalibration[]
 }
 
 export interface Lift {
@@ -338,9 +365,8 @@ export interface PtSetCheck {
    *
    * These are filled even when they match the prescription, because the
    * prescription is editable: raising an exercise's target later must not
-   * rewrite what a finished run says happened. All eight null together means a
-   * row from before PT recorded anything but a tick, and only those fall back to
-   * the exercise's own fields.
+   * rewrite what a finished run says happened. The `recorded` flag below, not
+   * the values themselves, says whether these are this run's own record.
    */
   reps?: number | null
   seconds?: number | null
@@ -350,6 +376,17 @@ export interface PtSetCheck {
   band?: string | null
   equipmentHeight?: number | null
   equipmentHeightUnit?: 'in' | 'cm' | null
+  /**
+   * True when the eight fields above are this set's own record of what happened.
+   *
+   * Absent on rows written before PT recorded anything but a tick, and ONLY
+   * those fall back to the exercise's current prescription. Stated rather than
+   * inferred from "are they all null": a bodyweight set of an unloaded, un-boxed
+   * exercise resolves every one of them to null legitimately, so the inference
+   * would quietly relabel a real record as a legacy row and render today's
+   * prescription as history.
+   */
+  recorded?: boolean
 }
 
 /** Free-text note on one exercise within one run ("switched to green band"). */

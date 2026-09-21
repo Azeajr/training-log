@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library'
+import { createSignal } from 'solid-js'
 import AccessoryLog from './AccessoryLog'
-import type { Exercise } from '../../types/domain'
+import { defaultBandProfile } from '../../lib/band-loading'
+import type { Exercise, BandProfile } from '../../types/domain'
 import { workout, addAccessory, clearSession, type ActiveAccessory } from '../../store/workout-store'
 import { ACCESSORY_SETS } from '../../lib/calc'
 
@@ -188,15 +190,41 @@ describe('assistance completion and drop rounds', () => {
 
 it('records band changes per set and per drop round, carrying the last choice forward', () => {
   addAccessory({ ...accessory([]), exerciseName: 'Pull-ups', calculatedWeight: 145 })
-  const view = render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ id: 1, name: 'Pull-ups', type: 'reps' }} />)
+  // Bands are opt-in now: the profile is saved on the exercise, not inferred
+  // from its name, so the test hands one over the way band settings would.
+  const view = render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: defaultBandProfile('Pull-ups') }} />)
   expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Green')
   fireEvent.change(screen.getByRole('combobox', { name: 'band' }), { target: { value: 'Purple' } })
   fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
   expect(screen.getByRole('combobox', { name: 'drop 1 band' })).toHaveValue('Purple')
   fireEvent.change(screen.getByRole('combobox', { name: 'drop 1 band' }), { target: { value: 'Green' } })
   fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
-  expect(workout.activeAccessories[0].loggedSets[0]).toMatchObject({ weight: 160, bandLoad: { band: 'Purple', assistance: 31 }, dropRounds: [{ weight: 145, bandLoad: { band: 'Green' } }] })
+  // Suggest opens on Green +2.5 for the prescribed 145, and switching band keeps
+  // the plates on the belt: Purple is 191−30+2.5 = 163.5, the round switched
+  // back to Green is 191−50+2.5 = 143.5.
+  expect(workout.activeAccessories[0].loggedSets[0]).toMatchObject({ weight: 163.5, bandLoad: { band: 'Purple', assistance: 30 }, dropRounds: [{ weight: 143.5, bandLoad: { band: 'Green' } }] })
   expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Purple')
   view.unmount()
   clearSession()
+})
+
+// `weight` only ever moves through `changeBandLoad` here, so when the profile
+// went away nothing took it off the last effective load — the stepper came back
+// reading the banded figure against the prescription and stayed there.
+it('hands the weight back to the prescription when bands are turned off', async () => {
+  addAccessory({ ...accessory([]), exerciseName: 'Pull-ups', calculatedWeight: 145 })
+  const [profile, setProfile] = createSignal<BandProfile | null>(defaultBandProfile('Pull-ups')!)
+  render(() => (
+    <AccessoryLog accessory={workout.activeAccessories[0]}
+      exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: profile() }} />
+  ))
+  // The headline load, beside the "3x10 @" label — not one of the per-set readouts.
+  const header = () => screen.getByText(/x\d+ @$/).nextElementSibling!.textContent!.replace(/[^\d.]/g, '')
+  expect(screen.getByRole('combobox', { name: 'band' })).toBeInTheDocument()
+  expect(header()).not.toBe('145')
+
+  setProfile(null)
+  await Promise.resolve()
+  expect(screen.queryByRole('combobox', { name: 'band' })).not.toBeInTheDocument()
+  expect(header()).toBe('145')
 })

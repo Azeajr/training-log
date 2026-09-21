@@ -4,13 +4,22 @@ Band loading applies to main lifts, cross-lift work, and assistance exercises.
 Each movement owns a raw load, calibrated assistance for each band, and an
 optional cap on suggested added weight. Chin-ups and pull-ups are independent.
 
-Initial measurements (lb):
+Measured effective load with each band on (lb). Raw is the movement's
+UNASSISTED load, not bodyweight — the nordic figure is nothing like a scale
+weight, and the same physical bands assist the two movements very differently
+because a stiff band's assistance depends on how far it is stretched at the
+working position.
 
 | Movement | Raw | Orange | Green | Purple | Red |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Chin-ups | 191 | 87 | 143 | 160 | 181 |
-| Pull-ups | 191 | 87 | 143 | 160 | 181 |
+| Chin-ups | 191 | 86 | 141 | 161 | 181 |
+| Pull-ups | 191 | 86 | 141 | 161 | 181 |
 | Nordic curls | 145 | 70 | 105 | 115 | 135 |
+
+Which gives, as assistance (raw − measured): chin/pull 105 / 50 / 30 / 10, and
+nordic 75 / 40 / 30 / 10. The chin/pull row replaces an earlier estimate of
+104 / 48 / 31 / 10; `CALIBRATIONS.pulling.superseded` keeps that older shape so
+`clearSeededBandProfiles` still recognises a profile the old boot seed wrote.
 
 Assistance is calibration raw load minus measured band load. Changing raw load
 keeps assistance fixed. Editing a band's measured load recalibrates assistance

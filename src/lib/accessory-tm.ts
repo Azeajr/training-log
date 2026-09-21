@@ -35,7 +35,15 @@ export function getAccessoryTmRecommendations(
 ): AccessoryTmRecommendation[] {
   const out: AccessoryTmRecommendation[] = []
   for (const acc of accessories) {
-    if (acc.loggedSets.some(s => s.dropRounds?.length || (s.weight ?? 0) < 0)) continue
+    // A negative logged weight is not a load, it is a corrupt row (only an
+    // import can produce one), and averaging it into an intent would suggest a
+    // training max from nonsense. Drop rounds are NOT disqualifying: they are
+    // extra volume BELOW the working weight, and the set's own weight is still
+    // what was worked. Skipping the whole exercise for them contradicted the
+    // rule this module is built on — "worked at the same off-prescription
+    // weight for its whole slate" — and did it silently, so a lifter who drops
+    // on the last set of every accessory simply never saw the prompt again.
+    if (acc.loggedSets.some(s => (s.weight ?? 0) < 0)) continue
     const weights = acc.loggedSets
       .map(s => s.weight)
       .filter((w): w is number => w != null && w > 0)

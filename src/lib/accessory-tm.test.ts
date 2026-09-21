@@ -35,9 +35,18 @@ describe('getAccessoryTmRecommendations', () => {
 
   // The whole point of the change: one heavier set is "the 45s were taken",
   // not a program decision.
-  it('does not derive a training max from legacy negative weights or drop-set work', () => {
-    expect(getAccessoryTmRecommendations([{ ...acc(), loggedSets: sets(60).map(s => ({ ...s, dropRounds: [{ weight: 40, reps: 8 }] })) }])).toEqual([])
+  it('does not derive a training max from legacy negative weights', () => {
     expect(getAccessoryTmRecommendations([acc({ loggedSets: [...sets(60), { weight: -30 }] })])).toEqual([])
+  })
+
+  it('still reads the working weight off a slate that finished with drops', () => {
+    // Drop rounds are extra volume BELOW the working weight, so they say
+    // nothing about what the slate was worked at. Skipping the exercise for
+    // them meant a lifter who drops on every accessory never saw the prompt.
+    const loggedSets = sets(60).map(s => ({ ...s, dropRounds: [{ weight: 40, reps: 8 }] }))
+    expect(getAccessoryTmRecommendations([{ ...acc(), loggedSets }])).toMatchObject([
+      { workedWeight: 60, suggestedTm: 80 },
+    ])
   })
 
   it('ignores a single off-prescription set', () => {

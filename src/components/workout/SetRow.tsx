@@ -1,7 +1,7 @@
 import { createSignal, createEffect, on, Show, Switch, Match } from 'solid-js'
 import type { Set, BandLoad, BandProfile } from '../../types/domain'
 import BandLoadControls from '../forms/BandLoadControls'
-import { effectiveBandLoad, suggestBandLoad } from '../../lib/band-loading'
+import { effectiveBandLoad, makeBandLoad, suggestBandLoad } from '../../lib/band-loading'
 import AmrapTargets from './AmrapTargets'
 import type { AmrapTarget } from '../../lib/calc'
 import { estimated1RM } from '../../lib/calc'
@@ -52,21 +52,49 @@ export default function SetRow(props: Props) {
 
   const [bandLoad, setBandLoad] = createSignal<BandLoad | null>(null)
   const [editBandLoad, setEditBandLoad] = createSignal<BandLoad | null>(null)
-  const changeBandLoad = (load: BandLoad) => {
+  // The band twin of `weightTouched`: true once the user has moved a band
+  // control themselves, as opposed to a value this component derived for them.
+  const [bandTouched, setBandTouched] = createSignal(false)
+  const applyBandLoad = (load: BandLoad) => {
     setBandLoad(load)
     setWeight(effectiveBandLoad(load))
     setWeightTouched(true)
     props.onWeightChange?.(effectiveBandLoad(load))
   }
+  /** A band the USER picked. Outranks anything re-derived below. */
+  const changeBandLoad = (load: BandLoad) => { setBandTouched(true); applyBandLoad(load) }
   const suggest = () => {
-    if (props.bandProfile) changeBandLoad(suggestBandLoad(props.bandProfile, props.set.weight, settings.plates))
+    if (props.bandProfile) applyBandLoad(suggestBandLoad(props.bandProfile, props.set.weight, settings.plates))
   }
-  createEffect(on(() => [props.bandProfile, props.set.weight, props.isActive] as const, () => {
+  createEffect(on(() => [props.bandProfile, props.set.weight, props.isActive] as const, (_now, prior) => {
     if (props.isCompleted || !props.isActive) return
-    if (!props.bandProfile) { setBandLoad(null); return }
+    const profile = props.bandProfile
+    if (!profile) {
+      // Bands were just switched off. The number in the stepper is one
+      // `applyBandLoad` derived, not one the user typed, so `weightTouched` —
+      // which it set on their behalf — has to come off with it. Leaving it on
+      // stranded the row at the last effective load for the rest of the
+      // session: the stepper reappeared reading 148.5 against a prescribed
+      // 150, the plate readout came back showing plates for 148.5, and the
+      // effect below could never take the weight back because every cascade
+      // from an earlier set was still being read as the user's own edit.
+      if (prior?.[0]) {
+        setWeightTouched(false)
+        setWeight(props.set.weight)
+        props.onWeightChange?.(props.set.weight)
+      }
+      setBandLoad(null); setBandTouched(false); return
+    }
+    // A deliberate choice survives the prescription moving under it. This effect
+    // re-runs whenever `props.set.weight` cascades — which it does every time an
+    // earlier set is edited — and re-suggesting there threw away the band the
+    // user had already dialled in, mid-exercise, with no way to tell it had
+    // happened. Same reason `weightTouched` gates the plain weight effect below.
+    const chosen = bandTouched() ? bandLoad() : null
+    if (chosen) { applyBandLoad(makeBandLoad(profile, chosen.band, chosen.addedWeight)); return }
     const previous = props.previousBandLoad
-    if (previous && previous.rawLoad === props.bandProfile.rawLoad && effectiveBandLoad(previous) === props.set.weight) {
-      changeBandLoad({ ...previous })
+    if (previous && previous.rawLoad === profile.rawLoad && effectiveBandLoad(previous) === props.set.weight) {
+      applyBandLoad({ ...previous })
     } else suggest()
   }))
 
@@ -113,9 +141,9 @@ export default function SetRow(props: Props) {
           </Show>
           <SetLogControls
             weight={weight()}
-            weightControls={bandLoad() ? <BandLoadControls target={props.set.weight} profile={props.bandProfile} value={bandLoad()!} onChange={changeBandLoad} onSuggest={suggest} /> : undefined}
+            weightControls={bandLoad() ? <BandLoadControls target={props.set.weight} profile={props.bandProfile} value={bandLoad()!} onChange={changeBandLoad} onSuggest={suggest} loading={props.loading ?? undefined} /> : undefined}
             onWeightChange={v => { setWeightTouched(true); setWeight(v); props.onWeightChange?.(v) }}
-            onLog={() => { props.onLog(reps(), weight(), bandLoad()); setReps(props.set.reps); setWeightTouched(false) }}
+            onLog={() => { props.onLog(reps(), weight(), bandLoad()); setReps(props.set.reps); setWeightTouched(false); setBandTouched(false) }}
           >
             <FieldRow label="reps">
               <Stepper value={reps()} onChange={setReps} step={1} min={0} label="reps" fieldLabel="reps" emphasized={isAmrap()} />
@@ -153,7 +181,7 @@ export default function SetRow(props: Props) {
       <Match when={editing()}>
         <div class="flex items-center gap-3 py-3 pl-3 border-l-4 border-accent flex-wrap">
           <Show when={editBandLoad()} fallback={<Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} label="edit-weight" fieldLabel="weight" />}>
-            <BandLoadControls profile={props.bandProfile} value={editBandLoad()!} onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
+            <BandLoadControls profile={props.bandProfile} value={editBandLoad()!} loading={props.loading ?? undefined} onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
           </Show>
           <span class="text-text-dim font-mono text-sm">×</span>
           <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} label="edit-reps" fieldLabel="reps" />

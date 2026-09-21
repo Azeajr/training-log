@@ -42,12 +42,15 @@ export default defineConfig(() => {
         'src/types/**',
       ],
       // Re-baselined against the wider scope rather than kept at a number that
-      // only ever held for a third of the tree. Measured over all of src/ the
-      // real figures are 88.79 / 78.27 / 88.18 / 91.17, so each threshold sits
-      // just under its actual value: the gate now bites on every metric instead
-      // of leaving three of them with ~9 points of slack. Ratchet these UP as
-      // coverage improves; do not widen the gap, and do not narrow the scope.
-      thresholds: { statements: 85, branches: 76, functions: 85, lines: 88 },
+      // only ever held for a third of the tree. Each threshold sits just under
+      // its actual value, so the gate bites on every metric instead of leaving
+      // most of them with points of slack. Ratchet these UP as coverage
+      // improves; do not widen the gap, and do not narrow the scope.
+      //
+      // Now 90.35 / 81.11 / 89.19 / 92.88, up from 88.79 / 78.27 / 88.18 /
+      // 91.17 — mostly PtSetList, whose per-set time, distance, band and
+      // equipment-height editors had no test driving them at all.
+      thresholds: { statements: 90, branches: 81, functions: 89, lines: 92 },
     },
   },
   optimizeDeps: {

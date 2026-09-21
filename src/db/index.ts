@@ -39,7 +39,7 @@ class TrainingSQLiteDB {
   ptRoutines = new SQLiteTable<PtRoutine>('ptRoutines', { boolFields: ['archived'] })
   ptExercises = new SQLiteTable<PtExercise>('ptExercises', { boolFields: ['archived'] })
   ptSessions = new SQLiteTable<PtSession>('ptSessions', { dateFields: ['date'] })
-  ptSetChecks = new SQLiteTable<PtSetCheck>('ptSetChecks', { boolFields: ['done'] })
+  ptSetChecks = new SQLiteTable<PtSetCheck>('ptSetChecks', { boolFields: ['done', 'recorded'] })
   ptNotes = new SQLiteTable<PtNote>('ptNotes')
   settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'], boolFields: ['hasDeloadWeek', 'restTimerNotifications'] })
 
