@@ -21,21 +21,42 @@ export default function BandLoadControls(props: {
    */
   loading?: PlateLoading
 }) {
-  // Captured ONCE, at mount, not derived from props.value. This is the band the
-  // set was logged under back when the calibration still had it. The moment the
-  // user selects something else `props.value` stops carrying it, so a reactive
-  // version would drop the option exactly when it is needed to get back — and
-  // `makeBandLoad` would then miss the lookup and silently reset the set to
-  // "None" with zero assistance, changing its effective load by the whole
-  // assistance value.
-  const fromProfile = props.profile?.bands ?? []
-  const recorded = props.value.band && !fromProfile.some(b => b.name === props.value.band)
+  // The bands this set was RECORDED under, falling back to the live profile for
+  // rows written before that snapshot existed. Reading the profile first
+  // re-priced a finished set the moment its dropdown was touched: a
+  // recalibration keeps all four names and changes every assistance, so a set
+  // logged at 191 − 48 came back as 191 − 50, and switching band produced a
+  // load from neither calibration (the recorded raw load against a re-measured
+  // assistance).
+  const atMount = props.value.calibration ?? props.profile?.bands ?? []
+
+  // Captured ONCE, at mount, not derived from props.value. This is the pairing
+  // the set actually carries. The moment the user selects something else
+  // `props.value` stops carrying it, so a reactive version would drop it
+  // exactly when it is needed to get back.
+  //
+  // It fires on a DISAGREEMENT, not only on a missing name. A band the
+  // calibration has since dropped is the obvious case, and `makeBandLoad` would
+  // miss that lookup and silently reset the set to "None" with zero assistance.
+  // But a band still listed under a different assistance loses just as much and
+  // says nothing: before this, Green → Purple → Green on a legacy row wrote the
+  // profile's Green and the set's own value was gone for good.
+  const match = props.value.band ? atMount.find(b => b.name === props.value.band) : undefined
+  const recorded = props.value.band && match?.assistance !== props.value.assistance
     ? { name: props.value.band, assistance: props.value.assistance }
     : null
 
   const choices = () => {
-    const list = props.profile?.bands ?? []
-    return recorded ? [...list, recorded] : list
+    const list = [...(props.value.calibration ?? props.profile?.bands ?? [])]
+    if (!recorded) return list
+    // Replaced in place rather than appended when the name is still listed:
+    // two options reading "Green" are indistinguishable in the select, and
+    // `makeBandLoad` resolves by name and would take whichever came first.
+    const at = list.findIndex(b => b.name === recorded.name)
+    if (at === -1) return [...list, recorded]
+    const merged = [...list]
+    merged[at] = recorded
+    return merged
   }
   const changeBand = (band: string) => {
     if ((band || null) === props.value.band) return

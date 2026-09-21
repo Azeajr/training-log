@@ -20,10 +20,13 @@ export type HighRepDiscount = 'off' | 'mild' | 'moderate' | 'aggressive'
 //            plate machine): target − base, plates as singles, "plates: …"
 export type PlateMode = 'none' | 'paired' | 'total'
 
+/** One band and what it takes off the raw load, as measured. */
+export interface BandCalibration { name: string; assistance: number }
+
 export interface BandProfile {
   enabled: boolean
   rawLoad: number
-  bands: { name: string; assistance: number }[]
+  bands: BandCalibration[]
   maxAddedWeight: number | null
 }
 
@@ -33,6 +36,18 @@ export interface BandLoad {
   rawLoad: number
   assistance: number
   addedWeight: number
+  /**
+   * Every band as it was measured when this set was recorded, not just the one
+   * used. `rawLoad` and `assistance` are already pinned to the record; without
+   * the rest of the table, changing which band a finished set used had nothing
+   * to read but the CURRENT profile, so the load came back priced under a
+   * calibration that did not exist yet — 191 raw with a re-measured assistance
+   * under it, a number from neither calibration.
+   *
+   * Optional: rows written before this carry nothing, and fall back to the live
+   * profile the way they always did.
+   */
+  calibration?: BandCalibration[]
 }
 
 export interface Lift {

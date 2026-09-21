@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import { createSignal } from 'solid-js'
 import { db } from '../../db'
-import { defaultBandProfile } from '../../lib/band-loading'
+import { BAND_NAMES, defaultBandProfile, effectiveBandLoad } from '../../lib/band-loading'
 import type { Exercise } from '../../types/domain'
 import BandSettings from './BandSettings'
 import BandLoadControls from './BandLoadControls'
-import type { BandLoad } from '../../types/domain'
+import type { BandLoad, BandProfile } from '../../types/domain'
 
 it('saves raw-load changes with fixed assistance and keeps each exercise independent', async () => {
   const bandProfile = defaultBandProfile('Pull-ups')!
@@ -130,5 +130,59 @@ describe('band settings state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/incomplete/i)
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+})
+
+describe('editing a set recorded under a superseded calibration', () => {
+  // The calibration #162 corrected: estimates 104/48/31/10, measured 105/50/30/10.
+  const cal = (n: readonly number[]) => BAND_NAMES.map((name, i) => ({ name, assistance: n[i] }))
+  const OLD = cal([104, 48, 31, 10])
+  const NOW: BandProfile = { enabled: true, rawLoad: 191, maxAddedWeight: null, bands: cal([105, 50, 30, 10]) }
+
+  const editing = (value: BandLoad) => {
+    const [load, setLoad] = createSignal(value)
+    const view = render(() => <BandLoadControls profile={NOW} value={load()} onChange={setLoad} />)
+    const select = view.getByLabelText('band') as HTMLSelectElement
+    return { load, select, pick: (b: string) => fireEvent.change(select, { target: { value: b } }) }
+  }
+
+  it('prices a band change against the calibration the set was recorded under', () => {
+    // Logged at 191 − 48 = 143, under the estimates.
+    const { load, pick } = editing({ band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0, calibration: OLD })
+    expect(effectiveBandLoad(load())).toBe(143)
+    // Purple was 31 then and is 30 now. 191 − 31 = 160 is what that set would
+    // have been; 191 − 30 = 161 mixes a recorded raw load with a measurement
+    // taken afterwards and is a load from neither calibration.
+    pick('Purple')
+    expect(effectiveBandLoad(load())).toBe(160)
+    pick('Green')
+    expect(effectiveBandLoad(load())).toBe(143)
+  })
+
+  it('keeps the recorded pairing reachable on a row with no calibration', () => {
+    // Written before the snapshot existed, so the live profile is all there is
+    // to price the OTHER bands with — but the set's own 48 is on the row and
+    // has to survive a round trip through the dropdown.
+    const { load, select, pick } = editing({ band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 })
+    expect([...select.options].map(o => o.textContent)).toContain('Green (recorded)')
+    pick('Purple')
+    expect(effectiveBandLoad(load())).toBe(161)   // nothing better than today's 30
+    pick('Green')
+    expect(effectiveBandLoad(load())).toBe(143)   // the set's own 48, not today's 50
+  })
+
+  it('offers each band once when the recorded one is still listed', () => {
+    // Two options reading "Green" are indistinguishable, and `makeBandLoad`
+    // resolves by name and would take whichever came first.
+    const { select } = editing({ band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 })
+    const names = [...select.options].map(o => o.textContent!.replace(' (recorded)', ''))
+    expect(names).toEqual([...new Set(names)])
+    expect(names).toEqual(['None', ...BAND_NAMES])
+  })
+
+  it('stamps what it resolved, so the row prices itself from then on', () => {
+    const { load, pick } = editing({ band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 })
+    pick('Purple')
+    expect(load().calibration).toEqual(cal([105, 48, 30, 10]))
   })
 })

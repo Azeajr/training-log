@@ -100,7 +100,12 @@ export const effectiveBandLoad = (load: BandLoad): number =>
 
 export function makeBandLoad(profile: BandProfile, band: string | null, addedWeight = 0): BandLoad {
   const choice = profile.bands.find(b => b.name === band)
-  return { band: choice?.name ?? null, rawLoad: profile.rawLoad, assistance: choice?.assistance ?? 0, addedWeight }
+  return {
+    band: choice?.name ?? null, rawLoad: profile.rawLoad,
+    assistance: choice?.assistance ?? 0, addedWeight,
+    // Copied, not referenced: the profile row is editable and this is a record.
+    calibration: profile.bands.map(b => ({ ...b })),
+  }
 }
 
 // Bounded subset sums in hundredths. Single plates, respecting inventory counts.
@@ -159,6 +164,11 @@ export function suggestBandLoad(profile: BandProfile, target: number, plates: Pl
 export function validBandLoad(value: unknown): value is BandLoad {
   if (!value || typeof value !== 'object') return false
   const v = value as BandLoad
+  // Absent on every row written before the calibration snapshot existed, and an
+  // import has to keep taking those.
+  if (v.calibration != null && !(Array.isArray(v.calibration) && v.calibration.every(
+    b => b && typeof b.name === 'string' && b.name.trim() && Number.isFinite(b.assistance) && b.assistance >= 0,
+  ))) return false
   return (v.band === null || typeof v.band === 'string') &&
     [v.rawLoad, v.assistance, v.addedWeight].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0)
 }

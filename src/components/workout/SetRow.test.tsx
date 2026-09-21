@@ -72,7 +72,10 @@ describe('band-assisted main sets', () => {
     fireEvent.click(getByRole('button', { name: 'LOG' }))
     // Suggest opens on Green +2.5; switching band keeps the added weight, and
     // one more press makes it 5. 191 raw − 10 assistance + 5 added = 186 exactly.
-    expect(onLog).toHaveBeenCalledWith(5, 186, { band: 'Red', rawLoad: 191, assistance: 10, addedWeight: 5 })
+    expect(onLog).toHaveBeenCalledWith(5, 186, expect.objectContaining({ band: 'Red', rawLoad: 191, assistance: 10, addedWeight: 5 }))
+    // The set carries the calibration it was logged under, so a later edit can
+    // re-price it against that rather than against whatever is measured next.
+    expect(onLog.mock.calls[0][2].calibration).toEqual(defaultBandProfile('Chin-ups')!.bands)
   })
   it('keeps a band the user picked when the prescription cascades', () => {
     // `props.set.weight` moves under this row every time an EARLIER set is

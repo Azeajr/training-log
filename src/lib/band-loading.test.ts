@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { availableBeltLoads, bandProfileFor, defaultBandProfile, effectiveBandLoad, makeBandLoad, suggestBandLoad } from './band-loading'
+import { availableBeltLoads, bandProfileFor, defaultBandProfile, effectiveBandLoad, makeBandLoad, suggestBandLoad, validBandLoad } from './band-loading'
 
 const pull = () => defaultBandProfile('Pull-ups')!
 const plates = [{ weight: 45, count: 2 }, { weight: 10, count: 2 }, { weight: 5, count: 2 }, { weight: 2.5, count: 2 }]
@@ -21,7 +21,13 @@ describe('band loading', () => {
   it('keeps assistance fixed when raw load changes, and adds plates exactly', () => {
     const profile = { ...pull(), rawLoad: 201 }
     const load = makeBandLoad(profile, 'Green', 10)
-    expect(load).toEqual({ band: 'Green', rawLoad: 201, assistance: 50, addedWeight: 10 })
+    expect(load).toEqual({
+      band: 'Green', rawLoad: 201, assistance: 50, addedWeight: 10,
+      // The whole table, not just the band used: editing which band a finished
+      // set had needs the assistances that were in force at the time.
+      calibration: profile.bands,
+    })
+    expect(load.calibration).not.toBe(profile.bands)
     expect(effectiveBandLoad(load)).toBe(161)
     expect(effectiveBandLoad(makeBandLoad(pull(), null, 25))).toBe(216)
     // 2.5 in, 2.5 out. A 5lb grid here swallowed every other press of the
@@ -49,5 +55,26 @@ describe('band loading', () => {
     expect(suggestBandLoad(pull(), 145, plates).band).toBe('Green')
     expect(suggestBandLoad(pull(), 190, plates)).toMatchObject({ band: null, addedWeight: 0 })
     expect(suggestBandLoad(pull(), 215, plates)).toMatchObject({ band: null, addedWeight: 22.5 })
+  })
+})
+
+describe('validBandLoad and the calibration snapshot', () => {
+  const base = { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 }
+
+  it('takes a row written before the snapshot existed', () => {
+    // This is the import gate. Every banded set in an existing backup has no
+    // calibration, and refusing those would reject the whole file.
+    expect(validBandLoad(base)).toBe(true)
+    expect(validBandLoad({ ...base, calibration: undefined })).toBe(true)
+    expect(validBandLoad({ ...base, calibration: null })).toBe(true)
+  })
+
+  it('takes a well-formed snapshot and refuses a malformed one', () => {
+    expect(validBandLoad({ ...base, calibration: [{ name: 'Green', assistance: 48 }] })).toBe(true)
+    expect(validBandLoad({ ...base, calibration: [] })).toBe(true)
+    expect(validBandLoad({ ...base, calibration: 'Green' })).toBe(false)
+    expect(validBandLoad({ ...base, calibration: [{ name: '', assistance: 48 }] })).toBe(false)
+    expect(validBandLoad({ ...base, calibration: [{ name: 'Green', assistance: -1 }] })).toBe(false)
+    expect(validBandLoad({ ...base, calibration: [{ name: 'Green' }] })).toBe(false)
   })
 })
