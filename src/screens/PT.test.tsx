@@ -7,6 +7,7 @@ import { archivePtRoutine, commitPtRun, getPtRoutine, resolvePtCheck, savePtRout
 import { clearAllPtRuns as clearPtRun, getPtRun, startPtRun, togglePtSet } from '../store/pt-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
+import { showToast, toast } from '../store/toast-store'
 
 const mockNavigate = vi.fn()
 vi.mock('@solidjs/router', async () => {
@@ -45,6 +46,9 @@ beforeEach(async () => {
   ])
   clearPtRun()
   mockNavigate.mockClear()
+  // The toast is a module singleton and outlives a test; left standing, a
+  // `waitFor` on its content passes against the previous test's message.
+  showToast('')
 })
 
 afterEach(drain)
@@ -235,6 +239,156 @@ describe('PT screen', () => {
     })
     // Rewritten, not appended: still two sets for the one exercise.
     expect(await db.ptSetChecks.count()).toBe(2)
+  })
+
+  /*
+   * A5. The editor lives inside the collapsible row, so folding it used to
+   * unmount the draft with no prompt and no sign anything had been lost. The
+   * draft is held above the row now, keyed by session.
+   */
+
+  /** Two runs, one exercise, so a draft attached to the wrong one would show. */
+  const seedTwoRuns = async () => {
+    const id = await savePtRoutine(db, {
+      name: 'Knee',
+      exercises: [repsDraft({ name: 'Step down', sets: 2, targetReps: 10, resistanceKind: 'none' })],
+    })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    const checks = [1, 2].map(setNumber => ({
+      ptExerciseId: exercise.id!, setNumber, done: true, ...resolvePtCheck(exercise),
+    }))
+    const older = await commitPtRun(db, { routineId: id, date: new Date(2026, 8, 14), checks })
+    const newer = await commitPtRun(db, { routineId: id, date: new Date(2026, 8, 16), checks })
+    return { id, exercise, older, newer }
+  }
+
+  const openRun = async (label: string) => {
+    fireEvent.click(await screen.findByText(label))
+    await screen.findByText(/EDIT RUN|SAVE CHANGES/)
+  }
+
+  const editSetOne = async (reps = 1) => {
+    const row = await screen.findByRole('checkbox', { name: /Step down set 1/ })
+    fireEvent.click(row.parentElement!.querySelector('button:not([role])')!)
+    for (let i = 0; i < reps; i++) fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
+  }
+
+  it('keeps an edit through a fold, a visit to another run, and a return', async () => {
+    const { older, newer } = await seedTwoRuns()
+    renderPT()
+
+    await openRun('Sep 16')
+    fireEvent.click(screen.getByText('EDIT RUN'))
+    await editSetOne()
+    fireEvent.click(screen.getByText('APPLY SET CHANGES'))
+    fireEvent.input(screen.getByLabelText('Session notes'), { target: { value: 'knee quiet' } })
+
+    // Fold, look at the older run, come back.
+    fireEvent.click(screen.getByText('Sep 16'))
+    await waitFor(() => expect(screen.queryByLabelText('Session notes')).toBeNull())
+    expect(document.body.textContent).toContain('UNSAVED CHANGES')
+    await openRun('Sep 14')
+    fireEvent.click(screen.getByText('Sep 14'))
+    await openRun('Sep 16')
+
+    await waitFor(() => expect((screen.getByLabelText('Session notes') as HTMLTextAreaElement).value)
+      .toBe('knee quiet'))
+    expect(document.body.textContent).toContain('9 reps')
+    // Nothing was written on the way.
+    const rows = await db.ptSetChecks.where('sessionId').equals(newer).toArray()
+    expect(rows.every(r => r.reps === 10)).toBe(true)
+    // And the older run, which was visited in between, is untouched and clean.
+    const olderRows = await db.ptSetChecks.where('sessionId').equals(older).toArray()
+    expect(olderRows.every(r => r.reps === 10)).toBe(true)
+  })
+
+  it('keeps one draft per run', async () => {
+    await seedTwoRuns()
+    renderPT()
+
+    await openRun('Sep 16')
+    fireEvent.click(screen.getByText('EDIT RUN'))
+    fireEvent.input(screen.getByLabelText('Session notes'), { target: { value: 'newer note' } })
+    fireEvent.click(screen.getByText('Sep 16'))
+
+    await openRun('Sep 14')
+    fireEvent.click(screen.getByText('EDIT RUN'))
+    fireEvent.input(screen.getByLabelText('Session notes'), { target: { value: 'older note' } })
+    fireEvent.click(screen.getByText('Sep 14'))
+
+    await openRun('Sep 16')
+    await waitFor(() => expect((screen.getByLabelText('Session notes') as HTMLTextAreaElement).value)
+      .toBe('newer note'))
+  })
+
+  it('DISCARD CHANGES drops the draft and gives the saved run back', async () => {
+    await seedTwoRuns()
+    renderPT()
+
+    await openRun('Sep 16')
+    fireEvent.click(screen.getByText('EDIT RUN'))
+    fireEvent.input(screen.getByLabelText('Session notes'), { target: { value: 'scratch that' } })
+    fireEvent.click(screen.getByText('DISCARD CHANGES'))
+
+    await screen.findByText('EDIT RUN')
+    expect(document.body.textContent).not.toContain('UNSAVED CHANGES')
+    fireEvent.click(screen.getByText('EDIT RUN'))
+    expect((screen.getByLabelText('Session notes') as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('keeps the edit when the write fails, so it can be retried', async () => {
+    await seedTwoRuns()
+    renderPT()
+
+    await openRun('Sep 16')
+    fireEvent.click(screen.getByText('EDIT RUN'))
+    fireEvent.input(screen.getByLabelText('Session notes'), { target: { value: 'retry me' } })
+
+    const spy = vi.spyOn(db, 'transaction').mockRejectedValueOnce(new Error('disk full'))
+    fireEvent.click(screen.getByText('SAVE CHANGES'))
+    await waitFor(() => expect(toast()).toContain('disk full'))
+    spy.mockRestore()
+
+    expect((screen.getByLabelText('Session notes') as HTMLTextAreaElement).value).toBe('retry me')
+    fireEvent.click(screen.getByText('SAVE CHANGES'))
+    await waitFor(async () => expect((await db.ptSessions.toArray())
+      .find(s => s.notes === 'retry me')).toBeTruthy())
+  })
+
+  /**
+   * The other half of the draft: values typed into a set editor but not yet
+   * applied are in neither the run draft's sets nor the database, so lifting
+   * only the applied half would still lose them on a fold.
+   */
+  it('keeps an unapplied set edit through a fold, and still blocks SAVE', async () => {
+    const { newer } = await seedTwoRuns()
+    renderPT()
+
+    await openRun('Sep 16')
+    fireEvent.click(screen.getByText('EDIT RUN'))
+    await editSetOne(3)
+
+    fireEvent.click(screen.getByText('Sep 16'))
+    await waitFor(() => expect(screen.queryByText('APPLY SET CHANGES')).toBeNull())
+    expect(document.body.textContent).toContain('UNSAVED CHANGES')
+    await openRun('Sep 14')
+    fireEvent.click(screen.getByText('Sep 14'))
+    await openRun('Sep 16')
+
+    // The set editor comes back open, on the same set, holding the same value.
+    await screen.findByText('APPLY SET CHANGES')
+    expect(document.body.textContent).toContain('Set 1')
+    fireEvent.click(screen.getByText('SAVE CHANGES'))
+    await waitFor(() => expect(toast()).toBe('One set has unapplied changes.'))
+    expect((await db.ptSetChecks.where('sessionId').equals(newer).toArray())
+      .every(r => r.reps === 10)).toBe(true)
+
+    // The inner CANCEL restores what the set opened on.
+    fireEvent.click(screen.getByText('CANCEL'))
+    await waitFor(() => expect(screen.queryByText('APPLY SET CHANGES')).toBeNull())
+    expect(document.body.textContent).toContain('10 reps')
+    fireEvent.click(screen.getByText('SAVE CHANGES'))
+    await waitFor(() => expect(toast()).toContain('Run updated'))
   })
 
   it('collapses an expanded run on a second tap', async () => {

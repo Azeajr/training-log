@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from 'solid-js'
+import { For, Show } from 'solid-js'
 import { db } from '../../db/index'
 import type { PtExercise, PtSetCheck } from '../../types/domain'
 import {
@@ -22,13 +22,61 @@ import { showToast } from '../../store/toast-store'
 import SectionLabel from '../layout/SectionLabel'
 import SubLabel from '../layout/SubLabel'
 import NotesField from '../forms/NotesField'
-import PtSetList from './PtSetList'
+import PtSetList, { ptSetDraftChanged, type PtSetDraft } from './PtSetList'
 
 interface Props {
   detail: PtSessionDetail
+  /** The edit in progress. Owned above, because this component unmounts on a fold. */
+  draft: PtRunDraft
+  onDraftChange: (next: PtRunDraft) => void
   onSaved: () => void
   onCancel: () => void
 }
+
+/**
+ * Everything an unsaved edit of a recorded run consists of.
+ *
+ * Held by whatever outlives the editor rather than by the editor, because the
+ * editor sits inside a collapsible history row: folding the row unmounted it and
+ * took the work with it, with no prompt and no sign that anything had been lost.
+ *
+ * `pending` is the other half. A3's inner set editor buffers field changes until
+ * APPLY SET CHANGES, so text typed but not applied is in neither `sets` nor the
+ * database, and lifting only the applied half would still lose it on a fold.
+ */
+export interface PtRunDraft {
+  sets: Record<number, PtRecordedSet[]>
+  notes: string
+  exerciseNotes: Record<number, string>
+  /** Open set editors, by ptExercise id. Not yet applied to `sets`. */
+  pending: Record<number, PtSetDraft>
+  /**
+   * Whether anything has been applied to the draft.
+   *
+   * A flag rather than a comparison against the saved run: it answers the only
+   * question the collapsed row asks, and the one thing it gets wrong — a value
+   * changed and changed back still counts — errs toward warning about work that
+   * turns out to be identical, never toward discarding work that is not.
+   */
+  dirty: boolean
+}
+
+/** A recorded run as an edit of it starts: exactly what the database says. */
+export function seedPtRunDraft(detail: PtSessionDetail): PtRunDraft {
+  return {
+    sets: Object.fromEntries(
+      detail.exercises.map(row => [row.exercise.id!, row.checks.map(c => toRunSet(c, row.exercise))]),
+    ),
+    notes: detail.session.notes ?? '',
+    exerciseNotes: Object.fromEntries(detail.exercises.map(row => [row.exercise.id!, row.note ?? ''])),
+    pending: {},
+    dirty: false,
+  }
+}
+
+/** Whether a draft is holding anything a fold or a departure would lose. */
+export const ptRunDraftDirty = (draft: PtRunDraft | undefined): boolean =>
+  draft != null && (draft.dirty || Object.values(draft.pending).some(ptSetDraftChanged))
 
 const NOTE_CLASS = 'w-full bg-surface border border-border text-text font-mono px-2 py-2 text-xs focus:outline-none focus:border-accent resize-none'
 
@@ -83,26 +131,30 @@ const addedRunSet = (sets: PtRecordedSet[], exercise: PtExercise): PtRecordedSet
  * and a failed write leaves the edit on screen to retry.
  */
 export default function PtSessionEditor(props: Props) {
-  const seed = (): Record<number, PtRecordedSet[]> => Object.fromEntries(
-    props.detail.exercises.map(row => [row.exercise.id!, row.checks.map(c => toRunSet(c, row.exercise))]),
-  )
+  /** Applied changes mark the run unsaved; an open set editor does not, yet. */
+  const edit = (patch: Partial<PtRunDraft>) =>
+    props.onDraftChange({ ...props.draft, ...patch, dirty: true })
 
-  const [sets, setSets] = createSignal<Record<number, PtRecordedSet[]>>(seed())
-  const [notes, setNotes] = createSignal(props.detail.session.notes ?? '')
-  const [exerciseNotes, setExerciseNotes] = createSignal<Record<number, string>>(
-    Object.fromEntries(props.detail.exercises.map(row => [row.exercise.id!, row.note ?? ''])),
-  )
+  const notes = () => props.draft.notes
+  const exerciseNotes = () => props.draft.exerciseNotes
 
-  // Which exercises have a set editor open with unapplied changes in it.
   // APPLY SET CHANGES puts an edit into the draft below; SAVE CHANGES writes the
   // draft. An edit still sitting in the inner editor is in neither, and saving
   // over it would look exactly like saving it.
-  const [pending, setPending] = createSignal<Record<number, boolean>>({})
-  const hasPending = () => Object.values(pending()).some(Boolean)
+  const hasPending = () => Object.values(props.draft.pending).some(ptSetDraftChanged)
 
-  const setsOf = (exerciseId: number) => sets()[exerciseId] ?? []
+  const setsOf = (exerciseId: number) => props.draft.sets[exerciseId] ?? []
   const update = (exerciseId: number, next: PtRecordedSet[]) =>
-    setSets(current => ({ ...current, [exerciseId]: next }))
+    edit({ sets: { ...props.draft.sets, [exerciseId]: next } })
+
+  const setDraftFor = (exerciseId: number, next: PtSetDraft | null) => {
+    const pending = { ...props.draft.pending }
+    if (next === null) delete pending[exerciseId]
+    else pending[exerciseId] = next
+    // Opening or typing in a set editor is not yet a change to the run, so this
+    // one does not go through `edit`.
+    props.onDraftChange({ ...props.draft, pending })
+  }
 
   const { busy: saving, guard } = useSingleFlight()
 
@@ -148,7 +200,8 @@ export default function PtSessionEditor(props: Props) {
               sets={setsOf(row.exercise.id!)}
               read={set => readRecordedPtSet(row.exercise, set)}
               commitLabel="APPLY SET CHANGES"
-              onPendingChange={p => setPending(current => ({ ...current, [row.exercise.id!]: p }))}
+              draft={props.draft.pending[row.exercise.id!] ?? null}
+              onDraftChange={next => setDraftFor(row.exercise.id!, next)}
               onPatch={(setNumber, fields) =>
                 update(row.exercise.id!, applyPtSetPatch(setsOf(row.exercise.id!), setNumber, fields))}
               onAdd={() => update(row.exercise.id!, addedRunSet(setsOf(row.exercise.id!), row.exercise))}
@@ -159,7 +212,7 @@ export default function PtSessionEditor(props: Props) {
             <SubLabel class="mb-1">NOTE</SubLabel>
             <NotesField
               value={exerciseNotes()[row.exercise.id!] ?? ''}
-              onInput={v => setExerciseNotes(current => ({ ...current, [row.exercise.id!]: v }))}
+              onInput={v => edit({ exerciseNotes: { ...exerciseNotes(), [row.exercise.id!]: v } })}
               rows={2}
               placeholder="Swapped to the green band"
               ariaLabel={`Note for ${row.exercise.name}`}
@@ -173,7 +226,7 @@ export default function PtSessionEditor(props: Props) {
         <SectionLabel class="mb-1">SESSION NOTES</SectionLabel>
         <NotesField
           value={notes()}
-          onInput={setNotes}
+          onInput={v => edit({ notes: v })}
           rows={2}
           placeholder="Shoulder felt better than Tuesday"
           ariaLabel="Session notes"
@@ -182,11 +235,15 @@ export default function PtSessionEditor(props: Props) {
       </div>
 
       <div class="flex gap-2">
+        {/* Not "CANCEL": the set editor inside this one has a CANCEL of its
+            own with a much smaller scope, and two nested controls under one
+            word with opposite reach is how the draft got lost in the first
+            place. This one is the pair to SAVE CHANGES beside it. */}
         <button
           onClick={() => props.onCancel()}
           class="flex-1 border border-border text-muted px-3 py-2 text-xs tracking-widest uppercase"
         >
-          CANCEL
+          DISCARD CHANGES
         </button>
         <button
           onClick={() => void handleSave()}

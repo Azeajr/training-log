@@ -125,7 +125,7 @@ from source here.
 | **A2** | P1 | Workout data loss | WF#1 · CX#2 | `src/store/workout-store.ts` | `open` | |
 | **A3** | P2 | PT draft model | UI#3 · EF#2 · UI#10 · CX#3/#4 | `src/components/pt/PtSetList.tsx` | `fixed` | 13 tests red at B2: `PtSetList.test.tsx` ×9 (new file), `PtRun.test.tsx` ×3, `PtSessionEditor.test.tsx` ×1 |
 | **A4** | P2 | PT draft model | EF#3 · CX#5 | `src/store/pt-store.ts` | `open` | |
-| **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `open` | |
+| **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `fixed` | `PT.test.tsx` ×5; 4 red at A3, the 5th guards the save-error behaviour A5 must not break |
 | **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `open` | |
 | **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×2 red at `d222835` (`1/0` single, `2/0` combined) |
 | **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
 
-**Totals: 22 items — 19 `open`, 0 `wip`, 3 `fixed`.**
+**Totals: 22 items — 18 `open`, 0 `wip`, 4 `fixed`.**
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -838,7 +838,7 @@ Upgrade fixtures, each reloaded **twice** to prove migration and initialization 
 
 ## A5 · Collapsing a PT history row silently discards set corrections
 
-**State:** `open` · **P2** · Sources: EF#4, CX#6 · Batch 2, with A3
+**State:** `fixed` · **P2** · Sources: EF#4, CX#6 · Batch 2, with A3
 
 ### Problem
 
@@ -904,6 +904,34 @@ const isDirty = (sessionId: number) => draftFor(sessionId)?.dirty ?? false
 5. `PT.test.tsx` — change a set **without** pressing APPLY, collapse, visit another run,
    then return. The pending editor values survive under the correct set; SAVE remains
    blocked until resolved, and inner CANCEL restores the pre-edit values.
+
+### As built
+
+`PtSessionEditor` is now fully controlled: `PT.tsx` owns `PtRunDraft` per session and the
+editor reads and writes it through props. `PtSetList` gained the same optional lift — pass
+`onDraftChange` and it stops keeping its own — so A3's inner editor state travels in
+`PtRunDraft.pending`, keyed by exercise id, and comes back open on the same set when the row
+is reopened. A live run passes neither prop and keeps its draft locally, which is right: that
+screen outlives its own set editors.
+
+Three notes:
+
+- **`dirty` is a flag, as the plan wrote it**, set when something is *applied* and OR'd with
+  "any open set editor is holding changes". It is wrong in exactly one direction — a value
+  changed and changed back still reads as unsaved — which warns about work that turns out to
+  be identical rather than discarding work that is not.
+- **Leaving PT is guarded with `useBeforeLeave`** from `@solidjs/router`, which covers in-app
+  navigation, plus `beforeunload` for reload and close. The draft stays memory-only; C10's
+  persisted-draft machinery is not reused here.
+- **The outer `CANCEL` is now `DISCARD CHANGES`.** A3 replaced the set editor's lowercase
+  `cancel` with an uppercase `CANCEL`, which left two nested controls spelled identically with
+  very different reach — the exact confusion A3 set out to remove, and a test found them
+  colliding. The outer one is the pair to `SAVE CHANGES` beside it; `CANCEL` now means the
+  set editor and only that.
+
+Test 4 (a failed write keeps the edit) passes against the pre-A5 code too — the editor
+already stayed mounted on a save error. It is kept as the regression guard the plan asked
+for: the lift must not turn a retryable failure into a lost draft.
 
 ---
 

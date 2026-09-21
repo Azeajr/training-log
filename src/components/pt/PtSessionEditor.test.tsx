@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { createSignal } from 'solid-js'
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
-import PtSessionEditor from './PtSessionEditor'
+import PtSessionEditor, { seedPtRunDraft, type PtRunDraft } from './PtSessionEditor'
 import { db } from '../../db/index'
 import {
   commitPtRun,
@@ -49,11 +50,23 @@ const sledWalk = (over: Partial<PtExerciseDraft> = {}): PtExerciseDraft => ({
   ...over,
 })
 
-/** Open the run, render its editor, and hand back the rows it will write over. */
+/**
+ * Open the run and render its editor, with the draft held outside it the way
+ * `PT.tsx` holds it.
+ */
 async function openEditor(sessionId: number) {
   const detail = (await getPtSessionDetail(db, sessionId))!
-  render(() => <PtSessionEditor detail={detail} onSaved={() => {}} onCancel={() => {}} />)
-  return detail
+  const [draft, setDraft] = createSignal<PtRunDraft>(seedPtRunDraft(detail))
+  render(() => (
+    <PtSessionEditor
+      detail={detail}
+      draft={draft()}
+      onDraftChange={setDraft}
+      onSaved={() => {}}
+      onCancel={() => {}}
+    />
+  ))
+  return { detail, draft }
 }
 
 const rowsOf = async (sessionId: number): Promise<PtSetCheck[]> =>
