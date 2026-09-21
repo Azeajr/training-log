@@ -142,9 +142,14 @@ from source here.
 | **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `open` | |
 | **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `open` | |
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
-| **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
+| **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 14 `open`, 0 `wip`, 8 `fixed`.** Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 13 `open`, 0 `wip`, 9 `fixed`.** Batches 1, 2 and 3 are complete.
+
+**Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
+"one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
+each item still gets its own failing test first and its own ledger row update in the commit
+that carries its code.
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -2028,7 +2033,7 @@ effective load.
 
 ## E1 · `DropRoundsEditor` shallow-copies a `BandLoad`
 
-**State:** `open` · **P3** · In neither proposal · Batch 4, **first**
+**State:** `fixed` · **P3** · In neither proposal · Batch 4, **first**
 
 ### Problem
 

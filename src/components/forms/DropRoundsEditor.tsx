@@ -36,7 +36,19 @@ export default function DropRoundsEditor(props: {
       <button type="button" class="text-left text-accent text-xs tracking-widest" onClick={() => {
         const last = props.rounds.at(-1)
         const previousBand = last?.bandLoad ?? props.bandLoad
-        props.onChange([...props.rounds, { weight: last?.weight ?? props.weight, reps: last?.reps ?? props.reps, bandLoad: previousBand ? { ...previousBand } : null }])
+        // Deep on `calibration`, the way `makeBandLoad` builds one: a spread
+        // shares that array by reference, and a BandLoad is a record of what a
+        // set was, not a view onto a profile that is still editable. Absent
+        // stays absent — a load written before snapshots existed falls back to
+        // the live profile in BandLoadControls, and an empty array would
+        // suppress that fallback and leave the row with no bands to pick from.
+        props.onChange([...props.rounds, {
+          weight: last?.weight ?? props.weight,
+          reps: last?.reps ?? props.reps,
+          bandLoad: previousBand
+            ? { ...previousBand, calibration: previousBand.calibration?.map(b => ({ ...b })) }
+            : null,
+        }])
       }}>+ ADD DROP ROUND</button>
     </div>
   )
