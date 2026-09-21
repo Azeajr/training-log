@@ -118,10 +118,12 @@ test.describe('PT checklist', () => {
     const setOne = page.getByRole('checkbox', { name: /Step down set 1/ })
     await setOne.locator('..').getByRole('button', { name: /reps/ }).click()
     await page.getByLabel('Decrease set 1 reps').click()
-    // Wait for the stepper to actually hold 9 before logging — clicking LOG in
-    // the same tick races the change and saves the original value.
+    // Wait for the stepper to actually hold 9 before applying — clicking in the
+    // same tick races the change and applies the original value.
     await expect(page.getByLabel(/Edit set 1 reps, currently 9/)).toBeVisible()
-    await page.getByRole('button', { name: 'LOG', exact: true }).click()
+    // A recorded run's set editor applies into the run draft; SAVE CHANGES
+    // below is still what writes it.
+    await page.getByRole('button', { name: 'APPLY SET CHANGES', exact: true }).click()
     // The editor holds the correction before it is written.
     await expect(page.getByText('× 9 reps')).toBeVisible()
     await page.getByRole('button', { name: 'SAVE CHANGES', exact: true }).click()
