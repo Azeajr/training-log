@@ -136,7 +136,7 @@ from source here.
 | **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `fixed` | `Workout.test.tsx` ×3, all red at batch 4 |
 | **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×2, 1 red at C1 (the other guards the unchanged step and bounds) |
 | **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×3, all red at C5 |
-| **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `open` | |
+| **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `fixed` | `AccessoryPicker.test.tsx` ×4, all red at C9 |
 | **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `fixed` | `AccessoryLog.test.tsx` ×5, 4 red at C7 |
 | **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `fixed` | `PtRoutineEdit.test.tsx` ×9 red at A4, `pt-routine-draft.test.ts` ×13 (new helper) |
 | **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `fixed` | `band-entry-points.test.tsx` ×5 (new file), 2 red at C6 |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 3 `open`, 0 `wip`, 19 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 2 `open`, 0 `wip`, 20 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1816,7 +1816,7 @@ after `pb-*` at equal specificity and silently resets it at desktop width.
 
 ## C8 · Missing assistance exercises force a Settings detour
 
-**State:** `open` · **P2** · Sources: WF#6, CX#20 · Batch 5
+**State:** `fixed` · **P2** · Sources: WF#6, CX#20 · Batch 5
 
 ### Problem
 
@@ -1852,6 +1852,23 @@ slot being filled and returning to the slot with the new exercise selected.
 
 Create and select an exercise without leaving the workout. The new exercise appears in
 Settings and in future picker searches.
+
+### As built
+
+`+ NEW EXERCISE` sits at the end of the list in both modes and in the empty state, and opens
+a sub-sheet in the same slot as the training-max one. Three fields — name, measurement type,
+category — with the category prefilled to a category belonging to the slot and correctable,
+since the picker cannot know which of legs/core a thing is. Everything else about an
+exercise stays in Settings.
+
+Persistence is `createExercise` unchanged, so the case-insensitive unique index and the
+typed `ExerciseNameConflictError` come with it; the conflict is shown in the sheet and the
+form stays open to correct. Nothing about the current selection is touched until the insert
+succeeds, and creation runs straight on into `handleSelect` — which means the training-max
+sheet for a brand-new exercise, and A2's slot handling after it.
+
+The empty state's "Tag one in Settings." became "No PUSH exercises yet.", since the sentence
+told the user to go somewhere they no longer need to go.
 
 ---
 

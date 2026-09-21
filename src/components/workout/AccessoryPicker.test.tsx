@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, it, expect } from 'vitest'
 import type { JSX } from 'solid-js'
-import { render, screen } from '@solidjs/testing-library'
+import { render, screen, fireEvent } from '@solidjs/testing-library'
 import { db } from '../../db/index'
 import { __resetForTest } from '../../db/sqlite-client'
 import { clearSession } from '../../store/workout-store'
@@ -317,6 +317,85 @@ describe('AccessoryPicker — swapping a fixed slot', () => {
 
     expect(screen.queryByText(/replaces Dips/)).toBeNull()
     expect(workout.activeAccessories.map(a => a.exerciseId)).toEqual([cgb])
+    view.unmount()
+  })
+})
+
+// ── C8 ──────────────────────────────────────────────────────────────────────
+// The empty state said "Tag one in Settings", and exercise management lives
+// inside an initially-collapsed section of a long page — so choosing an
+// exercise for a slot became a separate configuration task.
+describe('AccessoryPicker — creating an exercise without leaving', () => {
+  const openPush = () =>
+    renderPicker(() => (
+      <AccessoryPicker
+        liftId={LIFT_ID} slot="push" mode="session"
+        onClose={() => {}} onSelected={() => {}}
+      />
+    ))
+
+  const settle = () => new Promise(r => setTimeout(r, 30))
+  const create = async (name: string) => {
+    fireEvent.click(await screen.findByText('+ NEW EXERCISE'))
+    fireEvent.input(await screen.findByLabelText('New exercise name'), { target: { value: name } })
+    fireEvent.click(screen.getByText('CREATE AND SELECT'))
+    await settle()
+  }
+
+  it('offers the action in the empty state and pre-tags the slot', async () => {
+    const view = openPush()
+    expect(await screen.findByText(/No PUSH exercises yet/)).toBeTruthy()
+
+    await create('Close-grip bench')
+
+    const made = (await db.exercises.toArray()).find(e => e.name === 'Close-grip bench')!
+    expect(made).toMatchObject({ type: 'reps', category: 'push' })
+    view.unmount()
+  })
+
+  /** A new exercise has no training max, so selection continues into that sheet. */
+  it('carries straight on to the training max, then into the slot', async () => {
+    const { workout } = await import('../../store/workout-store')
+    const view = openPush()
+    await create('Close-grip bench')
+
+    await screen.findByRole('button', { name: 'Increase training max' })
+    fireEvent.click(screen.getByRole('button', { name: 'Increase training max' }))
+    fireEvent.click(screen.getByRole('button', { name: /^SAVE$/i }))
+    await settle()
+
+    const made = (await db.exercises.toArray()).find(e => e.name === 'Close-grip bench')!
+    expect(workout.activeAccessories).toMatchObject([{ exerciseId: made.id, slot: 'push' }])
+    view.unmount()
+  })
+
+  it('rejects a duplicate name in the picker rather than swallowing it', async () => {
+    await db.exercises.add({ name: 'Dips', type: 'reps', category: 'push' })
+    const view = openPush()
+
+    await create('dips')
+
+    expect(screen.getByRole('alert').textContent).toMatch(/dips/i)
+    // Nothing created, and the form is still there to correct.
+    expect((await db.exercises.toArray()).filter(e => /dips/i.test(e.name))).toHaveLength(1)
+    expect(screen.getByLabelText('New exercise name')).toBeTruthy()
+    view.unmount()
+  })
+
+  it('leaves the current selection alone when creation is backed out of', async () => {
+    const { workout, addAccessory } = await import('../../store/workout-store')
+    const dips = await db.exercises.add({ name: 'Dips', type: 'reps', category: 'push' })
+    await db.accessoryTrainingMaxes.add({ exerciseId: dips, weight: 100, incrementLb: 5, setAt: new Date() })
+    addAccessory({ exerciseId: dips, exerciseName: 'Dips', tm: 100, calculatedWeight: 60, loggedSets: [], slot: 'push' })
+
+    const view = openPush()
+    fireEvent.click(await screen.findByText('+ NEW EXERCISE'))
+    fireEvent.input(await screen.findByLabelText('New exercise name'), { target: { value: 'Something else' } })
+    fireEvent.click(screen.getByText('BACK'))
+    await settle()
+
+    expect(workout.activeAccessories).toMatchObject([{ exerciseId: dips, slot: 'push' }])
+    expect((await db.exercises.toArray()).some(e => e.name === 'Something else')).toBe(false)
     view.unmount()
   })
 })
