@@ -62,6 +62,12 @@ Dated runtime-verification logs, one per claim checked against the running app.
   commit, PR and regression test, one row each. Read it to learn whether a finding
   is *resolved*. Update it in the same commit as the code change it describes.
 
+- `docs/workflow-review-fixes.md` — the 2026-09-20/21 workflow, PT and band reviews,
+  consolidated into one implementation plan **and** fix ledger: 22 items (A1–E1) with
+  verified anchors, the code for each change, the traps each naive fix walks into, and
+  per-item state. Self-contained — the seven working reviews it consolidates are not in
+  the repo. Update this doc in the same commit as the code change it describes.
+
 - `docs/ui-consistency-review.md` — UI/UX consistency findings from the history-modal /
   history-label work. **RESOLVED 2026-08-08**: all nine findings validated, then fixed
   in one design-system pass; resolutions recorded inline. Kept as the rationale record.
