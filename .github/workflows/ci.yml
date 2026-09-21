@@ -1,51 +1,19 @@
 name: CI
 
-# paths-ignore, NOT a paths allowlist. An allowlist is what produced F75: the
-# deploy workflow's filter left eslint.config.js, scripts/**, tests/e2e/** and
-# .github/** with no workflow at all. Listing what to SKIP keeps "everything
-# else runs" as the default, so a new directory is covered by not being here.
+# NO paths filter on the triggers, deliberately. `checks` is a REQUIRED status
+# check on main, and a workflow skipped by `paths-ignore` never reports one — the
+# PR then sits on "Expected — waiting for status to be reported" and can never
+# merge. #165 (ROADMAP.md + docs/INDEX.md + docs/design/**, every one of them on
+# the old ignore list) hit exactly that: zero checks, mergeState BLOCKED, no runs
+# on the branch at all.
 #
-# Only prose that no test reads is listed. `docs/deep-code-review-fixes.md` is
-# deliberately ABSENT: src/db/batches.test.ts parses it, so an edit there can
-# break the suite and has to be checked like code.
+# So the filtering moved INTO the jobs. `checks` always starts and always
+# reports; for a prose-only change every step after the scope check is skipped,
+# which costs a checkout and a few seconds instead of the full suite.
 on:
   pull_request:
-    paths-ignore:
-      - 'README.md'
-      - 'ROADMAP.md'
-      - 'CLAUDE.md'
-      - 'ENGINEERING_PASSES.md'
-      - 'AMRAP_TARGET_REPS_ANALYSIS.md'
-      - '.claude/**'
-      - 'docs/INDEX.md'
-      - 'docs/deep-code-review.md'
-      - 'docs/ui-consistency-review.md'
-      - 'docs/archive/**'
-      - 'docs/design/**'
-      - 'docs/verification/**'
-  # Also on pushes to main. Without this, CI ran on PRs only, and the deploy
-  # workflow is path-filtered — so a commit pushed straight to main (an accepted
-  # workflow here) got NO checks at all unless it happened to touch a deploy
-  # path. The sharpest case was the deploy filter's own '!src/**/*.test.*': a
-  # broken test committed to main triggered nothing, then surfaced later by
-  # failing check:ci inside an unrelated deploy (F75).
   push:
     branches: [main]
-    # Duplicated rather than a YAML anchor: the Actions parser does not
-    # support anchors. Keep the two lists in step.
-    paths-ignore:
-      - 'README.md'
-      - 'ROADMAP.md'
-      - 'CLAUDE.md'
-      - 'ENGINEERING_PASSES.md'
-      - 'AMRAP_TARGET_REPS_ANALYSIS.md'
-      - '.claude/**'
-      - 'docs/INDEX.md'
-      - 'docs/deep-code-review.md'
-      - 'docs/ui-consistency-review.md'
-      - 'docs/archive/**'
-      - 'docs/design/**'
-      - 'docs/verification/**'
 
 permissions:
   contents: read
@@ -57,27 +25,113 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
+  # What changed, and does it need checking? One job, one list — the previous
+  # version duplicated its ignore list across two triggers because the Actions
+  # parser has no YAML anchors, and keeping them in step was manual.
+  scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.decide.outputs.code }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Needed to diff against the base; the default shallow clone has no
+          # merge base to compare with.
+          fetch-depth: 0
 
-      - uses: pnpm/action-setup@v6
+      - id: decide
+        env:
+          # Interpolated into env, never into the script body: a branch name is
+          # attacker-controllable on a fork PR and `${{ }}` inside `run:` is a
+          # shell injection.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
 
-      - uses: actions/setup-node@v7
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$BASE_SHA"
+          else
+            base="$BEFORE_SHA"
+          fi
+
+          # A new branch, a force-push, or anything else that leaves no usable
+          # base: run everything. Failing open is the only safe default here —
+          # the cost is a redundant suite, the alternative is an unchecked merge.
+          if [ -z "${base:-}" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "no usable base ref — running everything"
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "$base" "$GITHUB_SHA")
+          echo "changed files:"
+          echo "$changed" | sed 's/^/  /'
+
+          # A SKIP-LIST, not an allowlist. An allowlist is what produced F75: the
+          # deploy workflow's filter left eslint.config.js, scripts/**,
+          # tests/e2e/** and .github/** with no workflow at all. Listing what to
+          # skip keeps "everything else is code" as the default, so a new file or
+          # directory is covered by not being here.
+          #
+          # Only prose that no test reads belongs below. docs/deep-code-review-fixes.md
+          # is deliberately ABSENT: src/db/batches.test.ts parses it, so an edit
+          # there can break the suite and has to be checked like code.
+          skip='^(README\.md|ROADMAP\.md|CLAUDE\.md|ENGINEERING_PASSES\.md|AMRAP_TARGET_REPS_ANALYSIS\.md|\.claude/|docs/INDEX\.md|docs/deep-code-review\.md|docs/ui-consistency-review\.md|docs/workflow-review-fixes\.md|docs/archive/|docs/design/|docs/verification/)'
+
+          if echo "$changed" | grep -qvE "$skip"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "→ code changed, running checks"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "→ prose only, skipping the suite"
+          fi
+
+  # REQUIRED status check. This job always runs and always reports, whatever
+  # changed — that is the whole point of the restructure. Only its steps are
+  # conditional, rather than the job, because a skipped job's effect on a
+  # required check has changed across GitHub versions and a success reported by
+  # a job that genuinely ran is unambiguous.
+  checks:
+    needs: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - if: needs.scope.outputs.code == 'true'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - if: needs.scope.outputs.code == 'true'
+        uses: pnpm/action-setup@v6
+
+      - if: needs.scope.outputs.code == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run check:ci
+      - if: needs.scope.outputs.code == 'true'
+        run: pnpm install --frozen-lockfile
 
+      - if: needs.scope.outputs.code == 'true'
+        run: pnpm run check:ci
+
+      - if: needs.scope.outputs.code != 'true'
+        run: echo "Prose-only change — no code to check."
+
+  # Not a required check, so these two skip at the JOB level and cost no runner
+  # at all on a docs change.
+  #
   # Separate job: this one needs a Chromium download and drives a real browser
   # against `vite preview`, so it is too slow to belong inside check:ci.
   verify-sw:
+    needs: scope
+    if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -100,6 +154,8 @@ jobs:
   # build. The suite ran in NO workflow at all before this, and 6 of its 32
   # specs were failing — dormant is the worst of the options (F74, F85).
   e2e:
+    needs: scope
+    if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
