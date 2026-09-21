@@ -248,10 +248,14 @@ export default function AccessoryLog(props: Props) {
               >
                 <div class="flex items-center gap-2 pl-2 py-1 flex-wrap">
                   <span class="text-warn text-xs">Set {i() + 1}:</span>
-                  <Show when={editBandLoad()} fallback={<Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} fieldLabel="weight" />}>
+                  <Show
+                    when={editBandLoad()}
+                    fallback={<><Stepper value={editWeight()} onChange={setEditWeight} step={2.5} min={0} fieldLabel="weight" /><span class="text-muted text-xs">lb ×</span></>}
+                  >
                     <BandLoadControls profile={profile()} loading={loading() ?? undefined} value={editBandLoad()!} onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />
+                    {/* Bare — the band summary already ends in its own "lb". */}
+                    <span class="text-muted text-xs">×</span>
                   </Show>
-                  <span class="text-muted text-xs">lb ×</span>
                   <Show when={type() === 'reps'}>
                     <Stepper value={editReps()} onChange={setEditReps} step={1} min={0} fieldLabel="reps" />
                   </Show>

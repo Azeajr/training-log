@@ -23,11 +23,15 @@ export default function DropRoundsEditor(props: {
         {(round, i) => (
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-muted text-xs">Drop {i + 1}</span>
-            <Show when={round().bandLoad} fallback={<Stepper value={round().weight} onChange={v => update(i, 'weight', v)} step={2.5} min={0} fieldLabel={`drop ${i + 1} weight`} />}>
+            <Show
+              when={round().bandLoad}
+              fallback={<><Stepper value={round().weight} onChange={v => update(i, 'weight', v)} step={2.5} min={0} fieldLabel={`drop ${i + 1} weight`} /><span class="text-muted text-xs">lb ×</span></>}
+            >
               <BandLoadControls profile={props.profile} loading={props.loading} value={round().bandLoad!} label={`drop ${i + 1}`}
                 onChange={bandLoad => props.onChange(props.rounds.map((r, n) => n === i ? { ...r, bandLoad, weight: effectiveBandLoad(bandLoad) } : r))} />
+              {/* Bare — the band summary already ends in its own "lb". */}
+              <span class="text-muted text-xs">×</span>
             </Show>
-            <span class="text-muted text-xs">lb ×</span>
             <Stepper value={round().reps} onChange={v => update(i, 'reps', v)} min={0} fieldLabel={`drop ${i + 1} reps`} />
             <button type="button" aria-label={`Remove drop ${i + 1}`} onClick={() => props.onChange(props.rounds.filter((_, n) => n !== i))} class="text-muted text-xs">remove</button>
           </div>

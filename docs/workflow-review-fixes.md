@@ -130,7 +130,7 @@ from source here.
 | **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×2 red at `d222835` (`1/0` single, `2/0` combined) |
 | **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `open` | |
 | **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `open` | |
-| **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `open` | |
+| **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `fixed` | `AccessoryLog.test.tsx` ×3, `HistoryEdit.test.tsx` ×5; 5 red at E1 |
 | **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `open` | |
 | **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
 | **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 13 `open`, 0 `wip`, 9 `fixed`.** Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 12 `open`, 0 `wip`, 10 `fixed`.** Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1384,7 +1384,7 @@ movement does; disabling the profile removes it and Settings still reaches it.
 
 ## C2 · Orphan `lb` after the band controls
 
-**State:** `open` · **P3** · Sources: UI#2, CX#14 · Batch 4
+**State:** `fixed` · **P3** · Sources: UI#2, CX#14 · Batch 4
 
 ### Problem
 
@@ -1435,6 +1435,15 @@ exist.
 Plus a focused visual check of each of the six sites in both modes, including reps, timed
 and distance accessories in history. Every load has one unit and one multiplication
 separator.
+
+### As built
+
+All six sites moved as written. One observation the plan's table does not cover:
+**`SetRow.tsx` has the mirror defect.** Its `×` is also outside the `Show`, but bare — so
+the band branch reads correctly (which is why the plan called it "the one site that got it
+right") while its plain-weight branch renders no unit at all. Left alone: the plan names six
+sites and blesses this one, and changing it is a visible edit to the main logger's edit row
+rather than the silent cleanup C2 is. Worth its own decision if it ever bothers anyone.
 
 ---
 
