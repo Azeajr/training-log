@@ -5,7 +5,8 @@ import { Router, Route } from '@solidjs/router'
 import Workout from './Workout'
 import { db } from '../db/index'
 import {
-  clearSession, startSession, addAccessory, logAccessorySet, logCrossSet, setNotes, workout,
+  clearSession, startSession, addAccessory, advanceSet, logAccessorySet, logCrossSet, logSet,
+  setNotes, workout,
 } from '../store/workout-store'
 import { loadSettings, updateSettings } from '../store/settings-store'
 import { toast } from '../store/toast-store'
@@ -72,6 +73,19 @@ const getFinishButton = () => screen.getByText(FINISH_CONTROL)
 // SKIP LIFT and EXIT WITHOUT SAVING moved behind the `session options`
 // disclosure — one deliberate tap back from COMPLETE, which is the routine
 // action they used to sit beside at equal weight.
+/**
+ * Put real work in the session and run the cursor past every block.
+ *
+ * FINISH now branches on what a session holds, and only a session with nothing
+ * outstanding completes on one tap. Tests about what happens AFTER completion —
+ * the TM prompts, the cycle roll-up — use this so they exercise their own
+ * subject rather than the finish gate, which has its own tests.
+ */
+function logCompletedWork(sessionId = 1) {
+  logSet({ sessionId, type: 'warmup', setNumber: 1, weight: 90, reps: 5, isAmrap: false })
+  for (let i = 0; i < 60; i++) advanceSet()
+}
+
 async function findSessionOption(label: string) {
   if (!screen.queryByText(label)) {
     fireEvent.click(await screen.findByText(/session options/))
@@ -231,6 +245,9 @@ describe('Workout screen — with active session', () => {
 
   it('COMPLETE SESSION marks session completed in DB and navigates', async () => {
     startSession(BENCH)
+    // With work in it and nothing outstanding. An empty session no longer
+    // completes at all — see the FINISH-branches tests for what it does offer.
+    logCompletedWork()
     renderWorkout()
     const completeBtn = await findFinishButton()
     fireEvent.click(completeBtn)
@@ -271,6 +288,10 @@ describe('Workout screen — with active session', () => {
 
     renderWorkout()
     fireEvent.click(await findFinishButton())
+
+    // Notes and no sets: real work, so FINISH offers to save it rather than
+    // treating the session as an empty attempt.
+    fireEvent.click(await screen.findByText('FINISH WITH NOTES'))
 
     await waitFor(async () => {
       const notes = await db.accessoryNotes.toArray()
@@ -491,6 +512,178 @@ describe('Workout screen — with active session', () => {
     await waitFor(async () => {
       const session = await db.sessions.get(1)
       expect(session?.status).toBe('pending')
+    })
+  })
+
+  /*
+   * B1. FINISH went straight to completion. Starting a lift and tapping it with
+   * nothing logged marked the lift done on Today, selected the next one, and
+   * put an empty session in History — one tap, no question asked.
+   */
+  describe('FINISH branches on what is actually logged', () => {
+    /** Run the linear cursor off the end, so no segment reports work still owed. */
+    const finishEverySet = () => { for (let i = 0; i < 60; i++) advanceSet() }
+
+    const completedSessions = async () =>
+      (await db.sessions.toArray()).filter(s => s.status === 'completed')
+
+    it('offers continue, discard or skip for a session with nothing in it', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      fireEvent.click(await findFinishButton())
+
+      await screen.findByText(/nothing logged/i)
+      expect(screen.queryByText(/^COMPLETE/)).toBeNull()
+      expect(screen.getByText('CONTINUE WORKOUT')).toBeTruthy()
+      expect(screen.getByText('DISCARD ATTEMPT')).toBeTruthy()
+      expect(screen.getByText('SKIP LIFT')).toBeTruthy()
+
+      fireEvent.click(screen.getByText('CONTINUE WORKOUT'))
+      await drain()
+      expect(await completedSessions()).toHaveLength(0)
+      expect((await db.sessions.get(1))?.status).toBe('pending')
+      expect(mockNavigate).not.toHaveBeenCalled()
+    })
+
+    it('discards the empty attempt when that is chosen', async () => {
+      await db.sets.add({ sessionId: 1, type: 'warmup', setNumber: 1, weight: 45, reps: 5, isAmrap: false })
+      startSession(BENCH)
+      renderWorkout()
+      fireEvent.click(await findFinishButton())
+
+      await screen.findByText(/nothing logged/i)
+      fireEvent.click(screen.getByText('DISCARD ATTEMPT'))
+
+      await waitFor(async () => expect(await db.sessions.get(1)).toBeUndefined())
+      expect(await db.sets.where('sessionId').equals(1).toArray()).toHaveLength(0)
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    })
+
+    it('skips the lift when that is chosen, by the same path as SKIP LIFT', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      fireEvent.click(await findFinishButton())
+
+      await screen.findByText(/nothing logged/i)
+      fireEvent.click(screen.getByText('SKIP LIFT'))
+
+      await waitFor(async () => expect((await db.sessions.get(1))?.status).toBe('skipped'))
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
+    })
+
+    /** Dismissing is neither answer, and the two answers that are not "continue" destroy work. */
+    it('returns to the workout when the empty prompt is dismissed', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      fireEvent.click(await findFinishButton())
+
+      await screen.findByText(/nothing logged/i)
+      fireEvent.click(screen.getByText('CONTINUE WORKOUT'))
+      await drain()
+
+      expect((await db.sessions.get(1))?.status).toBe('pending')
+      expect(mockNavigate).not.toHaveBeenCalled()
+    })
+
+    /** A note with no sets is user work, not an empty attempt. */
+    it('offers to finish a notes-only session, and asks only once', async () => {
+      startSession(BENCH)
+      await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+      addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 50, loggedSets: [], notes: 'shoulder tight' })
+      setNotes('ran out of time')
+
+      renderWorkout()
+      fireEvent.click(await findFinishButton())
+
+      await screen.findByText(/notes and no logged sets/i)
+      expect(screen.queryByText('DISCARD ATTEMPT')).toBeNull()
+      fireEvent.click(screen.getByText('FINISH WITH NOTES'))
+
+      await waitFor(async () => expect((await db.sessions.get(1))?.status).toBe('completed'))
+      // Straight through: no second, partial-work confirmation behind the first.
+      expect(screen.queryByText(/Still outstanding/)).toBeNull()
+      expect((await db.sessions.get(1))?.notes).toBe('ran out of time')
+      expect(await db.accessoryNotes.toArray()).toHaveLength(1)
+    })
+
+    it('names what is still outstanding on a partly logged session', async () => {
+      startSession(BENCH)
+      logSet({ sessionId: 1, type: 'warmup', setNumber: 1, weight: 90, reps: 5, isAmrap: false })
+      advanceSet()
+
+      renderWorkout()
+      // `segments()` reports nothing until the plan lands, and the section
+      // heading renders before it does — so wait for the chain, not the header.
+      await screen.findByText('WARM UP')
+      await drain()
+      fireEvent.click(await findFinishButton())
+
+      const prompt = await screen.findByText(/Still outstanding/)
+      expect(prompt.textContent).toMatch(/MAIN/)
+      expect(screen.getByText('FINISH WITH 1 LOGGED')).toBeTruthy()
+
+      fireEvent.click(screen.getByText('CONTINUE WORKOUT'))
+      await drain()
+      expect((await db.sessions.get(1))?.status).toBe('pending')
+      expect(mockNavigate).not.toHaveBeenCalled()
+    })
+
+    /** Assistance done, main not: a partial session whose outstanding block is the main lift. */
+    it('names the main lift when only assistance was logged', async () => {
+      startSession(BENCH)
+      await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+      addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 50, loggedSets: [], slot: 'pull' })
+      logAccessorySet(10, { setNumber: 1, weight: 50, reps: 8 })
+
+      renderWorkout()
+      await screen.findByText('WARM UP')
+      await drain()
+      fireEvent.click(await findFinishButton())
+
+      const prompt = await screen.findByText(/Still outstanding/)
+      expect(prompt.textContent).toMatch(/MAIN/)
+      fireEvent.click(screen.getByText('FINISH WITH 1 LOGGED'))
+      await waitFor(async () => expect((await db.sessions.get(1))?.status).toBe('completed'))
+    })
+
+    it('completes a session with nothing outstanding without an extra tap', async () => {
+      startSession(BENCH)
+      logSet({ sessionId: 1, type: 'warmup', setNumber: 1, weight: 90, reps: 5, isAmrap: false })
+      renderWorkout()
+      await screen.findByText('WARM UP')
+      finishEverySet()
+
+      fireEvent.click(await findFinishButton())
+
+      await waitFor(async () => expect((await db.sessions.get(1))?.status).toBe('completed'))
+      expect(screen.queryByText(/Still outstanding/)).toBeNull()
+      expect(screen.queryByText(/nothing logged/i)).toBeNull()
+    })
+
+    /**
+     * The guard the new branch sits in front of: `runFinishing` is held across
+     * the choice and the action, and `finalizePendingSession` is
+     * status-conditional, so neither a second tap nor a retry writes twice.
+     */
+    it('does not duplicate records on repeated taps or a retry', async () => {
+      startSession(BENCH)
+      await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+      addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 50, loggedSets: [] })
+      logAccessorySet(10, { setNumber: 1, weight: 50, reps: 8 })
+      renderWorkout()
+      await screen.findByText('WARM UP')
+      finishEverySet()
+
+      const finish = await findFinishButton()
+      finish.click(); finish.click(); finish.click()
+      await waitFor(async () => expect((await db.sessions.get(1))?.status).toBe('completed'))
+      await drain()
+
+      fireEvent.click(finish)
+      await drain()
+
+      expect(await db.accessorySets.toArray()).toHaveLength(1)
+      expect((await db.sessions.toArray()).filter(s => s.status === 'completed')).toHaveLength(1)
     })
   })
 
@@ -1330,6 +1523,7 @@ describe('Workout screen — cycle complete', () => {
   it('COMPLETE SESSION shows cycle complete modal when cycle ends', async () => {
     const session4 = await setupCycleComplete()
     startSession(session4)
+    logCompletedWork(session4.id!)
     renderWorkout()
 
     fireEvent.click(await findFinishButton())
@@ -1340,6 +1534,7 @@ describe('Workout screen — cycle complete', () => {
   it('CONTINUE in cycle complete modal clears session and navigates', async () => {
     const session4 = await setupCycleComplete()
     startSession(session4)
+    logCompletedWork(session4.id!)
     renderWorkout()
 
     fireEvent.click(await findFinishButton())
@@ -1352,6 +1547,7 @@ describe('Workout screen — cycle complete', () => {
   it('CUT ALL TMS INSTEAD in cycle complete modal deloads and navigates', async () => {
     const session4 = await setupCycleComplete()
     startSession(session4)
+    logCompletedWork(session4.id!)
     renderWorkout()
 
     fireEvent.click(await findFinishButton())
@@ -1376,6 +1572,7 @@ describe('Workout screen — cycle complete', () => {
   it('STRONG CYCLE section appears when all 3 AMRAP sets meet ≥10% threshold', async () => {
     const session4 = await setupCycleCompleteWithDoubling()
     startSession(session4)
+    logCompletedWork(session4.id!)
     renderWorkout()
 
     fireEvent.click(await findFinishButton())
@@ -1385,6 +1582,7 @@ describe('Workout screen — cycle complete', () => {
   it('double increment button shows 2× progressionIncrement (+10 LBS for Bench increment=5)', async () => {
     const session4 = await setupCycleCompleteWithDoubling()
     startSession(session4)
+    logCompletedWork(session4.id!)
     renderWorkout()
 
     fireEvent.click(await findFinishButton())
@@ -1395,6 +1593,7 @@ describe('Workout screen — cycle complete', () => {
   it('clicking double increment updates newTms display from 205 to 210', async () => {
     const session4 = await setupCycleCompleteWithDoubling()
     startSession(session4)
+    logCompletedWork(session4.id!)
     renderWorkout()
 
     fireEvent.click(await findFinishButton())
@@ -1409,6 +1608,7 @@ describe('Workout screen — cycle complete', () => {
   it('clicking double increment writes doubled TM to DB', async () => {
     const session4 = await setupCycleCompleteWithDoubling()
     startSession(session4)
+    logCompletedWork(session4.id!)
     renderWorkout()
 
     fireEvent.click(await findFinishButton())
@@ -1424,6 +1624,7 @@ describe('Workout screen — cycle complete', () => {
   it('clicking double increment removes lift from STRONG CYCLE section', async () => {
     const session4 = await setupCycleCompleteWithDoubling()
     startSession(session4)
+    logCompletedWork(session4.id!)
     renderWorkout()
 
     fireEvent.click(await findFinishButton())
@@ -1451,6 +1652,7 @@ describe('Workout screen — TM recommendation modal', () => {
 
   it('COMPLETE SESSION shows TM ADJUSTMENT modal when AMRAP delta ≥ 15%', async () => {
     startSession(BENCH)
+    logCompletedWork()
     renderWorkout()
     fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
@@ -1458,6 +1660,7 @@ describe('Workout screen — TM recommendation modal', () => {
 
   it('KEEP CURRENT dismisses TM modal and navigates to /today', async () => {
     startSession(BENCH)
+    logCompletedWork()
     renderWorkout()
     fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
@@ -1472,6 +1675,7 @@ describe('Workout screen — TM recommendation modal', () => {
 
   it('UPDATE TM applies suggestedTm and navigates to /today', async () => {
     startSession(BENCH)
+    logCompletedWork()
     renderWorkout()
     fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('TM ADJUSTMENT'))
@@ -1489,6 +1693,7 @@ describe('Workout screen — TM recommendation modal', () => {
     // session, so the flow navigates to /today instead of opening the cycle modal.
     await db.lifts.add({ name: 'OHP', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
     startSession({ ...BENCH, week: 4 })
+    logCompletedWork()
     renderWorkout()
     fireEvent.click(await findFinishButton())
 
@@ -1998,6 +2203,9 @@ describe('Workout screen — overlapping set mutations', () => {
     expect((await db.sessions.get(1))?.status).toBe('pending')
 
     release()
+    // One set of many: the finish prompt names what is still outstanding, and
+    // only appears now — `runFinishing` waits for the write before asking.
+    fireEvent.click(await screen.findByText('FINISH WITH 1 LOGGED'))
     await waitFor(async () => expect((await db.sessions.get(1))?.status).toBe('completed'))
     expect(await db.sets.toArray()).toHaveLength(1)
   })

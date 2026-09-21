@@ -126,7 +126,7 @@ from source here.
 | **A3** | P2 | PT draft model | UI#3 · EF#2 · UI#10 · CX#3/#4 | `src/components/pt/PtSetList.tsx` | `fixed` | 13 tests red at B2: `PtSetList.test.tsx` ×9 (new file), `PtRun.test.tsx` ×3, `PtSessionEditor.test.tsx` ×1 |
 | **A4** | P2 | PT draft model | EF#3 · CX#5 | `src/store/pt-store.ts` | `fixed` | `pt-store.test.ts` ×6 red at A5, ×2 more guarding behaviour that must not regress |
 | **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `fixed` | `PT.test.tsx` ×5; 4 red at A3, the 5th guards the save-error behaviour A5 must not break |
-| **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `open` | |
+| **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×9, 7 red at A2; 15 existing finish tests updated to the new contract |
 | **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×2 red at `d222835` (`1/0` single, `2/0` combined) |
 | **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `open` | |
 | **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
 
-**Totals: 22 items — 15 `open`, 0 `wip`, 7 `fixed`.** Batches 1 and 2 are complete.
+**Totals: 22 items — 14 `open`, 0 `wip`, 8 `fixed`.** Batches 1, 2 and 3 are complete.
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -982,7 +982,7 @@ for: the lift must not turn a retryable failure into a lost draft.
 
 ## B1 · FINISH records an empty or half-done session with one tap
 
-**State:** `open` · **P2** · Sources: WF#2, CX#9 · Batch 3, after A2
+**State:** `fixed` · **P2** · Sources: WF#2, CX#9 · Batch 3, after A2
 
 ### Problem
 
@@ -1095,6 +1095,35 @@ The new branch sits **before** `completeSession`, never inside it.
 ### Acceptance
 
 Today and History distinguish skipped from completed sessions.
+
+### As built
+
+`skipPendingAttempt` and `discardPendingAttempt` are extracted as written: no `runFinishing`,
+no confirmation of their own, and the existing standalone handlers keep both. Three
+departures:
+
+- **Four branches, not five.** *Assistance-only* is a partial session whose outstanding
+  block happens to be the main lift, and the partial branch already names the outstanding
+  sections — for that case it names MAIN, which is exactly what the table asks for. A
+  separate branch would have produced the same prompt from different code. Both shapes have
+  their own test.
+- **The empty prompt maps dismissal to CONTINUE.** `confirmWithChoice` gives three
+  outcomes, and two of them destroy the attempt, so `confirm` is SKIP LIFT, `secondary` is
+  the danger-styled DISCARD ATTEMPT, and `cancel` — which is also what Escape and a
+  displaced dialog resolve to — returns to the workout. The same reasoning as A2's
+  displacement prompt: a dismissal is not an answer, and it must not be the destructive one.
+- **`SessionBar` needed no change.** Its control already reads FINISH while work is
+  outstanding and COMPLETE SESSION only once every segment is logged, which is precisely the
+  distinction this item introduces behind it.
+
+**Fifteen existing tests changed, and they are the behaviour change rather than collateral.**
+Most completed an EMPTY session to reach the post-completion modal chain — the cycle roll-up,
+the TM prompts — which is the exact tap this item removes. They now put real work in the
+session through a `logCompletedWork` helper, so they exercise their own subject instead of
+the finish gate. Two kept their shape and answer the new prompt: the accessory-notes test
+takes FINISH WITH NOTES, and the in-flight-write test takes FINISH WITH 1 LOGGED after the
+release — which also shows the prompt cannot appear until `runFinishing` has awaited the
+write.
 
 ---
 
