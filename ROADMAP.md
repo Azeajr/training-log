@@ -2,6 +2,24 @@
 
 ## Done
 
+### Assistance Swaps and FINISH Stop Losing Work (2026-09-21)
+
+Items **A2** and **B1** of `docs/workflow-review-fixes.md`.
+
+- **Swapping a fixed assistance slot keeps the displaced exercise's work.** It
+  used to be filtered out of the session outright, logged sets and note included.
+  It is demoted to extra work instead — and, because every accessory mutator
+  addresses by exercise id with a predicate that matches EVERY entry, an exercise
+  already present is moved rather than added twice. The picker had to change with
+  it: a retained exercise was greyed out, so the swap back could not be performed
+  at all.
+- **FINISH asks what the session actually holds.** Starting a lift and tapping
+  FINISH marked it done, advanced to the next lift and put an empty session in
+  History. A session with nothing in it now offers to continue, discard or skip
+  and cannot be completed; one with notes and no sets offers to save the notes;
+  one with work still outstanding names what is outstanding before finishing. A
+  fully logged session completes on one tap, as before.
+
 ### PT Drafts Survive the Thing That Used to Eat Them (2026-09-21)
 
 Four ways a PT draft could disappear without saying so. Items **A3**, **A4**, **A5**

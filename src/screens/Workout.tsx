@@ -114,7 +114,7 @@ function SetSection(props: {
 
 export default function Workout() {
   const navigate = useNavigate()
-  const { confirm } = useConfirmation()
+  const { confirm, confirmWithChoice } = useConfirmation()
 
   const [lift, setLift] = createSignal<Lift | null>(null)
   const [supplementalTemplate, setSupplementalTemplate] = createSignal<SupplementalTemplate>('fsl')
@@ -695,9 +695,70 @@ export default function Workout() {
     }
   }
 
+  const loggedCount = () =>
+    workout.loggedSets.length
+    + workout.loggedCrossSets.length
+    + workout.activeAccessories.reduce((n, a) => n + a.loggedSets.length, 0)
+
+  const hasNotes = () =>
+    !!workout.notes?.trim() || workout.activeAccessories.some(a => a.notes?.trim())
+
+  /**
+   * FINISH, branching on what the session actually holds.
+   *
+   * It used to complete unconditionally, so starting a lift and tapping FINISH
+   * marked it done on Today, advanced to the next lift, and left an empty
+   * session in History — one tap, no question.
+   *
+   * The counting is `segments()`, which already enumerates every block across
+   * main, cross and assistance and reports `total: 0` for an assistance slot
+   * nobody filled — so an unfilled optional slot raises no warning for free.
+   *
+   * Every branch sits BEFORE `completeSession`, never inside it, and the whole
+   * choice runs under the one `runFinishing` guard already held. The shared
+   * action bodies below must not re-acquire it: `finishing()` would be true and
+   * the chosen action would silently do nothing.
+   */
   const handleComplete = () => runFinishing(async () => {
     const session = workout.activeSession
     if (!session?.id) return
+
+    if (loggedCount() === 0 && !hasNotes()) {
+      // Three outcomes, and dismissal is none of them. Two of the three destroy
+      // the attempt, so Escape returns to the workout rather than landing on
+      // whichever one a two-button dialog would map cancel to.
+      const choice = await confirmWithChoice(
+        'Nothing logged yet. There is nothing in this session to record.',
+        {
+          confirmLabel: 'SKIP LIFT',
+          secondaryLabel: 'DISCARD ATTEMPT',
+          cancelLabel: 'CONTINUE WORKOUT',
+          destructive: true,
+        },
+      )
+      if (choice === 'cancel') return
+      if (choice === 'confirm') return await skipPendingAttempt(session)
+      return await discardPendingAttempt(session)
+    }
+
+    if (loggedCount() === 0) {
+      if (!await confirm('Save this session with notes and no logged sets?', {
+        confirmLabel: 'FINISH WITH NOTES',
+        cancelLabel: 'CONTINUE WORKOUT',
+      })) return
+      await completeSession(session, session.id)
+      return
+    }
+
+    const outstanding = segments().filter(isOutstanding)
+    if (outstanding.length > 0) {
+      const names = outstanding.map(s => `${s.label} ${s.total - s.done}`).join(', ')
+      if (!await confirm(`Still outstanding: ${names}.`, {
+        confirmLabel: `FINISH WITH ${loggedCount()} LOGGED`,
+        cancelLabel: 'CONTINUE WORKOUT',
+      })) return
+    }
+
     await completeSession(session, session.id)
   })
 
@@ -758,21 +819,26 @@ export default function Workout() {
     await afterAccessoryStep(session, sessionId)
   }
 
-  const handleExit = () => runFinishing(async () => {
-    if (!await confirm('Discard this attempt?', { destructive: true, confirmLabel: 'EXIT' })) return
-    const session = workout.activeSession
+  /*
+   * The two destructive endings, as action bodies.
+   *
+   * Shared by their own buttons and by FINISH's empty-session choice. Neither
+   * acquires `runFinishing` and neither confirms: both callers have already
+   * done both, and re-acquiring the guard inside it would find `finishing()`
+   * true and make the action a silent no-op.
+   */
+
+  const discardPendingAttempt = async (session: Session | null) => {
     // Delete the pending session row too, not just its child rows — a leftover
     // empty pending session holds the week open (weekComplete) and shows the
     // lift as not done. discardPendingSession no-ops on a completed session.
     if (session?.id) await discardPendingSession(db, session.id)
     clearSession()
     navigate('/today')
-  })
+  }
 
-  const handleSkip = () => runFinishing(async () => {
-    if (!await confirm('Skip this lift?', { destructive: true, confirmLabel: 'SKIP' })) return
-    const session = workout.activeSession
-    if (!session?.id) return
+  const skipPendingAttempt = async (session: Session) => {
+    if (!session.id) return
     // Only a pending attempt can be skipped. Rewriting a completed row as
     // 'skipped' would drop a finished workout out of History — the store says
     // 'pending' for the whole post-complete modal chain, so a kill there is all
@@ -784,6 +850,18 @@ export default function Workout() {
       return
     }
     await finishSession()
+  }
+
+  const handleExit = () => runFinishing(async () => {
+    if (!await confirm('Discard this attempt?', { destructive: true, confirmLabel: 'EXIT' })) return
+    await discardPendingAttempt(workout.activeSession)
+  })
+
+  const handleSkip = () => runFinishing(async () => {
+    if (!await confirm('Skip this lift?', { destructive: true, confirmLabel: 'SKIP' })) return
+    const session = workout.activeSession
+    if (!session?.id) return
+    await skipPendingAttempt(session)
   })
 
   const handleCycleCompleteDismiss = () => {
