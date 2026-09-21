@@ -2,6 +2,63 @@
 
 ## Done
 
+### Band Loading, Drop Rounds and Exact Loads (2026-09-19 → 2026-09-20)
+
+Band-assisted and weighted work — chin-ups, pull-ups, nordic curls — logged as a
+real load instead of a bodyweight guess, so it feeds e1RM, records and the TM
+prompt like anything else. `docs/design/band-loading.md` is the rationale record.
+
+- **Effective load = raw + added − assistance**, where raw load is the
+  movement's UNASSISTED load and *not* anyone's bodyweight. `bandProfile` on
+  `Lift` / `Exercise` holds the raw load, one measured assistance per band and
+  an optional cap on suggested added weight; `bandLoad` on `Set` /
+  `AccessorySet` / `DropRound` is the immutable record of what a set actually
+  was. Measured: chin/pull 191 raw at 105 / 50 / 30 / 10 assistance, nordic 145
+  raw at 75 / 40 / 30 / 10. The same four physical bands assist the two
+  movements very differently because a stiff band's assistance depends on how
+  far it is stretched at the working position.
+- **The load is recorded exactly, not snapped to 5 lb.** It is a record of
+  something that already happened, not a prescription being proposed, and the
+  added-weight stepper moves in 2.5s — a 5 lb grid swallowed half of every press,
+  so two sessions genuinely a plate apart wrote the same `sets.weight`, and a
+  band measured at 87 read back as 85.
+- **Suggestions rank by least assistance, not nearest load.** Distance decides
+  only down to one plate step; after that the least-assisted option wins. With
+  exact loads the nearest candidate at a 190 target is "Purple band plus 30 lb
+  hanging off you" (exactly 190) rather than "unassisted" (191), and nobody rigs
+  an assistance band in order to carry more weight.
+- **Profiles are opt-in.** A profile does not add controls, it REPLACES them:
+  the weight stepper disappears. An earlier build turned band loading on for any
+  name matching chinup / pullup / nordic, which took the stepper away from a
+  chin-up deliberately set up as `plateMode: 'total'` with a base weight of 0 to
+  log a real belt total, and decided by spelling — "Chin-ups" was banded,
+  "Chinup (neutral grip)" was not. `bandProfileFor` now reads saved profiles
+  only; `defaultBandProfile` prefills the settings dialog and nothing else.
+- **`BandProfile.accepted` states provenance instead of inferring it.**
+  `clearSeededBandProfiles` undoes the old seed by comparing against the
+  templates it could have written — and someone who ticks the box and accepts
+  the offered measurements unchanged produces those bytes exactly, so their
+  opt-in was read as the seeder's own work and nulled on the next start. The
+  flag works *through* the byte compare: no template carries it, so a saved
+  profile can never match one. Same move as `ptSetChecks.recorded` replacing an
+  all-null guess. The fixup also runs on import, because a backup from a seeded
+  database carries those rows too.
+- **Each set snapshots the whole calibration table**, not just the band it used.
+  Without the other three, changing which band a finished set used had only the
+  *current* profile to price them with, and a recalibration keeps all four names
+  while changing every number under them — so merely opening a set in history
+  and touching its dropdown twice re-priced it for good.
+- **Drop rounds** (`accessorySets.dropRounds`) carry their own weight, reps and
+  band snapshot, and survive logging, editing, history and backups. Completed
+  assistance exercises collapse, including after extra sets.
+- **A dialled-in setup survives the prescription moving under it.** The band
+  twin of `weightTouched`: editing an earlier set cascades weights through the
+  whole exercise, and re-suggesting on that cascade silently discarded the band
+  the user had already chosen, mid-exercise.
+- CSV gains band / raw / assistance / added columns only when band work is
+  present; JSON backups carry every field. `tests/e2e/bands.spec.ts` opts in and
+  checks the exact effective load rather than a rounded one.
+
 ### PT Checklists (2026-09-17)
 
 Rehab work, kept deliberately apart from training. Today → PT, plus `/pt`,

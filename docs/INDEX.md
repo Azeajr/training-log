@@ -31,6 +31,9 @@ Every markdown doc in the repo, what it is for, and when to load it.
 
 - `docs/design/plate-loading-model.md` — the `{ plateMode, implementBase }` generalization of
   `usesBarbell`. **Shipped**; kept as the rationale record.
+- `docs/design/band-loading.md` — band-assisted and weighted work: the measured
+  calibrations, why effective load is exact rather than snapped to 5 lb, why a
+  profile is opt-in, and what each set snapshots. **Shipped**; current.
 
 ## Verification records
 
