@@ -34,6 +34,7 @@ import CrossBlockLog from '../components/workout/CrossBlockLog'
 import { resolveLiftLoading, type PlateLoading } from '../lib/plate-loading'
 import RestTimer from '../components/workout/RestTimer'
 import SessionBar, { isOutstanding, scrollToSection, type SessionSegment } from '../components/workout/SessionBar'
+import BottomBar from '../components/layout/BottomBar'
 import NotesField from '../components/forms/NotesField'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
@@ -1354,15 +1355,18 @@ export default function Workout() {
           />
         </Show>
 
-        {/* One fixed strip, two jobs: the rest countdown while resting, the
-            session's outstanding work and its finish action the rest of the
-            time. Each renders only when the other doesn't. */}
-        <RestTimer />
-        <SessionBar
-          segments={segments()}
-          disabled={finishing()}
-          onComplete={() => void handleComplete()}
-        />
+        {/* One fixed strip, two rows. The countdown stacks ABOVE the session
+            strip rather than replacing it: it used to take FINISH and section
+            navigation with it for the length of every rest, so the way back to
+            either was to work out that SKIP REST was the way back. */}
+        <BottomBar>
+          <RestTimer />
+          <SessionBar
+            segments={segments()}
+            disabled={finishing()}
+            onComplete={() => void handleComplete()}
+          />
+        </BottomBar>
 
         <Show when={liftHistoryId() != null}>
           <LiftHistoryModal

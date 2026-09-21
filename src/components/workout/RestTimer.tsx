@@ -209,58 +209,59 @@ export default function RestTimer() {
 
   return (
     <Show when={workout.isResting}>
-      <div class="fixed bottom-[var(--nav-h)] left-0 right-0 bg-bg border-t-2 border-border px-4 py-3">
-        <div class="max-w-3xl mx-auto">
-          <div class="flex items-end justify-between gap-4">
-            <div class="min-w-0">
-              {/* The countdown targets the first completed-set bell or the
-                  single failed-set bell; the label makes that distinction. */}
-              <div class="text-muted text-xs uppercase tracking-widest mb-1">
-                {REST_TYPE_LABEL[workout.restType]}
+      {/* A row inside `BottomBar`, not a bar of its own. It used to draw the
+          whole strip and so replaced the session bar underneath it, taking
+          FINISH and section navigation off screen for the length of a rest. */}
+      <div class="py-3 border-b border-border-dim">
+        <div class="flex items-end justify-between gap-4">
+          <div class="min-w-0">
+            {/* The countdown targets the first completed-set bell or the
+                single failed-set bell; the label makes that distinction. */}
+            <div class="text-muted text-xs uppercase tracking-widest mb-1">
+              {REST_TYPE_LABEL[workout.restType]}
+            </div>
+            <div class="flex items-baseline gap-2">
+              <div
+                class={`font-mono text-4xl leading-none ${overrun() ? 'text-danger' : 'text-warn'}`}
+                data-testid="rest-timer-display"
+              >
+                {overrun() ? `+${formatDuration(-remaining())}` : formatDuration(remaining())}
               </div>
-              <div class="flex items-baseline gap-2">
-                <div
-                  class={`font-mono text-4xl leading-none ${overrun() ? 'text-danger' : 'text-warn'}`}
-                  data-testid="rest-timer-display"
-                >
-                  {overrun() ? `+${formatDuration(-remaining())}` : formatDuration(remaining())}
-                </div>
-                <div class="text-faint text-xs tracking-widest whitespace-nowrap">
-                  {overrun() ? 'OVER' : `LEFT OF ${formatDuration(target())}`}
-                </div>
+              <div class="text-faint text-xs tracking-widest whitespace-nowrap">
+                {overrun() ? 'OVER' : `LEFT OF ${formatDuration(target())}`}
               </div>
             </div>
-            <div class="flex gap-2 shrink-0">
-              <button
-                onClick={() => {
-                  trace('rest.extend', { by: BONUS_STEP, elapsed: elapsed() })
-                  setBonus(b => b + BONUS_STEP)
-                }}
-                aria-label="Add 30 seconds to this rest"
-                class="border border-border px-3 py-3 font-mono text-text-dim text-xs tracking-widest hover:border-accent hover:text-accent"
-              >
-                +30s
-              </button>
-              <button
-                onClick={() => { trace('rest.skip', { elapsed: elapsed() }); stopRest() }}
-                aria-label="SKIP REST"
-                class="border border-border px-5 py-3 font-mono text-text-dim text-xs tracking-widest hover:border-accent hover:text-accent"
-              >
-                SKIP
-              </button>
-            </div>
           </div>
-          {/* One depleting rule. Cheaper to read at arm's length than digits. */}
-          <div class="h-0.5 bg-border-dim mt-3">
-            <div
-              class={`h-full ${overrun() ? 'bg-danger' : 'bg-warn'}`}
-              style={{ width: `${progress() * 100}%` }}
-            />
+          <div class="flex gap-2 shrink-0">
+            <button
+              onClick={() => {
+                trace('rest.extend', { by: BONUS_STEP, elapsed: elapsed() })
+                setBonus(b => b + BONUS_STEP)
+              }}
+              aria-label="Add 30 seconds to this rest"
+              class="border border-border px-3 py-3 font-mono text-text-dim text-xs tracking-widest hover:border-accent hover:text-accent"
+            >
+              +30s
+            </button>
+            <button
+              onClick={() => { trace('rest.skip', { elapsed: elapsed() }); stopRest() }}
+              aria-label="SKIP REST"
+              class="border border-border px-5 py-3 font-mono text-text-dim text-xs tracking-widest hover:border-accent hover:text-accent"
+            >
+              SKIP
+            </button>
           </div>
-          <Show when={status().message}>
-            <div class="text-warn text-xs uppercase tracking-widest mt-2">{status().message}</div>
-          </Show>
         </div>
+        {/* One depleting rule. Cheaper to read at arm's length than digits. */}
+        <div class="h-0.5 bg-border-dim mt-3">
+          <div
+            class={`h-full ${overrun() ? 'bg-danger' : 'bg-warn'}`}
+            style={{ width: `${progress() * 100}%` }}
+          />
+        </div>
+        <Show when={status().message}>
+          <div class="text-warn text-xs uppercase tracking-widest mt-2">{status().message}</div>
+        </Show>
       </div>
     </Show>
   )

@@ -133,7 +133,7 @@ from source here.
 | **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `fixed` | `AccessoryLog.test.tsx` ×3, `HistoryEdit.test.tsx` ×5; 5 red at E1 |
 | **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `fixed` | `BandLoadControls.test.tsx` ×5; 6 of the file's 10 red at D1 |
 | **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
-| **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `open` | |
+| **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `fixed` | `Workout.test.tsx` ×3, all red at batch 4 |
 | **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×2, 1 red at C1 (the other guards the unchanged step and bounds) |
 | **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `open` | |
 | **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 6 `open`, 0 `wip`, 16 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 5 `open`, 0 `wip`, 17 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1634,7 +1634,7 @@ warmups as outstanding.
 
 ## C5 · Resting hides FINISH and section navigation
 
-**State:** `open` · **P2** · Sources: WF#5, CX#11 · Batch 5, after B1
+**State:** `fixed` · **P2** · Sources: WF#5, CX#11 · Batch 5, after B1
 
 ### Problem
 
@@ -1678,6 +1678,23 @@ navigation if that scroller is navigation's only implementation.
 During rest at mobile width (390×844), jump to a section and start or cancel finishing
 without stopping the timer first. The last content row is unobscured. Desktop (1280×900)
 likewise.
+
+### As built
+
+A second row, not a rearrangement: the countdown stacks **above** the session strip. The
+fixed shell moved out into `components/layout/BottomBar` — position, background and top
+border in one place — so neither row draws a bar of its own and they stop replacing each
+other. `SessionBar` no longer imports `workout-store` at all, which is what lets C7 reuse it
+from PT.
+
+The reserved space is unchanged at `pb-48` (12rem). The two rows together come to roughly
+8rem, so the existing padding already covers the taller case; it is the measurement that
+matters, not equal heights, and nothing was squeezed to preserve the old height.
+
+One existing test moved with the change. `sectionToggle` found any button whose text starts
+with a section's label, which used to be unambiguous only because the session bar was hidden
+during rest — it now also matches that block's segment link. It matches on `aria-expanded`,
+which is what a fold control actually is.
 
 ---
 
