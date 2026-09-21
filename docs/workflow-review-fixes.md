@@ -129,7 +129,7 @@ from source here.
 | **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×9, 7 red at A2; 15 existing finish tests updated to the new contract |
 | **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×2 red at `d222835` (`1/0` single, `2/0` combined) |
 | **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `open` | |
-| **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `open` | |
+| **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×3, `AccessoryLog.test.tsx` ×3; 4 red at C2 |
 | **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `fixed` | `AccessoryLog.test.tsx` ×3, `HistoryEdit.test.tsx` ×5; 5 red at E1 |
 | **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `open` | |
 | **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 12 `open`, 0 `wip`, 10 `fixed`.** Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 11 `open`, 0 `wip`, 11 `fixed`.** Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1300,7 +1300,7 @@ corresponding messages in `BandLoadControls.test.tsx`:
 
 ## C1 · Band settings sits on every lift's logging screen
 
-**State:** `open` · **P2** · Sources: UI#1, CX#13 · Batch 4
+**State:** `fixed` · **P2** · Sources: UI#1, CX#13 · Batch 4
 
 ### Problem
 
@@ -1379,6 +1379,18 @@ describes behaviour to **preserve**, not another bug. A `?.enabled` on top of
 
 `Workout.test.tsx` / `AccessoryLog.test.tsx` — an ordinary squat and an ordinary accessory render no band shortcut; an enabled band-assisted
 movement does; disabling the profile removes it and Settings still reaches it.
+
+### As built
+
+Gated as written, on `bandProfileFor` and never on a name, at all three sites; the Workout
+control also moved below `SaveFailureBanner`. The label is `BANDS`, which D1 then makes
+derived rather than passed.
+
+**One existing test changed with the policy.** `a band profile saved from an accessory
+reaches the exercise list` set a profile up for the first time *from the accessory header* —
+the entry point this item removes, since setting one up is what Settings is for. It now
+edits the profile of an exercise that already has one, which is the case the shortcut still
+serves, and still asserts the save reaches the exercise row and the live logger.
 
 ---
 

@@ -279,3 +279,41 @@ describe('the load separator carries exactly one unit', () => {
     expect(separatorText()).not.toMatch(/effective\s*lb/)
   })
 })
+
+// ── C1 ──────────────────────────────────────────────────────────────────────
+// Every accessory header carried a band shortcut, and a session logs several.
+describe('the accessory band shortcut is gated on the profile', () => {
+  afterEach(() => { cleanup(); clearSession() })
+
+  it('renders none for an ordinary accessory', () => {
+    addAccessory(accessory([]))
+    render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ ...TIMED, type: 'reps' }} />)
+
+    expect(screen.queryByRole('button', { name: /^Band settings for/ })).toBeNull()
+  })
+
+  it('renders one for a band-assisted accessory', () => {
+    addAccessory({ ...accessory([]), exerciseName: 'Pull-ups' })
+    render(() => (
+      <AccessoryLog
+        accessory={workout.activeAccessories[0]}
+        exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: defaultBandProfile('Pull-ups') }}
+      />
+    ))
+
+    expect(screen.getByRole('button', { name: 'Band settings for Pull-ups' })).toBeTruthy()
+  })
+
+  it('renders none when the profile is saved but switched off', () => {
+    const off: BandProfile = { ...defaultBandProfile('Pull-ups')!, enabled: false }
+    addAccessory({ ...accessory([]), exerciseName: 'Pull-ups' })
+    render(() => (
+      <AccessoryLog
+        accessory={workout.activeAccessories[0]}
+        exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: off }}
+      />
+    ))
+
+    expect(screen.queryByRole('button', { name: /^Band settings for/ })).toBeNull()
+  })
+})

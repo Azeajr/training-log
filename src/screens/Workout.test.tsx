@@ -2366,18 +2366,65 @@ it('persists effective main-lift load and the exact band setup across raw-load e
 // `exercises()` and does not refetch, so a save kept locally inside one
 // AccessoryLog was invisible to every other logger on the same exercise until a
 // reload — the two disagreed about whether bands were even on.
-it('a band profile saved from an accessory reaches the exercise list', async () => {
+it('a band profile edited from an accessory reaches the exercise list', async () => {
   startSession(BENCH)
-  await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+  // The shortcut is only offered for an exercise that already uses bands (C1),
+  // so setting one up for the first time goes through Settings. Editing the
+  // profile of one that does still belongs on the logging screen.
+  await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps', bandProfile: defaultBandProfile('Chinup')! })
   addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 150, loggedSets: [] })
   renderWorkout()
 
   fireEvent.click(await screen.findByRole('button', { name: 'Band settings for Chinup' }))
-  fireEvent.click(screen.getByRole('checkbox', { name: /Use raw load and bands/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Increase raw load' }))
   fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 
-  expect((await db.exercises.get(10))?.bandProfile).toMatchObject({ enabled: true, rawLoad: 191 })
+  expect((await db.exercises.get(10))?.bandProfile).toMatchObject({ enabled: true, rawLoad: 192 })
   // The logger follows the row it was saved to, without a reload.
   expect(await screen.findByRole('combobox', { name: 'band' })).toBeInTheDocument()
+})
+
+// ── C1 ──────────────────────────────────────────────────────────────────────
+// Bands apply to about two movements. The shortcut was rendered on every lift's
+// logging screen, every cross block and every accessory header — and above the
+// save-failure banner, so a write error was pushed down the page by a control
+// nobody on that screen wanted.
+describe('band shortcuts appear only where bands are used', () => {
+  it('renders none for an ordinary lift and an ordinary accessory', async () => {
+    startSession(BENCH)
+    await db.exercises.add({ id: 10, name: 'Chinup', type: 'reps' })
+    addAccessory({ exerciseId: 10, exerciseName: 'Chinup', tm: 50, calculatedWeight: 150, loggedSets: [] })
+    renderWorkout()
+    await screen.findByText('WARM UP')
+    await drain()
+
+    expect(screen.queryByRole('button', { name: /^Band settings for/ })).toBeNull()
+  })
+
+  it('renders one for a band-assisted lift, below the save-failure banner', async () => {
+    await db.lifts.update(1, { bandProfile: defaultBandProfile('Chin-ups')! })
+    startSession(BENCH)
+    renderWorkout()
+
+    const shortcut = await screen.findByRole('button', { name: 'Band settings for Bench' })
+    const banner = document.querySelector('[data-testid="save-failure-banner"]')
+    // Order matters even with no failure to show: the banner's slot is above.
+    if (banner) {
+      expect(banner.compareDocumentPosition(shortcut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+  })
+
+  it('drops the shortcut again when the profile is turned off', async () => {
+    await db.lifts.update(1, { bandProfile: defaultBandProfile('Chin-ups')! })
+    startSession(BENCH)
+    renderWorkout()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Band settings for Bench' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Use raw load and bands/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Band settings for Bench' })).toBeNull())
+    expect((await db.lifts.get(1))?.bandProfile).toMatchObject({ enabled: false })
+  })
 })
