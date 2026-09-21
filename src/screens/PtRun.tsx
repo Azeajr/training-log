@@ -30,6 +30,7 @@ import { useConfirmation } from '../hooks/use-confirmation'
 import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
 import Rule from '../components/layout/Rule'
+import BottomBar from '../components/layout/BottomBar'
 import AsyncErrorBox from '../components/ui/AsyncErrorBox'
 import FoldGlyph from '../components/ui/FoldGlyph'
 import SectionLabel from '../components/layout/SectionLabel'
@@ -243,7 +244,10 @@ export default function PtRun() {
         when={exercises().length > 0}
         fallback={<div class="p-4 md:p-8 font-mono text-muted text-sm tracking-widest uppercase">Loading…</div>}
       >
-        <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
+        {/* pb-32, not the `p-4` shorthand's padding: the action bar is fixed
+            above the nav, and without this the last exercise note sat under it
+            on a phone. */}
+        <div class="p-4 md:px-8 md:pt-8 pb-32 font-mono max-w-5xl mx-auto">
           <Rule label={routineName()} labelSuffix={`. ${doneCount()}/${total()}`} class="text-muted mb-4" />
 
           <button
@@ -348,23 +352,36 @@ export default function PtRun() {
           }}</For>
           </fieldset>
 
-          <div class="flex gap-2">
-            <button
-              onClick={() => void handleDiscard()}
-              disabled={finishing()}
-              class="flex-1 border border-border text-muted hover:border-danger hover:text-danger px-4 py-3 text-xs tracking-widest uppercase"
-            >
-              DISCARD
-            </button>
-            <button
-              onClick={() => void handleFinish()}
-              disabled={finishing()}
-              class="flex-1 border border-accent text-accent px-4 py-3 text-xs tracking-widest uppercase disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {groups().length > 1 ? 'FINISH SESSION' : 'FINISH'}
-            </button>
-          </div>
         </div>
+
+        {/* Fixed, because a multi-routine PT session is the longest scroll in
+            the app and this was the only logging screen where finishing meant
+            scrolling back to find the button. The count is session-wide, the
+            same aggregate the page heading shows. DISCARD stays secondary and
+            keeps its own confirmation. */}
+        <BottomBar>
+          <div class="flex items-center gap-3 py-2">
+            <span class="text-muted text-xs tracking-widest whitespace-nowrap shrink-0">
+              {doneCount()}/{total()} DONE
+            </span>
+            <div class="flex gap-2 flex-1 justify-end">
+              <button
+                onClick={() => void handleDiscard()}
+                disabled={finishing()}
+                class="border border-border text-muted hover:border-danger hover:text-danger px-3 py-2 text-xs tracking-widest uppercase disabled:opacity-40"
+              >
+                DISCARD
+              </button>
+              <button
+                onClick={() => void handleFinish()}
+                disabled={finishing()}
+                class="border border-accent text-accent px-3 py-2 text-xs tracking-widest uppercase disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {groups().length > 1 ? 'FINISH SESSION' : 'FINISH'}
+              </button>
+            </div>
+          </div>
+        </BottomBar>
       </Show>
     </Show>
   )

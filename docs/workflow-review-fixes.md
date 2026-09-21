@@ -135,7 +135,7 @@ from source here.
 | **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
 | **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `fixed` | `Workout.test.tsx` ×3, all red at batch 4 |
 | **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×2, 1 red at C1 (the other guards the unchanged step and bounds) |
-| **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `open` | |
+| **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×3, all red at C5 |
 | **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `open` | |
 | **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `open` | |
 | **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `fixed` | `PtRoutineEdit.test.tsx` ×9 red at A4, `pt-routine-draft.test.ts` ×13 (new helper) |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 5 `open`, 0 `wip`, 17 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 4 `open`, 0 `wip`, 18 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1761,7 +1761,7 @@ about restraint. Only the first is red against the old code, by construction.
 
 ## C7 · PtRun has no sticky action bar
 
-**State:** `open` · **P2** · Sources: UI#6, CX#12 · Batch 5
+**State:** `fixed` · **P2** · Sources: UI#6, CX#12 · Batch 5
 
 ### Problem
 
@@ -1795,6 +1795,22 @@ A fixed bottom bar reusing `SessionBar`'s shell and the `--nav-h` padding contra
 
 FINISH is reachable from the middle of a long multi-routine PT run without scrolling. The
 final notes field is unobscured. A save failure leaves a usable draft and a usable action bar.
+
+### As built
+
+The shared shell is `components/layout/BottomBar`, extracted by C5 an item earlier and
+store-free by construction — PT imports the shell and nothing else, so no part of
+`workout-store` or its rest state comes with it. `SessionBar` itself is not reused: PT's bar
+carries two actions and one aggregate count rather than a scrollable segment strip, and
+sharing the component would have meant a prop for each difference.
+
+The count is `doneCount()/total()`, the session-wide memos the page heading already shows,
+so a multi-routine run aggregates rather than reporting the routine in view. B2's capture
+already applies — the finish toast reads both counts before the clear, from batch 1.
+
+The page's bottom padding is `pb-32` and the shorthand `p-4 md:p-8` is split into
+`p-4 md:px-8 md:pt-8`, for the reason spelled out on the Workout screen: `md:p-8` is emitted
+after `pb-*` at equal specificity and silently resets it at desktop width.
 
 ---
 
