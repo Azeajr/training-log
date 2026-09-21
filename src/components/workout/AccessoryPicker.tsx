@@ -2,7 +2,15 @@ import { createSignal, onMount, For, Show } from 'solid-js'
 import { db } from '../../db/index'
 import { useSingleFlight } from '../../hooks/use-single-flight'
 import type { Exercise } from '../../types/domain'
-import { workout, addAccessory, toActiveAccessory } from '../../store/workout-store'
+import {
+  workout,
+  addAccessory,
+  accessoryHasWork,
+  removeAccessory,
+  toActiveAccessory,
+  type ActiveAccessory,
+} from '../../store/workout-store'
+import { useConfirmation } from '../../hooks/use-confirmation'
 import { accessoryWeight, ACCESSORY_SETS, ACCESSORY_REPS, DEFAULT_ACCESSORY_INCREMENT_LB } from '../../lib/calc'
 import { getLatestAccessoryTms } from '../../lib/training-max'
 import { groupByAssistanceSection, sectionForCategory, accessoryRecencyRanks, setAssistanceDefault, ASSISTANCE_SECTIONS, ASSISTANCE_SUGGESTION_SESSIONS, SECTION_LABEL, type AssistanceSlot } from '../../lib/assistance'
@@ -36,6 +44,7 @@ interface PickerRow {
 }
 
 export default function AccessoryPicker(props: Props) {
+  const { confirmWithChoice } = useConfirmation()
   // Both commit paths are async handlers wired straight to onClick, and both
   // write: SAVE appends an accessoryTrainingMaxes row, row-select adds to the
   // session. Three taps used to mean three of each.
@@ -90,8 +99,30 @@ export default function AccessoryPicker(props: Props) {
   //
   // In 'default' mode there is no live session, so a stale persisted session's
   // accessories must not disable rows in the Today picker.
+  //
+  // "Already added" means OCCUPIES A SLOT, not "is present anywhere". An
+  // exercise displaced from a fixed slot is retained as an extra and so is
+  // still in `activeAccessories` — reading presence alone greyed that row out
+  // and made swapping back impossible, which is the whole point of retaining it.
+  const occupiesASlot = (a: ActiveAccessory) =>
+    a.slot != null && (a.slot !== 'extra' || props.slot === 'extra')
+
   const alreadyAdded = (exerciseId: number) =>
-    props.mode !== 'default' && workout.activeAccessories.some(a => a.exerciseId === exerciseId)
+    props.mode !== 'default'
+    && workout.activeAccessories.some(a => a.exerciseId === exerciseId && occupiesASlot(a))
+
+  /** An entry kept from an earlier swap, offered back with what it is carrying. */
+  const retained = (exerciseId: number): ActiveAccessory | undefined =>
+    props.mode === 'default'
+      ? undefined
+      : workout.activeAccessories.find(a =>
+          a.exerciseId === exerciseId && !occupiesASlot(a) && accessoryHasWork(a))
+
+  const carriedLabel = (a: ActiveAccessory): string => {
+    const sets = a.loggedSets.length
+    if (sets > 0) return `${sets} logged set${sets === 1 ? '' : 's'}`
+    return 'a note'
+  }
 
   const grouped = () => groupByAssistanceSection(rows())
   // For a fixed-slot pick, only that section's exercises are offered. Previously
@@ -112,7 +143,14 @@ export default function AccessoryPicker(props: Props) {
     >
       {/* uppercase to match how the name renders once logged (AccessoryLog
           header) — the exercise should look the same before and after picking */}
-      <span class="uppercase tracking-widest">{row.exercise.name}{alreadyAdded(row.exercise.id!) ? ' ✓' : ''}</span>
+      <span class="uppercase tracking-widest">
+        {row.exercise.name}{alreadyAdded(row.exercise.id!) ? ' ✓' : ''}
+        {/* What a retained row is carrying, so moving it back is an informed
+            choice rather than a bare name among names. */}
+        <Show when={retained(row.exercise.id!)}>
+          {a => <span class="text-warn normal-case tracking-normal"> · {carriedLabel(a())}</span>}
+        </Show>
+      </span>
       <span class="text-muted">
         {row.calculatedWeight != null ? `${ACCESSORY_SETS}x${ACCESSORY_REPS} @ ${row.calculatedWeight}lb` : 'NOT SET'}
       </span>
@@ -148,12 +186,39 @@ export default function AccessoryPicker(props: Props) {
     setSettingTm(exercise)
   }
 
+  /**
+   * The exercise this pick would displace, if it has anything worth keeping.
+   *
+   * `addAccessory` retains such an entry as an extra on its own. Discarding it
+   * is the destructive choice and so is the one that has to be asked for.
+   */
+  const displaced = (exerciseId: number): ActiveAccessory | undefined => {
+    if (props.mode === 'default' || props.slot === 'extra') return undefined
+    return workout.activeAccessories.find(a =>
+      a.slot === props.slot && a.exerciseId !== exerciseId && accessoryHasWork(a))
+  }
+
   const handleSelect = async (row: PickerRow) => {
     if (alreadyAdded(row.exercise.id!)) return
     if (row.tm == null) {
       openTmSheet(row.exercise)
       return
     }
+
+    // Three outcomes, not two: dismissing the dialog resolves 'cancel', and on
+    // a two-button question Escape would land on whichever option cancel maps
+    // to. Neither keeping nor discarding is what a dismissal means, so it
+    // abandons the swap instead and nothing is lost either way.
+    const outgoing = displaced(row.exercise.id!)
+    if (outgoing) {
+      const choice = await confirmWithChoice(
+        `${row.exercise.name} replaces ${outgoing.exerciseName}. Keep its ${carriedLabel(outgoing)} as extra work?`,
+        { confirmLabel: 'KEEP', secondaryLabel: 'DISCARD', cancelLabel: 'BACK' },
+      )
+      if (choice === 'cancel') return
+      if (choice === 'secondary') removeAccessory(outgoing.exerciseId)
+    }
+
     await persistDefault(row.exercise.id!)
     if (props.mode !== 'default') {
       addAccessory(toActiveAccessory({

@@ -1,10 +1,26 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, it, expect } from 'vitest'
+import type { JSX } from 'solid-js'
 import { render, screen } from '@solidjs/testing-library'
 import { db } from '../../db/index'
 import { __resetForTest } from '../../db/sqlite-client'
 import { clearSession } from '../../store/workout-store'
 import AccessoryPicker from './AccessoryPicker'
+import { ConfirmationContext, createConfirmation } from '../../hooks/use-confirmation'
+import ConfirmationDialog from '../modals/ConfirmationDialog'
+
+/**
+ * The picker asks before discarding a displaced accessory's work, so it needs
+ * the confirmation context every screen that renders it already provides.
+ */
+function renderPicker(element: () => JSX.Element) {
+  return render(() => (
+    <ConfirmationContext.Provider value={createConfirmation()}>
+      {element()}
+      <ConfirmationDialog />
+    </ConfirmationContext.Provider>
+  ))
+}
 
 beforeEach(async () => {
   await __resetForTest()
@@ -62,7 +78,7 @@ describe('AccessoryPicker — "used for this lift" recency window', () => {
       cycleId: 1, liftId: LIFT_ID, week: 1, date: new Date(2026, 0, 4), notes: null, status: 'pending',
     })
 
-    render(() => <AccessoryPicker slot="pull" liftId={LIFT_ID} onClose={() => {}} />)
+    renderPicker(() => <AccessoryPicker slot="pull" liftId={LIFT_ID} onClose={() => {}} />)
     await screen.findByText('Used for this lift')
 
     // All three completed-session accessories are suggested, newest-first; the
@@ -80,7 +96,7 @@ describe('AccessoryPicker — "used for this lift" recency window', () => {
       cycleId: 1, liftId: LIFT_ID, week: 1, date: new Date(2026, 0, 5), notes: null, status: 'skipped',
     })
 
-    render(() => <AccessoryPicker slot="pull" liftId={LIFT_ID} onClose={() => {}} />)
+    renderPicker(() => <AccessoryPicker slot="pull" liftId={LIFT_ID} onClose={() => {}} />)
     await screen.findByText('Used for this lift')
 
     expect(usedGroupNames()).toContain('Bicep Curls')
@@ -94,7 +110,7 @@ describe('AccessoryPicker — "used for this lift" recency window', () => {
 // time, so it could not see an add made by the previous tap.
 describe('AccessoryPicker single flight', () => {
   const open = (slot: 'push' | 'pull' | 'extra' = 'pull') =>
-    render(() => (
+    renderPicker(() => (
       <AccessoryPicker
         liftId={LIFT_ID} slot={slot} mode="session"
         onClose={() => {}} onSelected={() => {}}
@@ -142,7 +158,7 @@ describe('AccessoryPicker single flight', () => {
 describe('AccessoryPicker TM sub-sheet buffer', () => {
   it('does not carry a dialled TM over to a different exercise (F54)', async () => {
     const { chinups, barbell } = await seedPullExercises()
-    render(() => (
+    renderPicker(() => (
       <AccessoryPicker
         liftId={LIFT_ID} slot="pull" mode="session"
         onClose={() => {}} onSelected={() => {}}
@@ -171,5 +187,136 @@ describe('AccessoryPicker TM sub-sheet buffer', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].weight).toBe(0)
     expect(await db.accessoryTrainingMaxes.where('exerciseId').equals(chinups).toArray()).toHaveLength(0)
+  })
+})
+
+// ── A2 ──────────────────────────────────────────────────────────────────────
+// Replacing a fixed slot's occupant used to discard its logged sets outright.
+// The store now keeps that work as an extra — but the picker decided "already
+// added" by presence alone, so a retained exercise was greyed out and the swap
+// back could not be performed at all. The store tests call `addAccessory`
+// directly and pass either way; only this one sees the feature is unusable.
+describe('AccessoryPicker — swapping a fixed slot', () => {
+  const openPush = () =>
+    renderPicker(() => (
+      <AccessoryPicker
+        liftId={LIFT_ID} slot="push" mode="session"
+        onClose={() => {}} onSelected={() => {}}
+      />
+    ))
+
+  async function seedPushPair() {
+    const dips = await db.exercises.add({ name: 'Dips', type: 'reps', category: 'push' })
+    const cgb = await db.exercises.add({ name: 'Close-Grip Bench', type: 'reps', category: 'push' })
+    for (const exerciseId of [dips, cgb]) {
+      await db.accessoryTrainingMaxes.add({ exerciseId, weight: 100, incrementLb: 5, setAt: new Date() })
+    }
+    return { dips, cgb }
+  }
+
+  const settle = () => new Promise(r => setTimeout(r, 30))
+
+  it('offers a retained exercise back, saying what it is carrying', async () => {
+    const { workout, addAccessory, logAccessorySet } = await import('../../store/workout-store')
+    const { dips, cgb } = await seedPushPair()
+
+    addAccessory({ exerciseId: dips, exerciseName: 'Dips', tm: 100, calculatedWeight: 60, loggedSets: [], slot: 'push' })
+    logAccessorySet(dips, { setNumber: 1, weight: 60, reps: 8 })
+    addAccessory({ exerciseId: cgb, exerciseName: 'Close-Grip Bench', tm: 100, calculatedWeight: 60, loggedSets: [], slot: 'push' })
+
+    const view = openPush()
+    const row = await screen.findByRole('button', { name: /Dips/ })
+    // Selectable, and it says what moving it back would bring with it.
+    expect(row).not.toBeDisabled()
+    expect(row.textContent).toContain('1 logged set')
+    // The current occupant is the one that reads as taken.
+    expect(await screen.findByRole('button', { name: /Close-Grip Bench/ })).toBeDisabled()
+
+    row.click()
+    await settle()
+
+    const entries = workout.activeAccessories.filter(a => a.exerciseId === dips)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ slot: 'push' })
+    expect(entries[0].loggedSets).toHaveLength(1)
+    view.unmount()
+  })
+
+  it('asks before a swap that would displace logged work, and KEEP retains it', async () => {
+    const { workout, addAccessory, logAccessorySet } = await import('../../store/workout-store')
+    const { dips, cgb } = await seedPushPair()
+
+    addAccessory({ exerciseId: dips, exerciseName: 'Dips', tm: 100, calculatedWeight: 60, loggedSets: [], slot: 'push' })
+    logAccessorySet(dips, { setNumber: 1, weight: 60, reps: 8 })
+
+    const view = openPush()
+    ;(await screen.findByRole('button', { name: /Close-Grip Bench/ })).click()
+
+    await screen.findByText(/replaces Dips/)
+    expect(document.body.textContent).toContain('1 logged set')
+    ;(await screen.findByRole('button', { name: 'KEEP' })).click()
+    await settle()
+
+    expect(workout.activeAccessories.find(a => a.exerciseId === dips))
+      .toMatchObject({ slot: 'extra' })
+    expect(workout.activeAccessories.find(a => a.exerciseId === cgb))
+      .toMatchObject({ slot: 'push' })
+    view.unmount()
+  })
+
+  it('discards the displaced work only when that is chosen outright', async () => {
+    const { workout, addAccessory, logAccessorySet } = await import('../../store/workout-store')
+    const { dips, cgb } = await seedPushPair()
+
+    addAccessory({ exerciseId: dips, exerciseName: 'Dips', tm: 100, calculatedWeight: 60, loggedSets: [], slot: 'push' })
+    logAccessorySet(dips, { setNumber: 1, weight: 60, reps: 8 })
+
+    const view = openPush()
+    ;(await screen.findByRole('button', { name: /Close-Grip Bench/ })).click()
+    await screen.findByText(/replaces Dips/)
+    ;(await screen.findByRole('button', { name: 'DISCARD' })).click()
+    await settle()
+
+    expect(workout.activeAccessories.map(a => a.exerciseId)).toEqual([cgb])
+    view.unmount()
+  })
+
+  /**
+   * Dismissing the dialog is neither answer. On a two-button question it would
+   * have to land on one of them, and landing on "discard" would destroy logged
+   * work by pressing Escape.
+   */
+  it('abandons the swap when the dialog is dismissed', async () => {
+    const { workout, addAccessory, logAccessorySet } = await import('../../store/workout-store')
+    const { dips } = await seedPushPair()
+
+    addAccessory({ exerciseId: dips, exerciseName: 'Dips', tm: 100, calculatedWeight: 60, loggedSets: [], slot: 'push' })
+    logAccessorySet(dips, { setNumber: 1, weight: 60, reps: 8 })
+
+    const view = openPush()
+    ;(await screen.findByRole('button', { name: /Close-Grip Bench/ })).click()
+    await screen.findByText(/replaces Dips/)
+    ;(await screen.findByRole('button', { name: 'BACK' })).click()
+    await settle()
+
+    expect(workout.activeAccessories.map(a => a.exerciseId)).toEqual([dips])
+    expect(workout.activeAccessories[0]).toMatchObject({ slot: 'push' })
+    expect(workout.activeAccessories[0].loggedSets).toHaveLength(1)
+    view.unmount()
+  })
+
+  it('does not ask when the displaced exercise recorded nothing', async () => {
+    const { workout, addAccessory } = await import('../../store/workout-store')
+    const { dips, cgb } = await seedPushPair()
+
+    addAccessory({ exerciseId: dips, exerciseName: 'Dips', tm: 100, calculatedWeight: 60, loggedSets: [], slot: 'push' })
+
+    const view = openPush()
+    ;(await screen.findByRole('button', { name: /Close-Grip Bench/ })).click()
+    await settle()
+
+    expect(screen.queryByText(/replaces Dips/)).toBeNull()
+    expect(workout.activeAccessories.map(a => a.exerciseId)).toEqual([cgb])
+    view.unmount()
   })
 })

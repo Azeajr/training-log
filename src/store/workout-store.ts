@@ -240,14 +240,52 @@ export function toActiveAccessory(
   return { ...pick, loggedSets: [], slot }
 }
 
+/**
+ * Whether an accessory records anything a swap would destroy.
+ *
+ * Notes count as much as sets. `completeSession` saves accessory notes
+ * independently of them, because "wanted to try this, ran out of time" is real
+ * work and the only record of it.
+ */
+export const accessoryHasWork = (a: ActiveAccessory): boolean =>
+  a.loggedSets.length > 0 || !!a.notes?.trim()
+
+/**
+ * Put an exercise in a slot.
+ *
+ * A fixed slot (push/pull/legs_core) holds exactly one exercise, so picking
+ * again displaces the occupant. It used to be filtered out of the list
+ * outright, taking its logged sets and its note with it, with no warning and no
+ * undo. Real work is demoted to `extra` instead; an untouched selection is
+ * simply dropped.
+ *
+ * Every entry here is addressed elsewhere by exercise id through Solid's store
+ * PREDICATE form, which applies to EVERY match rather than the first. So an
+ * exercise already present is MOVED, never pushed a second time: two entries
+ * for one exercise would make `logAccessorySet` write two sets and
+ * `editAccessorySet` rewrite both. That reconciliation is what makes retaining
+ * anything safe, not a refinement of it.
+ */
 export function addAccessory(accessory: ActiveAccessory) {
   setWorkout('activeAccessories', (prev) => {
-    // A fixed slot (push/pull/legs_core) holds exactly one exercise:
-    // picking again replaces the current occupant. Extras (and legacy rows with
-    // no slot) just append.
     const isFixedSlot = accessory.slot != null && accessory.slot !== 'extra'
-    const kept = isFixedSlot ? prev.filter((a) => a.slot !== accessory.slot) : prev
-    return [...kept, accessory]
+
+    // Re-selecting the current occupant is a no-op, not a reset. `existing` is
+    // tested explicitly: a legacy accessory carries no slot, so `existing?.slot`
+    // and `accessory.slot` are both undefined when there is no existing entry
+    // at all, and the optional chain would call every such add a no-op.
+    const existing = prev.find((a) => a.exerciseId === accessory.exerciseId)
+    if (existing !== undefined && existing.slot === accessory.slot) return prev
+
+    const kept = prev.flatMap((a) => {
+      if (a.exerciseId === accessory.exerciseId) return []
+      if (!isFixedSlot || a.slot !== accessory.slot) return [a]
+      return accessoryHasWork(a) ? [{ ...a, slot: 'extra' as const }] : []
+    })
+
+    // What the entry already holds beats the picker's blank: the incoming
+    // object is freshly built and carries no sets, no note and no band load.
+    return [...kept, existing ? { ...existing, slot: accessory.slot } : accessory]
   })
 }
 

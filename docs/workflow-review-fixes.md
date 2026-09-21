@@ -122,7 +122,7 @@ from source here.
 | ID | Pri | Area | Sources | Primary file | State | Evidence |
 |---|---|---|---|---|---|---|
 | **A1** | P1 | PT data loss | EF#1 · CX#1 | `src/lib/pt.ts` | `fixed` | 11 tests red at `d222835`: `pt.test.ts` ×4, `PtSessionEditor.test.tsx` ×4 (new file), `export-import.test.ts` ×2, `pt-set-actuals.test.ts` ×1 |
-| **A2** | P1 | Workout data loss | WF#1 · CX#2 | `src/store/workout-store.ts` | `open` | |
+| **A2** | P1 | Workout data loss | WF#1 · CX#2 | `src/store/workout-store.ts` | `fixed` | 11 tests red at `e52c562`: `workout-store.test.ts` ×6, `AccessoryPicker.test.tsx` ×5 |
 | **A3** | P2 | PT draft model | UI#3 · EF#2 · UI#10 · CX#3/#4 | `src/components/pt/PtSetList.tsx` | `fixed` | 13 tests red at B2: `PtSetList.test.tsx` ×9 (new file), `PtRun.test.tsx` ×3, `PtSessionEditor.test.tsx` ×1 |
 | **A4** | P2 | PT draft model | EF#3 · CX#5 | `src/store/pt-store.ts` | `fixed` | `pt-store.test.ts` ×6 red at A5, ×2 more guarding behaviour that must not regress |
 | **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `fixed` | `PT.test.tsx` ×5; 4 red at A3, the 5th guards the save-error behaviour A5 must not break |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
 
-**Totals: 22 items — 16 `open`, 0 `wip`, 6 `fixed`.** Batches 1 and 2 are complete.
+**Totals: 22 items — 15 `open`, 0 `wip`, 7 `fixed`.** Batches 1 and 2 are complete.
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -393,7 +393,7 @@ Verified by reverting the migration into a file copy — it fails with
 
 ## A2 · Swapping a fixed assistance slot discards its logged sets
 
-**State:** `open` · **P1** · Sources: WF#1, CX#2 · Batch 3
+**State:** `fixed` · **P1** · Sources: WF#1, CX#2 · Batch 3
 
 ### Problem
 
@@ -529,6 +529,34 @@ Discarding stays an explicit action. In `AccessoryPicker`, when the outgoing occ
 
 Log A, swap to B, log B, swap back, reload, finish. No duplicate sets in history or export.
 Re-selecting the current occupant does not reset it.
+
+### As built
+
+The store change is as written, with `worthKeeping` exported as `accessoryHasWork` so the
+picker can ask the same question. Two things differ:
+
+- **The displacement prompt has three outcomes, not two.** `confirmWithChoice` already
+  exists for exactly this: `KEEP` retains as an extra, `DISCARD` removes, and dismissing the
+  dialog resolves `cancel`, which abandons the swap. On the plan's two-button question,
+  Escape would have to land on one of the answers — and landing on "discard" means pressing
+  Escape destroys logged work. Neither answer is what a dismissal means, so it now means
+  neither.
+- **`existing` is tested explicitly, not through `?.`.** `existing?.slot === accessory.slot`
+  reads `undefined === undefined` as true for a legacy accessory with no slot when there is
+  no existing entry at all, which made every such add a silent no-op. The base test
+  `appends accessory to activeAccessories` caught it immediately.
+
+`AccessoryPicker.test.tsx` now renders through a `ConfirmationContext.Provider`; the picker
+needs the context every screen that mounts it already supplies.
+
+The **open sub-decision** is resolved as the plan recommended: a re-selected entry keeps its
+own `tm` and `calculatedWeight` rather than the picker's fresh ones, so moving an exercise
+back cannot silently re-price work already logged under the old numbers. Revisit only if a
+mid-session TM edit turns out to matter in practice.
+
+Test 5's dependency was verified directly: reverting only `alreadyAdded` to its presence
+check — keeping every other part of this change — makes
+`offers a retained exercise back` fail. That is the test the store-level ones cannot give.
 
 ---
 
