@@ -231,6 +231,112 @@ describe('addAccessory', () => {
     addAccessory({ ...makeAcc(), exerciseId: 2, slot: 'extra' })
     expect(workout.activeAccessories.filter(a => a.slot === 'extra')).toHaveLength(2)
   })
+
+  /*
+   * A2. Replacing a fixed slot's occupant used to filter it out of the list
+   * entirely, taking its logged sets and its note with it — no warning, no undo.
+   */
+
+  const dips = () => ({ ...makeAcc(), exerciseId: 1, exerciseName: 'Dips', slot: 'push' as const })
+  const cgb = () => ({ ...makeAcc(), exerciseId: 2, exerciseName: 'Close-Grip Bench', slot: 'push' as const })
+  const byId = (exerciseId: number) => workout.activeAccessories.filter(a => a.exerciseId === exerciseId)
+
+  it('keeps a displaced exercise that has logged work, as an extra', () => {
+    startSession(SESSION)
+    addAccessory(dips())
+    logAccessorySet(1, { setNumber: 1, weight: 50, reps: 8 })
+    addAccessory(cgb())
+
+    const retained = workout.activeAccessories.find(a => a.exerciseId === 1)
+    expect(retained).toMatchObject({ slot: 'extra', exerciseName: 'Dips' })
+    expect(retained!.loggedSets).toHaveLength(1)
+    expect(workout.activeAccessories.find(a => a.exerciseId === 2)?.slot).toBe('push')
+  })
+
+  it('drops a displaced exercise that recorded nothing', () => {
+    startSession(SESSION)
+    addAccessory(dips())
+    addAccessory(cgb())
+
+    expect(byId(1)).toHaveLength(0)
+    expect(workout.activeAccessories).toHaveLength(1)
+  })
+
+  it('keeps a displaced exercise that has only a note, and keeps it once', () => {
+    startSession(SESSION)
+    addAccessory(dips())
+    setAccessoryNotes(1, 'shoulder felt off')
+    addAccessory(cgb())
+
+    expect(byId(1)).toHaveLength(1)
+    expect(byId(1)[0]).toMatchObject({ slot: 'extra', notes: 'shoulder felt off' })
+  })
+
+  /**
+   * The trap that makes the obvious fix unsafe. Every accessory mutator
+   * addresses by exercise id with Solid's PREDICATE form, which applies to every
+   * match — so a second entry for one exercise means one log writes two sets and
+   * one edit rewrites both. Moving rather than pushing is a precondition of
+   * retaining anything at all, not a follow-up.
+   */
+  it('never holds two entries for one exercise across a swap and back', () => {
+    startSession(SESSION)
+    addAccessory(dips())
+    logAccessorySet(1, { setNumber: 1, weight: 50, reps: 8 })
+    addAccessory(cgb())
+    logAccessorySet(2, { setNumber: 1, weight: 95, reps: 5 })
+    addAccessory(dips())
+
+    const ids = workout.activeAccessories.map(a => a.exerciseId)
+    expect(ids).toHaveLength(new Set(ids).size)
+
+    // Each exercise holds its own work, and only its own.
+    expect(byId(1)[0]).toMatchObject({ slot: 'push' })
+    expect(byId(1)[0].loggedSets).toEqual([{ setNumber: 1, weight: 50, reps: 8 }])
+    expect(byId(2)[0]).toMatchObject({ slot: 'extra' })
+    expect(byId(2)[0].loggedSets).toEqual([{ setNumber: 1, weight: 95, reps: 5 }])
+
+    // And a log lands once, not once per entry.
+    logAccessorySet(1, { setNumber: 2, weight: 50, reps: 7 })
+    expect(byId(1)[0].loggedSets).toHaveLength(2)
+  })
+
+  it('moves a retained extra back into its slot rather than duplicating it', () => {
+    startSession(SESSION)
+    addAccessory(dips())
+    setAccessoryNotes(1, 'wide grip')
+    logAccessorySet(1, { setNumber: 1, weight: 50, reps: 8 })
+    addAccessory(cgb())
+    // The picker offers a blank ActiveAccessory; what the entry already holds
+    // wins over it.
+    addAccessory({ ...makeAcc(), exerciseId: 1, exerciseName: 'Dips', slot: 'push' })
+
+    expect(byId(1)).toHaveLength(1)
+    expect(byId(1)[0]).toMatchObject({ slot: 'push', notes: 'wide grip' })
+    expect(byId(1)[0].loggedSets).toHaveLength(1)
+  })
+
+  it('leaves the current occupant alone when it is picked again', () => {
+    startSession(SESSION)
+    addAccessory(dips())
+    logAccessorySet(1, { setNumber: 1, weight: 50, reps: 8 })
+    const before = workout.activeAccessories
+    addAccessory({ ...makeAcc(), exerciseId: 1, exerciseName: 'Dips', slot: 'push' })
+
+    expect(workout.activeAccessories).toBe(before)
+    expect(byId(1)[0].loggedSets).toHaveLength(1)
+  })
+
+  it('moves an exercise between fixed slots without leaving a copy behind', () => {
+    startSession(SESSION)
+    addAccessory({ ...makeAcc(), exerciseId: 1, slot: 'push' })
+    logAccessorySet(1, { setNumber: 1, weight: 50, reps: 8 })
+    addAccessory({ ...makeAcc(), exerciseId: 1, slot: 'pull' })
+
+    expect(byId(1)).toHaveLength(1)
+    expect(byId(1)[0]).toMatchObject({ slot: 'pull' })
+    expect(byId(1)[0].loggedSets).toHaveLength(1)
+  })
 })
 
 describe('logAccessorySet', () => {
