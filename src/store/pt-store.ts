@@ -362,9 +362,21 @@ export function removePtSet(ptExerciseId: number, setNumber: number, routineId =
  * rule lives here once and both callers apply it.
  */
 
-export function applyPtSetPatch(sets: PtRunSet[], setNumber: number, patch: Partial<PtRunSet>): PtRunSet[] {
+/*
+ * Generic over the set shape, because the historical editor's draft is a
+ * `PtRunSet` plus the kinds the set was recorded under, and those have to
+ * survive a patch, an insert and — above all — a removal, which renumbers every
+ * set after it. Recovering them afterwards by set number would hand a survivor
+ * the removed set's context.
+ *
+ * A freshly made set is cast to T: it carries only `done` and whatever
+ * `carriedOnly` gives it, which is a complete T for every draft shape here
+ * because everything a draft adds is optional. The caller materializes the rest.
+ */
+
+export function applyPtSetPatch<T extends PtRunSet>(sets: T[], setNumber: number, patch: Partial<T>): T[] {
   const next = sets.map(set => ({ ...set }))
-  while (next.length < setNumber) next.push(emptySet())
+  while (next.length < setNumber) next.push(emptySet() as T)
   Object.assign(next[setNumber - 1], patch)
 
   const carried = carriedOnly(patch)
@@ -374,10 +386,10 @@ export function applyPtSetPatch(sets: PtRunSet[], setNumber: number, patch: Part
   return next
 }
 
-export const withPtSetAdded = (sets: PtRunSet[]): PtRunSet[] =>
-  [...sets.map(set => ({ ...set })), { ...carriedOnly(sets[sets.length - 1] ?? {}), done: false }]
+export const withPtSetAdded = <T extends PtRunSet>(sets: T[]): T[] =>
+  [...sets.map(set => ({ ...set })), { ...carriedOnly(sets[sets.length - 1] ?? {}), done: false } as T]
 
-export const withPtSetRemoved = (sets: PtRunSet[], setNumber: number): PtRunSet[] =>
+export const withPtSetRemoved = <T extends PtRunSet>(sets: T[], setNumber: number): T[] =>
   setNumber < 1 || setNumber > sets.length
     ? sets
     : sets.filter((_, i) => i !== setNumber - 1).map(set => ({ ...set }))

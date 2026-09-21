@@ -368,6 +368,9 @@ export interface PtRunCheck {
   equipmentHeightUnit?: 'in' | 'cm' | null
   /** Set by the writers below; see `PtSetCheck.recorded`. */
   recorded?: boolean
+  /** What the values above mean; see `PtSetCheck.measure`. */
+  measure?: PtMeasure | null
+  resistanceKind?: PtResistanceKind | null
 }
 
 /** The prescription fields a set resolves against. */
@@ -376,8 +379,19 @@ type PtPrescription = Pick<PtExercise,
   'resistanceKind' | 'resistanceWeight' | 'resistanceBand' | 'equipmentHeight' | 'equipmentHeightUnit'>
 
 /** A per-set override. Anything left undefined falls back to the prescription. */
-// 'recorded' is provenance, not one of the values a set resolves.
-type PtSetActuals = Partial<Omit<PtRunCheck, 'ptExerciseId' | 'setNumber' | 'done' | 'recorded'>>
+// 'recorded' is provenance and the two kinds are context. Neither is one of the
+// values a set resolves — they say which of those values apply.
+export type PtSetActuals =
+  Partial<Omit<PtRunCheck, 'ptExerciseId' | 'setNumber' | 'done' | 'recorded' | 'measure' | 'resistanceKind'>>
+
+/** The context a set was recorded under, carried beside its actuals. */
+export interface PtRecordedKinds {
+  measure?: PtMeasure | null
+  resistanceKind?: PtResistanceKind | null
+}
+
+/** A set as an editor holds it: every actual materialized, plus done-ness. */
+export type PtDraftSet = PtSetActuals & { done: boolean }
 
 /**
  * Pin what a set actually was, resolving anything the user did not override
@@ -409,12 +423,101 @@ export function resolvePtCheck(exercise: PtPrescription, actuals: PtSetActuals =
 }
 
 /**
- * What a recorded set was, for display.
+ * A recorded set, read back as it was stored.
  *
- * A row written before PT recorded anything but a tick has every actual null;
- * those and only those fall back to the exercise's current prescription, which
- * is the best available answer for a run that never captured its own.
+ * Unlike `resolvePtCheck`, this never nulls a field because the CURRENT
+ * prescription has no room for it. A row is a record of what happened; the
+ * routine it was done under is editable and its edits are not retroactive.
+ *
+ * The distinction is not cosmetic. The run editor writes back what it read, so
+ * a read that re-resolved did not merely describe an old run wrongly — it
+ * deleted it, on any save, including a notes-only one.
  */
+export function recordedPtCheckActuals(check: PtSetActuals): Required<PtSetActuals> {
+  return {
+    reps: check.reps ?? null,
+    seconds: check.seconds ?? null,
+    distance: check.distance ?? null,
+    distanceUnit: check.distanceUnit ?? null,
+    weight: check.weight ?? null,
+    band: check.band ?? null,
+    equipmentHeight: check.equipmentHeight ?? null,
+    equipmentHeightUnit: check.equipmentHeightUnit ?? null,
+  }
+}
+
+/** The eight actual fields of an editor draft, ready to write. Never re-resolved. */
+export function recordedPtRunSetFields(set: PtDraftSet & PtRecordedKinds): Required<PtSetActuals> & PtRecordedKinds {
+  return {
+    ...recordedPtCheckActuals(set),
+    // Absent stays absent. A legacy row that never recorded its context does not
+    // acquire today's routine as history just because the run was saved again.
+    measure: set.measure ?? null,
+    resistanceKind: set.resistanceKind ?? null,
+  }
+}
+
+/**
+ * The measure and resistance kind a recorded set is read under.
+ *
+ * The row's own when it has them. A row written before those columns existed is
+ * inferred from what it stored, and only where that is unambiguous — exactly one
+ * of reps/seconds/distance names the measure, exactly one of weight/band names
+ * the resistance. Anything else falls back to the prescription, which can be
+ * wrong about which fields to SHOW but never drops a value the row holds.
+ */
+export function ptRecordedKinds(
+  check: PtSetActuals & PtRecordedKinds,
+  exercise: PtPrescription,
+): { measure: PtMeasure; resistanceKind: PtResistanceKind } {
+  const only = <T,>(candidates: readonly (readonly [T, unknown])[]): T | null => {
+    const filled = candidates.filter(([, value]) => value != null)
+    return filled.length === 1 ? filled[0][0] : null
+  }
+  return {
+    measure: check.measure ?? only<PtMeasure>([
+      ['reps', check.reps], ['time', check.seconds], ['distance', check.distance],
+    ]) ?? exercise.measure,
+    // Both null is genuinely ambiguous — 'none', or a set of a loaded exercise
+    // dropped to bodyweight — so it keeps the prescription's answer.
+    resistanceKind: check.resistanceKind ?? only<PtResistanceKind>([
+      ['weight', check.weight], ['band', check.band],
+    ]) ?? exercise.resistanceKind,
+  }
+}
+
+/** A prescription as one recorded set should be read against it. */
+export function ptRecordedContext<T extends PtPrescription>(
+  check: PtSetActuals & PtRecordedKinds,
+  exercise: T,
+): T {
+  return { ...exercise, ...ptRecordedKinds(check, exercise) }
+}
+
+/**
+ * How one set of a set list is read: what it means, and what it holds.
+ *
+ * The two run kinds differ in both halves and `PtSetList` renders both, so the
+ * component takes the reading rather than deciding it. A live set's blank field
+ * still means "as prescribed" and resolves; a recorded set is already
+ * materialized and must never be resolved again, under any prescription.
+ */
+export interface PtSetReading {
+  context: PtExercise
+  values: Required<PtSetActuals>
+}
+
+/** A set of a run in progress, against the routine as it stands. */
+export const readLivePtSet = (exercise: PtExercise, set: PtDraftSet): PtSetReading =>
+  ({ context: exercise, values: resolvePtCheck(exercise, set) })
+
+/** A set of a finished run, under the kinds it was recorded with. */
+export const readRecordedPtSet = (
+  exercise: PtExercise,
+  set: PtDraftSet & PtRecordedKinds,
+): PtSetReading =>
+  ({ context: ptRecordedContext(set, exercise), values: recordedPtCheckActuals(set) })
+
 /**
  * A recorded set's values broken into the pieces a readout needs.
  *
@@ -443,7 +546,10 @@ export function ptActualParts(
 
 /** One recorded set on one line: "10 lb . 10 reps . 6 in high". */
 export function formatPtCheck(check: PtRunCheck, exercise: PtPrescription): string {
-  const parts = ptActualParts(exercise, ptCheckActuals(check, exercise))
+  // Described under the kinds it was DONE under, not the ones the routine
+  // carries today — otherwise a step-up taken to bodyweight reads its old
+  // loaded sets back as bodyweight.
+  const parts = ptActualParts(ptRecordedContext(check, exercise), ptCheckActuals(check, exercise))
   return [
     parts.weight == null ? '' : `${parts.weight} lb`,
     parts.target,
@@ -463,7 +569,7 @@ export function formatPtCheck(check: PtRunCheck, exercise: PtPrescription): stri
  * history detail and in the CSV export, so editing a routine rewrote the past.
  */
 export function ptCheckActuals(check: PtRunCheck, exercise: PtPrescription): Required<PtSetActuals> {
-  return isRecordedPtCheck(check) ? resolvePtCheck(exercise, check) : resolvePtCheck(exercise)
+  return isRecordedPtCheck(check) ? recordedPtCheckActuals(check) : resolvePtCheck(exercise)
 }
 
 /**
@@ -534,6 +640,8 @@ async function writePtRun(db: TrainingDB, run: PtRunInput): Promise<number> {
     equipmentHeight: c.equipmentHeight ?? null,
     equipmentHeightUnit: c.equipmentHeightUnit ?? null,
     recorded: true,
+    measure: c.measure ?? null,
+    resistanceKind: c.resistanceKind ?? null,
   })))
   if (exerciseNotes.length > 0) {
     await db.ptNotes.bulkAdd(exerciseNotes.map(n => ({ ...n, sessionId })))
@@ -684,6 +792,11 @@ export async function updatePtSession(db: TrainingDB, edit: PtSessionEdit): Prom
           equipmentHeight: c.equipmentHeight ?? null,
           equipmentHeightUnit: c.equipmentHeightUnit ?? null,
           recorded: true,
+          // Carried from the payload, never stamped from the exercise: this is
+          // a replacement row for work already done, and today's routine is not
+          // what it was done under.
+          measure: c.measure ?? null,
+          resistanceKind: c.resistanceKind ?? null,
         })))
       }
 

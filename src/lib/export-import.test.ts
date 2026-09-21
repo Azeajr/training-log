@@ -1268,6 +1268,36 @@ describe('exportPtCsv', () => {
     expect(await actualReps()).toBe('""')
   })
 
+  /**
+   * The CSV reads every actual back through `ptCheckActuals`. While that
+   * re-resolved against the current prescription, a routine taken to bodyweight
+   * blanked `actual_weight_lb` for every run ever done under it — including in
+   * the export, which is the copy a user keeps.
+   */
+  it('keeps a recorded weight in the CSV after the routine goes bodyweight', async () => {
+    const routineId = await savePtRoutine(db, {
+      name: 'Knee rehab',
+      exercises: [{ name: 'Step up', sets: 1, measure: 'reps', targetReps: 10, resistanceKind: 'weight', resistanceWeight: 25 }],
+    })
+    const exercise = (await getPtRoutine(db, routineId))!.exercises[0]
+    await commitPtRun(db, {
+      routineId, date: new Date(),
+      checks: [{
+        ptExerciseId: exercise.id!, setNumber: 1, done: true,
+        reps: 10, weight: 25, measure: 'reps', resistanceKind: 'weight',
+      }],
+    })
+    await savePtRoutine(db, {
+      id: routineId, name: 'Knee rehab',
+      exercises: [{ id: exercise.id, name: 'Step up', sets: 1, measure: 'reps', targetReps: 10, resistanceKind: 'none' }],
+    })
+
+    await exportPtCsv(db)
+    const lines = (await capturedBlob!.text()).split('\n')
+    const header = lines[0].split(',')
+    expect(lines[1].split(',')[header.indexOf('"actual_weight_lb"')]).toBe('"25"')
+  })
+
   it('keeps a run with no checks the same width as every other row', async () => {
     const { routineId } = await seedPt()
     await db.ptSessions.add({ routineId, date: new Date(), notes: 'nothing ticked' })
@@ -1338,6 +1368,36 @@ describe('PT backup round trip', () => {
     expect(checks.every(c => typeof c.done === 'boolean')).toBe(true)
     // And the date survives as a Date, not an ISO string.
     expect((await db.ptSessions.toArray())[0].date).toBeInstanceOf(Date)
+  })
+
+  /**
+   * The kinds a set was recorded under are part of the record, not decoration.
+   * Left out of the COLS allowlist they survive in the live database and vanish
+   * on the first restore, which is exactly when history is most likely to be
+   * read back against a routine that has moved on.
+   */
+  it('restores the measure and resistance kind each set was recorded under', async () => {
+    const routineId = await savePtRoutine(db, {
+      name: 'Knee rehab',
+      exercises: [{ name: 'Step up', sets: 1, measure: 'reps', targetReps: 10, resistanceKind: 'weight', resistanceWeight: 25 }],
+    })
+    const exercise = (await getPtRoutine(db, routineId))!.exercises[0]
+    await commitPtRun(db, {
+      routineId, date: new Date(2026, 8, 16),
+      checks: [{
+        ptExerciseId: exercise.id!, setNumber: 1, done: true,
+        reps: 10, weight: 25, measure: 'reps', resistanceKind: 'weight',
+      }],
+    })
+
+    await exportJson(db)
+    const parsed = JSON.parse(await capturedBlob!.text())
+    expect(parsed.ptSetChecks[0]).toMatchObject({ measure: 'reps', resistanceKind: 'weight' })
+
+    await importFromRawData(db, parsed)
+    expect((await db.ptSetChecks.toArray())[0]).toMatchObject({
+      measure: 'reps', resistanceKind: 'weight', weight: 25,
+    })
   })
 
   it('wipes PT tables when a legacy backup carries none of them', async () => {

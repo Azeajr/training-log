@@ -130,7 +130,9 @@ CREATE TABLE IF NOT EXISTS ptSetChecks (
   band TEXT,
   equipmentHeight REAL,
   equipmentHeightUnit TEXT,
-  recorded INTEGER
+  recorded INTEGER,
+  measure TEXT,
+  resistanceKind TEXT
 );
 CREATE TABLE IF NOT EXISTS ptNotes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -298,6 +300,14 @@ export const ADDITIVE_MIGRATIONS = [
   // anything but a tick, which is the only case that falls back to the
   // prescription.
   `ALTER TABLE ptSetChecks ADD COLUMN recorded INTEGER`,
+  // The context the eight actuals were recorded under, pinned the same way and
+  // for the same reason they are. Without it a reader has only the CURRENT
+  // prescription to decide which fields a row even has, so taking an exercise
+  // to bodyweight made every weight ever logged under it unreadable — and, via
+  // the run editor, unwritten. NULL means a row written before these columns
+  // existed; those and only those infer their context from what they stored.
+  `ALTER TABLE ptSetChecks ADD COLUMN measure TEXT`,
+  `ALTER TABLE ptSetChecks ADD COLUMN resistanceKind TEXT`,
 ] as const
 
 export const ALL_TABLES = [
