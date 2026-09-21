@@ -134,7 +134,7 @@ from source here.
 | **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `open` | |
 | **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
 | **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `open` | |
-| **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `open` | |
+| **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×2, 1 red at C1 (the other guards the unchanged step and bounds) |
 | **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `open` | |
 | **C8** | P2 | Flow | WF#6 · CX#20 | `AccessoryPicker.tsx` | `open` | |
 | **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 11 `open`, 0 `wip`, 11 `fixed`.** Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 10 `open`, 0 `wip`, 12 `fixed`.** Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1651,7 +1651,7 @@ likewise.
 
 ## C6 · The band calibration form's direct entry is invisible
 
-**State:** `open` · **P3** · Sources: UI#4, CX#15 · Batch 4
+**State:** `fixed` · **P3** · Sources: UI#4, CX#15 · Batch 4
 
 ### Problem
 
@@ -1698,6 +1698,15 @@ The heading "no direct entry" also overstated it: tap-to-type already works. Thi
 Type 191 directly into raw load. Adjust to 192 with one tap. Measured-load bounds
 (`max={draft()!.rawLoad}`) and the raw-load clamp (`setRawLoad`, `:39`) still apply.
 Cancelling leaves the saved profile unchanged. No general `Stepper` redesign.
+
+### As built
+
+`emphasized` on all six fields — raw load, the four measured loads and the added-weight cap
+— and nothing else. `step={5}` stays withdrawn.
+
+Two tests rather than one: the first asserts every field is marked editable, the second
+asserts the steps and bounds did **not** move, which is the half of this change that is
+about restraint. Only the first is red against the old code, by construction.
 
 ---
 

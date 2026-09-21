@@ -93,6 +93,48 @@ describe('band settings state', () => {
     expect((await db.exercises.get(id))?.bandProfile).toMatchObject({ enabled: true, rawLoad: 145 })
   })
 
+  /**
+   * C6. Every field here opens at 0 for a movement with no template and wants a
+   * number in the 70–191 range — 191 taps, or a long press. Tapping the value
+   * has always opened a numeric keypad; it rendered as a plain readout nobody
+   * thought to press. `emphasized` is what says it is editable.
+   */
+  it('marks every calibration field as directly editable', async () => {
+    // Its own name: this file shares one database and exercise names are unique.
+    const id = await db.exercises.add({ name: 'Nordic curl', type: 'reps' })
+    render(() => <BandSettings entity={{ id, name: 'Nordic curl', type: 'reps' }} kind="exercise" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Band settings for Nordic curl' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Limit suggested added weight/ }))
+
+    const fields = ['raw load', 'Orange measured load', 'Green measured load',
+      'Purple measured load', 'Red measured load', 'maximum added weight']
+    for (const field of fields) {
+      const value = screen.getByRole('button', { name: new RegExp(`^Edit ${field},`) })
+      expect(value.className, field).toContain('border-accent')
+    }
+  })
+
+  /** Steps and bounds are untouched: these are measurements, not increments. */
+  it('still moves one pound at a time, and still clamps to the raw load', async () => {
+    const id = await db.exercises.add({ name: 'Pullup', type: 'reps' })
+    render(() => <BandSettings entity={{ id, name: 'Pullup', type: 'reps' }} kind="exercise" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Band settings for Pullup' }))
+
+    // 191 is the pulling calibration's raw load. One tap is still one pound.
+    fireEvent.click(screen.getByRole('button', { name: 'Increase raw load' }))
+    expect(screen.getByRole('button', { name: /^Edit raw load,/ }).textContent).toBe('192')
+
+    // The measured load still cannot exceed the raw load it is measured
+    // against. Raising the raw load holds each band's assistance fixed, so Red
+    // followed it from 181 to 182 — ten pounds below the new ceiling, near
+    // enough to walk there rather than hammer the button a hundred times, which
+    // is slow enough under coverage to time the test out.
+    const red = () => screen.getByRole('button', { name: /^Edit Red measured load,/ })
+    expect(red().textContent).toBe('182')
+    for (let i = 0; i < 20; i++) fireEvent.click(screen.getByRole('button', { name: 'Increase Red measured load' }))
+    expect(Number(red().textContent)).toBe(192)
+  })
+
   // The measured stepper clamps what it DISPLAYS to the raw load. Leaving the
   // stored assistance unclamped meant the two disagreed silently: at raw load
   // 100 against 105 of assistance it read 0 while the profile still held 105,

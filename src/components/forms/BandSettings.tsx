@@ -64,21 +64,28 @@ export default function BandSettings(props: {
       <Modal title={`${props.entity.name} bands`} onClose={() => { if (!busy()) setDraft(null) }} busy={busy()} variant="sheet">
         <div class="p-4 flex flex-col gap-4 overflow-y-auto max-h-[80vh]">
           <label><input type="checkbox" checked={draft()!.enabled} onChange={e => setDraft(p => ({ ...p!, enabled: e.currentTarget.checked }))} /> Use raw load and bands</label>
+          {/* `emphasized` throughout: this is the largest-jump form in the app.
+              Every field starts at 0 for a movement with no template and wants
+              a value in the 70–191 range, which is 191 taps or a long press.
+              Tapping the value has always opened a numeric keypad; it just
+              rendered as a plain readout nobody thought to press. The steps and
+              bounds are unchanged — these are measurements, and a 1lb
+              correction has to stay one tap. */}
           <div class="flex flex-wrap items-center gap-2">Raw load (lb)
-            <Stepper value={draft()!.rawLoad} onChange={setRawLoad} min={0} fieldLabel="raw load" />
+            <Stepper value={draft()!.rawLoad} onChange={setRawLoad} min={0} fieldLabel="raw load" emphasized />
           </div>
           <p class="text-muted text-xs">Changing raw load keeps each band's assistance fixed. To recalibrate, enter its measured effective load below at the current raw load. Logged sets stay unchanged.</p>
           <For each={draft()!.bands.map(b => b.name)}>{name => {
             const band = () => draft()!.bands.find(b => b.name === name)!
             return <div class="flex items-center flex-wrap gap-2">
               <span>{name} measured lb</span>
-              <Stepper value={Math.max(0, draft()!.rawLoad - band().assistance)} min={0} max={draft()!.rawLoad} fieldLabel={`${name} measured load`}
+              <Stepper value={Math.max(0, draft()!.rawLoad - band().assistance)} min={0} max={draft()!.rawLoad} fieldLabel={`${name} measured load`} emphasized
                 onChange={measured => setDraft(p => ({ ...p!, bands: p!.bands.map(b => b.name === name ? { ...b, assistance: p!.rawLoad - measured } : b) }))} />
             </div>
           }}</For>
           <label><input type="checkbox" checked={draft()!.maxAddedWeight != null} onChange={e => setDraft(p => ({ ...p!, maxAddedWeight: e.currentTarget.checked ? 0 : null }))} /> Limit suggested added weight</label>
           <Show when={draft()!.maxAddedWeight != null}>
-            <Stepper value={draft()!.maxAddedWeight!} onChange={maxAddedWeight => setDraft(p => ({ ...p!, maxAddedWeight }))} step={2.5} min={0} fieldLabel="maximum added weight" />
+            <Stepper value={draft()!.maxAddedWeight!} onChange={maxAddedWeight => setDraft(p => ({ ...p!, maxAddedWeight }))} step={2.5} min={0} fieldLabel="maximum added weight" emphasized />
           </Show>
           <Show when={error()}><p role="alert">{error()}</p></Show>
           <button type="button" disabled={busy()} onClick={() => void save()} class="border border-accent text-accent p-3">SAVE BAND SETTINGS</button>
