@@ -1,6 +1,12 @@
 import { createSignal, For, Show } from 'solid-js'
 import type { PtExercise } from '../../types/domain'
-import { formatPtResistance, formatPtTarget, ptActualParts, resolvePtCheck } from '../../lib/pt'
+import {
+  formatPtResistance,
+  formatPtTarget,
+  ptActualParts,
+  readLivePtSet,
+  type PtSetReading,
+} from '../../lib/pt'
 import type { PtRunSet } from '../../store/pt-store'
 import { FieldRow } from '../forms/SetLogControls'
 import SetReadout from '../forms/SetReadout'
@@ -19,6 +25,16 @@ interface Props {
   onPatch: (setNumber: number, fields: Partial<PtRunSet>) => void
   onAdd: () => void
   onRemove: (setNumber: number) => void
+  /**
+   * How to read one set: which kinds it has, and what it holds.
+   *
+   * Defaults to a live run's reading, where a blank field still means "as
+   * prescribed" and resolves against `exercise`. A recorded run passes its own,
+   * because its sets are already materialized and are read under the kinds they
+   * were DONE under — resolving those again against today's routine is what
+   * erased them.
+   */
+  read?: (set: PtRunSet, index: number) => PtSetReading
 }
 
 const INPUT_CLASS = 'bg-surface border border-border text-text px-2 py-1 text-sm focus:outline-none focus:border-accent'
@@ -31,8 +47,8 @@ const INPUT_CLASS = 'bg-surface border border-border text-text px-2 py-1 text-sm
  * which leaves the same bare "× 10 reps" a bodyweight accessory set already
  * shows.
  */
-function describe(exercise: PtExercise, set: PtRunSet): { weight: number | null; value: string } {
-  const parts = ptActualParts(exercise, resolvePtCheck(exercise, set))
+function describe(reading: PtSetReading): { weight: number | null; value: string } {
+  const parts = ptActualParts(reading.context, reading.values)
   return {
     weight: parts.weight,
     value: [parts.target, parts.resistance, parts.height].filter(Boolean).join(' . '),
@@ -54,9 +70,16 @@ export default function PtSetList(props: Props) {
 
   const patch = (index: number, fields: Partial<PtRunSet>) => props.onPatch(index + 1, fields)
 
-  // Seeded from what the set already holds, falling back to the prescription,
-  // so opening the editor on an untouched set shows what it would record.
-  const valueOf = (index: number) => resolvePtCheck(exercise(), props.sets[index] ?? {})
+  const reading = (index: number): PtSetReading => {
+    const set = props.sets[index] ?? { done: false }
+    return props.read ? props.read(set, index) : readLivePtSet(exercise(), set)
+  }
+
+  // Which fields a set HAS, and what the editor seeds them from. Both come from
+  // the set's own reading, so an old set keeps the shape it was recorded in
+  // while the routine moves on around it.
+  const contextOf = (index: number) => reading(index).context
+  const valueOf = (index: number) => reading(index).values
 
   return (
     <div class="mb-2">
@@ -74,8 +97,8 @@ export default function PtSetList(props: Props) {
                 <button
                   role="checkbox"
                   aria-checked={set.done}
-                  aria-label={`${exercise().name} set ${i() + 1}, ${formatPtTarget(exercise())}${
-                    formatPtResistance(exercise()) ? `, ${formatPtResistance(exercise())}` : ''
+                  aria-label={`${exercise().name} set ${i() + 1}, ${formatPtTarget(contextOf(i()))}${
+                    formatPtResistance(contextOf(i())) ? `, ${formatPtResistance(contextOf(i()))}` : ''
                   }`}
                   onClick={() => patch(i(), { done: !set.done })}
                   class={`border px-2 py-1 shrink-0 text-xs font-mono tracking-widest transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
@@ -88,8 +111,8 @@ export default function PtSetList(props: Props) {
                   {i() + 1}
                 </button>
                 <SetReadout
-                  weight={describe(exercise(), set).weight}
-                  value={describe(exercise(), set).value}
+                  weight={describe(reading(i())).weight}
+                  value={describe(reading(i())).value}
                   size="sm"
                   tone={set.done ? undefined : 'text-faint'}
                   onClick={() => setEditing(i())}
@@ -111,7 +134,7 @@ export default function PtSetList(props: Props) {
             <div class="border border-accent px-2 py-2 mb-1 flex flex-col gap-2">
               <span class="text-warn text-xs tracking-widest uppercase">Set {i() + 1}</span>
 
-              <Show when={exercise().measure === 'reps'}>
+              <Show when={contextOf(i()).measure === 'reps'}>
                 <FieldRow label="reps">
                   <Stepper
                     value={valueOf(i()).reps ?? 0}
@@ -120,7 +143,7 @@ export default function PtSetList(props: Props) {
                   />
                 </FieldRow>
               </Show>
-              <Show when={exercise().measure === 'time'}>
+              <Show when={contextOf(i()).measure === 'time'}>
                 <FieldRow label="time">
                   <DurationInput
                     value={valueOf(i()).seconds}
@@ -129,7 +152,7 @@ export default function PtSetList(props: Props) {
                   />
                 </FieldRow>
               </Show>
-              <Show when={exercise().measure === 'distance'}>
+              <Show when={contextOf(i()).measure === 'distance'}>
                 <FieldRow label="dist">
                   <Stepper
                     value={valueOf(i()).distance ?? 0}
@@ -139,7 +162,7 @@ export default function PtSetList(props: Props) {
                 </FieldRow>
               </Show>
 
-              <Show when={exercise().resistanceKind === 'weight'}>
+              <Show when={contextOf(i()).resistanceKind === 'weight'}>
                 <FieldRow label="wt">
                   {/* Zero is "unloaded", not "loaded with nothing" — the same
                       reading the height field below takes, and the one
@@ -155,7 +178,7 @@ export default function PtSetList(props: Props) {
                   />
                 </FieldRow>
               </Show>
-              <Show when={exercise().resistanceKind === 'band'}>
+              <Show when={contextOf(i()).resistanceKind === 'band'}>
                 <FieldRow label="band">
                   <input
                     type="text"

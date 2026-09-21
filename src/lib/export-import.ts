@@ -123,7 +123,10 @@ const COLS = {
   ptRoutines: ['id', 'name', 'notes', 'order', 'archived'],
   ptExercises: ['id', 'routineId', 'name', 'description', 'videoUrl', 'sets', 'measure', 'targetReps', 'targetSeconds', 'targetDistance', 'distanceUnit', 'resistanceKind', 'resistanceWeight', 'resistanceBand', 'equipmentHeight', 'equipmentHeightUnit', 'order', 'archived'],
   ptSessions: ['id', 'routineId', 'date', 'notes'],
-  ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done', 'reps', 'seconds', 'distance', 'distanceUnit', 'weight', 'band', 'equipmentHeight', 'equipmentHeightUnit', 'recorded'],
+  // `measure` and `resistanceKind` belong here beside the actuals: they say what
+  // those eight values MEAN, and a restore that dropped them would hand every
+  // set back to the current prescription to interpret.
+  ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done', 'reps', 'seconds', 'distance', 'distanceUnit', 'weight', 'band', 'equipmentHeight', 'equipmentHeightUnit', 'recorded', 'measure', 'resistanceKind'],
   ptNotes: ['id', 'sessionId', 'ptExerciseId', 'notes'],
   settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek'],
 } as const
@@ -475,9 +478,9 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
 /**
  * The eight actual_* cells for one recorded set.
  *
- * Resolved through `ptCheckActuals`, so a row written before PT recorded
- * anything but a tick still exports the prescription it was done under rather
- * than eight blanks. An orphaned check whose exercise no longer resolves has
+ * Read through `ptCheckActuals`: a recorded row exports exactly what it stored,
+ * and a row written before PT recorded anything but a tick still exports the
+ * prescription it was done under rather than eight blanks. An orphaned check whose exercise no longer resolves has
  * nothing to resolve against and exports what it stored, or nothing.
  */
 function actualCells(check: PtSetCheck, exercise: PtExercise | undefined): string[] {

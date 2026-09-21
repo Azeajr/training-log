@@ -395,6 +395,100 @@ describe('recorded actuals', () => {
     expect(ptCheckActuals(legacy, ex)).toMatchObject({ reps: 12, band: 'red' })
     expect(ptCheckActuals({ ...legacy, reps: 8 }, ex)).toMatchObject({ reps: 8 })
   })
+
+  /**
+   * A recorded row read back under a prescription that no longer has room for
+   * its values.
+   *
+   * The old read nulled every field outside the CURRENT measure and resistance
+   * kind, which is right when resolving a NEW set and destructive when reading
+   * an old one: the editor writes what it read straight back, so a routine
+   * flipped to bodyweight erased the weights of every run done under it.
+   */
+  it('reads a recorded set as stored, not as the current prescription allows', () => {
+    const bodyweight = validatePtExercise(repsDraft({ resistanceKind: 'none', resistanceBand: undefined }), 1, 0)
+    const recorded = {
+      ptExerciseId: 1, setNumber: 1, done: true,
+      reps: 12, weight: 25, recorded: true,
+      measure: 'reps' as const, resistanceKind: 'weight' as const,
+    }
+
+    expect(ptCheckActuals(recorded, bodyweight)).toMatchObject({ reps: 12, weight: 25 })
+    expect(formatPtCheck(recorded, bodyweight)).toBe('25 lb . 12 reps')
+  })
+
+  /**
+   * Rows written before the kind columns existed have actuals but no context.
+   * Where the stored values name the context on their own — one measure field
+   * filled, one resistance field filled — that is what the row is read under.
+   * The values are never dropped for want of a label.
+   */
+  it('reads a pre-metadata recorded row from its own values', () => {
+    const bodyweight = validatePtExercise(repsDraft({ resistanceKind: 'none', resistanceBand: undefined }), 1, 0)
+    const legacyRecorded = { ptExerciseId: 1, setNumber: 1, done: true, reps: 12, weight: 25, recorded: true }
+
+    expect(ptCheckActuals(legacyRecorded, bodyweight)).toMatchObject({ reps: 12, weight: 25 })
+    expect(formatPtCheck(legacyRecorded, bodyweight)).toBe('25 lb . 12 reps')
+
+    // A tick-only row has nothing to read, so it keeps the prescription fallback.
+    expect(ptCheckActuals({ ptExerciseId: 1, setNumber: 1, done: true }, bodyweight))
+      .toMatchObject({ reps: 15, weight: null })
+  })
+
+  /**
+   * The reported repro, at the layer that writes: record weighted work, take
+   * the routine to bodyweight, save the run from that state, put the routine
+   * back. `d222835` loses the weight permanently at the save.
+   */
+  it('keeps a recorded weight through a save made while the routine is bodyweight', async () => {
+    const weighted = repsDraft({ resistanceKind: 'weight', resistanceWeight: 25, resistanceBand: undefined })
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [weighted] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    const sessionId = await commitPtRun(db, {
+      routineId: id,
+      date: new Date('2026-09-10'),
+      checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true, ...resolvePtCheck(exercise) }],
+    })
+
+    const reshape = async (over: Partial<PtExerciseDraft>) => {
+      await savePtRoutine(db, { id, name: 'Rehab', exercises: [{ ...repsDraft(over), id: exercise.id }] })
+      return (await getPtRoutine(db, id))!.exercises[0]
+    }
+    const bodyweight = await reshape({ resistanceKind: 'none', resistanceBand: undefined })
+
+    // What the editor does on SAVE: read every set back, write every set out.
+    const stored = (await getPtSessionDetail(db, sessionId))!.exercises[0].checks[0]
+    await updatePtSession(db, {
+      sessionId,
+      exercises: [{
+        ptExerciseId: exercise.id!,
+        checks: [{ setNumber: 1, done: true, ...ptCheckActuals(stored, bodyweight) }],
+      }],
+    })
+
+    await reshape({ resistanceKind: 'weight', resistanceWeight: 25, resistanceBand: undefined })
+    const after = (await getPtSessionDetail(db, sessionId))!.exercises[0].checks[0]
+    expect(after.weight).toBe(25)
+  })
+
+  /** The kinds a set was done under are stored with it, not looked up later. */
+  it('stores the measure and resistance kind a set was recorded under', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    const sessionId = await commitPtRun(db, {
+      routineId: id,
+      date: new Date('2026-09-10'),
+      checks: [{
+        ptExerciseId: exercise.id!, setNumber: 1, done: true,
+        ...resolvePtCheck(exercise),
+        measure: exercise.measure, resistanceKind: exercise.resistanceKind,
+      }],
+    })
+
+    const stored = (await getPtSessionDetail(db, sessionId))!.exercises[0].checks[0]
+    expect(stored.measure).toBe('reps')
+    expect(stored.resistanceKind).toBe('band')
+  })
 })
 
 describe('updatePtSession', () => {

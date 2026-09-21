@@ -387,6 +387,21 @@ export interface PtSetCheck {
    * prescription as history.
    */
   recorded?: boolean
+  /**
+   * The measure and resistance kind the set was done under.
+   *
+   * `recorded` says the values above are this row's own; these say what they
+   * MEAN. Without them a reader has only the exercise's current prescription to
+   * decide which of the eight a row even uses, so taking an exercise to
+   * bodyweight hid — and, through the run editor, erased — every weight logged
+   * under it.
+   *
+   * Absent on rows written before these columns existed. Those infer their
+   * context from the values they stored, and keep the gap: an unrelated save
+   * must not stamp today's routine on them as though it were known history.
+   */
+  measure?: PtMeasure | null
+  resistanceKind?: PtResistanceKind | null
 }
 
 /** Free-text note on one exercise within one run ("switched to green band"). */

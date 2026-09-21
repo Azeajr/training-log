@@ -145,6 +145,10 @@ export default function PtRun() {
           // Pinned now, against the prescription as it stands today. A later
           // edit to the routine must not rewrite what this run says happened.
           ...resolvePtCheck(ex, set),
+          // And what those values mean, pinned with them: without it a reader
+          // has only the current routine to decide which of them apply.
+          measure: ex.measure,
+          resistanceKind: ex.resistanceKind,
         })),
       )
 

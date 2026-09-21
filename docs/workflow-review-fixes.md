@@ -121,7 +121,7 @@ from source here.
 
 | ID | Pri | Area | Sources | Primary file | State | Evidence |
 |---|---|---|---|---|---|---|
-| **A1** | P1 | PT data loss | EF#1 · CX#1 | `src/lib/pt.ts` | `open` | |
+| **A1** | P1 | PT data loss | EF#1 · CX#1 | `src/lib/pt.ts` | `fixed` | 11 tests red at `d222835`: `pt.test.ts` ×4, `PtSessionEditor.test.tsx` ×4 (new file), `export-import.test.ts` ×2, `pt-set-actuals.test.ts` ×1 |
 | **A2** | P1 | Workout data loss | WF#1 · CX#2 | `src/store/workout-store.ts` | `open` | |
 | **A3** | P2 | PT draft model | UI#3 · EF#2 · UI#10 · CX#3/#4 | `src/components/pt/PtSetList.tsx` | `open` | |
 | **A4** | P2 | PT draft model | EF#3 · CX#5 | `src/store/pt-store.ts` | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
 
-**Totals: 22 items — 22 `open`, 0 `wip`, 0 `fixed`.**
+**Totals: 22 items — 21 `open`, 0 `wip`, 1 `fixed`.**
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -170,7 +170,7 @@ A1 carries a schema change and goes **alone in its branch**.
 
 ## A1 · Editing an old PT run erases actuals the prescription no longer covers
 
-**State:** `open` · **P1** · Sources: EF#1, CX#1 · Batch 1, alone in its branch
+**State:** `fixed` · **P1** · Sources: EF#1, CX#1 · Batch 1, alone in its branch
 
 ### Problem
 
@@ -363,6 +363,31 @@ come back — say so in the release note rather than inventing a repair.
 Record weighted, banded, timed and distance sets. Change their routine types. View, edit an
 unrelated field, save, reload, export. Original actuals, units and recorded kinds survive.
 Explicit bodyweight/null values stay null. Already-erased values are not claimed to be recoverable.
+
+### As built
+
+Three things took a different shape than the plan wrote them, all in the same direction —
+the "read an old set" path needed a name, not just a function:
+
+- **`PtSetReading` and its two constructors** (`readLivePtSet`, `readRecordedPtSet`) instead
+  of `PtSetList` deciding for itself. A set has a *context* (which fields it has) and
+  *values*, and the two run kinds differ in both: a live set's blank field still means "as
+  prescribed" and resolves, a recorded one is already materialized and must never resolve
+  again. `PtSetList` takes a `read` prop and defaults to the live reading, so `PtRun` is
+  unchanged.
+- **`ptRecordedKinds` / `ptRecordedContext`** carry step 3's legacy policy: the row's own
+  kinds, else an inference from its values where exactly one measure field and one
+  resistance field are filled, else the prescription. `formatPtCheck` and `PtSetList` read
+  through it, so an old loaded set still reads as loaded under a routine gone bodyweight.
+- **`applyPtSetPatch` / `withPtSetAdded` / `withPtSetRemoved` are generic** over the set
+  shape. The editor's draft is `PtRunSet & PtRecordedKinds`, and removing a set renumbers
+  every set after it — the kinds have to travel *with* the draft object, since recovering
+  them by set number afterwards is exactly the bug the plan forbids.
+
+Also added, not in the plan: `pt-set-actuals.test.ts` covers the two new columns arriving on
+a database that already holds rows, the way the eight actual columns are already covered.
+Verified by reverting the migration into a file copy — it fails with
+`no such column: "measure"`.
 
 ---
 

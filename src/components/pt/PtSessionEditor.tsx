@@ -4,8 +4,11 @@ import type { PtExercise, PtSetCheck } from '../../types/domain'
 import {
   formatPtPrescription,
   ptCheckActuals,
+  readRecordedPtSet,
+  recordedPtRunSetFields,
   resolvePtCheck,
   updatePtSession,
+  type PtRecordedKinds,
   type PtSessionDetail,
 } from '../../lib/pt'
 import {
@@ -32,17 +35,45 @@ const NOTE_CLASS = 'w-full bg-surface border border-border text-text font-mono p
 const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
 
+/** A draft of a set that already happened: the live shape, plus what it meant. */
+type PtRecordedSet = PtRunSet & PtRecordedKinds
+
 /**
  * A recorded set as the editor holds it.
  *
  * Every field is materialized rather than left to fall back, because that is
  * what saving will write — a legacy row that recorded only a tick resolves
  * against the prescription once, here, and is concrete from then on.
+ *
+ * The kinds ride along unresolved. A row that has them keeps them; one written
+ * before they existed keeps the gap, so saving the run again does not write
+ * today's routine into the past as though it were known history.
  */
-const toRunSet = (check: PtSetCheck, exercise: PtExercise): PtRunSet => ({
+const toRunSet = (check: PtSetCheck, exercise: PtExercise): PtRecordedSet => ({
   done: check.done,
   ...ptCheckActuals(check, exercise),
+  measure: check.measure ?? null,
+  resistanceKind: check.resistanceKind ?? null,
 })
+
+/**
+ * A set added to a run that is already history.
+ *
+ * It is a new record, so unlike its neighbours it takes the routine as it
+ * stands — which is the context its own editor is about to show — and is
+ * materialized straight away like every other set in the draft.
+ */
+const addedRunSet = (sets: PtRecordedSet[], exercise: PtExercise): PtRecordedSet[] => {
+  const next = withPtSetAdded(sets)
+  const added = next[next.length - 1]
+  next[next.length - 1] = {
+    done: added.done,
+    ...resolvePtCheck(exercise, added),
+    measure: exercise.measure,
+    resistanceKind: exercise.resistanceKind,
+  }
+  return next
+}
 
 /**
  * Edit a run that has already been saved.
@@ -52,18 +83,18 @@ const toRunSet = (check: PtSetCheck, exercise: PtExercise): PtRunSet => ({
  * and a failed write leaves the edit on screen to retry.
  */
 export default function PtSessionEditor(props: Props) {
-  const seed = (): Record<number, PtRunSet[]> => Object.fromEntries(
+  const seed = (): Record<number, PtRecordedSet[]> => Object.fromEntries(
     props.detail.exercises.map(row => [row.exercise.id!, row.checks.map(c => toRunSet(c, row.exercise))]),
   )
 
-  const [sets, setSets] = createSignal<Record<number, PtRunSet[]>>(seed())
+  const [sets, setSets] = createSignal<Record<number, PtRecordedSet[]>>(seed())
   const [notes, setNotes] = createSignal(props.detail.session.notes ?? '')
   const [exerciseNotes, setExerciseNotes] = createSignal<Record<number, string>>(
     Object.fromEntries(props.detail.exercises.map(row => [row.exercise.id!, row.note ?? ''])),
   )
 
   const setsOf = (exerciseId: number) => sets()[exerciseId] ?? []
-  const update = (exerciseId: number, next: PtRunSet[]) =>
+  const update = (exerciseId: number, next: PtRecordedSet[]) =>
     setSets(current => ({ ...current, [exerciseId]: next }))
 
   const { busy: saving, guard } = useSingleFlight()
@@ -78,7 +109,10 @@ export default function PtSessionEditor(props: Props) {
           checks: setsOf(row.exercise.id!).map((set, i) => ({
             setNumber: i + 1,
             done: set.done,
-            ...resolvePtCheck(row.exercise, set),
+            // The draft, passed through. Re-resolving here against a routine
+            // that has since changed is what erased recorded work on any save,
+            // including a notes-only one.
+            ...recordedPtRunSetFields(set),
           })),
           note: exerciseNotes()[row.exercise.id!] ?? null,
         })),
@@ -101,9 +135,10 @@ export default function PtSessionEditor(props: Props) {
             <PtSetList
               exercise={row.exercise}
               sets={setsOf(row.exercise.id!)}
+              read={set => readRecordedPtSet(row.exercise, set)}
               onPatch={(setNumber, fields) =>
                 update(row.exercise.id!, applyPtSetPatch(setsOf(row.exercise.id!), setNumber, fields))}
-              onAdd={() => update(row.exercise.id!, withPtSetAdded(setsOf(row.exercise.id!)))}
+              onAdd={() => update(row.exercise.id!, addedRunSet(setsOf(row.exercise.id!), row.exercise))}
               onRemove={setNumber =>
                 update(row.exercise.id!, withPtSetRemoved(setsOf(row.exercise.id!), setNumber))}
             />

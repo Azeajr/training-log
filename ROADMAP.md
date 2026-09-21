@@ -2,6 +2,26 @@
 
 ## Done
 
+### PT Runs Keep What They Recorded (2026-09-21)
+
+A finished PT run is a record of what happened, and editing the routine is not
+retroactive. Item **A1** of `docs/workflow-review-fixes.md`.
+
+- **Reading a recorded set no longer re-resolves it.** `resolvePtCheck` fills only
+  the fields the CURRENT prescription has room for and nulls the rest, which is
+  right for a new set and destructive for an old one. The run editor writes back
+  what it reads, so taking an exercise to bodyweight and saving the run — even a
+  notes-only save — deleted every weight it had logged. Recorded rows now read
+  through `recordedPtCheckActuals`, which returns them as stored.
+- **A set stores the kinds it was done under.** `ptSetChecks.measure` and
+  `ptSetChecks.resistanceKind` travel with the eight actuals through the DB, the
+  backup and the CSV, so a reader no longer has to ask today's routine what an old
+  set's values mean. Rows written before these columns infer their context from
+  what they stored, and keep the gap — an unrelated save does not stamp today's
+  routine on them.
+- **Values already erased by this bug do not come back.** There is nothing left to
+  recover them from, and no repair is attempted.
+
 ### Band Loading, Drop Rounds and Exact Loads (2026-09-19 → 2026-09-20)
 
 Band-assisted and weighted work — chin-ups, pull-ups, nordic curls — logged as a
