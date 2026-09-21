@@ -167,9 +167,15 @@ export default function PtRun() {
       await commitPtSession(db, runs)
       // Cleared only after the write lands. A failed commit keeps every tick,
       // so the user can retry rather than re-ticking the whole routine.
+      //
+      // BOTH counts are read before the clear. `doneCount` and `total` are
+      // memos over the store's set lists, so a denominator interpolated after
+      // it reads 0 and the run reports "1/0 done". `routineName` reads
+      // `groups()`, which the clear does not touch.
       const completed = doneCount()
+      const prescribed = total()
       groups().forEach(group => clearPtRun(group.routine.id!))
-      showToast(`${routineName()} logged — ${completed}/${total()} done.`)
+      showToast(`${routineName()} logged — ${completed}/${prescribed} done.`)
       navigate('/pt')
     } catch (err) {
       showToast(`Could not save that run: ${message(err)}`)
