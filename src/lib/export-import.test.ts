@@ -4,6 +4,7 @@ import { db } from '../db'
 import { __resetForTest } from '../db/sqlite-client'
 import { retryPendingExport, exportJson, importFromRawData, exportCsv, exportPtCsv, importJson, MAX_IMPORT_BYTES } from './export-import'
 import { commitPtRun, getPtRoutine, savePtRoutine } from './pt'
+import { bandProfileFor, defaultBandProfile } from './band-loading'
 import { hasTrainingMaxes, refreshTrainingMaxPresence, resetTrainingMaxPresence } from './training-max'
 
 let capturedBlob: Blob | null = null
@@ -1411,4 +1412,35 @@ it('exports band setup on main, assistance, and drop rows, with consistent CSV c
   expect(lines[1].slice(-4)).toEqual(['"Green"', '"191"', '"48"', '"5"'])
   expect(lines[3].slice(-4)).toEqual(['"Green"', '"191"', '"48"', '"0"'])
   expect(lines.every(line => line.length === lines[0].length)).toBe(true)
+})
+
+describe('a backup carrying the boot seed\'s band profiles', () => {
+  // The undo lives in `seed()`, which runs at startup and not again. Restoring
+  // a backup taken from a database that ran the seeding build put those
+  // profiles straight back, and a profile REPLACES the weight stepper — so
+  // importing your own backup took the chin-up weight stepper away for the
+  // rest of the session, self-healing only on the next reload.
+  const seeded = defaultBandProfile('Chinups')!
+
+  it('clears the seeded profiles the payload restores', async () => {
+    await importFromRawData(db, {
+      lifts: [{ id: 8, name: 'CHINUPS', order: 4, liftType: 'upper', baseWeight: 0, progressionIncrement: 2.5, plateMode: 'total', bandProfile: seeded }],
+      exercises: [{ id: 1, name: 'Chinups', type: 'reps', category: 'pull', bandProfile: seeded }],
+    })
+    expect(bandProfileFor(await db.lifts.get(8))).toBeNull()
+    expect(bandProfileFor(await db.exercises.get(1))).toBeNull()
+  })
+
+  it('leaves a profile the user saved exactly as the backup carries it', async () => {
+    // One number away from the template is a calibration someone took, and a
+    // deliberately disabled one is a decision as much as an edit is.
+    const mine = { ...seeded, rawLoad: 205 }
+    const off = { ...defaultBandProfile('Nordic Curls')!, enabled: false }
+    await importFromRawData(db, {
+      lifts: [{ id: 8, name: 'CHINUPS', order: 4, liftType: 'upper', baseWeight: 0, progressionIncrement: 2.5, plateMode: 'total', bandProfile: mine }],
+      exercises: [{ id: 6, name: 'Nordic Curls', type: 'reps', category: 'legs', bandProfile: off }],
+    })
+    expect((await db.lifts.get(8))?.bandProfile).toEqual(mine)
+    expect((await db.exercises.get(6))?.bandProfile).toEqual(off)
+  })
 })
