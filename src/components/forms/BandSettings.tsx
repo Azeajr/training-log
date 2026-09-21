@@ -49,8 +49,11 @@ export default function BandSettings(props: {
     setBusy(true)
     try {
       const table = props.kind === 'lift' ? db.lifts : db.exercises
-      await table.update(props.entity.id, { bandProfile: profile })
-      props.onSaved?.(profile)
+      // Stamped here and nowhere else: this is the one path a person
+      // saves through, and it is what keeps the boot-time seed undo off it.
+      const saved: BandProfile = { ...profile, accepted: true }
+      await table.update(props.entity.id, { bandProfile: saved })
+      props.onSaved?.(saved)
       setDraft(null)
     } catch { setError('Could not save band settings. Try again.') }
     finally { setBusy(false) }

@@ -176,6 +176,7 @@ export function validBandLoad(value: unknown): value is BandLoad {
 export function validBandProfile(value: unknown): value is BandProfile {
   if (!value || typeof value !== 'object') return false
   const v = value as BandProfile
+  if (v.accepted !== undefined && v.accepted !== true) return false
   return typeof v.enabled === 'boolean' && Number.isFinite(v.rawLoad) && v.rawLoad >= 0 &&
     (v.maxAddedWeight === null || (Number.isFinite(v.maxAddedWeight) && v.maxAddedWeight >= 0)) &&
     Array.isArray(v.bands) && v.bands.every(b => b && typeof b.name === 'string' && b.name.trim() && Number.isFinite(b.assistance) && b.assistance >= 0) &&
@@ -196,6 +197,13 @@ export function validBandProfile(value: unknown): value is BandProfile {
  */
 export async function clearSeededBandProfiles(db: TrainingDB): Promise<void> {
   const isUntouchedSeed = (entity: { name: string; bandProfile?: BandProfile | null }): boolean => {
+    // `accepted` is what makes this safe, and it works through the compare
+    // rather than around it: no template carries the flag, so a profile a
+    // person saved can never match one. Before it existed, accepting the
+    // offered measurements unchanged produced the template's bytes exactly and
+    // was read as the seeder's own work — bands on for a session, off after a
+    // reload. Rows with no flag predate it and are still judged on bytes alone,
+    // which is the best that can be said about them.
     const saved = JSON.stringify(entity.bandProfile)
     return seededBandProfiles(entity.name).some(seeded => JSON.stringify(seeded) === saved)
   }

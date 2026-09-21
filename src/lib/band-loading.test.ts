@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { availableBeltLoads, bandProfileFor, defaultBandProfile, effectiveBandLoad, makeBandLoad, suggestBandLoad, validBandLoad } from './band-loading'
+import { availableBeltLoads, bandProfileFor, defaultBandProfile, effectiveBandLoad, makeBandLoad, suggestBandLoad, validBandLoad, validBandProfile } from './band-loading'
 
 const pull = () => defaultBandProfile('Pull-ups')!
 const plates = [{ weight: 45, count: 2 }, { weight: 10, count: 2 }, { weight: 5, count: 2 }, { weight: 2.5, count: 2 }]
@@ -76,5 +76,27 @@ describe('validBandLoad and the calibration snapshot', () => {
     expect(validBandLoad({ ...base, calibration: [{ name: '', assistance: 48 }] })).toBe(false)
     expect(validBandLoad({ ...base, calibration: [{ name: 'Green', assistance: -1 }] })).toBe(false)
     expect(validBandLoad({ ...base, calibration: [{ name: 'Green' }] })).toBe(false)
+  })
+})
+
+describe('seeded profiles vs. ones a person saved', () => {
+  // `clearSeededBandProfiles` tells them apart by bytes, and the ONLY thing
+  // separating an accepted template from the template is the flag. Pin it:
+  // normalise the profile before that compare, or drop the flag from what
+  // BandSettings writes, and every opt-in starts being undone on reload again.
+  it('no seed template carries the accepted flag', () => {
+    for (const name of ['Chinups', 'Pull-ups', 'Nordic Curls']) {
+      const template = defaultBandProfile(name)!
+      expect(template.accepted).toBeUndefined()
+      expect(JSON.stringify({ ...template, accepted: true })).not.toBe(JSON.stringify(template))
+    }
+  })
+
+  it('takes the flag through the import gate, and only as true', () => {
+    const p = defaultBandProfile('Chinups')!
+    expect(validBandProfile({ ...p, accepted: true })).toBe(true)
+    expect(validBandProfile(p)).toBe(true)
+    expect(validBandProfile({ ...p, accepted: false })).toBe(false)
+    expect(validBandProfile({ ...p, accepted: 'yes' })).toBe(false)
   })
 })

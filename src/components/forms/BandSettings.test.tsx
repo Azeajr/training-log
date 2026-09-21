@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import { createSignal } from 'solid-js'
 import { db } from '../../db'
-import { BAND_NAMES, defaultBandProfile, effectiveBandLoad } from '../../lib/band-loading'
+import { BAND_NAMES, bandProfileFor, clearSeededBandProfiles, defaultBandProfile, effectiveBandLoad } from '../../lib/band-loading'
 import type { Exercise } from '../../types/domain'
 import BandSettings from './BandSettings'
 import BandLoadControls from './BandLoadControls'
@@ -185,4 +185,31 @@ describe('editing a set recorded under a superseded calibration', () => {
     pick('Purple')
     expect(load().calibration).toEqual(cal([105, 48, 30, 10]))
   })
+})
+
+// The seed undo runs from `seed()` on every start, and it decided provenance
+// by comparing against the templates the seeding build could have written.
+// Someone who ticks the box and accepts the offered measurements unchanged
+// produces those bytes exactly, so their opt-in was read as the seeder's own
+// work and undone on the next start: bands on for one session, off after a
+// reload, with no indication why.
+it('an opt-in survives the boot-time seed undo', async () => {
+  const id = await db.exercises.add({ name: 'Chinups', type: 'reps' })
+  render(() => <BandSettings entity={{ id, name: 'Chinups', type: 'reps' }} kind="exercise" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Band settings for Chinups' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /Use raw load and bands/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+  // Byte-identical to the template it was offered, apart from saying who saved it.
+  expect((await db.exercises.get(id))?.bandProfile).toEqual({ ...defaultBandProfile('Chinups')!, accepted: true })
+  await clearSeededBandProfiles(db)
+  expect(bandProfileFor(await db.exercises.get(id))).not.toBeNull()
+})
+
+it('still clears a profile the seeding build wrote', async () => {
+  // No flag, template bytes: nobody chose this.
+  const id = await db.exercises.add({ name: 'Pullups', type: 'reps', bandProfile: defaultBandProfile('Pullups')! })
+  await clearSeededBandProfiles(db)
+  expect((await db.exercises.get(id))?.bandProfile).toBeNull()
 })

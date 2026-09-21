@@ -28,6 +28,18 @@ export interface BandProfile {
   rawLoad: number
   bands: BandCalibration[]
   maxAddedWeight: number | null
+  /**
+   * A person saved this, as opposed to a build seeding it by name.
+   *
+   * `clearSeededBandProfiles` decided that by comparing against the templates
+   * the seed could have written, and someone who ticks the box and accepts the
+   * offered measurements unchanged produces those bytes exactly — so their
+   * opt-in was undone on the next start. Provenance is stated rather than
+   * inferred, the same way `ptSetChecks.recorded` replaced an all-null guess.
+   *
+   * Absent on seeded rows and on anything saved before this existed.
+   */
+  accepted?: true
 }
 
 /** Immutable setup captured with a logged set; weight holds the effective load. */
