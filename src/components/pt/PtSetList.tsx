@@ -55,6 +55,16 @@ interface Props {
    * CHANGES, leaving the screen — live above. They ask through this.
    */
   onPendingChange?: (pending: boolean) => void
+  /**
+   * The open set editor, when an owner above holds it.
+   *
+   * A live run keeps this state here, where it lives as long as the screen. A
+   * recorded run's editor is inside a collapsible row that unmounts the moment
+   * the row is folded, so its owner keeps it instead — passing `onDraftChange`
+   * is what says so.
+   */
+  draft?: PtSetDraft | null
+  onDraftChange?: (draft: PtSetDraft | null) => void
 }
 
 /**
@@ -64,11 +74,15 @@ interface Props {
  * offer the whole snapshot, and see `changedPtActuals` for why that is not the
  * same thing.
  */
-interface PtSetDraft {
+export interface PtSetDraft {
   index: number
   initial: Required<PtSetActuals>
   values: Required<PtSetActuals>
 }
+
+/** Whether an open editor is holding anything that would be lost. */
+export const ptSetDraftChanged = (draft: PtSetDraft): boolean =>
+  Object.keys(changedPtActuals(draft.initial, draft.values)).length > 0
 
 const INPUT_CLASS = 'bg-surface border border-border text-text px-2 py-1 text-sm focus:outline-none focus:border-accent'
 
@@ -97,7 +111,12 @@ function describe(reading: PtSetReading): { weight: number | null; value: string
  * exercise before fixing it is how a wrong number ends up saved.
  */
 export default function PtSetList(props: Props) {
-  const [draft, setDraft] = createSignal<PtSetDraft | null>(null)
+  const [ownDraft, setOwnDraft] = createSignal<PtSetDraft | null>(null)
+  const controlled = () => props.onDraftChange !== undefined
+  const draft = () => controlled() ? props.draft ?? null : ownDraft()
+  const setDraft = (next: PtSetDraft | null) =>
+    controlled() ? props.onDraftChange!(next) : setOwnDraft(next)
+
   const editing = () => draft()?.index ?? null
   const exercise = () => props.exercise
   const activeIndex = () => props.sets.findIndex(s => !s.done)
@@ -124,7 +143,7 @@ export default function PtSetList(props: Props) {
     const open = draft()
     return open ? changedPtActuals(open.initial, open.values) : {}
   }
-  const dirty = () => Object.keys(changes()).length > 0
+  const dirty = () => draft() != null && ptSetDraftChanged(draft()!)
 
   // The draft is memory-only, so everything that could destroy it asks first.
   createEffect(() => props.onPendingChange?.(dirty()))
@@ -141,8 +160,10 @@ export default function PtSetList(props: Props) {
     setDraft({ index, initial: { ...values }, values: { ...values } })
   }
 
-  const patchDraft = (fields: PtSetActuals) =>
-    setDraft(open => open && { ...open, values: { ...open.values, ...fields } })
+  const patchDraft = (fields: PtSetActuals) => {
+    const open = draft()
+    if (open) setDraft({ ...open, values: { ...open.values, ...fields } })
+  }
 
   const closeEditor = () => setDraft(null)
 

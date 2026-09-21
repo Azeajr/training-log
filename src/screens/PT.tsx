@@ -1,5 +1,5 @@
-import { createSignal, For, Show } from 'solid-js'
-import { A, useNavigate } from '@solidjs/router'
+import { createSignal, For, onCleanup, Show } from 'solid-js'
+import { A, useBeforeLeave, useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import type { PtRoutine } from '../types/domain'
 import {
@@ -23,7 +23,11 @@ import { formatDateShort } from '../lib/format'
 import Rule from '../components/layout/Rule'
 import AsyncErrorBox from '../components/ui/AsyncErrorBox'
 import FoldGlyph from '../components/ui/FoldGlyph'
-import PtSessionEditor from '../components/pt/PtSessionEditor'
+import PtSessionEditor, {
+  ptRunDraftDirty,
+  seedPtRunDraft,
+  type PtRunDraft,
+} from '../components/pt/PtSessionEditor'
 import SectionLabel from '../components/layout/SectionLabel'
 import InlineConfirm from '../components/ui/InlineConfirm'
 
@@ -48,6 +52,42 @@ export default function PT() {
   const [openSession, setOpenSession] = createSignal<number | null>(null)
   const [detail, setDetail] = createSignal<PtSessionDetail | null>(null)
   const [editing, setEditing] = createSignal(false)
+
+  /**
+   * Unsaved edits, by session id, held above the row that renders them.
+   *
+   * The editor lives inside a collapsible row, so folding the row — or opening
+   * another one — unmounted it and took the edit with it silently. Keeping the
+   * draft here outlives both, and a draft is dropped only by a successful save
+   * or an explicit CANCEL.
+   */
+  const [runDrafts, setRunDrafts] = createSignal<Record<number, PtRunDraft>>({})
+  const draftFor = (sessionId: number): PtRunDraft | undefined => runDrafts()[sessionId]
+  const isDirty = (sessionId: number) => ptRunDraftDirty(draftFor(sessionId))
+  const anyDirty = () => Object.keys(runDrafts()).some(id => isDirty(Number(id)))
+
+  const putDraft = (sessionId: number, next: PtRunDraft) =>
+    setRunDrafts(current => ({ ...current, [sessionId]: next }))
+  const dropDraft = (sessionId: number) =>
+    setRunDrafts(current => {
+      const next = { ...current }
+      delete next[sessionId]
+      return next
+    })
+
+  /** An edit survives a fold, but not a reload: it is in memory only. */
+  const warnOnUnload = (e: BeforeUnloadEvent) => { if (anyDirty()) e.preventDefault() }
+  window.addEventListener('beforeunload', warnOnUnload)
+  onCleanup(() => window.removeEventListener('beforeunload', warnOnUnload))
+
+  useBeforeLeave(e => {
+    if (e.defaultPrevented || !anyDirty()) return
+    e.preventDefault()
+    void confirm(
+      'A recorded run has unsaved changes. Leave anyway?',
+      { destructive: true, confirmLabel: 'LEAVE', cancelLabel: 'STAY' },
+    ).then(ok => { if (ok) e.retry(true) })
+  })
 
   const read = createAsyncRead()
 
@@ -131,7 +171,9 @@ export default function PT() {
       return
     }
     setOpenSession(sessionId)
-    setEditing(false)
+    // A run with an edit in progress reopens into it. The fold is a place to
+    // look at something else from, not a decision about the edit.
+    setEditing(draftFor(sessionId) != null)
     setDetail(null)
     try {
       const loaded = await getPtSessionDetail(db, sessionId)
@@ -308,6 +350,9 @@ export default function PT() {
                       <span class="text-text uppercase tracking-widest truncate flex-1">
                         {summary.routineName}
                       </span>
+                      <Show when={isDirty(summary.session.id!)}>
+                        <span class="text-warn text-xs tracking-widest shrink-0">UNSAVED CHANGES</span>
+                      </Show>
                       <span class={summary.done === summary.total ? 'text-accent text-xs tracking-widest' : 'text-warn text-xs tracking-widest'}>
                         {summary.done}/{summary.total}
                       </span>
@@ -326,12 +371,21 @@ export default function PT() {
                         <Show when={!editing()} fallback={
                           <PtSessionEditor
                             detail={detail()!}
-                            onSaved={() => { setEditing(false); void reopenSession(summary.session.id!) }}
-                            onCancel={() => setEditing(false)}
+                            draft={draftFor(summary.session.id!) ?? seedPtRunDraft(detail()!)}
+                            onDraftChange={next => putDraft(summary.session.id!, next)}
+                            onSaved={() => {
+                              setEditing(false)
+                              dropDraft(summary.session.id!)
+                              void reopenSession(summary.session.id!)
+                            }}
+                            onCancel={() => { setEditing(false); dropDraft(summary.session.id!) }}
                           />
                         }>
                         <button
-                          onClick={() => setEditing(true)}
+                          onClick={() => {
+                            putDraft(summary.session.id!, draftFor(summary.session.id!) ?? seedPtRunDraft(detail()!))
+                            setEditing(true)
+                          }}
                           class="border border-border text-muted px-3 py-1 mb-2 text-xs tracking-widest uppercase"
                         >
                           EDIT RUN
