@@ -234,7 +234,10 @@ describe('PtRun screen', () => {
     const row = checkbox(/Step down set 1/).parentElement!
     fireEvent.click(within(row).getByRole('button', { name: /× 10 reps/ }))
     fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
-    fireEvent.click(screen.getByText('LOG'))
+    // Already done, so the only commit on offer is the one that does not
+    // re-affirm completion — there is no LOG SET to press.
+    expect(screen.queryByText('LOG SET')).toBeNull()
+    fireEvent.click(screen.getByText('SAVE SET CHANGES'))
 
     await waitFor(() => expect(document.body.textContent).toContain('9 reps'))
     // Set 1 stays done, and the correction did not spill onto the rest.
@@ -259,7 +262,7 @@ describe('PtRun screen', () => {
 
     // Down from 10 in 2.5 steps: zero means unloaded, not "loaded with nothing".
     for (let i = 0; i < 4; i++) fireEvent.click(screen.getByLabelText('Decrease set 1 weight'))
-    fireEvent.click(screen.getByText('LOG'))
+    fireEvent.click(screen.getByText('LOG SET'))
 
     await waitFor(() => expect(checkbox(/Step up set 1/).parentElement!.textContent).not.toContain('lb'))
     // And it carries, like any other equipment change: putting the weight down
@@ -398,6 +401,71 @@ describe('PtRun screen', () => {
 
     fireEvent.click(screen.getByText('SAVE'))
     await waitFor(async () => expect(await db.ptSessions.count()).toBe(1))
+  })
+
+  /**
+   * A set edit lives in the editor until it is committed. FINISH would save the
+   * run around it and leave, so the edit has to be settled first — silently
+   * dropping it is exactly what A3 set out to stop.
+   */
+  it('refuses to finish while a set has unapplied changes', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
+    renderRun(id)
+    await screen.findByText('Band pull-apart')
+
+    fireEvent.click(checkbox(/set 1/))
+    const row = checkbox(/Band pull-apart set 1/).parentElement!
+    fireEvent.click(within(row).getByRole('button', { name: /15 reps/ }))
+    fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
+
+    fireEvent.click(screen.getByText('FINISH'))
+    await waitFor(() => expect(toast()).toBe('One set has unapplied changes.'))
+    expect(await db.ptSessions.count()).toBe(0)
+
+    fireEvent.click(screen.getByText('SAVE SET CHANGES'))
+    fireEvent.click(screen.getByText('FINISH'))
+    await waitFor(async () => expect(await db.ptSessions.count()).toBe(1))
+    expect((await db.ptSetChecks.toArray()).find(c => c.setNumber === 1)!.reps).toBe(14)
+  })
+
+  it('asks before leaving with an unapplied set edit, and staying keeps it', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
+    renderRun(id)
+    await screen.findByText('Band pull-apart')
+
+    const row = checkbox(/Band pull-apart set 1/).parentElement!
+    fireEvent.click(within(row).getByRole('button', { name: /15 reps/ }))
+    fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
+
+    fireEvent.click(screen.getByText('BACK TO ROUTINES'))
+    await screen.findByText(/unapplied changes/i)
+    fireEvent.click(screen.getByText('STAY'))
+
+    await waitFor(() => expect(screen.queryByText('STAY')).toBeNull())
+    expect(mockNavigate).not.toHaveBeenCalled()
+    // Still open, still holding the edit.
+    fireEvent.click(screen.getByText('SAVE SET CHANGES'))
+    expect(doneSets(ptRun)).toHaveLength(0)
+    expect(ptRun.sets[String((await getPtRoutine(db, id))!.exercises[0].id!)][0].reps).toBe(14)
+  })
+
+  /** Ticks are in the store and survive a reload. An open set edit is not. */
+  it('warns before a reload that would take an unapplied set edit with it', async () => {
+    const id = await savePtRoutine(db, { name: 'Rehab', exercises: [repsDraft()] })
+    renderRun(id)
+    await screen.findByText('Band pull-apart')
+
+    const quiet = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(quiet)
+    expect(quiet.defaultPrevented).toBe(false)
+
+    const row = checkbox(/Band pull-apart set 1/).parentElement!
+    fireEvent.click(within(row).getByRole('button', { name: /15 reps/ }))
+    fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
+
+    const dirty = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(dirty)
+    expect(dirty.defaultPrevented).toBe(true)
   })
 
   it('keeps every tick when the write fails, so the run can be retried', async () => {
@@ -561,7 +629,7 @@ describe('timed holds', () => {
     fireEvent.click(within(row).getByRole('button', { name: /0:30/ }))
     // 30s prescribed, 22s managed.
     for (let i = 0; i < 8; i++) fireEvent.click(screen.getByLabelText('Decrease set 1 seconds'))
-    fireEvent.click(screen.getByText('LOG'))
+    fireEvent.click(screen.getByText('LOG SET'))
 
     await waitFor(() =>
       expect(checkbox(/Side plank set 1/).parentElement!.textContent).toContain('0:22'))
@@ -577,7 +645,7 @@ describe('timed holds', () => {
     const row = checkbox(/Backward sled walk set 1/).parentElement!
     fireEvent.click(within(row).getByRole('button', { name: /50 yd/ }))
     for (let i = 0; i < 10; i++) fireEvent.click(screen.getByLabelText('Decrease set 1 distance'))
-    fireEvent.click(screen.getByText('LOG'))
+    fireEvent.click(screen.getByText('LOG SET'))
 
     await waitFor(() =>
       expect(checkbox(/Backward sled walk set 1/).parentElement!.textContent).toContain('40 yd'))
@@ -591,7 +659,7 @@ describe('timed holds', () => {
     const row = checkbox(/Band pull-apart set 1/).parentElement!
     fireEvent.click(within(row).getByRole('button', { name: /red band/ }))
     fireEvent.input(screen.getByLabelText('Set 1 band'), { target: { value: 'green' } })
-    fireEvent.click(screen.getByText('LOG'))
+    fireEvent.click(screen.getByText('LOG SET'))
 
     await waitFor(() =>
       expect(checkbox(/Band pull-apart set 1/).parentElement!.textContent).toContain('green band'))
@@ -614,7 +682,7 @@ describe('timed holds', () => {
     // Zero is "no box", the same reading the weight field takes — not a box of
     // height nothing. Both the height and its unit have to clear together.
     for (let i = 0; i < 6; i++) fireEvent.click(screen.getByLabelText('Decrease set 1 equipment height'))
-    fireEvent.click(screen.getByText('LOG'))
+    fireEvent.click(screen.getByText('LOG SET'))
 
     await waitFor(() =>
       expect(checkbox(/Step down set 1/).parentElement!.textContent).not.toContain('high'))

@@ -393,6 +393,37 @@ export interface PtRecordedKinds {
 /** A set as an editor holds it: every actual materialized, plus done-ness. */
 export type PtDraftSet = PtSetActuals & { done: boolean }
 
+const PT_ACTUAL_FIELDS = [
+  'reps', 'seconds', 'distance', 'distanceUnit',
+  'weight', 'band', 'equipmentHeight', 'equipmentHeightUnit',
+] as const satisfies readonly (keyof Required<PtSetActuals>)[]
+
+/**
+ * The actual fields that differ between two readings of one set.
+ *
+ * Sparse on purpose, twice over. A set editor opens on a materialized snapshot,
+ * but `PtRunSet` reads an ABSENT field as "not overridden, resolve against the
+ * prescription" and a null one as an explicit "none" — so committing the whole
+ * snapshot would silently detach every untouched field from the prescription.
+ * And `applyPtSetPatch` carries equipment forward into later unfinished sets, so
+ * a full patch would push a weight nobody touched over one already entered
+ * there.
+ *
+ * A field edited and put back to the value it opened on is unchanged, and absent.
+ */
+export function changedPtActuals(
+  before: Required<PtSetActuals>,
+  after: Required<PtSetActuals>,
+): PtSetActuals {
+  const changed: PtSetActuals = {}
+  for (const field of PT_ACTUAL_FIELDS) {
+    if (after[field] !== before[field]) {
+      (changed as Record<string, unknown>)[field] = after[field]
+    }
+  }
+  return changed
+}
+
 /**
  * Pin what a set actually was, resolving anything the user did not override
  * against the prescription.

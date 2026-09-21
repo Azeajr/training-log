@@ -226,7 +226,7 @@ describe('PT screen', () => {
     const row = await screen.findByRole('checkbox', { name: /Step down set 1/ })
     fireEvent.click(row.parentElement!.querySelector('button:not([role])')!)
     fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
-    fireEvent.click(screen.getByText('LOG'))
+    fireEvent.click(screen.getByText('APPLY SET CHANGES'))
     fireEvent.click(screen.getByText('SAVE CHANGES'))
 
     await waitFor(async () => {
