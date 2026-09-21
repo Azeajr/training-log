@@ -93,6 +93,13 @@ export default function PtSessionEditor(props: Props) {
     Object.fromEntries(props.detail.exercises.map(row => [row.exercise.id!, row.note ?? ''])),
   )
 
+  // Which exercises have a set editor open with unapplied changes in it.
+  // APPLY SET CHANGES puts an edit into the draft below; SAVE CHANGES writes the
+  // draft. An edit still sitting in the inner editor is in neither, and saving
+  // over it would look exactly like saving it.
+  const [pending, setPending] = createSignal<Record<number, boolean>>({})
+  const hasPending = () => Object.values(pending()).some(Boolean)
+
   const setsOf = (exerciseId: number) => sets()[exerciseId] ?? []
   const update = (exerciseId: number, next: PtRecordedSet[]) =>
     setSets(current => ({ ...current, [exerciseId]: next }))
@@ -100,6 +107,10 @@ export default function PtSessionEditor(props: Props) {
   const { busy: saving, guard } = useSingleFlight()
 
   const handleSave = guard(async () => {
+    if (hasPending()) {
+      showToast('One set has unapplied changes.')
+      return
+    }
     try {
       await updatePtSession(db, {
         sessionId: props.detail.session.id!,
@@ -136,6 +147,8 @@ export default function PtSessionEditor(props: Props) {
               exercise={row.exercise}
               sets={setsOf(row.exercise.id!)}
               read={set => readRecordedPtSet(row.exercise, set)}
+              commitLabel="APPLY SET CHANGES"
+              onPendingChange={p => setPending(current => ({ ...current, [row.exercise.id!]: p }))}
               onPatch={(setNumber, fields) =>
                 update(row.exercise.id!, applyPtSetPatch(setsOf(row.exercise.id!), setNumber, fields))}
               onAdd={() => update(row.exercise.id!, addedRunSet(setsOf(row.exercise.id!), row.exercise))}

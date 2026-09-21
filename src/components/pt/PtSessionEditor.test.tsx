@@ -10,6 +10,7 @@ import {
   type PtExerciseDraft,
 } from '../../lib/pt'
 import type { PtSetCheck } from '../../types/domain'
+import { showToast, toast } from '../../store/toast-store'
 
 const drain = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)) }
 
@@ -18,6 +19,9 @@ beforeEach(async () => {
     db.ptRoutines.clear(), db.ptExercises.clear(),
     db.ptSessions.clear(), db.ptSetChecks.clear(), db.ptNotes.clear(),
   ])
+  // The toast is a module singleton and outlives a test; left standing, a
+  // `waitFor` on its content passes against the previous test's message.
+  showToast('')
 })
 
 afterEach(drain)
@@ -183,7 +187,7 @@ describe('PtSessionEditor', () => {
 
     // The set was recorded as distance under load, so that is what it edits as.
     fireEvent.click(await screen.findByLabelText('Decrease set 2 distance'))
-    fireEvent.click(screen.getByText('LOG'))
+    fireEvent.click(screen.getByText('APPLY SET CHANGES'))
     fireEvent.click(screen.getByText('SAVE CHANGES'))
 
     await waitFor(async () => expect((await rowsOf(sessionId))[1].distance).toBe(49))
@@ -198,6 +202,37 @@ describe('PtSessionEditor', () => {
       distance: 49, distanceUnit: 'm', weight: 180,
       measure: 'distance', resistanceKind: 'weight',
     })
+  })
+
+  /**
+   * Two commit points, and only the outer one writes. APPLY SET CHANGES puts an
+   * edit into the run draft; SAVE CHANGES writes the draft. An edit still in the
+   * inner editor is in neither, and saving over it would look like saving it.
+   */
+  it('refuses to save the run while a set has unapplied changes', async () => {
+    const routineId = await savePtRoutine(db, { name: 'Knee', exercises: [stepUp({ sets: 1 })] })
+    const step = (await getPtRoutine(db, routineId))!.exercises[0]
+    const sessionId = await commitPtRun(db, {
+      routineId,
+      date: new Date(2026, 8, 16),
+      checks: [{
+        ptExerciseId: step.id!, setNumber: 1, done: true,
+        reps: 10, weight: 25, measure: 'reps', resistanceKind: 'weight',
+      }],
+    })
+
+    await openEditor(sessionId)
+    const row = await screen.findByRole('checkbox', { name: /Step up set 1/ })
+    fireEvent.click(row.parentElement!.querySelector('button:not([role])')!)
+    fireEvent.click(await screen.findByLabelText('Decrease set 1 reps'))
+
+    fireEvent.click(screen.getByText('SAVE CHANGES'))
+    await waitFor(() => expect(toast()).toBe('One set has unapplied changes.'))
+    expect((await rowsOf(sessionId))[0].reps).toBe(10)
+
+    fireEvent.click(screen.getByText('APPLY SET CHANGES'))
+    fireEvent.click(screen.getByText('SAVE CHANGES'))
+    await waitFor(async () => expect((await rowsOf(sessionId))[0].reps).toBe(9))
   })
 
   /**

@@ -1,13 +1,16 @@
-import { createSignal, For, Show } from 'solid-js'
+import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js'
 import type { PtExercise } from '../../types/domain'
 import {
+  changedPtActuals,
   formatPtResistance,
   formatPtTarget,
   ptActualParts,
   readLivePtSet,
+  type PtSetActuals,
   type PtSetReading,
 } from '../../lib/pt'
 import type { PtRunSet } from '../../store/pt-store'
+import { showToast } from '../../store/toast-store'
 import { FieldRow } from '../forms/SetLogControls'
 import SetReadout from '../forms/SetReadout'
 import Stepper from '../forms/Stepper'
@@ -35,6 +38,36 @@ interface Props {
    * erased them.
    */
   read?: (set: PtRunSet, index: number) => PtSetReading
+  /**
+   * The primary commit button's label. Defaults to `SAVE SET CHANGES`.
+   *
+   * Passing one also means "this list has no completion semantics of its own":
+   * the `LOG SET` action, which commits AND ticks, is only offered when the
+   * label is left alone. A run being edited in history is already finished, so
+   * its inner action says what it does — apply into the run draft, which the
+   * enclosing SAVE CHANGES still has to write.
+   */
+  commitLabel?: string
+  /**
+   * Told whenever this list gains or loses unapplied set edits.
+   *
+   * The draft lives here, but the buttons that would destroy it — FINISH, SAVE
+   * CHANGES, leaving the screen — live above. They ask through this.
+   */
+  onPendingChange?: (pending: boolean) => void
+}
+
+/**
+ * A set being edited: which one, what it opened on, and what it says now.
+ *
+ * `initial` is what makes the commit sparse. Without it the editor could only
+ * offer the whole snapshot, and see `changedPtActuals` for why that is not the
+ * same thing.
+ */
+interface PtSetDraft {
+  index: number
+  initial: Required<PtSetActuals>
+  values: Required<PtSetActuals>
 }
 
 const INPUT_CLASS = 'bg-surface border border-border text-text px-2 py-1 text-sm focus:outline-none focus:border-accent'
@@ -64,22 +97,84 @@ function describe(reading: PtSetReading): { weight: number | null; value: string
  * exercise before fixing it is how a wrong number ends up saved.
  */
 export default function PtSetList(props: Props) {
-  const [editing, setEditing] = createSignal<number | null>(null)
+  const [draft, setDraft] = createSignal<PtSetDraft | null>(null)
+  const editing = () => draft()?.index ?? null
   const exercise = () => props.exercise
   const activeIndex = () => props.sets.findIndex(s => !s.done)
-
-  const patch = (index: number, fields: Partial<PtRunSet>) => props.onPatch(index + 1, fields)
 
   const reading = (index: number): PtSetReading => {
     const set = props.sets[index] ?? { done: false }
     return props.read ? props.read(set, index) : readLivePtSet(exercise(), set)
   }
 
-  // Which fields a set HAS, and what the editor seeds them from. Both come from
-  // the set's own reading, so an old set keeps the shape it was recorded in
-  // while the routine moves on around it.
+  // Which fields a set HAS. Read from the set's own reading, so an old set keeps
+  // the shape it was recorded in while the routine moves on around it.
   const contextOf = (index: number) => reading(index).context
-  const valueOf = (index: number) => reading(index).values
+
+  /**
+   * What the editor shows: the open draft for the set being edited, the set's
+   * own reading for every other row.
+   */
+  const valueOf = (index: number) => {
+    const open = draft()
+    return open?.index === index ? open.values : reading(index).values
+  }
+
+  const changes = () => {
+    const open = draft()
+    return open ? changedPtActuals(open.initial, open.values) : {}
+  }
+  const dirty = () => Object.keys(changes()).length > 0
+
+  // The draft is memory-only, so everything that could destroy it asks first.
+  createEffect(() => props.onPendingChange?.(dirty()))
+  onCleanup(() => props.onPendingChange?.(false))
+
+  const openEditor = (index: number) => {
+    if (dirty()) {
+      // Never silently commit and never silently drop: two editors cannot be
+      // open at once, so the one already open has to be settled by hand.
+      showToast('Apply or cancel the open set first.')
+      return
+    }
+    const values = reading(index).values
+    setDraft({ index, initial: { ...values }, values: { ...values } })
+  }
+
+  const patchDraft = (fields: PtSetActuals) =>
+    setDraft(open => open && { ...open, values: { ...open.values, ...fields } })
+
+  const closeEditor = () => setDraft(null)
+
+  /**
+   * Send the edit up, as a patch of only what changed.
+   *
+   * `done` is passed only by an action that means to change completion. Opening
+   * a set and committing without touching anything sends nothing at all, which
+   * is what keeps carry-forward from pushing untouched equipment into the sets
+   * below.
+   */
+  const commit = (index: number, done?: boolean) => {
+    const fields = changes()
+    if (done !== undefined || Object.keys(fields).length > 0) {
+      props.onPatch(index + 1, done === undefined ? fields : { ...fields, done })
+    }
+    closeEditor()
+  }
+
+  /**
+   * Removing a set renumbers every set after it, so an open draft has to follow
+   * the set it belongs to rather than stay on an index that now holds a
+   * different one. Removing the set being edited takes its draft with it.
+   */
+  const handleRemove = (setNumber: number) => {
+    const open = draft()
+    if (open) {
+      if (open.index === setNumber - 1) closeEditor()
+      else if (open.index > setNumber - 1) setDraft({ ...open, index: open.index - 1 })
+    }
+    props.onRemove(setNumber)
+  }
 
   return (
     <div class="mb-2">
@@ -100,7 +195,7 @@ export default function PtSetList(props: Props) {
                   aria-label={`${exercise().name} set ${i() + 1}, ${formatPtTarget(contextOf(i()))}${
                     formatPtResistance(contextOf(i())) ? `, ${formatPtResistance(contextOf(i()))}` : ''
                   }`}
-                  onClick={() => patch(i(), { done: !set.done })}
+                  onClick={() => props.onPatch(i() + 1, { done: !set.done })}
                   class={`border px-2 py-1 shrink-0 text-xs font-mono tracking-widest transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
                     set.done
                       ? 'border-accent text-accent bg-surface-high'
@@ -115,14 +210,14 @@ export default function PtSetList(props: Props) {
                   value={describe(reading(i())).value}
                   size="sm"
                   tone={set.done ? undefined : 'text-faint'}
-                  onClick={() => setEditing(i())}
+                  onClick={() => openEditor(i())}
                   badges={<Show when={i() === activeIndex()}><span class="text-warn ml-1">next</span></Show>}
                   trailing={
                     <InlineConfirm
                       label="✕"
                       ariaLabel={`Remove ${exercise().name} set ${i() + 1}`}
                       confirmText="remove set?"
-                      onConfirm={() => props.onRemove(i() + 1)}
+                      onConfirm={() => handleRemove(i() + 1)}
                       class="ml-auto"
                     />
                   }
@@ -138,7 +233,7 @@ export default function PtSetList(props: Props) {
                 <FieldRow label="reps">
                   <Stepper
                     value={valueOf(i()).reps ?? 0}
-                    onChange={v => patch(i(), { reps: v })}
+                    onChange={v => patchDraft({ reps: v })}
                     step={1} min={0} fieldLabel={`set ${i() + 1} reps`}
                   />
                 </FieldRow>
@@ -147,7 +242,7 @@ export default function PtSetList(props: Props) {
                 <FieldRow label="time">
                   <DurationInput
                     value={valueOf(i()).seconds}
-                    onChange={v => patch(i(), { seconds: v })}
+                    onChange={v => patchDraft({ seconds: v })}
                     fieldLabel={`set ${i() + 1}`}
                   />
                 </FieldRow>
@@ -156,7 +251,7 @@ export default function PtSetList(props: Props) {
                 <FieldRow label="dist">
                   <Stepper
                     value={valueOf(i()).distance ?? 0}
-                    onChange={v => patch(i(), { distance: v })}
+                    onChange={v => patchDraft({ distance: v })}
                     step={1} min={0} fieldLabel={`set ${i() + 1} distance`}
                   />
                 </FieldRow>
@@ -173,7 +268,7 @@ export default function PtSetList(props: Props) {
                       on an otherwise loaded exercise should read. */}
                   <Stepper
                     value={valueOf(i()).weight ?? 0}
-                    onChange={v => patch(i(), { weight: v === 0 ? null : v })}
+                    onChange={v => patchDraft({ weight: v === 0 ? null : v })}
                     step={2.5} min={0} fieldLabel={`set ${i() + 1} weight`}
                   />
                 </FieldRow>
@@ -183,7 +278,7 @@ export default function PtSetList(props: Props) {
                   <input
                     type="text"
                     value={valueOf(i()).band ?? ''}
-                    onInput={e => patch(i(), { band: e.currentTarget.value })}
+                    onInput={e => patchDraft({ band: e.currentTarget.value })}
                     aria-label={`Set ${i() + 1} band`}
                     class={`${INPUT_CLASS} w-full`}
                   />
@@ -193,7 +288,7 @@ export default function PtSetList(props: Props) {
               <FieldRow label="height">
                 <Stepper
                   value={valueOf(i()).equipmentHeight ?? 0}
-                  onChange={v => patch(i(), {
+                  onChange={v => patchDraft({
                     equipmentHeight: v === 0 ? null : v,
                     equipmentHeightUnit: v === 0 ? null : valueOf(i()).equipmentHeightUnit ?? 'in',
                   })}
@@ -202,14 +297,26 @@ export default function PtSetList(props: Props) {
                 <span class="text-muted text-xs">{valueOf(i()).equipmentHeightUnit ?? 'in'}</span>
               </FieldRow>
 
+              {/* Two named actions rather than one that also ticks. Correcting a
+                  number and saying the set is finished are different claims, and
+                  LOG made the second the only way to do the first. CANCEL now
+                  cancels, so it is spelled like the other commit controls. */}
               <div class="flex gap-2">
+                <Show when={props.commitLabel === undefined && !set.done}>
+                  <button
+                    onClick={() => commit(i(), true)}
+                    class="flex-1 border border-accent text-accent py-2 font-mono text-sm tracking-widest"
+                  >
+                    LOG SET
+                  </button>
+                </Show>
                 <button
-                  onClick={() => { patch(i(), { done: true }); setEditing(null) }}
-                  class="flex-1 border border-accent text-accent py-2 font-mono text-sm tracking-widest"
+                  onClick={() => commit(i())}
+                  class="flex-1 border border-border text-muted py-2 font-mono text-sm tracking-widest"
                 >
-                  LOG
+                  {props.commitLabel ?? 'SAVE SET CHANGES'}
                 </button>
-                <button onClick={() => setEditing(null)} class="text-muted text-xs px-2">cancel</button>
+                <button onClick={closeEditor} class="text-muted text-xs px-2">CANCEL</button>
               </div>
             </div>
           </Show>

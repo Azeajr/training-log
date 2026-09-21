@@ -1,4 +1,4 @@
-import { batch, createMemo, createSignal, For, Show } from 'solid-js'
+import { batch, createMemo, createSignal, For, onCleanup, Show } from 'solid-js'
 import { useNavigate, useParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { PtExercise } from '../types/domain'
@@ -122,10 +122,26 @@ export default function PtRun() {
   const total = createMemo(() => setsIn(exercises()))
   const doneCount = createMemo(() => doneIn(exercises()))
 
+  // A set editor open with unapplied changes, anywhere in the session —
+  // including inside a folded routine, which is why this is tracked here rather
+  // than asked of the DOM. The draft lives in `PtSetList` and in memory only, so
+  // finishing, leaving and reloading all have to reckon with it.
+  const [pending, setPending] = createSignal<Record<number, boolean>>({})
+  const hasPending = () => Object.values(pending()).some(Boolean)
+
+  const warnOnUnload = (e: BeforeUnloadEvent) => { if (hasPending()) e.preventDefault() }
+  window.addEventListener('beforeunload', warnOnUnload)
+  onCleanup(() => window.removeEventListener('beforeunload', warnOnUnload))
+
   const { busy: finishing, guard } = useSingleFlight()
 
   const handleFinish = guard(async () => {
     if (!groups().length) return
+
+    if (hasPending()) {
+      showToast('One set has unapplied changes.')
+      return
+    }
 
     if (doneCount() === 0) {
       if (!await confirm(
@@ -182,6 +198,21 @@ export default function PtRun() {
     }
   })
 
+  /**
+   * Leaving the run screen unmounts every set editor with it. Ticks are in the
+   * store and survive; an unapplied set edit is not and does not, so it is the
+   * one thing worth stopping for.
+   */
+  const handleBack = async () => {
+    if (hasPending() && !await confirm(
+      'One set has unapplied changes. Leave anyway?',
+      // Named rather than left as the default CANCEL: the set editor this is
+      // warning about has a CANCEL of its own on screen at the same time.
+      { destructive: true, confirmLabel: 'LEAVE', cancelLabel: 'STAY' },
+    )) return
+    navigate('/pt')
+  }
+
   const handleDiscard = async () => {
     const hasNotes = groups().some(group => {
       const run = getPtRun(group.routine.id!)
@@ -216,7 +247,7 @@ export default function PtRun() {
           <Rule label={routineName()} labelSuffix={`. ${doneCount()}/${total()}`} class="text-muted mb-4" />
 
           <button
-            onClick={() => navigate('/pt')}
+            onClick={() => void handleBack()}
             disabled={finishing()}
             class="border border-border text-muted px-3 py-2 text-xs tracking-widest mb-4"
           >
@@ -284,6 +315,7 @@ export default function PtRun() {
                         onPatch={(setNumber, fields) => setPtSetFields(exercise.id!, setNumber, fields, exercise.routineId)}
                         onAdd={() => addPtSet(exercise.id!, exercise.routineId)}
                         onRemove={setNumber => removePtSet(exercise.id!, setNumber, exercise.routineId)}
+                        onPendingChange={p => setPending(current => ({ ...current, [exercise.id!]: p }))}
                       />
 
                       <SubLabel class="mb-1">NOTE</SubLabel>

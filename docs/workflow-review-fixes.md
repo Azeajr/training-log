@@ -123,7 +123,7 @@ from source here.
 |---|---|---|---|---|---|---|
 | **A1** | P1 | PT data loss | EF#1 · CX#1 | `src/lib/pt.ts` | `fixed` | 11 tests red at `d222835`: `pt.test.ts` ×4, `PtSessionEditor.test.tsx` ×4 (new file), `export-import.test.ts` ×2, `pt-set-actuals.test.ts` ×1 |
 | **A2** | P1 | Workout data loss | WF#1 · CX#2 | `src/store/workout-store.ts` | `open` | |
-| **A3** | P2 | PT draft model | UI#3 · EF#2 · UI#10 · CX#3/#4 | `src/components/pt/PtSetList.tsx` | `open` | |
+| **A3** | P2 | PT draft model | UI#3 · EF#2 · UI#10 · CX#3/#4 | `src/components/pt/PtSetList.tsx` | `fixed` | 13 tests red at B2: `PtSetList.test.tsx` ×9 (new file), `PtRun.test.tsx` ×3, `PtSessionEditor.test.tsx` ×1 |
 | **A4** | P2 | PT draft model | EF#3 · CX#5 | `src/store/pt-store.ts` | `open` | |
 | **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `open` | |
 | **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `open` | |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
 
-**Totals: 22 items — 20 `open`, 0 `wip`, 2 `fixed`.**
+**Totals: 22 items — 19 `open`, 0 `wip`, 3 `fixed`.**
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -534,7 +534,7 @@ Re-selecting the current occupant does not reset it.
 
 ## A3 · The PT set editor's `cancel` does not cancel, and `LOG` force-ticks
 
-**State:** `open` · **P2** · Sources: UI#3, EF#2, UI#10, CX#3, CX#4 · Batch 2
+**State:** `fixed` · **P2** · Sources: UI#3, EF#2, UI#10, CX#3, CX#4 · Batch 2
 
 ### Problem
 
@@ -694,6 +694,30 @@ silently lose the draft):
    navigation preserves them or requests resolution, and cancelling departure keeps them.
 8. `PtSetList.test.tsx` — removing an earlier set cannot redirect a pending edit to a
    different set. Historical type-change coverage is shared with A1.
+
+### As built
+
+The draft is one signal, `PtSetDraft { index, initial, values }`, rather than the three the
+sketch used — `initial` is the whole reason the commit can be sparse, so it belongs next to
+the values it is compared against. `changedPtActuals` lives in `lib/pt.ts` beside the other
+actual-field helpers.
+
+Two rules landed differently than written:
+
+- **"Force an explicit choice" before opening a second set** is only enforced when the open
+  draft is *dirty*. An editor open on untouched values has nothing to lose, and demanding a
+  decision to close it would be a prompt about nothing. A dirty one refuses to be displaced
+  and says so.
+- **"Removing a set while editing it"** is unreachable through the UI: the set being edited
+  renders as the editor, so it has no remove control. The guard in `handleRemove` is kept
+  anyway — it is two lines and it is where the rule belongs — and the test covers the cases
+  that *are* reachable: a removal above the open set rebinds it, one below leaves it alone.
+
+`src/screens/PT.tsx` needed no change here; preserving the draft across a collapse is A5's
+half of the work, and until it lands a historical draft still dies with the unmount. The
+live run's memory-only drafts are guarded on FINISH (hard block), on BACK TO ROUTINES
+(confirm, with `STAY` naming the cancel so it cannot be confused with the set editor's own
+CANCEL) and on reload via `beforeunload`.
 
 ### Not done
 
