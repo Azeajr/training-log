@@ -144,12 +144,30 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 0 `open`, 0 `wip`, 22 `fixed`.** Every batch is complete. Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 0 `open`, 0 `wip`, 22 `fixed`.** Every batch is complete.
 
-**Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
-"one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
-each item still gets its own failing test first and its own ledger row update in the commit
+**Batches 4 and 5 landed as one PR each with a commit per item**, at the user's direction —
+rule 6's "one stacked PR per sub-batch" was set aside for those two. Every other rule stood:
+each item still got its own failing test first and its own ledger row update in the commit
 that carries its code.
+
+**Where the work landed.** Batches 1 and 2 as a six-PR stack (#168, #169, #171, #172, #173,
+#174), then #175 (A2), #176 (B1), #177 (batch 4), #178 (batch 5) and #179 (C4). Each merge
+was verified into `main` by commit ancestry rather than by the MERGED label.
+
+**Deliberately not built**, each recorded in its own item's As built rather than dropped
+silently:
+
+- **B3/C3** — a direct route from an out-of-range suggestion into band settings or plate
+  configuration. Six call sites would each have to mount that dialog from inside a nested
+  control; the message already names the limit and which side of it the target falls on.
+- **C2** — `SetRow`'s mirror defect. Its `×` is outside the `Show` too, but bare, so the
+  band branch reads correctly while plain weight shows no unit at all. The plan names six
+  sites and blesses this one.
+- **A5** — `dirty` is a flag, so a value changed and changed back still reads as unsaved.
+  It errs toward warning about work that turns out to be identical.
+- **A4** — a v1 draft already re-serialized as v2 has lost its provenance and is treated as
+  authoritative. Preserving the list the user has beats inventing sets they did not do.
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
