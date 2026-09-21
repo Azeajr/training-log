@@ -515,6 +515,110 @@ describe('Workout screen — with active session', () => {
     })
   })
 
+  // ── C4 ────────────────────────────────────────────────────────────────────
+  // Logging was tied to one linear cursor, so someone who warmed up their own
+  // way could not reach the main sets without logging warmups they did not do.
+  // The cursor WAS the completion model, and `logSet` appends while the rows
+  // read `loggedSets` by global index — two problems from one root.
+  describe('skipping warmups', () => {
+    const skipWarmups = async () => {
+      fireEvent.click(await screen.findByText('SKIP REMAINING WARMUPS'))
+      await waitFor(() => expect(workout.currentSetIndex).toBe(3))
+    }
+
+    /** The direct test for the append-versus-index-read pairing. */
+    it('renders a main set logged after a skip with its own values', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      await screen.findByText('WARM UP')
+      await skipWarmups()
+
+      fireEvent.click(await screen.findByText('LOG'))
+      await waitFor(() => expect(workout.loggedSets).toHaveLength(1))
+
+      // One logged set at position 0, read by a row whose plan index is 3.
+      const [logged] = workout.loggedSets
+      expect(logged).toMatchObject({ type: 'main', setNumber: 1 })
+      const row = screen.getAllByText('done')[0].closest('div')!.parentElement!
+      expect(row.textContent).toContain(String(logged.reps))
+      expect(row.textContent).toContain(`${logged.weight}lb`)
+    })
+
+    it('records no warmup sets for the ones it skipped', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      await screen.findByText('WARM UP')
+      await skipWarmups()
+
+      fireEvent.click(await screen.findByText('LOG'))
+      await waitFor(() => expect(workout.loggedSets).toHaveLength(1))
+
+      expect(workout.loggedSets.every(s => s.type !== 'warmup')).toBe(true)
+      expect(await db.sets.where('sessionId').equals(1).toArray()).toHaveLength(1)
+      expect(workout.skippedSets).toEqual([0, 1, 2])
+    })
+
+    it('skips only what is left when some warmups were performed', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      await logNSets(1)
+      fireEvent.click(await screen.findByLabelText('SKIP REST'))
+      await skipWarmups()
+
+      expect(workout.skippedSets).toEqual([1, 2])
+      expect(workout.loggedSets).toHaveLength(1)
+      expect(workout.loggedSets[0].type).toBe('warmup')
+    })
+
+    it('edits the set that was logged, not the row beside it', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      await screen.findByText('WARM UP')
+      await skipWarmups()
+      fireEvent.click(await screen.findByText('LOG'))
+      await waitFor(() => expect(workout.loggedSets).toHaveLength(1))
+      const original = workout.loggedSets[0].reps
+
+      fireEvent.click(screen.getAllByText('done')[0])
+      // The edit row carries its own steppers; the active row below has a set
+      // of identically-named ones.
+      const editRow = (await screen.findByText('SAVE')).parentElement!
+      fireEvent.click(within(editRow).getByLabelText('Decrease reps'))
+      fireEvent.click(within(editRow).getByText('SAVE'))
+
+      await waitFor(() => expect(workout.loggedSets[0].reps).toBe(original - 1))
+      expect(workout.loggedSets).toHaveLength(1)
+    })
+
+    it('counts a skipped warmup as neither done nor outstanding', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      await screen.findByText('WARM UP')
+      await skipWarmups()
+      await drain()
+
+      // The block leaves the session bar entirely once nothing in it is owed.
+      expect(screen.queryByRole('button', { name: /^WARMUP / })).toBeNull()
+      // And FINISH does not list it as outstanding.
+      fireEvent.click(getFinishButton())
+      await screen.findByText(/nothing logged/i)
+      expect(document.body.textContent).not.toMatch(/WARMUP/)
+      fireEvent.click(screen.getByText('CONTINUE WORKOUT'))
+    })
+
+    it('gives a skipped warmup back', async () => {
+      startSession(BENCH)
+      renderWorkout()
+      await screen.findByText('WARM UP')
+      await skipWarmups()
+
+      fireEvent.click(await screen.findByLabelText('Undo skipping warmup set 2'))
+
+      await waitFor(() => expect(workout.currentSetIndex).toBe(1))
+      expect(workout.skippedSets).toEqual([0, 2])
+    })
+  })
+
   // ── C5 ────────────────────────────────────────────────────────────────────
   // The rest timer took the whole strip, so a rest hid FINISH and every section
   // link with it. Getting either back meant working out that SKIP REST was the

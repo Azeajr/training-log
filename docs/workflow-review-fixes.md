@@ -132,7 +132,7 @@ from source here.
 | **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×3, `AccessoryLog.test.tsx` ×3; 4 red at C2 |
 | **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `fixed` | `AccessoryLog.test.tsx` ×3, `HistoryEdit.test.tsx` ×5; 5 red at E1 |
 | **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `fixed` | `BandLoadControls.test.tsx` ×5; 6 of the file's 10 red at D1 |
-| **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
+| **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×6 all red at batch 5, `workout-store.test.ts` ×2 |
 | **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `fixed` | `Workout.test.tsx` ×3, all red at batch 4 |
 | **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×2, 1 red at C1 (the other guards the unchanged step and bounds) |
 | **C7** | P2 | Flow | UI#6 · CX#12 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×3, all red at C5 |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 1 `open`, 0 `wip`, 21 `fixed`.** Batches 1–5 are complete; only C4 remains. Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 0 `open`, 0 `wip`, 22 `fixed`.** Every batch is complete. Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1555,7 +1555,7 @@ props.targetLabel?: 'Prescribed' | 'Target effective load'
 
 ## C4 · Main sets are locked behind every prescribed warmup
 
-**State:** `open` · **P2** · Sources: WF#3, CX#10 · Batch 6, **last and alone**
+**State:** `fixed` · **P2** · Sources: WF#3, CX#10 · Batch 6, **last and alone**
 
 ### Problem
 
@@ -1629,6 +1629,36 @@ reps and weight** — the direct test for (a), and the one that fails today's ap
 index-read pairing. No fake warmup records; counts truthful. The main set still editable
 and deletable, with the edit landing on it and not a neighbour. B1's prompt does not list skipped
 warmups as outstanding.
+
+### As built
+
+**(a) is solved by keying rows to the set they belong to**, not by renumbering anything. A
+row finds its logged set through `loggedIndexOf`, which matches on `type` and `setNumber` —
+what the database row carries too — so the append and the read no longer have to agree about
+position. `onEdit` and `onDelete` address that index; `onLog` keeps the plan index, which is
+what it was always reading.
+
+That turned up the same defect one layer down: `logSetAt` wrote the new row's database id
+back with `editSet(setIndex, …)`, the PLAN index. With a skip in front of it, that wrote a
+hole into `loggedSets` — the array came back `[main1, null, null]`, which is exactly the
+shape (a) describes. It writes to the appended index now.
+
+**(b) is `skippedSets: number[]`**, plan indices, warmups only. Persisted through all three
+places the plan names — the allowlist, the validators and `writeSnapshot`'s explicit object
+— and a test removes only the serializer line to prove that third one is load-bearing, since
+that is the trap A4 hit.
+
+`isCompleted` asks whether a logged row exists rather than whether the cursor has passed.
+`sectionComplete` requires every slot settled — logged or skipped — rather than trusting the
+cursor alone. `segments()` counts logged sets as `done` and drops skipped ones from `total`,
+so a fully skipped block leaves the session bar entirely and B1's prompt never lists it.
+
+**The route back** is per row: a skipped row renders as `skipped` with `UNDO SKIP`, which
+takes the skip back and puts the cursor on it. The skip itself is
+`SKIP REMAINING WARMUPS`, offered only while the cursor is still inside the block and
+something is left to skip.
+
+Scope held: warmups only, and the cursor is not generalised to arbitrary ordering.
 
 ---
 

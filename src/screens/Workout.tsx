@@ -5,7 +5,7 @@ import { createSignal, createEffect, on, For, Index, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, Exercise, Session } from '../types/domain'
-import { workout, logSet, editSet, advanceSet, deleteLastSet, logCrossSet, editCrossSet, deleteLastCrossSetFor, startRest, clearSession, setNotes, persistenceError } from '../store/workout-store'
+import { workout, logSet, editSet, advanceSet, deleteLastSet, logCrossSet, editCrossSet, deleteLastCrossSetFor, skipSetsThrough, unskipSet, startRest, clearSession, setNotes, persistenceError } from '../store/workout-store'
 import {
   getSupplementalLabel, calcJokerSet, calcJokerIncrement, calcNextJokerWeight,
   shouldShowJokerButton, JOKER_MIN_REPS, isSupplementalType, jokerChainBaseWeight,
@@ -64,6 +64,16 @@ interface LoadedCrossBlock {
   unplanned?: boolean
 }
 
+/**
+ * The index in `loggedSets` of the row belonging to a planned slot, or -1.
+ *
+ * By what the set IS — its type and set number, which is what the database row
+ * carries too — rather than by where it sits in the plan. `logSet` appends, so
+ * position only ever agreed with the plan while every set was logged in order.
+ */
+const loggedIndexOf = (planned: { type: string; setNumber: number }) =>
+  workout.loggedSets.findIndex(l => l.type === planned.type && l.setNumber === planned.setNumber)
+
 function SetSection(props: {
   sets: () => (WarmupSet | MainSet | JokerSet | FslSet | CrossSet)[]
   offset: () => number
@@ -89,21 +99,32 @@ function SetSection(props: {
     <Index each={props.sets()}>
       {(s, i) => {
         const globalIdx = () => props.offset() + i
+        // The logged row this slot OWNS, found by what it is rather than by
+        // where the cursor happens to be. `logSet` appends while this used to
+        // read by global index, which agreed only while every set was logged in
+        // order with no gaps: skip three warmups and log main set 1 and the row
+        // read `loggedSets[3]` — undefined — so the set just logged rendered
+        // blank, and an edit landed on a neighbour.
+        const loggedIdx = () => loggedIndexOf(s())
+        const logged = () => workout.loggedSets[loggedIdx()]
+        const skipped = () => workout.skippedSets.includes(globalIdx())
         return (
           <SetRow
             set={{ ...s(), isAmrap: props.forceAmrapFalse ? false : !!(s() as MainSet).isAmrap }}
-            isActive={workout.currentSetIndex === globalIdx()}
-            isCompleted={globalIdx() < workout.currentSetIndex}
-            loggedReps={workout.loggedSets[globalIdx()]?.reps}
-            loggedWeight={workout.loggedSets[globalIdx()]?.weight}
-            loggedBandLoad={workout.loggedSets[globalIdx()]?.bandLoad}
-            previousBandLoad={workout.loggedSets[globalIdx() - 1]?.bandLoad}
+            isActive={workout.currentSetIndex === globalIdx() && !skipped()}
+            isCompleted={loggedIdx() !== -1}
+            isSkipped={skipped()}
+            onUnskip={skipped() ? () => unskipSet(globalIdx()) : undefined}
+            loggedReps={logged()?.reps}
+            loggedWeight={logged()?.weight}
+            loggedBandLoad={logged()?.bandLoad}
+            previousBandLoad={workout.loggedSets[loggedIdx() - 1]?.bandLoad}
             bandProfile={props.bandProfile}
             amrapTargets={(s() as MainSet).isAmrap && props.amrapTargets ? props.amrapTargets() : undefined}
             onLog={(reps, weight, bandLoad) => props.onLog(globalIdx(), reps, weight, bandLoad)}
-            onEdit={(reps, weight, bandLoad) => props.onEdit(globalIdx(), reps, weight, bandLoad)}
+            onEdit={(reps, weight, bandLoad) => props.onEdit(loggedIdx(), reps, weight, bandLoad)}
             onWeightChange={(s() as MainSet).isAmrap ? props.onWeightChange : undefined}
-            onDelete={globalIdx() === workout.currentSetIndex - 1 ? props.onDelete : undefined}
+            onDelete={loggedIdx() !== -1 && loggedIdx() === workout.loggedSets.length - 1 ? props.onDelete : undefined}
             loading={props.loading}
             activeRef={props.onActiveRef}
           />
@@ -419,6 +440,11 @@ export default function Workout() {
     }
     const prevAllSets = allSets()
     logSet(setData)
+    // Where the row actually landed. `logSet` APPENDS, so this is the end of
+    // the array and not the plan index — which agreed only while every set was
+    // logged in cursor order, and writes a hole into `loggedSets` the moment a
+    // warmup is skipped.
+    const loggedIdx = workout.loggedSets.length - 1
     advanceSet()
     // Re-derive the planned tail from the new logged state — this is what
     // cascades an overridden weight into the not-yet-logged sets after it.
@@ -427,7 +453,7 @@ export default function Workout() {
     let dbId: number
     try {
       dbId = await db.sets.add(setData)
-      editSet(setIndex, { id: dbId })
+      editSet(loggedIdx, { id: dbId })
     } catch (err) {
       deleteLastSet()
       setAllSets(prevAllSets)
@@ -901,12 +927,52 @@ export default function Workout() {
     return warmupCount() + mainCount() + jokerCount()
   }
 
-  // A linear section is finished when the cursor has moved past its last set.
+  /**
+   * Slots in a range that are settled: logged, or deliberately skipped.
+   *
+   * The counts used to be the cursor's distance into a section, which meant
+   * skipping a warmup counted it as done. Performed and skipped are both
+   * "nothing still owed here" for the purpose of folding a section and of B1's
+   * prompt, but only one of them is a set the user did — so `done` counts the
+   * logged ones and `total` drops the skipped.
+   */
+  const settledIn = (offset: number, count: number) => {
+    let settled = 0
+    for (let i = offset; i < offset + count; i++) {
+      const planned = allSets()[i]
+      if (workout.skippedSets.includes(i) || (planned && loggedIndexOf(planned) !== -1)) settled++
+    }
+    return settled
+  }
+
+  const skippedIn = (offset: number, count: number) =>
+    workout.skippedSets.filter(i => i >= offset && i < offset + count).length
+
+  const loggedIn = (offset: number, count: number) => settledIn(offset, count) - skippedIn(offset, count)
+
+  /**
+   * Take the warmups from the cursor onwards as not done, and move to the main
+   * work. Warmups only, deliberately: this is not a general reordering of the
+   * cursor, it is the one block people routinely do their own way.
+   */
+  const skipRemainingWarmups = () => {
+    const skipped: number[] = []
+    for (let i = workout.currentSetIndex; i < warmupCount(); i++) {
+      if (loggedIndexOf(allSets()[i]) === -1) skipped.push(i)
+    }
+    if (skipped.length === 0) return
+    skipSetsThrough(skipped, warmupCount())
+  }
+
+  // A linear section is finished when every slot in it has been settled —
+  // logged or deliberately skipped. It used to ask only whether the cursor had
+  // moved past, which folded a section on the strength of the cursor alone.
   // Only a finished section may collapse — the active row is then guaranteed to
   // be somewhere else on the page, so folding one can never hide the row the
   // scroll-to-active effect is tracking.
   const sectionComplete = (count: number, offset: number) =>
     count > 0 && workout.currentSetIndex >= offset + count
+      && settledIn(offset, count) === count
 
   const showJokerButton = () => workout.activeSession ? shouldShowJokerButton({
     week: workout.activeSession.week,
@@ -961,11 +1027,15 @@ export default function Workout() {
     const out: SessionSegment[] = []
     const linear = (id: string, label: string, count: number, offset: number) => {
       if (count === 0) return
+      // A skipped set leaves the block, rather than counting as done: it was
+      // never performed, and B1's prompt must not list it as outstanding either.
+      const skipped = skippedIn(offset, count)
+      if (count - skipped === 0) return
       out.push({
         id,
         label,
-        done: Math.max(0, Math.min(count, workout.currentSetIndex - offset)),
-        total: count,
+        done: loggedIn(offset, count),
+        total: count - skipped,
       })
     }
     linear('warmup', 'WARMUP', warmupCount(), 0)
@@ -1099,6 +1169,19 @@ export default function Workout() {
               onDelete={handleDeleteSet}
               onActiveRef={el => setActiveRowEl(el)}
             />
+            {/* Someone who warmed up their own way could not reach the main
+                sets without logging warmups they did not do. Skipping records
+                that they were skipped rather than faking the records — each row
+                keeps an UNDO SKIP. Offered only while the cursor is still in the
+                block and something is left to skip. */}
+            <Show when={workout.currentSetIndex < warmupCount() && settledIn(0, warmupCount()) < warmupCount()}>
+              <button
+                onClick={skipRemainingWarmups}
+                class="mt-2 text-muted text-xs font-mono tracking-widest hover:text-accent"
+              >
+                SKIP REMAINING WARMUPS
+              </button>
+            </Show>
           </CollapsibleSection>
 
           <div class="mb-6 md:mb-0">

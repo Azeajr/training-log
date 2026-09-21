@@ -450,6 +450,39 @@ describe('loadFromStorage', () => {
     vi.resetModules()
   })
 
+  /**
+   * C4. A skip is state of its own, and the serializer lists its keys rather
+   * than iterating `PERSISTED_KEYS` — so a key added to the allowlist alone is
+   * validated on read and never written. The skip would survive until the first
+   * reload and then silently vanish, and the warmups would come back.
+   */
+  it('writes skipped sets as well as reading them back', async () => {
+    const store = await import('./workout-store')
+    const dispose = createRoot(d => { store.setupWorkoutPersistence(); return d })
+    try {
+      store.skipSetsThrough([0, 1, 2], 3)
+      await new Promise(r => setTimeout(r, 0))
+      const written = JSON.parse(localStorage.getItem('workout-store')!)
+      expect(written.state.skippedSets).toEqual([0, 1, 2])
+    } finally {
+      dispose()
+    }
+
+    vi.resetModules()
+    const restored = await import('./workout-store')
+    expect(restored.workout.skippedSets).toEqual([0, 1, 2])
+    expect(restored.workout.currentSetIndex).toBe(3)
+  })
+
+  it('drops a malformed skipped-set list rather than storing it', async () => {
+    for (const skippedSets of ['nope', [1, 'two'], [-1], [1.5], null]) {
+      localStorage.setItem('workout-store', JSON.stringify({ v: 1, state: { skippedSets } }))
+      vi.resetModules()
+      const { workout: w } = await import('./workout-store')
+      expect(w.skippedSets, JSON.stringify(skippedSets)).toEqual([])
+    }
+  })
+
   it('restores state from valid localStorage entry', async () => {
     localStorage.setItem('workout-store', JSON.stringify({ v: 1, state: { notes: 'recovered' } }))
     const { workout: w } = await import('./workout-store')

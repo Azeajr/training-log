@@ -17,6 +17,14 @@ interface Props {
   set: Omit<Set, 'id' | 'sessionId'> & { isAmrap?: boolean }
   isActive: boolean
   isCompleted: boolean
+  /**
+   * Planned, deliberately not performed. Distinct from completed, which is the
+   * distinction the cursor alone could not make — moving past a warmup nobody
+   * did used to render it as a set they had done.
+   */
+  isSkipped?: boolean
+  /** Take the skip back. Absent unless the row is skipped. */
+  onUnskip?: () => void
   loggedReps?: number
   loggedWeight?: number
   bandProfile?: BandProfile | null
@@ -114,6 +122,27 @@ export default function SetRow(props: Props) {
 
   return (
     <Switch>
+      {/* Skipped — a row that says so, and the way back to it. */}
+      <Match when={props.isSkipped && !props.isCompleted}>
+        <div class="flex items-center gap-3 py-3 pl-3 border-l-4 border-transparent">
+          <SetReadout
+            weight={props.set.weight}
+            value={`${props.set.reps}`}
+            alignWeight
+            tone="text-faint"
+            class="flex-1 min-w-0"
+            badges={<span class="text-faint text-xs tracking-widest">skipped</span>}
+          />
+          <button
+            onClick={() => props.onUnskip?.()}
+            aria-label={`Undo skipping ${props.set.type} set ${props.set.setNumber}`}
+            class="shrink-0 text-muted text-xs font-mono tracking-widest hover:text-accent"
+          >
+            UNDO SKIP
+          </button>
+        </div>
+      </Match>
+
       {/* Active set — input form */}
       <Match when={!props.isCompleted && props.isActive}>
         <div ref={props.activeRef} class="border-l-4 border-accent pl-3 py-3 mb-1">

@@ -33,6 +33,15 @@ interface WorkoutState {
   restType: RestType
   activeAccessories: ActiveAccessory[]
   notes: string
+  /**
+   * Planned set indices the user skipped rather than performed. Warmups only.
+   *
+   * The cursor used to stand in for "what happened": a set before it was
+   * completed, a set after it was not. Moving it past a warmup nobody did
+   * therefore recorded a set nobody did — into the section counts, the session
+   * bar and the early-finish prompt. Skipping is its own fact, so it says so.
+   */
+  skippedSets: number[]
 }
 
 const STORAGE_KEY = 'workout-store'
@@ -51,6 +60,7 @@ const PERSISTED_KEYS = [
   'restType',
   'activeAccessories',
   'notes',
+  'skippedSets',
 ] as const satisfies readonly (keyof WorkoutState)[]
 
 const isPlainObject = (v: unknown): boolean =>
@@ -71,6 +81,7 @@ const PERSISTED_VALIDATORS: Record<(typeof PERSISTED_KEYS)[number], (v: unknown)
   restType: v => v === 'normal' || v === 'fail',
   activeAccessories: Array.isArray,
   notes: v => typeof v === 'string',
+  skippedSets: v => Array.isArray(v) && v.every(i => Number.isInteger(i) && (i as number) >= 0),
 }
 
 function loadFromStorage(): Partial<WorkoutState> {
@@ -104,6 +115,7 @@ const emptyState = (): WorkoutState => ({
   restType: 'normal',
   activeAccessories: [],
   notes: '',
+  skippedSets: [],
 })
 
 export const [workout, setWorkout] = createStore<WorkoutState>({
@@ -148,6 +160,11 @@ function writeSnapshot() {
       restType:          workout.restType,
       activeAccessories: workout.activeAccessories,
       notes:             workout.notes,
+      // Listed here as well as in PERSISTED_KEYS. This serializer does not
+      // iterate that allowlist, so a key added to it alone is validated on read
+      // and never written — a skip would survive until the first reload and
+      // then silently vanish. Same trap as `pendingSeed` in pt-store.
+      skippedSets:       workout.skippedSets,
     },
   }))
 }
@@ -190,6 +207,29 @@ export function editSet(index: number, updates: Partial<Set>) {
 
 export function advanceSet() {
   setWorkout('currentSetIndex', (i) => i + 1)
+}
+
+/**
+ * Record that these planned sets were not performed, and move past them.
+ *
+ * `cursor` is where the cursor lands afterwards — the caller knows where the
+ * skipped block ends. Idempotent, and never marks a set that is already logged:
+ * skipping is about work that did not happen.
+ */
+export function skipSetsThrough(indices: number[], cursor: number) {
+  setWorkout(produce((s) => {
+    for (const i of indices) if (!s.skippedSets.includes(i)) s.skippedSets.push(i)
+    s.skippedSets.sort((a, b) => a - b)
+    s.currentSetIndex = cursor
+  }))
+}
+
+/** Take a skipped set back, and put the cursor on it. */
+export function unskipSet(index: number) {
+  setWorkout(produce((s) => {
+    s.skippedSets = s.skippedSets.filter(i => i !== index)
+    s.currentSetIndex = index
+  }))
 }
 
 export function deleteLastSet() {

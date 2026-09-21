@@ -2,6 +2,24 @@
 
 ## Done
 
+### Warmups Can Be Skipped (2026-09-21)
+
+**C4** of `docs/workflow-review-fixes.md`, and the last item of the workflow
+review — all 22 are now done.
+
+- **Someone who warmed up their own way can reach the main sets.** Logging was
+  tied to one linear cursor, so the only way past a prescribed warmup was to log
+  it. SKIP REMAINING WARMUPS records that they were skipped rather than faking
+  the records, and every skipped row keeps an UNDO SKIP.
+- **A skipped set is not a completed one.** The cursor used to stand in for what
+  happened, so moving past a warmup nobody did counted it as done — in the
+  section counts, in the session bar and in the early-finish prompt. Skipping is
+  its own state now, persisted with the rest of the session.
+- **A set logged after a skip renders its own numbers.** The rows read the logged
+  array by position while logging appends to it, which agreed only while every
+  set was logged in order. A row finds its own set by what it is now, so a
+  correction lands on it and not on a neighbour.
+
 ### Logging Flow (2026-09-21)
 
 Five items on the friction of actually logging. **C5, C7, C9, C8** and **D2** of
