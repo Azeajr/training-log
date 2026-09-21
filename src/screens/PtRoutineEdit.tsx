@@ -1,4 +1,4 @@
-import { createSignal, Index, Show } from 'solid-js'
+import { createEffect, createSignal, Index, Show } from 'solid-js'
 import { useNavigate, useParams } from '@solidjs/router'
 import { db } from '../db/index'
 import type { PtDistanceUnit, PtMeasure, PtResistanceKind } from '../types/domain'
@@ -18,6 +18,13 @@ import { createAsyncRead } from '../lib/async-read'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { useSingleFlight } from '../hooks/use-single-flight'
 import { showToast } from '../store/toast-store'
+import {
+  clearPtRoutineDraft,
+  ptRoutineDraftKey,
+  ptRoutineFingerprint,
+  readPtRoutineDraft,
+  writePtRoutineDraft,
+} from '../store/pt-routine-draft'
 import Rule from '../components/layout/Rule'
 import AsyncErrorBox from '../components/ui/AsyncErrorBox'
 import FoldGlyph from '../components/ui/FoldGlyph'
@@ -57,11 +64,18 @@ const emptyDraft = (): PtExerciseDraft => ({
 /**
  * Build or edit a PT routine.
  *
- * The whole form is a draft: nothing reaches the database until DONE, which
- * writes the routine and its full exercise list in one transaction. Leaving
- * early — CANCEL, the back gesture, a killed tab — leaves the database exactly
- * as it was, so a new routine cannot exist half-built and an edit cannot be
- * half-applied.
+ * The whole form is a draft: nothing reaches the database until SAVE ROUTINE,
+ * which writes the routine and its full exercise list in one transaction.
+ * Leaving early — BACK, the back gesture, a killed tab — leaves the database
+ * exactly as it was, so a new routine cannot exist half-built and an edit cannot
+ * be half-applied.
+ *
+ * Leaving early no longer costs the work, either. The form parks itself in
+ * localStorage whenever it differs from what is saved, so tapping Today and
+ * coming back with the browser's Back button finds the routine as it was left.
+ * The parked copy is dropped by a successful save or an explicit DISCARD DRAFT,
+ * and by nothing else — a save rejected by validation is the moment the draft is
+ * worth the most.
  *
  * The drafts keep every target field populated regardless of the selected
  * measure (a reps exercise still carries `targetSeconds: 30`), so toggling
@@ -86,14 +100,62 @@ export default function PtRoutineEdit() {
   const [drafts, setDrafts] = createSignal<PtExerciseDraft[]>([])
   const [openIndex, setOpenIndex] = createSignal<number | null>(null)
 
+  const draftKey = () => ptRoutineDraftKey(routineId())
+
+  /**
+   * The form as the database has it, for two questions: is what is on screen a
+   * change worth parking, and has the routine moved underneath a parked one.
+   */
+  const [baseline, setBaseline] = createSignal<string | null>(null)
+  /**
+   * Whether the form has finished deciding what it holds.
+   *
+   * Loading writes the saved routine into the same signals the parked draft is
+   * about to be written into, and the effect below watches them. Without this
+   * gate it fires on the loaded values, sees a form that matches what is saved,
+   * and deletes the draft a line before it would have been restored.
+   */
+  const [hydrated, setHydrated] = createSignal(false)
+  const current = () => ({ name: name(), notes: notes(), exercises: drafts() })
+  const isDirty = () => baseline() !== null && ptRoutineFingerprint(current()) !== baseline()
+
   const read = createAsyncRead()
 
+  /**
+   * Put a parked draft back on screen, once the saved routine is loaded.
+   *
+   * A draft is written against a routine other screens can change — an import
+   * replaces every table — so one taken against a different version asks first
+   * rather than overwriting whatever happened since.
+   */
+  const restoreDraft = async (base: string) => {
+    const parked = readPtRoutineDraft(draftKey())
+    if (!parked) return
+    if (parked.base !== null && parked.base !== base && !await confirm(
+      'This routine has changed since your unsaved draft was taken. Restore the draft anyway?',
+      { confirmLabel: 'RESTORE', cancelLabel: 'DISCARD' },
+    )) {
+      clearPtRoutineDraft(draftKey())
+      return
+    }
+    setName(parked.name)
+    setNotes(parked.notes)
+    setDrafts(parked.exercises)
+    setOpenIndex(parked.exercises.length === 1 ? 0 : null)
+  }
+
   const load = async (isCurrent: () => boolean) => {
+    setHydrated(false)
     const id = routineId()
     if (id === null) {
       if (!isCurrent()) return
       setDrafts([emptyDraft()])
       setOpenIndex(0)
+      // A routine that does not exist yet has nothing behind it to change, so
+      // its baseline is simply the blank form.
+      setBaseline(ptRoutineFingerprint(current()))
+      await restoreDraft(baseline()!)
+      setHydrated(true)
       return
     }
     const detail = await getPtRoutine(db, id)
@@ -125,9 +187,22 @@ export default function PtRoutineEdit() {
       equipmentHeightUnit: ex.equipmentHeightUnit ?? 'in',
       resistanceBand: ex.resistanceBand ?? '',
     })))
+    setBaseline(ptRoutineFingerprint(current()))
+    await restoreDraft(baseline()!)
+    setHydrated(true)
   }
 
   void read.run(load)
+
+  // Parked only while it differs from what is saved, so "a draft exists" means
+  // "there is unsaved work" — which is what makes the stale check above worth
+  // asking about. Matching the saved routine again takes the draft away.
+  createEffect(() => {
+    const base = baseline()
+    if (base === null || !hydrated()) return
+    if (isDirty()) writePtRoutineDraft(draftKey(), { ...current(), base })
+    else clearPtRoutineDraft(draftKey())
+  })
 
   const patch = (index: number, changes: Partial<PtExerciseDraft>) => {
     setDrafts(prev => prev.map((d, i) => i === index ? { ...d, ...changes } : d))
@@ -166,6 +241,7 @@ export default function PtRoutineEdit() {
         notes: notes(),
         exercises: drafts(),
       })
+      clearPtRoutineDraft(draftKey())
       showToast(isNew() ? 'Routine created.' : 'Routine saved.')
       navigate('/pt')
     } catch (err) {
@@ -174,6 +250,26 @@ export default function PtRoutineEdit() {
       showToast(message(err))
     }
   })
+
+  /**
+   * Throw the parked draft away and put the saved routine back on screen.
+   *
+   * The only thing other than a successful save that drops a draft, and it is
+   * spelled out because everything else now preserves it: BACK parks the work
+   * rather than discarding it, which is the whole point, but it also means
+   * leaving is no longer a way to change your mind.
+   */
+  const handleDiscard = async () => {
+    if (!await confirm(
+      'Discard your unsaved changes to this routine?',
+      { destructive: true, confirmLabel: 'DISCARD' },
+    )) return
+    clearPtRoutineDraft(draftKey())
+    setBaseline(null)
+    setOpenIndex(null)
+    await read.run(load)
+    showToast('Unsaved changes discarded.')
+  }
 
   // Archive, not delete: deleting a routine takes every run of it, and the
   // record of having done the rehab is usually the part worth keeping. Lives
@@ -462,6 +558,16 @@ export default function PtRoutineEdit() {
           + ADD EXERCISE
         </button>
 
+        <Show when={isDirty()}>
+          <button
+            onClick={() => void handleDiscard()}
+            disabled={saving()}
+            class="w-full border border-border text-muted hover:border-danger hover:text-danger px-4 py-2 text-xs tracking-widest uppercase mb-6 disabled:opacity-40"
+          >
+            DISCARD DRAFT
+          </button>
+        </Show>
+
         <Show when={!isNew()}>
           <button
             onClick={() => void handleArchive()}
@@ -473,18 +579,20 @@ export default function PtRoutineEdit() {
         </Show>
 
         <div class="flex gap-2">
+          {/* Not "CANCEL": leaving keeps the draft now, so a word that
+              promises to undo would be a lie about where the work went. */}
           <button
             onClick={() => navigate('/pt')}
             class="flex-1 border border-border text-muted hover:text-text px-4 py-3 text-xs tracking-widest uppercase"
           >
-            CANCEL
+            BACK
           </button>
           <button
             onClick={() => void handleSave()}
             disabled={saving()}
             class="flex-1 border border-accent text-accent px-4 py-3 text-xs tracking-widest uppercase disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            DONE
+            SAVE ROUTINE
           </button>
         </div>
       </div>

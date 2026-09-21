@@ -2,6 +2,33 @@
 
 ## Done
 
+### PT Drafts Survive the Thing That Used to Eat Them (2026-09-21)
+
+Four ways a PT draft could disappear without saying so. Items **A3**, **A4**, **A5**
+and **C10** of `docs/workflow-review-fixes.md`.
+
+- **The set editor's `cancel` now cancels.** Every stepper press used to commit
+  straight through, and for equipment it carried forward into every later
+  unfinished set on the way, so `cancel` closed the editor over changes already
+  applied. Edits buffer into a per-set draft and commit once, as a patch of only
+  what changed. `LOG SET` commits and ticks; `SAVE SET CHANGES` commits and leaves
+  completion alone; a recorded run's editor says `APPLY SET CHANGES`, which applies
+  into the run draft that `SAVE CHANGES` still has to write.
+- **Collapsing a history row no longer discards the edit in it.** The draft is held
+  above the row, keyed by session, and includes any set editor still open. A
+  collapsed row with unsaved work says `UNSAVED CHANGES`. A draft is dropped by a
+  successful save or an explicit discard, and by nothing else.
+- **A deleted set stays deleted.** The run screen used to grow every short set list
+  back to the prescription on load, which existed for v1 drafts — they recorded
+  only ticks — but undid real deletions. The persisted format now says which lists
+  are v1 remnants. A side effect: raising a routine's set count no longer reaches
+  into a run already under way.
+- **A half-written routine survives leaving the screen.** `PtRoutineEdit` parks
+  itself in localStorage whenever it differs from what is saved, restores on
+  return, and asks before restoring a draft taken against a routine that has
+  changed since. `DONE` is now `SAVE ROUTINE`, `CANCEL` is `BACK`, and
+  `DISCARD DRAFT` is the explicit way to throw the work away.
+
 ### PT Runs Keep What They Recorded (2026-09-21)
 
 A finished PT run is a record of what happened, and editing the routine is not
