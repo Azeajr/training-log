@@ -124,7 +124,7 @@ from source here.
 | **A1** | P1 | PT data loss | EF#1 · CX#1 | `src/lib/pt.ts` | `fixed` | 11 tests red at `d222835`: `pt.test.ts` ×4, `PtSessionEditor.test.tsx` ×4 (new file), `export-import.test.ts` ×2, `pt-set-actuals.test.ts` ×1 |
 | **A2** | P1 | Workout data loss | WF#1 · CX#2 | `src/store/workout-store.ts` | `open` | |
 | **A3** | P2 | PT draft model | UI#3 · EF#2 · UI#10 · CX#3/#4 | `src/components/pt/PtSetList.tsx` | `fixed` | 13 tests red at B2: `PtSetList.test.tsx` ×9 (new file), `PtRun.test.tsx` ×3, `PtSessionEditor.test.tsx` ×1 |
-| **A4** | P2 | PT draft model | EF#3 · CX#5 | `src/store/pt-store.ts` | `open` | |
+| **A4** | P2 | PT draft model | EF#3 · CX#5 | `src/store/pt-store.ts` | `fixed` | `pt-store.test.ts` ×6 red at A5, ×2 more guarding behaviour that must not regress |
 | **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `fixed` | `PT.test.tsx` ×5; 4 red at A3, the 5th guards the save-error behaviour A5 must not break |
 | **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `open` | |
 | **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×2 red at `d222835` (`1/0` single, `2/0` combined) |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `open` | |
 
-**Totals: 22 items — 18 `open`, 0 `wip`, 4 `fixed`.**
+**Totals: 22 items — 17 `open`, 0 `wip`, 5 `fixed`.**
 **By priority: 2 P1 · 12 P2 · 8 P3.**
 
 ---
@@ -728,7 +728,7 @@ label honest and leaves the carry-forward contamination in place.
 
 ## A4 · Deleted PT sets come back on resume
 
-**State:** `open` · **P2** · Sources: EF#3, CX#5 · Batch 2, after A3
+**State:** `fixed` · **P2** · Sources: EF#3, CX#5 · Batch 2, after A3
 
 ### Problem
 
@@ -833,6 +833,21 @@ Upgrade fixtures, each reloaded **twice** to prove migration and initialization 
 7. Load a v1 partial tick list, persist it as v2 **before** `ensurePtSets` runs, reload,
    then initialize. It expands once and clears the marker. Cover both current and paused
    routines, including the normal persistence effect before the run screen mounts.
+
+### As built
+
+As designed. `pendingSeed` is a required `string[]` on `PtRunState` defaulting to `[]`
+rather than the optional field the sketch used — a v2 draft that predates the field
+restores to `[]`, which reads as "authoritative, nothing pending", so there is nothing an
+absent value would say that an empty one does not. `STORAGE_VERSION` stays at 2.
+
+**One behaviour changed beyond the reported bug, and it follows from the same rule.**
+`ensurePtSets` no longer extends a list the run already has, so raising a routine's set
+count mid-run no longer reaches into a run already under way. The existing test
+`leaves what is already recorded alone` asserted the old growth and now asserts the new
+contract under a name that says what it means. This is the deletion rule seen from the
+other side — a list in the run is the run's own answer — and + ADD SET is still there. An
+exercise absent from `sets` is seeded on first entry exactly as before.
 
 ---
 

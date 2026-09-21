@@ -57,6 +57,16 @@ interface PtRunState {
   /** Per-exercise note, keyed by ptExercise id (as a string — JSON has no numeric keys). */
   exerciseNotes: Record<string, string>
   notes: string
+  /**
+   * ptExercise ids whose set list came from a v1 draft and may still be short.
+   *
+   * A v1 draft recorded only the ticks, so `migrateV1` can rebuild a list no
+   * further than the highest one — those lists genuinely need the prescription
+   * filled in behind them. A v2 list is what the user left, deletions included.
+   * The two look identical, so the format that produced them says which is which
+   * and this carries that answer forward until the run screen acts on it.
+   */
+  pendingSeed: string[]
 }
 
 const STORAGE_KEY = 'pt-run'
@@ -72,6 +82,7 @@ const PERSISTED_KEYS = [
   'sets',
   'exerciseNotes',
   'notes',
+  'pendingSeed',
 ] as const satisfies readonly (keyof PtRunState)[]
 
 const isPlainObject = (v: unknown): boolean =>
@@ -102,6 +113,7 @@ const PERSISTED_VALIDATORS: Record<(typeof PERSISTED_KEYS)[number], (v: unknown)
     && Object.values(v as object).every(list => Array.isArray(list) && list.every(isPtRunSet)),
   exerciseNotes: v => isPlainObject(v) && Object.values(v as object).every(x => typeof x === 'string'),
   notes: v => typeof v === 'string',
+  pendingSeed: v => Array.isArray(v) && v.every(id => typeof id === 'string'),
 }
 
 function validateState(state: unknown): Partial<PtRunState> {
@@ -137,7 +149,9 @@ function migrateV1(state: unknown): unknown {
     while (list.length < setNumber) list.push(emptySet())
     list[setNumber - 1] = { ...emptySet(), done: true }
   }
-  return { ...rest, sets }
+  // Every list this rebuilt is a v1 remnant, and says so. Without it the next
+  // save writes them back as v2 and the provenance is gone for good.
+  return { ...rest, sets, pendingSeed: Object.keys(sets) }
 }
 
 function loadFromStorage(): { current: Partial<PtRunState>; paused: Record<string, PtRunState> } {
@@ -178,6 +192,9 @@ const emptyState = (): PtRunState => ({
   sets: {},
   exerciseNotes: {},
   notes: '',
+  // Empty, not absent: a v2 draft that predates this field reads back as
+  // "authoritative, nothing pending", which is exactly what it is.
+  pendingSeed: [],
 })
 
 const restored = loadFromStorage()
@@ -222,6 +239,10 @@ export function setupPtRunPersistence() {
           sets: ptRun.sets,
           exerciseNotes: ptRun.exerciseNotes,
           notes: ptRun.notes,
+          // This serializer lists its keys rather than iterating PERSISTED_KEYS,
+          // so a new one has to be added here too. Leaving it out would lose v1
+          // provenance on the first ordinary save, before the run screen seeds.
+          pendingSeed: ptRun.pendingSeed,
         },
       }))
       setPtPersistenceError(null)
@@ -277,18 +298,28 @@ export function ptSetsFor(ptExerciseId: number, routineId = ptRun.routineId): Pt
 }
 
 /**
- * Grow an exercise's set list to its prescribed length, leaving what is already
- * there alone.
+ * Seed an exercise's set list to its prescribed length.
  *
- * Called on load, and deliberately one-way: it never shrinks. A run that added a
- * fourth set keeps it, and so does one restored from a v1 draft that only knew
- * about the sets which had been ticked.
+ * Called on load, for every exercise. It used to grow any list that was short,
+ * which meant deleting the third of three sets and reloading brought it back —
+ * and changed the completion count under the user. A list already in the run is
+ * the run's own answer, an empty one included: a deletion is a decision.
+ *
+ * Two cases still seed. An exercise ABSENT from `sets` is entering the run for
+ * the first time. And a list carrying `pendingSeed` came from a v1 draft, which
+ * recorded only ticks and so reaches no further than the highest one — that is
+ * the case the one-way growth was written for. It is expanded once and the
+ * marker cleared, after which it is as authoritative as any other.
  */
 export function ensurePtSets(ptExerciseId: number, count: number, routineId = ptRun.routineId): void {
-  if (ptSetsFor(ptExerciseId, routineId).length >= count) return
+  const key = String(ptExerciseId)
+  const run = routineId === null ? ptRun : getPtRun(routineId)
+  if (run?.sets[key] != null && !run.pendingSeed.includes(key)) return
+
   mutateRun(routineId, state => {
-    const list = (state.sets[String(ptExerciseId)] ??= [])
+    const list = (state.sets[key] ??= [])
     while (list.length < count) list.push(emptySet())
+    state.pendingSeed = state.pendingSeed.filter(id => id !== key)
   })
 }
 

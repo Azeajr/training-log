@@ -179,13 +179,19 @@ describe('ensurePtSets', () => {
     expect(ptSetsFor(7)).toHaveLength(4)
   })
 
-  it('leaves what is already recorded alone', () => {
+  /**
+   * A list the run already has is the run's own answer and is not extended, so
+   * raising the routine's set count no longer reaches into a run already under
+   * way. That is the same rule that stops a deleted set coming back, and the
+   * user still has + ADD SET. Seeding only ever happens on first entry.
+   */
+  it('leaves a list the run already has exactly as it is', () => {
     startPtRun(1)
     ensurePtSets(7, 1)
     setPtSetFields(7, 1, { done: true, reps: 11 })
     ensurePtSets(7, 3)
     expect(ptSetsFor(7)[0]).toMatchObject({ done: true, reps: 11 })
-    expect(ptSetsFor(7)).toHaveLength(3)
+    expect(ptSetsFor(7)).toHaveLength(1)
   })
 })
 
@@ -450,5 +456,168 @@ describe('loadFromStorage', () => {
     } finally {
       getItem.mockRestore()
     }
+  })
+})
+
+/*
+ * A4. `ensurePtSets` grew every list on every load, so deleting a set and
+ * reloading brought it back — with the completion count changed underneath the
+ * user. The one-way growth exists for v1 drafts, which only ever recorded the
+ * sets that had been ticked, so the two cases have to be told apart by the
+ * PERSISTED FORMAT rather than by "does this list look short".
+ *
+ * Every fixture is initialized twice: once is the migration, twice is the proof
+ * that initialization does not repeat it.
+ */
+describe('set-list provenance', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+    vi.resetModules()
+  })
+
+  const v2 = (sets: Record<string, unknown[]>, extra: Record<string, unknown> = {}) =>
+    localStorage.setItem('pt-run', JSON.stringify({
+      v: 2,
+      state: { routineId: 3, startedAt: 1000, sets, exerciseNotes: {}, notes: '', ...extra },
+    }))
+
+  /** What the run screen does on load, for every exercise, on every load. */
+  const seedTwice = (store: typeof import('./pt-store'), exerciseId: number, count: number) => {
+    store.ensurePtSets(exerciseId, count)
+    store.ensurePtSets(exerciseId, count)
+  }
+
+  it('leaves a shortened v2 list shortened', async () => {
+    v2({ 4: [{ done: true }, { done: false }] })
+    const store = await import('./pt-store')
+
+    seedTwice(store, 4, 3)
+    expect(store.ptSetsFor(4)).toHaveLength(2)
+  })
+
+  it('leaves an emptied v2 list empty', async () => {
+    v2({ 4: [] })
+    const store = await import('./pt-store')
+
+    seedTwice(store, 4, 3)
+    expect(store.ptSetsFor(4)).toEqual([])
+  })
+
+  it('seeds an exercise the run has never touched', async () => {
+    v2({ 4: [] })
+    const store = await import('./pt-store')
+
+    seedTwice(store, 9, 3)
+    expect(store.ptSetsFor(9)).toHaveLength(3)
+  })
+
+  it('keeps a set added beyond the prescription', async () => {
+    v2({ 4: [{ done: true }, { done: true }, { done: true }, { done: false }] })
+    const store = await import('./pt-store')
+
+    seedTwice(store, 4, 3)
+    expect(store.ptSetsFor(4)).toHaveLength(4)
+  })
+
+  /**
+   * The case the one-way growth exists for: a v1 draft's list reaches the
+   * highest tick and no further, so it really is short and really does need
+   * the prescription. Once.
+   */
+  it('expands a v1 list once, and never again', async () => {
+    localStorage.setItem('pt-run', JSON.stringify({
+      v: 1,
+      state: { routineId: 3, startedAt: 1000, done: ['4:2'], exerciseNotes: {}, notes: '' },
+    }))
+    const store = await import('./pt-store')
+    expect(store.ptSetsFor(4)).toHaveLength(2)
+
+    seedTwice(store, 4, 3)
+    expect(store.ptSetsFor(4)).toHaveLength(3)
+
+    // Now a deliberate deletion, which must survive every later load.
+    store.removePtSet(4, 3)
+    seedTwice(store, 4, 3)
+    expect(store.ptSetsFor(4)).toHaveLength(2)
+  })
+
+  it('keeps a parked routine\'s list across a switch away and back', async () => {
+    localStorage.setItem('pt-run', JSON.stringify({
+      v: 2,
+      state: { routineId: 1, startedAt: 1000, sets: { 10: [{ done: true }] }, exerciseNotes: {}, notes: '' },
+      paused: { 2: { routineId: 2, startedAt: 900, sets: { 20: [{ done: true }] }, exerciseNotes: {}, notes: '' } },
+    }))
+    const store = await import('./pt-store')
+
+    store.ensurePtSets(20, 3, 2)
+    expect(store.ptSetsFor(20, 2)).toHaveLength(1)
+
+    store.startPtRun(2)
+    seedTwice(store, 20, 3)
+    expect(store.ptSetsFor(20)).toHaveLength(1)
+
+    store.startPtRun(1)
+    seedTwice(store, 10, 3)
+    expect(store.ptSetsFor(10)).toHaveLength(1)
+  })
+
+  it('drops a malformed pendingSeed rather than storing it', async () => {
+    v2({ 4: [{ done: true }] }, { pendingSeed: 42 })
+    const store = await import('./pt-store')
+
+    seedTwice(store, 4, 3)
+    expect(store.ptSetsFor(4)).toHaveLength(1)
+
+    vi.resetModules()
+    localStorage.clear()
+    v2({ 4: [{ done: true }] }, { pendingSeed: ['4', 7] })
+    const again = await import('./pt-store')
+    again.ensurePtSets(4, 3)
+    expect(again.ptSetsFor(4)).toHaveLength(1)
+  })
+
+  /**
+   * The provenance has to survive being written back out. The persistence
+   * effect runs on every store change, so an ordinary save can easily land
+   * before the run screen has seeded anything — and if the marker did not go
+   * with it, the reload after that would read the v1 remnant as authoritative
+   * and leave it permanently short.
+   */
+  it('carries v1 provenance through a save that happens before seeding', async () => {
+    localStorage.setItem('pt-run', JSON.stringify({
+      v: 1,
+      state: { routineId: 1, startedAt: 1000, done: ['10:2'], exerciseNotes: {}, notes: '' },
+      paused: { 2: { routineId: 2, startedAt: 900, done: ['20:1'], exerciseNotes: {}, notes: 'p' } },
+    }))
+    const first = await import('./pt-store')
+    const dispose = createRoot(d => { first.setupPtRunPersistence(); return d })
+    try {
+      // Anything at all writes the draft back out, as v2, before the run screen
+      // has had a chance to seed.
+      first.setPtNotes('typed something')
+      await new Promise(r => setTimeout(r, 0))
+    } finally {
+      dispose()
+    }
+
+    vi.resetModules()
+    const store = await import('./pt-store')
+    expect(store.ptSetsFor(10)).toHaveLength(2)
+
+    seedTwice(store, 10, 3)
+    expect(store.ptSetsFor(10)).toHaveLength(3)
+
+    store.startPtRun(2)
+    seedTwice(store, 20, 3)
+    expect(store.ptSetsFor(20)).toHaveLength(3)
+
+    store.removePtSet(20, 3)
+    seedTwice(store, 20, 3)
+    expect(store.ptSetsFor(20)).toHaveLength(2)
   })
 })
