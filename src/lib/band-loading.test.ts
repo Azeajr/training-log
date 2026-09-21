@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { availableBeltLoads, bandProfileFor, defaultBandProfile, effectiveBandLoad, makeBandLoad, suggestBandLoad, validBandLoad, validBandProfile } from './band-loading'
+import { availableBeltLoads, bandProfileFor, defaultBandProfile, effectiveBandLoad, makeBandLoad, suggestBandLoad, suggestBandLoadDetailed, validBandLoad, validBandProfile } from './band-loading'
 
 const pull = () => defaultBandProfile('Pull-ups')!
 const plates = [{ weight: 45, count: 2 }, { weight: 10, count: 2 }, { weight: 5, count: 2 }, { weight: 2.5, count: 2 }]
@@ -98,5 +98,91 @@ describe('seeded profiles vs. ones a person saved', () => {
     expect(validBandProfile(p)).toBe(true)
     expect(validBandProfile({ ...p, accepted: false })).toBe(false)
     expect(validBandProfile({ ...p, accepted: 'yes' })).toBe(false)
+  })
+})
+
+// ── B3 ──────────────────────────────────────────────────────────────────────
+// `Prescribed: 45lb effective` rendered next to an 86lb suggestion and a button
+// that cannot close the gap: `suggestBandLoad` can only pick a band and ADD
+// weight, so it can never go below the strongest band's assisted load. The
+// suggestion now returns its reasoning, so the control can say which of the two
+// reasons applies — and they are independent, so both can apply at once.
+describe('suggestBandLoadDetailed', () => {
+  const pulling = () => defaultBandProfile('Pull-ups')!
+  // Orange 86, Green 141, Purple 161, Red 181, unassisted 191.
+  const noPlates: { weight: number; count: number }[] = []
+
+  it('selects exactly what the existing algorithm selects', () => {
+    for (const target of [45, 86, 145, 150, 190, 215, 500]) {
+      for (const plateSet of [plates, noPlates]) {
+        expect(suggestBandLoadDetailed(pulling(), target, plateSet).selected)
+          .toEqual(suggestBandLoad(pulling(), target, plateSet))
+      }
+    }
+  })
+
+  it('reports an exact hit as reachable, with nothing to explain', () => {
+    const s = suggestBandLoadDetailed(pulling(), 141, noPlates)
+    expect(s.nearestDistance).toBe(0)
+    expect(s.nearestEffectiveLoad).toBe(141)
+    expect(s.preferenceUsed).toBe(false)
+    expect(s.minAchievable).toBe(86)
+    expect(s.maxAchievable).toBe(191)
+  })
+
+  /**
+   * The tolerance rule is `closest + 2.5`, not `target ± 2.5` — it makes no
+   * promise that the selection is near the target. A gap and a preference are
+   * separate facts and a caller must be able to say both.
+   */
+  it('separates an increment gap from a preference tradeoff', () => {
+    // 150: nearest is Green 141 (9 under) — nothing lands on 150 without plates.
+    // Preference then takes Purple 161, which is further away but less assisted.
+    const s = suggestBandLoadDetailed({ ...pulling(), maxAddedWeight: 0 }, 150, plates)
+    expect(s.selected).toMatchObject({ band: 'Purple', addedWeight: 0 })
+    expect(s.nearestDistance).toBe(9)
+    expect(s.nearestEffectiveLoad).toBe(141)
+    expect(s.preferenceUsed).toBe(true)
+  })
+
+  it('names a target below everything achievable', () => {
+    const s = suggestBandLoadDetailed(pulling(), 45, plates)
+    expect(s.minAchievable).toBe(86)
+    expect(45).toBeLessThan(s.minAchievable)
+    expect(s.nearestEffectiveLoad).toBe(86)
+    expect(s.nearestDistance).toBe(41)
+  })
+
+  it('names a target above everything achievable', () => {
+    const s = suggestBandLoadDetailed(pulling(), 500, plates)
+    // 191 raw plus every plate on the belt.
+    expect(s.maxAchievable).toBe(191 + 125)
+    expect(500).toBeGreaterThan(s.maxAchievable)
+    expect(s.nearestEffectiveLoad).toBe(s.maxAchievable)
+  })
+
+  /**
+   * The nearest load is reported so a caller can say which side of the target
+   * it falls on. An unsigned distance cannot, and `selected` may be a different
+   * candidate entirely.
+   */
+  it('reports the nearest load above, below, and on an equal-distance tie', () => {
+    const bare = { ...pulling(), maxAddedWeight: 0 }
+    // 145 sits 4 above Green 141 and 16 below Purple 161: nearest is below.
+    expect(suggestBandLoadDetailed(bare, 145, plates).nearestEffectiveLoad).toBe(141)
+    // 158 sits 17 above Green and 3 below Purple: nearest is above.
+    expect(suggestBandLoadDetailed(bare, 158, plates).nearestEffectiveLoad).toBe(161)
+    // 151 is exactly 10 from each. The tie goes to the lower load.
+    const tie = suggestBandLoadDetailed(bare, 151, plates)
+    expect(tie.nearestDistance).toBe(10)
+    expect(tie.nearestEffectiveLoad).toBe(141)
+  })
+
+  it('reports a profile with nothing achievable without inventing a range', () => {
+    const empty = { enabled: true, rawLoad: 0, maxAddedWeight: 0, bands: [] }
+    const s = suggestBandLoadDetailed(empty, 100, noPlates)
+    expect(s.selected).toEqual(makeBandLoad(empty, null))
+    expect(s.minAchievable).toBe(0)
+    expect(s.maxAchievable).toBe(0)
   })
 })

@@ -1,5 +1,6 @@
 import BandLoadControls from './BandLoadControls'
-import { effectiveBandLoad } from '../../lib/band-loading'
+import { effectiveBandLoad, suggestBandLoad } from '../../lib/band-loading'
+import { settings } from '../../store/settings-store'
 import { Index, Show } from 'solid-js'
 import type { DropRound, BandLoad, BandProfile } from '../../types/domain'
 import type { PlateLoading } from '../../lib/plate-loading'
@@ -27,7 +28,14 @@ export default function DropRoundsEditor(props: {
               when={round().bandLoad}
               fallback={<><Stepper value={round().weight} onChange={v => update(i, 'weight', v)} step={2.5} min={0} fieldLabel={`drop ${i + 1} weight`} /><span class="text-muted text-xs">lb ×</span></>}
             >
+              {/* A drop round has no prescription — it is defined by dropping
+                  to a lower load, and it was the one band control with no way
+                  to ask for one. The user names the load they want. */}
               <BandLoadControls profile={props.profile} loading={props.loading} value={round().bandLoad!} label={`drop ${i + 1}`}
+                onSuggest={props.profile ? target => {
+                  const bandLoad = suggestBandLoad(props.profile!, target, settings.plates)
+                  props.onChange(props.rounds.map((r, n) => n === i ? { ...r, bandLoad, weight: effectiveBandLoad(bandLoad) } : r))
+                } : undefined}
                 onChange={bandLoad => props.onChange(props.rounds.map((r, n) => n === i ? { ...r, bandLoad, weight: effectiveBandLoad(bandLoad) } : r))} />
               {/* Bare — the band summary already ends in its own "lb". */}
               <span class="text-muted text-xs">×</span>

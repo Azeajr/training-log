@@ -128,10 +128,10 @@ from source here.
 | **A5** | P2 | PT draft model | EF#4 · CX#6 | `src/screens/PT.tsx` | `fixed` | `PT.test.tsx` ×5; 4 red at A3, the 5th guards the save-error behaviour A5 must not break |
 | **B1** | P2 | Misleading state | WF#2 · CX#9 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×9, 7 red at A2; 15 existing finish tests updated to the new contract |
 | **B2** | P3 | Misleading state | EF#7 · CX#8 | `src/screens/PtRun.tsx` | `fixed` | `PtRun.test.tsx` ×2 red at `d222835` (`1/0` single, `2/0` combined) |
-| **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `open` | |
+| **B3** | P2 | Bands | EF#5 · CX#16 | `src/lib/band-loading.ts` | `fixed` | `band-loading.test.ts` ×7, `BandLoadControls.test.tsx` ×5; landed with C3 |
 | **C1** | P2 | Bands | UI#1 · CX#13 | `src/screens/Workout.tsx` | `fixed` | `Workout.test.tsx` ×3, `AccessoryLog.test.tsx` ×3; 4 red at C2 |
 | **C2** | P3 | Bands | UI#2 · CX#14 | 6 call sites | `fixed` | `AccessoryLog.test.tsx` ×3, `HistoryEdit.test.tsx` ×5; 5 red at E1 |
-| **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `open` | |
+| **C3** | P2 | Bands | UI#5 · CX#17 | `BandLoadControls.tsx` | `fixed` | `BandLoadControls.test.tsx` ×5; 6 of the file's 10 red at D1 |
 | **C4** | P2 | Flow | WF#3 · CX#10 | `src/screens/Workout.tsx` | `open` | |
 | **C5** | P2 | Flow | WF#5 · CX#11 | `SessionBar.tsx` | `open` | |
 | **C6** | P3 | Bands | UI#4 · CX#15 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×2, 1 red at C1 (the other guards the unchanged step and bounds) |
@@ -144,7 +144,7 @@ from source here.
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `open` | |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 9 `open`, 0 `wip`, 13 `fixed`.** Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 7 `open`, 0 `wip`, 15 `fixed`.** Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -1183,7 +1183,7 @@ gained the missing half of its assertion: no `logged` under the error.
 
 ## B3 · An unreachable band target is shown without saying it is unreachable
 
-**State:** `open` · **P2** · Sources: EF#5, CX#16 · Batch 4, **with C3**
+**State:** `fixed` · **P2** · Sources: EF#5, CX#16 · Batch 4, **with C3**
 
 ### Problem
 
@@ -1293,6 +1293,38 @@ corresponding messages in `BandLoadControls.test.tsx`:
    (the wrapper changes nothing).
 6. Nearest candidate above target, below target, and an equal-distance tie: the named
    nearest load and signed difference are accurate even when `selected` is different.
+
+### As built (B3 and C3 together)
+
+`suggestBandLoadDetailed` returns the structure as specified and `suggestBandLoad` is a
+one-line wrapper over it, so the selection is byte-identical by construction rather than by
+a parallel implementation that has to be kept in step. `BandLoadControls` derives the two
+messages independently and suppresses `USE SUGGESTED LOAD` only when the target is out of
+range.
+
+**Where a target comes from**, by surface:
+
+| Surface | Target |
+|---|---|
+| `SetRow` active and edit rows | the set's own recorded prescription |
+| `AccessoryLog` active and edit rows | the accessory's prescribed weight for this session |
+| `HistoryEdit`, all four branches | none — the user names one |
+| `DropRoundsEditor` | none — the user names one |
+
+The explicit target lives in `BandLoadControls` rather than in each of the six call sites:
+they pass `onSuggest`, the control asks for the number. `SUGGEST A LOAD…` reveals a
+`Target effective load` stepper seeded from the load currently on screen, so nothing claims
+a prescription that does not exist and nothing appears until the user asks. `onSuggest` now
+takes the target as an argument, which is what lets one signature serve both cases.
+
+**Not built: the direct route into band settings or plate configuration** from an
+out-of-range message. Every one of the six call sites would need to mount and position a
+`BandSettings` dialog from inside a nested control, and the message already names the limit
+and which side it is on. Worth its own item rather than a wide change made in passing.
+
+**One e2e spec moved with C1's gate**, in its own commit: `bands.spec.ts` opted a lift in
+from the workout screen, which is the entry point C1 removes. It now does it in Settings and
+pins D1's wording at the one row that shows both labels.
 
 ---
 
@@ -1461,7 +1493,7 @@ rather than the silent cleanup C2 is. Worth its own decision if it ever bothers 
 
 ## C3 · Suggest and target are missing everywhere except the active logger
 
-**State:** `open` · **P2** · Sources: UI#5, CX#17 · Batch 4, **with B3**
+**State:** `fixed` · **P2** · Sources: UI#5, CX#17 · Batch 4, **with B3**
 
 ### Problem
 
