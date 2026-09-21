@@ -370,7 +370,12 @@ export default function AccessoryLog(props: Props) {
                 </FieldRow>
               </Show>
             </SetLogControls>
-            <Show when={type() === 'reps'}><p class="text-faint text-xs mt-2">Log after all drop rounds.</p></Show>
+            {/* Only once there are rounds to log after. It was shown for every
+                reps accessory, drop rounds or not, so most of the time it named
+                a thing that was not on screen. */}
+            <Show when={type() === 'reps' && dropRounds().length > 0}>
+              <p class="text-faint text-xs mt-2">Log after all drop rounds.</p>
+            </Show>
           </div>
         </Show>
         <Show when={props.accessory.loggedSets.length >= ACCESSORY_SETS && !addingExtra()}>

@@ -140,11 +140,11 @@ from source here.
 | **C9** | P3 | Flow | EF#6 · CX#21 | `AccessoryLog.tsx` | `fixed` | `AccessoryLog.test.tsx` ×5, 4 red at C7 |
 | **C10** | P2 | Flow | WF#4 · CX#7 | `PtRoutineEdit.tsx` | `fixed` | `PtRoutineEdit.test.tsx` ×9 red at A4, `pt-routine-draft.test.ts` ×13 (new helper) |
 | **D1** | P3 | Bands | UI#7 · CX#18 | `BandSettings.tsx` | `fixed` | `band-entry-points.test.tsx` ×5 (new file), 2 red at C6 |
-| **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `open` | |
+| **D2** | P3 | Bands | UI#9 · CX#22 | `AccessoryLog.tsx` | `fixed` | `AccessoryLog.test.tsx` ×2, 1 red at C8 |
 | **D3** | P3 | Bands | UI#8 · CX#19 | `BandSettings.tsx` | `fixed` | `BandSettings.test.tsx` ×6, all red at B3/C3 |
 | **E1** | P3 | Bands | *(neither doc)* | `DropRoundsEditor.tsx` | `fixed` | `DropRoundsEditor.test.tsx` ×2 red at B1 (new file, 5 tests) |
 
-**Totals: 22 items — 2 `open`, 0 `wip`, 20 `fixed`.** Batch 4 is complete. Batches 1, 2 and 3 are complete.
+**Totals: 22 items — 1 `open`, 0 `wip`, 21 `fixed`.** Batches 1–5 are complete; only C4 remains. Batches 1, 2 and 3 are complete.
 
 **Batch 4 lands as one PR with a commit per item**, at the user's direction — rule 6's
 "one stacked PR per sub-batch" is set aside for this batch only. Every other rule stands:
@@ -2106,7 +2106,7 @@ case, plus the setup-versus-edit distinction that did not exist at all.
 
 ## D2 · "Log after all drop rounds." is always shown
 
-**State:** `open` · **P3** · Sources: UI#9, CX#22 · Batch 5
+**State:** `fixed` · **P3** · Sources: UI#9, CX#22 · Batch 5
 
 `AccessoryLog.tsx:322` renders it for every reps-measured accessory, drop rounds or not:
 
@@ -2129,6 +2129,12 @@ Removing the last round hides it again. Keep it next to the logging action.
 `AccessoryLog.test.tsx` — a reps accessory with no drop rounds renders no drop-specific
 instruction; adding a round shows it; removing the last round hides it again. This is
 conditional rendering, not wording, so it carries a test rather than a visual check.
+
+### As built
+
+As written. A second test pins the case the gate must not reach: a timed accessory has no
+drop rounds at all, so neither the instruction nor the control that would create one is
+there — only one of the two is red against the old code, and that is the honest split.
 
 ---
 

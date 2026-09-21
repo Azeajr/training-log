@@ -2,6 +2,28 @@
 
 ## Done
 
+### Logging Flow (2026-09-21)
+
+Five items on the friction of actually logging. **C5, C7, C9, C8** and **D2** of
+`docs/workflow-review-fixes.md`.
+
+- **Resting no longer hides FINISH.** The rest countdown took the whole bottom
+  strip, so a rest removed the finish control and every section link with it and
+  the way back to them was to work out that SKIP REST was the way back. The
+  countdown is a second row above the session strip now.
+- **The PT run has a fixed action bar.** DISCARD and FINISH sat at the bottom of
+  a page that grows with every routine, exercise and set row — the only logging
+  screen where finishing meant scrolling to find the button. It carries the
+  session-wide done count, aggregated across routines.
+- **A drop sequence can be copied forward.** The draft is cleared after every set,
+  which is right, but it meant re-entering the same three-round drop set after
+  set. COPY PREVIOUS DROPS is explicit, copies as an editable draft, and logs
+  nothing.
+- **An assistance exercise can be created from the picker**, pre-tagged with the
+  slot being filled, instead of leaving the workout for Settings and coming back.
+- **"Log after all drop rounds."** is shown once there are drop rounds to log
+  after.
+
 ### Band Surfaces (2026-09-21)
 
 Eight items across the band-assisted loading UI. **E1, C2, C1, C6, D1, B3, C3

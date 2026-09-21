@@ -412,3 +412,33 @@ describe('copying a drop sequence forward', () => {
     expect(b.calibration![0]).not.toBe(a.calibration![0])
   })
 })
+
+// ── D2 ──────────────────────────────────────────────────────────────────────
+// "Log after all drop rounds." was rendered for every reps-measured accessory,
+// drop rounds or not — naming a thing that was usually not on screen.
+describe('the drop-round instruction', () => {
+  afterEach(() => { cleanup(); clearSession() })
+
+  const instruction = () => screen.queryByText('Log after all drop rounds.')
+
+  it('follows the rounds in and out', () => {
+    addAccessory(accessory([]))
+    render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ ...TIMED, type: 'reps' }} />)
+
+    expect(instruction()).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
+    expect(instruction()).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove drop 1' }))
+    expect(instruction()).toBeNull()
+  })
+
+  it('stays away from an accessory that cannot have drop rounds at all', () => {
+    addAccessory(accessory([]))
+    render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={TIMED} />)
+
+    expect(instruction()).toBeNull()
+    expect(screen.queryByRole('button', { name: '+ ADD DROP ROUND' })).toBeNull()
+  })
+})
