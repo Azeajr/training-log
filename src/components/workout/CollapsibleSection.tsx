@@ -51,6 +51,14 @@ export default function CollapsibleSection(props: Props) {
 
   const expanded = () => !props.complete || userExpanded()
 
+  // Unbreakable, so a long movement name wraps the header BEFORE the meta:
+  // "SAFETY BAR SQUAT 5 × 10 75%" over "TM" read as two broken halves.
+  const meta = () => (
+    <Show when={props.labelMeta}>
+      <span class="text-muted">{'  '}<span class="whitespace-nowrap">{props.labelMeta}</span></span>
+    </Show>
+  )
+
   // The history tap target (onLabelClick) must survive the fold: previously it
   // existed only in the un-complete branch, so finishing a cross block silently
   // removed its history entry point. Label and fold toggle are separate buttons.
@@ -62,7 +70,7 @@ export default function CollapsibleSection(props: Props) {
       fallback={
         <SectionLabel class={extraClass}>
           <span class="text-text">{props.label}</span>
-          <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
+          {meta()}
         </SectionLabel>
       }
     >
@@ -72,7 +80,7 @@ export default function CollapsibleSection(props: Props) {
       >
         <SectionLabel>
           <span class="text-text underline underline-offset-2 decoration-faint hover:decoration-accent">{props.label}</span>
-          <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
+          {meta()}
         </SectionLabel>
       </button>
     </Show>
@@ -98,7 +106,7 @@ export default function CollapsibleSection(props: Props) {
             >
               <SectionLabel>
                 <span class="text-text">{props.label}</span>
-                <Show when={props.labelMeta}><span class="text-muted">{'  '}{props.labelMeta}</span></Show>
+                {meta()}
               </SectionLabel>
               <FoldSummary expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs ml-auto" />
             </button>
@@ -111,7 +119,7 @@ export default function CollapsibleSection(props: Props) {
               aria-expanded={expanded()}
               aria-controls={id}
               aria-label={`${expanded() ? 'Collapse' : 'Expand'} ${props.label}`}
-              class="flex items-baseline gap-2 ml-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              class="shrink-0 flex items-baseline gap-2 ml-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             >
               <FoldSummary expanded={expanded()} summary={props.summary} summaryClass="text-faint text-xs tracking-widest" glyphClass="text-faint text-xs" />
             </button>
@@ -132,7 +140,7 @@ function FoldSummary(props: { expanded: boolean; summary?: string; summaryClass:
   return (
     <>
       <Show when={!props.expanded && props.summary}>
-        <span class={props.summaryClass}>{props.summary} done</span>
+        <span class={`whitespace-nowrap ${props.summaryClass}`}>{props.summary} done</span>
       </Show>
       <FoldGlyph expanded={props.expanded} class={props.glyphClass} />
     </>

@@ -153,12 +153,14 @@ export default function Modal(props: Props) {
   // this identically; it lives here now so a fourth can't drift.
   const header = () => (
     <Show when={props.title}>
-      <div class="flex items-center justify-between mb-4">
-        <Show when={props.backButton !== false} fallback={<div class="w-14" />}>
+      <div class="flex items-center justify-between gap-2 mb-4">
+        <Show when={props.backButton !== false} fallback={<div class="w-14 shrink-0" />}>
+          {/* Never shrinks: as a flex item it gave way beside the rule on a
+              375px phone and broke "← BACK" over two lines, into the dashes. */}
           <button
             onClick={() => props.onClose()}
             disabled={props.busy}
-            class="text-muted hover:text-text text-xs tracking-widest disabled:opacity-40"
+            class="shrink-0 whitespace-nowrap text-muted hover:text-text text-xs tracking-widest disabled:opacity-40"
           >
             ← BACK
           </button>
@@ -169,7 +171,7 @@ export default function Modal(props: Props) {
             without it the title would be announced twice. */}
         <h2 id={titleId} class="sr-only">{props.title}</h2>
         <Rule label={props.title!} class="text-muted" aria-hidden="true" />
-        <div class="w-14" />
+        <div class="w-14 shrink-0" />
       </div>
     </Show>
   )
