@@ -2,6 +2,25 @@
 
 ## Done
 
+### Long Names on a Narrow Phone (2026-09-24)
+
+Checked at iPhone 13 mini size (375px) with lifts named Belt Squat, Chin-ups and
+Hip Thrust, then with longer names such as Close-Grip Bench Press.
+
+- **A long name gets an ellipsis, and what follows it stays.** Every `--- LABEL`
+  header was one clipped line, so a long name pushed out whatever came after it,
+  with no sign anything was missing: a lift's `. WEEK 4 . DELOAD`, or a PT run's
+  `1/3`.
+- **A finished cross-lift block's header no longer breaks mid-phrase.** With a
+  long movement name, `5 × 10 75% TM` split into `75%` and `TM`, and `5 sets done`
+  wrapped too. The name wraps first now, and the rest stays on one line.
+- **The session bar fades at its right edge.** On a phone it is always wider than
+  the screen, and a segment cut off mid-count (`FSL+BBB 0/`) looked broken rather
+  than like a strip that scrolls. The cross-lift and assistance segments are past
+  that edge.
+- **A sheet's `← BACK` stays on one line.** Squeezed by the title beside it, it
+  wrapped onto two lines and ran into the dashes.
+
 ### Same-Day PT Runs Can Be Told Apart (2026-09-24)
 
 - **Each PT run shows when it happened, not only what day.** Running one routine

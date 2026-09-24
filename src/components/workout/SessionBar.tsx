@@ -46,7 +46,13 @@ export default function SessionBar(props: Props) {
         when={allDone()}
         fallback={
           <div class="flex items-center gap-3">
-            <div class="flex gap-3 overflow-x-auto py-1 flex-1 -mx-1 px-1">
+            {/* Faded at the right edge. On a phone the strip is always wider
+                than the screen, and a segment cut off mid-count ("FSL+BBB 0/")
+                read as broken rather than as more to scroll to — worse with
+                cross-lift and assistance names, which live past that edge.
+                The spacer keeps the last segment clear of the fade once the
+                strip is scrolled to its end. */}
+            <div class="flex gap-3 overflow-x-auto py-1 flex-1 -mx-1 px-1 [mask-image:linear-gradient(to_right,#000_calc(100%_-_1.5rem),transparent)]">
               <For each={props.segments}>
                 {s => (
                   <button
@@ -66,6 +72,7 @@ export default function SessionBar(props: Props) {
                   </button>
                 )}
               </For>
+              <span aria-hidden="true" class="shrink-0 w-3" />
             </div>
             <button
               onClick={props.onComplete}
