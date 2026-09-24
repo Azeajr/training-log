@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDateShort, formatDateLong, formatDateIso } from './format'
+import { formatDateShort, formatDateLong, formatDateIso, formatTimeShort, formatTimeIso } from './format'
 
 describe('formatDateShort', () => {
   it('includes abbreviated month and day from Date', () => {
@@ -57,5 +57,24 @@ describe('formatDateIso', () => {
     expect(formatDateIso(evening)).toBe('2026-06-20')
     expect(formatDateShort(evening)).toContain('20')
     expect(formatDateShort(evening)).toContain('Jun')
+  })
+})
+
+describe('formatTimeShort', () => {
+  it('renders local 12-hour time with a plain space before AM/PM', () => {
+    expect(formatTimeShort(new Date(2026, 8, 24, 9, 5))).toBe('9:05 AM')
+    expect(formatTimeShort(new Date(2026, 8, 24, 21, 40))).toBe('9:40 PM')
+  })
+
+  it('reads midnight and noon as 12, not 0', () => {
+    expect(formatTimeShort(new Date(2026, 8, 24, 0, 0))).toBe('12:00 AM')
+    expect(formatTimeShort(new Date(2026, 8, 24, 12, 30))).toBe('12:30 PM')
+  })
+})
+
+describe('formatTimeIso', () => {
+  it('returns zero-padded local 24-hour HH:MM', () => {
+    expect(formatTimeIso(new Date(2026, 8, 24, 7, 3))).toBe('07:03')
+    expect(formatTimeIso(new Date(2026, 8, 24, 21, 30))).toBe('21:30')
   })
 })

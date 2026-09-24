@@ -20,6 +20,25 @@ export function formatDateIso(d: Date | string): string {
   return `${y}-${m}-${day}`
 }
 
+// Local 12-hour time, "9:14 AM". Built by hand rather than with
+// toLocaleTimeString, whose output varies by ICU version: newer ones put a
+// narrow no-break space before AM/PM, so the same call renders differently
+// from one engine to the next.
+export function formatTimeShort(d: Date | string): string {
+  const date = new Date(d)
+  const h = date.getHours()
+  const m = String(date.getMinutes()).padStart(2, '0')
+  return `${h % 12 || 12}:${m} ${h < 12 ? 'AM' : 'PM'}`
+}
+
+// Local HH:MM, 24-hour — formatDateIso's counterpart, local for the same reason.
+export function formatTimeIso(d: Date | string): string {
+  const date = new Date(d)
+  const h = String(date.getHours()).padStart(2, '0')
+  const m = String(date.getMinutes()).padStart(2, '0')
+  return `${h}:${m}`
+}
+
 // One accessory set's value for SetReadout: reps, else duration (m:ss), else
 // distance (ft), else empty. Single definition — History, ExerciseHistoryModal,
 // and AccessoryLog each rendered this by hand and had already drifted once

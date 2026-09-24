@@ -48,6 +48,25 @@ test.describe('PT checklist', () => {
     await expect(page.getByRole('button', { name: /Shoulder rehab.*2\/3/ })).toBeVisible()
   })
 
+  test('records the same routine several times in one day', async ({ page }) => {
+    await page.goto('/pt/new')
+    await page.getByLabel('Routine name').fill('Shoulder')
+    await page.getByLabel('Exercise 1 name').fill('External rotation')
+    await page.getByRole('button', { name: 'SAVE ROUTINE' }).click()
+
+    for (let run = 1; run <= 3; run++) {
+      await page.getByRole('button', { name: 'START', exact: true }).click()
+      // A fresh run every time, not the last one resumed with its ticks.
+      await expect(page.getByText('Shoulder . 0/3')).toBeVisible()
+      await page.getByRole('checkbox').first().click()
+      await page.getByRole('button', { name: 'FINISH' }).click()
+      await expect(page.getByRole('button', { name: /Shoulder.*1\/3/ })).toHaveCount(run)
+    }
+
+    await page.reload()
+    await expect(page.getByRole('button', { name: /Shoulder.*1\/3/ })).toHaveCount(3)
+  })
+
   test('discards a run without recording it', async ({ page }) => {
     await page.goto('/pt/new')
     await page.getByLabel('Routine name').fill('Knee')

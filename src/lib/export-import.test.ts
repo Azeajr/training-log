@@ -1101,9 +1101,9 @@ describe('exportPtCsv', () => {
 
     const lines = (await capturedBlob!.text()).split('\n')
     expect(capturedBlob!.type).toBe('text/csv')
-    expect(lines[0]).toContain('"date","routine","exercise","set_number","done","measure"')
+    expect(lines[0]).toContain('"date","time","routine","exercise","set_number","done","measure"')
     expect(lines).toHaveLength(4)
-    expect(lines[1]).toContain('"2026-09-16","Shoulder rehab","Band pull-apart","1","true","reps"')
+    expect(lines[1]).toContain('"2026-09-16","00:00","Shoulder rehab","Band pull-apart","1","true","reps"')
     expect(lines[1]).toContain('"15"')
     expect(lines[1]).toContain('"band"')
     expect(lines[1]).toContain('"red"')
@@ -1138,11 +1138,31 @@ describe('exportPtCsv', () => {
     await exportPtCsv(db)
 
     const lines = (await capturedBlob!.text()).split('\n').slice(1)
-    expect(lines.map(l => l.split(',').slice(0, 4).join(','))).toEqual([
-      '"2026-09-14","Shoulder rehab","Band pull-apart","1"',
-      '"2026-09-16","Shoulder rehab","Band pull-apart","1"',
-      '"2026-09-16","Shoulder rehab","Band pull-apart","2"',
-      '"2026-09-16","Shoulder rehab","Backward sled walk","1"',
+    expect(lines.map(l => l.split(',').slice(0, 5).join(','))).toEqual([
+      '"2026-09-14","00:00","Shoulder rehab","Band pull-apart","1"',
+      '"2026-09-16","00:00","Shoulder rehab","Band pull-apart","1"',
+      '"2026-09-16","00:00","Shoulder rehab","Band pull-apart","2"',
+      '"2026-09-16","00:00","Shoulder rehab","Backward sled walk","1"',
+    ])
+  })
+
+  it('tells apart several runs of one routine on the same day by their time', async () => {
+    const { routineId, band } = await seedPt()
+    for (const hour of [18, 8, 13]) {
+      await commitPtRun(db, {
+        routineId,
+        date: new Date(2026, 8, 16, hour, 5),
+        checks: [{ ptExerciseId: band.id!, setNumber: 1, done: true }],
+      })
+    }
+
+    await exportPtCsv(db)
+
+    const lines = (await capturedBlob!.text()).split('\n').slice(1)
+    expect(lines.map(l => l.split(',').slice(0, 3).join(','))).toEqual([
+      '"2026-09-16","08:05","Shoulder rehab"',
+      '"2026-09-16","13:05","Shoulder rehab"',
+      '"2026-09-16","18:05","Shoulder rehab"',
     ])
   })
 
@@ -1191,7 +1211,7 @@ describe('exportPtCsv', () => {
     await exportPtCsv(db)
     const lines = (await capturedBlob!.text()).split('\n')
     expect(lines).toHaveLength(1)
-    expect(lines[0]).toContain('"date","routine"')
+    expect(lines[0]).toContain('"date","time","routine"')
   })
 
   it('exports equipment height and its unit beside the existing prescription columns', async () => {

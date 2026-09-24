@@ -2,6 +2,16 @@
 
 ## Done
 
+### Same-Day PT Runs Can Be Told Apart (2026-09-24)
+
+- **Each PT run shows when it happened, not only what day.** Running one routine
+  several times a day always saved fine, but the history listed the runs by date
+  alone, so three shoulder runs read as three identical rows. Each row now has
+  its start time under the date. The delete dialog and each row's delete label
+  say which run they mean, and the PT CSV has a `time` column after `date`.
+- **A long routine name truncates instead of pushing the row off screen.** On a
+  phone it hid the done count and the delete control.
+
 ### Warmups Can Be Skipped (2026-09-21)
 
 **C4** of `docs/workflow-review-fixes.md`, and the last item of the workflow
