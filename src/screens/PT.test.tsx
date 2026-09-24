@@ -184,6 +184,27 @@ describe('PT screen', () => {
     expect(body.indexOf('Sep 16')).toBeLessThan(body.indexOf('Sep 14'))
   })
 
+  it('tells apart several runs of one routine on the same day by their time', async () => {
+    const id = await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft({ sets: 1 })] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    for (const [hour, minute] of [[8, 5], [13, 30], [19, 45]]) {
+      await commitPtRun(db, {
+        routineId: id,
+        date: new Date(2026, 8, 16, hour, minute),
+        checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+      })
+    }
+
+    renderPT()
+    await screen.findByText('7:45 PM')
+    const body = document.body.textContent!
+    expect(body.indexOf('7:45 PM')).toBeLessThan(body.indexOf('1:30 PM'))
+    expect(body.indexOf('1:30 PM')).toBeLessThan(body.indexOf('8:05 AM'))
+    // Each run's delete control names which one it removes.
+    expect(screen.getByLabelText('Delete Shoulder run from Sep 16, 8:05 AM')).toBeTruthy()
+    expect(screen.getByLabelText('Delete Shoulder run from Sep 16, 7:45 PM')).toBeTruthy()
+  })
+
   it('expands a run to show what was done', async () => {
     const id = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft({ sets: 2 })] })
     const exercise = (await getPtRoutine(db, id))!.exercises[0]
@@ -421,7 +442,7 @@ describe('PT screen', () => {
 
     renderPT()
     await screen.findByText('Sep 16')
-    fireEvent.click(screen.getByLabelText('Delete Knee run'))
+    fireEvent.click(screen.getByLabelText('Delete Knee run from Sep 16, 12:00 AM'))
     fireEvent.click(await screen.findByRole('button', { name: /yes, delete knee run/i }))
     // The confirm() dialog, then the delete.
     fireEvent.click(await screen.findByText('DELETE'))

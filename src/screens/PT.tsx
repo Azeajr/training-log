@@ -19,7 +19,7 @@ import { clearPtRun, getPtRun, ptSessionRoutineIds, startPtSession } from '../st
 import { createAsyncRead } from '../lib/async-read'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
-import { formatDateShort } from '../lib/format'
+import { formatDateShort, formatTimeShort } from '../lib/format'
 import Rule from '../components/layout/Rule'
 import AsyncErrorBox from '../components/ui/AsyncErrorBox'
 import FoldGlyph from '../components/ui/FoldGlyph'
@@ -35,6 +35,10 @@ const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
 
 const HISTORY_LIMIT = 30
+
+// A routine can be run several times in a day, and by date alone those runs
+// were indistinguishable — in the list, and in the dialog asking which to delete.
+const runWhen = (date: Date): string => `${formatDateShort(date)}, ${formatTimeShort(date)}`
 
 // One loading voice per screen. The app has several shapes of "Loading…" by
 // context (full-screen fallback vs embedded), and a screen that uses two of
@@ -138,7 +142,7 @@ export default function PT() {
 
   const handleDeleteSession = async (summary: PtSessionSummary) => {
     if (!await confirm(
-      `Delete the ${formatDateShort(summary.session.date)} ${summary.routineName} run?`,
+      `Delete the ${runWhen(summary.session.date)} ${summary.routineName} run?`,
       { destructive: true, confirmLabel: 'DELETE' },
     )) return
     try {
@@ -341,11 +345,12 @@ export default function PT() {
                       onClick={() => void toggleDetail(summary.session.id!)}
                       aria-expanded={openSession() === summary.session.id}
                       aria-controls={`pt-session-${summary.session.id}`}
-                      class="flex-1 text-left flex items-center justify-between gap-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                      class="flex-1 min-w-0 text-left flex items-center justify-between gap-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                     >
                       <FoldGlyph expanded={openSession() === summary.session.id} class="text-faint text-xs shrink-0" />
-                      <span class="text-faint text-xs tracking-widest w-16 shrink-0">
-                        {formatDateShort(summary.session.date)}
+                      <span class="text-faint text-xs tracking-widest w-20 shrink-0">
+                        <span class="block">{formatDateShort(summary.session.date)}</span>
+                        <span class="block">{formatTimeShort(summary.session.date)}</span>
                       </span>
                       <span class="text-text uppercase tracking-widest truncate flex-1">
                         {summary.routineName}
@@ -359,7 +364,7 @@ export default function PT() {
                     </button>
                     <InlineConfirm
                       label="✕"
-                      ariaLabel={`Delete ${summary.routineName} run`}
+                      ariaLabel={`Delete ${summary.routineName} run from ${runWhen(summary.session.date)}`}
                       confirmText="delete run?"
                       onConfirm={() => void handleDeleteSession(summary)}
                     />

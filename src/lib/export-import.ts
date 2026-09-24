@@ -3,7 +3,7 @@ import type { BandLoad } from '../types/domain'
 import type { TrainingDB } from '../db/index'
 import type { PtExercise, PtSetCheck } from '../types/domain'
 import { ptCheckActuals } from './pt'
-import { formatDateIso } from './format'
+import { formatDateIso, formatTimeIso } from './format'
 import { refreshTrainingMaxPresence } from './training-max'
 
 const PENDING_EXPORT_KEY = 'pending-export'
@@ -408,7 +408,9 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
   }
 
   const rows: string[][] = [[
-    'date', 'routine', 'exercise', 'set_number', 'done', 'measure',
+    // `time` because a routine can be run several times in a day, and by date
+    // alone those runs cannot be told apart.
+    'date', 'time', 'routine', 'exercise', 'set_number', 'done', 'measure',
     'target_reps', 'target_seconds', 'target_distance', 'distance_unit',
     'resistance_kind', 'resistance_weight_lb', 'resistance_band',
     'exercise_notes', 'session_notes',
@@ -427,6 +429,7 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
   const ordered = [...sessions].sort((a, b) => a.date.getTime() - b.date.getTime())
   for (const session of ordered) {
     const dateStr = formatDateIso(session.date)
+    const timeStr = formatTimeIso(session.date)
     const name = routineName.get(session.routineId) ?? String(session.routineId)
     const sessionChecks = (checksBySession.get(session.id!) ?? []).slice().sort((a, b) => {
       const orderA = exerciseById.get(a.ptExerciseId)?.order ?? 0
@@ -440,8 +443,8 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
     if (sessionChecks.length === 0) {
       // Positional, so it has to grow with the header above — a short row here
       // is what makes every later column slip one to the left.
-      const blanks = rows[0].length - 2
-      rows.push([dateStr, name, ...Array<string>(blanks).fill('')])
+      const blanks = rows[0].length - 3
+      rows.push([dateStr, timeStr, name, ...Array<string>(blanks).fill('')])
       rows[rows.length - 1][rows[0].indexOf('session_notes')] = session.notes ?? ''
       continue
     }
@@ -450,6 +453,7 @@ export async function exportPtCsv(db: TrainingDB): Promise<void> {
       const exercise = exerciseById.get(check.ptExerciseId)
       rows.push([
         dateStr,
+        timeStr,
         name,
         exercise?.name ?? String(check.ptExerciseId),
         String(check.setNumber),
