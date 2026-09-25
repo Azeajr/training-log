@@ -2504,17 +2504,20 @@ it('persists effective main-lift load and the exact band setup across raw-load e
   await db.lifts.update(1, { name: 'Chin-ups', bandProfile: defaultBandProfile('Chin-ups') })
   startSession(BENCH)
   renderWorkout()
-  const picker = await screen.findByRole('combobox', { name: 'band' })
-  fireEvent.change(picker, { target: { value: 'Green' } })
+  const picker = within(await screen.findByRole('group', { name: 'bands' }))
+  fireEvent.click(picker.getByRole('button', { name: 'NONE' }))
+  fireEvent.click(picker.getByRole('button', { name: 'Green' }))
   fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
   await waitFor(async () => expect(await db.sets.count()).toBe(1))
-  // 191 raw − 50 assistance = 141, the measured load, not a 5lb-grid value.
-  expect((await db.sets.toArray())[0]).toMatchObject({ weight: 141, bandLoad: { band: 'Green', rawLoad: 191, assistance: 50, addedWeight: 0 } })
+  // The 80 prescription opens on Orange + Red + 2.5 (78.5), and swapping the
+  // bands keeps the plate: 191 raw − 50 assistance + 2.5 = 143.5, exactly, not
+  // a 5lb-grid value.
+  expect((await db.sets.toArray())[0]).toMatchObject({ weight: 143.5, bandLoad: { bands: ['Green'], rawLoad: 191, assistance: 50, addedWeight: 2.5 } })
   fireEvent.click(screen.getByRole('button', { name: 'Band settings for Chin-ups' }))
   fireEvent.click(screen.getByRole('button', { name: 'Increase raw load' }))
   fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-  expect((await db.sets.toArray())[0]).toMatchObject({ weight: 141, bandLoad: { rawLoad: 191 } })
+  expect((await db.sets.toArray())[0]).toMatchObject({ weight: 143.5, bandLoad: { rawLoad: 191 } })
   expect((await db.lifts.get(1))?.bandProfile?.rawLoad).toBe(192)
 })
 
@@ -2538,7 +2541,7 @@ it('a band profile edited from an accessory reaches the exercise list', async ()
 
   expect((await db.exercises.get(10))?.bandProfile).toMatchObject({ enabled: true, rawLoad: 192 })
   // The logger follows the row it was saved to, without a reload.
-  expect(await screen.findByRole('combobox', { name: 'band' })).toBeInTheDocument()
+  expect(await screen.findByRole('group', { name: 'bands' })).toBeInTheDocument()
 })
 
 // ── C1 ──────────────────────────────────────────────────────────────────────

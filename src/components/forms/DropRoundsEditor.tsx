@@ -33,7 +33,7 @@ export default function DropRoundsEditor(props: {
                   to ask for one. The user names the load they want. */}
               <BandLoadControls profile={props.profile} loading={props.loading} value={round().bandLoad!} label={`drop ${i + 1}`}
                 onSuggest={props.profile ? target => {
-                  const bandLoad = suggestBandLoad(props.profile!, target, settings.plates)
+                  const bandLoad = suggestBandLoad(props.profile!, target, settings.plates, settings.bands)
                   props.onChange(props.rounds.map((r, n) => n === i ? { ...r, bandLoad, weight: effectiveBandLoad(bandLoad) } : r))
                 } : undefined}
                 onChange={bandLoad => props.onChange(props.rounds.map((r, n) => n === i ? { ...r, bandLoad, weight: effectiveBandLoad(bandLoad) } : r))} />

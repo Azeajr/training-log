@@ -1,9 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, fireEvent } from '@solidjs/testing-library'
+import { render, fireEvent, screen, within } from '@solidjs/testing-library'
 import { createSignal } from 'solid-js'
 import { bandProfileFor, defaultBandProfile, makeBandLoad } from '../../lib/band-loading'
 import type { BandProfile } from '../../types/domain'
 import SetRow from './SetRow'
+
+const bandChip = (name: string) => within(screen.getByRole('group', { name: 'bands' })).getByRole('button', { name })
+const pressedBands = () => within(screen.getByRole('group', { name: 'bands' })).getAllByRole('button', { pressed: true }).map(c => c.textContent)
+/** Swap to exactly this band: clear the stack, then put it on. */
+const pickOnly = (name: string) => { fireEvent.click(bandChip('NONE')); fireEvent.click(bandChip(name)) }
 
 const baseSet = { type: 'main' as const, setNumber: 1, weight: 100, reps: 5, isAmrap: false }
 const completedProps = {
@@ -66,13 +71,13 @@ describe('band-assisted main sets', () => {
   it('suggests a band, permits extra weight, and logs effective load for progression', () => {
     const onLog = vi.fn()
     const { getByRole } = render(() => <SetRow set={{ ...baseSet, weight: 145 }} isActive isCompleted={false} bandProfile={defaultBandProfile('Chin-ups')} onLog={onLog} onEdit={() => {}} />)
-    expect(getByRole('combobox', { name: 'band' })).toHaveValue('Green')
-    fireEvent.change(getByRole('combobox', { name: 'band' }), { target: { value: 'Red' } })
+    expect(pressedBands()).toEqual(['Green'])
+    pickOnly('Red')
     fireEvent.click(getByRole('button', { name: 'Increase added weight' }))
     fireEvent.click(getByRole('button', { name: 'LOG' }))
     // Suggest opens on Green +2.5; switching band keeps the added weight, and
     // one more press makes it 5. 191 raw − 10 assistance + 5 added = 186 exactly.
-    expect(onLog).toHaveBeenCalledWith(5, 186, expect.objectContaining({ band: 'Red', rawLoad: 191, assistance: 10, addedWeight: 5 }))
+    expect(onLog).toHaveBeenCalledWith(5, 186, expect.objectContaining({ bands: ['Red'], rawLoad: 191, assistance: 10, addedWeight: 5 }))
     // The set carries the calibration it was logged under, so a later edit can
     // re-price it against that rather than against whatever is measured next.
     expect(onLog.mock.calls[0][2].calibration).toEqual(defaultBandProfile('Chin-ups')!.bands)
@@ -86,19 +91,19 @@ describe('band-assisted main sets', () => {
     const onLog = vi.fn()
     const { getByRole } = render(() => <SetRow set={{ ...baseSet, weight: weight() }} isActive isCompleted={false}
       bandProfile={defaultBandProfile('Chin-ups')} onLog={onLog} onEdit={() => {}} />)
-    fireEvent.change(getByRole('combobox', { name: 'band' }), { target: { value: 'Purple' } })
+    pickOnly('Purple')
 
     // 141 is exactly Green/0, so an unguarded effect re-suggests Green here.
     setWeight(141)
 
-    expect(getByRole('combobox', { name: 'band' })).toHaveValue('Purple')
+    expect(pressedBands()).toEqual(['Purple'])
     fireEvent.click(getByRole('button', { name: 'LOG' }))
     // Purple keeps the 2.5 suggest opened with: 191 − 30 + 2.5 = 163.5.
-    expect(onLog).toHaveBeenCalledWith(5, 163.5, expect.objectContaining({ band: 'Purple' }))
+    expect(onLog).toHaveBeenCalledWith(5, 163.5, expect.objectContaining({ bands: ['Purple'] }))
   })
 
   it('retains recorded raw load when editing after recalibration', () => {
-    const original = makeBandLoad(defaultBandProfile('Chin-ups')!, 'Green')
+    const original = makeBandLoad(defaultBandProfile('Chin-ups')!, ['Green'])
     const onEdit = vi.fn()
     const { getByRole, getByText } = render(() => <SetRow {...completedProps} loggedWeight={145} loggedBandLoad={original}
       bandProfile={{ ...defaultBandProfile('Chin-ups')!, rawLoad: 220 }} onEdit={onEdit} />)
@@ -122,7 +127,7 @@ describe('band profiles are opt-in', () => {
         onLog={() => {}} onEdit={() => {}} />
     ))
     expect(queryByLabelText('Increase weight')).toBeInTheDocument()
-    expect(queryByRole('combobox', { name: 'band' })).not.toBeInTheDocument()
+    expect(queryByRole('group', { name: 'bands' })).not.toBeInTheDocument()
     expect(container.textContent).toContain('plates:')
   })
 
@@ -145,7 +150,7 @@ describe('band profiles are opt-in', () => {
         bandProfile={bandProfileFor({ name: 'Chin-ups', bandProfile: defaultBandProfile('Chin-ups') })}
         onLog={() => {}} onEdit={() => {}} />
     ))
-    expect(queryByRole('combobox', { name: 'band' })).toBeInTheDocument()
+    expect(queryByRole('group', { name: 'bands' })).toBeInTheDocument()
   })
 
   it('a profile the user turned off stays off', () => {

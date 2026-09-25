@@ -44,8 +44,17 @@ export interface BandProfile {
 
 /** Immutable setup captured with a logged set; weight holds the effective load. */
 export interface BandLoad {
-  band: string | null
+  /**
+   * Every band on, in calibration order; empty is unassisted.
+   *
+   * A list, not one name: bands stack. Two bands on the same anchor are
+   * stretched the same distance, so their pulls add, and `assistance` is the
+   * sum of theirs. Rows written before stacking held a single `band: string |
+   * null`; `upgradeBandLoad` converts those wherever rows arrive.
+   */
+  bands: string[]
   rawLoad: number
+  /** The TOTAL taken off, summed across `bands`. */
   assistance: number
   addedWeight: number
   /**
@@ -233,6 +242,17 @@ export interface PlateConfig {
   count: number
 }
 
+/**
+ * One band you own, and how many of it — equipment, like `PlateConfig`.
+ *
+ * The inventory is the one list of band NAMES. A movement's `BandProfile`
+ * measures what each of these assists it by, and holds nothing else: which
+ * bands exist, what they are called and how many can go on at once belong to
+ * the equipment, not to any one movement. A count of 0 keeps the band and its
+ * measurements but offers it nowhere.
+ */
+export interface BandInventoryItem { name: string; count: number }
+
 export interface Settings {
   id?: number
   restTimer1: number
@@ -241,6 +261,7 @@ export interface Settings {
   theme?: string
   barWeight?: number
   plates?: PlateConfig[]
+  bands?: BandInventoryItem[]
   supplementalTemplate?: SupplementalTemplate
   deloadSupplemental?: DeloadSupplemental
   // Whether cycles include a week-4 deload. false = 3-week cycle: after week 3

@@ -2,6 +2,30 @@
 
 ## Done
 
+### Stacked Bands, and Bands as Equipment (2026-09-25)
+
+- **Bands are equipment now.** Settings › Equipment › Bands lists the bands you
+  own and how many of each, beside the plates. Names are added, renamed and
+  removed there, and a rename or removal reaches every movement at once. Each
+  movement's band settings just measure those bands. A count of 0 puts a band
+  aside and keeps its measurements. Your existing band names carried over, one
+  of each.
+- **More than one of a band.** Owning two Greens means Green can go on twice: tap
+  the chip again for `GREEN ×2`. Suggestions use as many as you own and no more.
+- **Bands can be combined.** Any number of bands can be on at once, and a stack
+  assists the sum of its bands, so it needs no measuring of its own. For chin-ups
+  this fills the 55 lb hole between Orange (86) and Green (141) with Green +
+  Purple at 111, and goes below Orange, down to 36 with Orange + Green.
+- **Bands are toggle chips, not a dropdown.** `NONE` plus one chip per band; tap
+  one on or off. A dropdown holds one band, and it went against the app's chip
+  idiom anyway.
+- **Suggestions consider every stack.** The rule is unchanged, least assistance
+  within one plate step, so a stack shows up only where it is the less-assisted
+  option: at 111, Green + Purple beats Orange + 25 lb.
+- **Old sets carry over.** A set logged with one band is rewritten to the new
+  shape at startup and on import, with the same load. The CSV `band` column reads
+  `Green + Purple` for a stack. `docs/design/band-loading.md` has the rest.
+
 ### Long Names on a Narrow Phone (2026-09-24)
 
 Checked at iPhone 13 mini size (375px) with lifts named Belt Squat, Chin-ups and

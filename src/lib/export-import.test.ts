@@ -1481,7 +1481,7 @@ it('rejects malformed drop rounds before replacing existing data', async () => {
 it('exports band setup on main, assistance, and drop rows, with consistent CSV columns', async () => {
   const cycleId = await seedBase()
   const sessionId = await db.sessions.add({ cycleId, liftId: 1, week: 1, date: new Date(), notes: null, status: 'completed' })
-  const bandLoad = { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 5 }
+  const bandLoad = { bands: ['Green'], rawLoad: 191, assistance: 48, addedWeight: 5 }
   await db.sets.add({ sessionId, type: 'main', setNumber: 1, weight: 150, reps: 8, isAmrap: true, bandLoad })
   await db.accessorySets.add({ sessionId, exerciseId: 1, setNumber: 1, weight: 150, reps: 8, duration: null, distance: null, bandLoad,
     dropRounds: [{ weight: 145, reps: 6, bandLoad: { ...bandLoad, addedWeight: 0 } }] })

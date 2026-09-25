@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library'
+import { render, screen, fireEvent, cleanup, within } from '@solidjs/testing-library'
 import { createSignal } from 'solid-js'
 import AccessoryLog from './AccessoryLog'
 import { defaultBandProfile } from '../../lib/band-loading'
 import type { Exercise, BandProfile } from '../../types/domain'
 import { workout, addAccessory, clearSession, type ActiveAccessory } from '../../store/workout-store'
 import { ACCESSORY_SETS } from '../../lib/calc'
+
+const bandChip = (group: string, name: string) => within(screen.getByRole('group', { name: group })).getByRole('button', { name })
+const pressedBands = (group: string) => within(screen.getByRole('group', { name: group })).getAllByRole('button', { pressed: true }).map(c => c.textContent)
+/** Swap to exactly this band: clear the stack, then put it on. */
+const pickOnly = (group: string, name: string) => { fireEvent.click(bandChip(group, 'NONE')); fireEvent.click(bandChip(group, name)) }
 
 const TIMED: Exercise = { id: 1, name: 'Plank', type: 'timed', category: 'core' }
 
@@ -193,17 +198,17 @@ it('records band changes per set and per drop round, carrying the last choice fo
   // Bands are opt-in now: the profile is saved on the exercise, not inferred
   // from its name, so the test hands one over the way band settings would.
   const view = render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={{ id: 1, name: 'Pull-ups', type: 'reps', bandProfile: defaultBandProfile('Pull-ups') }} />)
-  expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Green')
-  fireEvent.change(screen.getByRole('combobox', { name: 'band' }), { target: { value: 'Purple' } })
+  expect(pressedBands('bands')).toEqual(['Green'])
+  pickOnly('bands', 'Purple')
   fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
-  expect(screen.getByRole('combobox', { name: 'drop 1 band' })).toHaveValue('Purple')
-  fireEvent.change(screen.getByRole('combobox', { name: 'drop 1 band' }), { target: { value: 'Green' } })
+  expect(pressedBands('drop 1 bands')).toEqual(['Purple'])
+  pickOnly('drop 1 bands', 'Green')
   fireEvent.click(screen.getByRole('button', { name: 'LOG' }))
   // Suggest opens on Green +2.5 for the prescribed 145, and switching band keeps
   // the plates on the belt: Purple is 191−30+2.5 = 163.5, the round switched
   // back to Green is 191−50+2.5 = 143.5.
-  expect(workout.activeAccessories[0].loggedSets[0]).toMatchObject({ weight: 163.5, bandLoad: { band: 'Purple', assistance: 30 }, dropRounds: [{ weight: 143.5, bandLoad: { band: 'Green' } }] })
-  expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Purple')
+  expect(workout.activeAccessories[0].loggedSets[0]).toMatchObject({ weight: 163.5, bandLoad: { bands: ['Purple'], assistance: 30 }, dropRounds: [{ weight: 143.5, bandLoad: { bands: ['Green'] } }] })
+  expect(pressedBands('bands')).toEqual(['Purple'])
   view.unmount()
   clearSession()
 })
@@ -220,12 +225,12 @@ it('hands the weight back to the prescription when bands are turned off', async 
   ))
   // The headline load, beside the "3x10 @" label — not one of the per-set readouts.
   const header = () => screen.getByText(/x\d+ @$/).nextElementSibling!.textContent!.replace(/[^\d.]/g, '')
-  expect(screen.getByRole('combobox', { name: 'band' })).toBeInTheDocument()
+  expect(screen.getByRole('group', { name: 'bands' })).toBeInTheDocument()
   expect(header()).not.toBe('145')
 
   setProfile(null)
   await Promise.resolve()
-  expect(screen.queryByRole('combobox', { name: 'band' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('group', { name: 'bands' })).not.toBeInTheDocument()
   expect(header()).toBe('145')
 })
 
@@ -275,7 +280,7 @@ describe('the load separator carries exactly one unit', () => {
     render(() => <AccessoryLog accessory={workout.activeAccessories[0]} exercise={banded()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '+ ADD DROP ROUND' }))
-    expect(screen.getByRole('combobox', { name: 'drop 1 band' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'drop 1 bands' })).toBeTruthy()
     expect(separatorText()).not.toMatch(/effective\s*lb/)
   })
 })

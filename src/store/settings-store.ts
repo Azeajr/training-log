@@ -1,6 +1,7 @@
 import { createStore } from 'solid-js/store'
 import { db } from '../db/index'
-import type { PlateConfig, SupplementalTemplate, DeloadSupplemental, HighRepDiscount } from '../types/domain'
+import type { BandInventoryItem, PlateConfig, SupplementalTemplate, DeloadSupplemental, HighRepDiscount } from '../types/domain'
+import { DEFAULT_BANDS } from '../lib/band-loading'
 
 export const THEMES = {
   oled: {
@@ -246,6 +247,7 @@ export const SETTINGS_DEFAULTS = {
   theme: DEFAULT_THEME,
   barWeight: DEFAULT_BAR_WEIGHT,
   plates: DEFAULT_PLATES,
+  bands: DEFAULT_BANDS,
   supplementalTemplate: 'fsl+bbb' as SupplementalTemplate,
   deloadSupplemental: 'normal' as DeloadSupplemental,
   hasDeloadWeek: true,
@@ -274,6 +276,7 @@ interface SettingsState {
   theme: string
   barWeight: number
   plates: PlateConfig[]
+  bands: BandInventoryItem[]
   supplementalTemplate: SupplementalTemplate
   deloadSupplemental: DeloadSupplemental
   hasDeloadWeek: boolean
@@ -301,6 +304,7 @@ export async function loadSettings() {
     theme: resolveThemeKey(row.theme),
     barWeight: row.barWeight ?? DEFAULT_BAR_WEIGHT,
     plates: row.plates ?? DEFAULT_PLATES,
+    bands: row.bands ?? DEFAULT_BANDS,
     supplementalTemplate: row.supplementalTemplate ?? 'fsl+bbb',
     deloadSupplemental: row.deloadSupplemental ?? 'normal',
     hasDeloadWeek: row.hasDeloadWeek ?? true,

@@ -16,7 +16,7 @@ const profile = (): BandProfile => ({
 })
 
 const bandLoad = (): BandLoad => ({
-  band: 'Green',
+  bands: ['Green'],
   rawLoad: 191,
   assistance: 50,
   addedWeight: 0,
@@ -83,7 +83,7 @@ describe('DropRoundsEditor', () => {
    * fallback and strand the row with no bands to choose from.
    */
   it('keeps an absent calibration absent rather than inventing an empty one', () => {
-    const legacy: BandLoad = { band: 'Green', rawLoad: 191, assistance: 50, addedWeight: 0 }
+    const legacy: BandLoad = { bands: ['Green'], rawLoad: 191, assistance: 50, addedWeight: 0 }
     const { rounds } = renderEditor([{ weight: 141, reps: 8, bandLoad: legacy }])
 
     fireEvent.click(screen.getByText('+ ADD DROP ROUND'))

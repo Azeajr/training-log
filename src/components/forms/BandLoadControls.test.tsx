@@ -1,15 +1,19 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createSignal } from 'solid-js'
-import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library'
+import { render, screen, fireEvent, cleanup, within } from '@solidjs/testing-library'
 import BandLoadControls from './BandLoadControls'
 import { defaultBandProfile, effectiveBandLoad, makeBandLoad } from '../../lib/band-loading'
 import { db } from '../../db/index'
-import { loadSettings } from '../../store/settings-store'
+import { loadSettings, updateSettings } from '../../store/settings-store'
 import type { BandLoad, BandProfile } from '../../types/domain'
 
 // Orange 86, Green 141, Purple 161, Red 181, unassisted 191.
 const pulling = (over: Partial<BandProfile> = {}): BandProfile => ({ ...defaultBandProfile('Pull-ups')!, ...over })
+// Green 141, Purple 161, both 111. Four bands stack into nearly every load,
+// which leaves no gap for a test about gaps to point at.
+const twoBands = (over: Partial<BandProfile> = {}): BandProfile =>
+  pulling({ bands: pulling().bands.filter(b => b.name === 'Green' || b.name === 'Purple'), ...over })
 
 beforeEach(async () => {
   cleanup()
@@ -29,7 +33,7 @@ function renderControls(options: {
   onSuggest?: (target: number) => void
 }) {
   const profile = options.profile === undefined ? pulling() : options.profile
-  const [value, setValue] = createSignal<BandLoad>(options.value ?? makeBandLoad(pulling(), 'Green'))
+  const [value, setValue] = createSignal<BandLoad>(options.value ?? makeBandLoad(pulling(), ['Green']))
   render(() => (
     <BandLoadControls
       profile={profile}
@@ -46,8 +50,8 @@ const body = () => (document.body.textContent ?? '').replace(/\s+/g, ' ')
 
 // ── B3 ──────────────────────────────────────────────────────────────────────
 // A 45lb prescription rendered next to an 86lb suggestion and a button that
-// cannot close the gap: only a band takes load off, so nothing below the
-// strongest band's assisted load is reachable however the plates are arranged.
+// cannot close the gap: only bands take load off, so nothing below the
+// strongest stack's assisted load is reachable however the plates are arranged.
 describe('BandLoadControls — why the suggestion is where it is', () => {
   it('says nothing when the target is reachable exactly', () => {
     renderControls({ target: 141, onSuggest: () => {} })
@@ -59,9 +63,9 @@ describe('BandLoadControls — why the suggestion is where it is', () => {
   })
 
   it('names the lightest load for a target below everything achievable', () => {
-    renderControls({ target: 45, onSuggest: () => {} })
+    renderControls({ profile: twoBands(), value: makeBandLoad(twoBands(), ['Green']), target: 45, onSuggest: () => {} })
 
-    expect(body()).toContain('Lightest available 86lb')
+    expect(body()).toContain('Lightest available 111lb')
     expect(body()).toContain('45lb is not reachable')
     // The button cannot close that gap, so it is not offered.
     expect(screen.queryByText('USE SUGGESTED LOAD')).toBeNull()
@@ -80,7 +84,7 @@ describe('BandLoadControls — why the suggestion is where it is', () => {
    * further away than the nearest candidate — that is a note, never a warning.
    */
   it('reports an increment gap and a preference tradeoff separately', () => {
-    renderControls({ profile: pulling({ maxAddedWeight: 0 }), target: 150, onSuggest: () => {} })
+    renderControls({ profile: twoBands({ maxAddedWeight: 0 }), value: makeBandLoad(twoBands(), ['Green']), target: 150, onSuggest: () => {} })
 
     expect(body()).toContain('Nearest available 141lb (9lb under)')
     expect(body()).toContain('Simpler setup, 11lb over')
@@ -89,7 +93,7 @@ describe('BandLoadControls — why the suggestion is where it is', () => {
   })
 
   it('says which side of the target the nearest load falls on', () => {
-    renderControls({ profile: pulling({ maxAddedWeight: 0 }), target: 158, onSuggest: () => {} })
+    renderControls({ profile: twoBands({ maxAddedWeight: 0 }), value: makeBandLoad(twoBands(), ['Green']), target: 158, onSuggest: () => {} })
     expect(body()).toContain('Nearest available 161lb (3lb over)')
   })
 })
@@ -123,12 +127,13 @@ describe('BandLoadControls — asking for a load where nothing prescribed one', 
   })
 
   it('explains an unreachable target the user named, and withholds the button', () => {
-    renderControls({ onSuggest: () => {}, value: makeBandLoad(pulling(), 'Orange') })
+    renderControls({ profile: twoBands(), onSuggest: () => {}, value: makeBandLoad(twoBands(), ['Green']) })
 
     fireEvent.click(screen.getByText('SUGGEST A LOAD…'))
+    // 141 down to 91, below both bands on.
     for (let i = 0; i < 20; i++) fireEvent.click(screen.getByLabelText('Decrease target effective load'))
 
-    expect(body()).toContain('Lightest available 86lb')
+    expect(body()).toContain('Lightest available 111lb')
     expect(screen.queryByText('USE SUGGESTED LOAD')).toBeNull()
   })
 
@@ -145,7 +150,84 @@ describe('BandLoadControls — asking for a load where nothing prescribed one', 
     const before = { ...value() }
 
     fireEvent.click(screen.getByLabelText('Increase added weight'))
-    expect(value()).toMatchObject({ band: before.band, assistance: before.assistance })
+    expect(value()).toMatchObject({ bands: before.bands, assistance: before.assistance })
     expect(effectiveBandLoad(value())).toBe(effectiveBandLoad(before) + 2.5)
+  })
+})
+
+describe('BandLoadControls — stacking bands', () => {
+  const chip = (name: string) => within(screen.getByRole('group', { name: 'bands' })).getByRole('button', { name })
+  const pressed = () => within(screen.getByRole('group', { name: 'bands' }))
+    .getAllByRole('button', { pressed: true }).map(c => c.textContent)
+
+  it('puts a second band on beside the first, and takes either off again', () => {
+    const { value } = renderControls({})
+    expect(pressed()).toEqual(['Green'])
+
+    fireEvent.click(chip('Purple'))
+    expect(value()).toMatchObject({ bands: ['Green', 'Purple'], assistance: 80 })
+    expect(pressed()).toEqual(['Green', 'Purple'])
+    expect(body()).toContain('assistance 80lb')
+    expect(body()).toContain('= 111lb effective')
+
+    fireEvent.click(chip('Green'))
+    expect(value()).toMatchObject({ bands: ['Purple'], assistance: 30 })
+  })
+
+  it('keeps calibration order whichever band went on first', () => {
+    const { value } = renderControls({ value: makeBandLoad(pulling(), ['Red']) })
+    fireEvent.click(chip('Orange'))
+    expect(value().bands).toEqual(['Orange', 'Red'])
+  })
+
+  it('takes every band off with NONE, keeping the plates', () => {
+    const { value } = renderControls({ value: makeBandLoad(pulling(), ['Green', 'Purple'], 5) })
+    expect(chip('NONE').getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(chip('NONE'))
+    expect(value()).toMatchObject({ bands: [], assistance: 0, addedWeight: 5 })
+    expect(chip('NONE').getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('puts on as many of a band as you own, one per tap, then takes them all off', async () => {
+    await updateSettings({ bands: [{ name: 'Orange', count: 1 }, { name: 'Green', count: 2 }, { name: 'Purple', count: 1 }, { name: 'Red', count: 1 }] })
+    const { value } = renderControls({ value: makeBandLoad(pulling(), []) })
+
+    fireEvent.click(chip('Green'))
+    expect(value().bands).toEqual(['Green'])
+    fireEvent.click(chip('Green'))
+    expect(value()).toMatchObject({ bands: ['Green', 'Green'], assistance: 100 })
+    expect(pressed()).toEqual(['Green ×2'])
+    fireEvent.click(chip('Green ×2'))
+    expect(value().bands).toEqual([])
+    // One of a band is still just on and off.
+    fireEvent.click(chip('Red'))
+    fireEvent.click(chip('Red'))
+    expect(value().bands).toEqual([])
+  })
+
+  it('offers only bands you own, but always the ones a set already has', async () => {
+    await updateSettings({ bands: [{ name: 'Orange', count: 0 }, { name: 'Green', count: 1 }, { name: 'Purple', count: 1 }] })
+    renderControls({ value: makeBandLoad(pulling(), ['Green']) })
+    const names = () => within(screen.getByRole('group', { name: 'bands' })).getAllByRole('button').map(c => c.textContent)
+    // Orange is put aside and Red is not in the equipment at all.
+    expect(names()).toEqual(['NONE', 'Green', 'Purple'])
+    cleanup()
+
+    // A finished set with two Reds on keeps both reachable, and can still
+    // cycle to two, though the equipment has none now.
+    const { value } = renderControls({ value: makeBandLoad(pulling(), ['Red', 'Red']) })
+    expect(names()).toContain('Red ×2')
+    fireEvent.click(chip('Red ×2'))
+    fireEvent.click(chip('Red'))
+    fireEvent.click(chip('Red'))
+    expect(value().bands).toEqual(['Red', 'Red'])
+  })
+
+  it('prices a stack on a finished set from the calibration it was recorded under', () => {
+    // Recorded under the estimates, Green 48 and Purple 31; measured since as 50 and 30.
+    const old = pulling({ bands: pulling().bands.map(b => ({ ...b, assistance: ({ Green: 48, Purple: 31 } as Record<string, number>)[b.name] ?? b.assistance })) })
+    const { value } = renderControls({ value: makeBandLoad(old, ['Green']) })
+    fireEvent.click(chip('Purple'))
+    expect(value().assistance).toBe(79)
   })
 })

@@ -72,7 +72,7 @@ export default function SetRow(props: Props) {
   /** A band the USER picked. Outranks anything re-derived below. */
   const changeBandLoad = (load: BandLoad) => { setBandTouched(true); applyBandLoad(load) }
   const suggest = (target: number) => {
-    if (props.bandProfile) applyBandLoad(suggestBandLoad(props.bandProfile, target, settings.plates))
+    if (props.bandProfile) applyBandLoad(suggestBandLoad(props.bandProfile, target, settings.plates, settings.bands))
   }
   createEffect(on(() => [props.bandProfile, props.set.weight, props.isActive] as const, (_now, prior) => {
     if (props.isCompleted || !props.isActive) return
@@ -99,7 +99,7 @@ export default function SetRow(props: Props) {
     // user had already dialled in, mid-exercise, with no way to tell it had
     // happened. Same reason `weightTouched` gates the plain weight effect below.
     const chosen = bandTouched() ? bandLoad() : null
-    if (chosen) { applyBandLoad(makeBandLoad(profile, chosen.band, chosen.addedWeight)); return }
+    if (chosen) { applyBandLoad(makeBandLoad(profile, chosen.bands, chosen.addedWeight)); return }
     const previous = props.previousBandLoad
     if (previous && previous.rawLoad === profile.rawLoad && effectiveBandLoad(previous) === props.set.weight) {
       applyBandLoad({ ...previous })
@@ -216,7 +216,7 @@ export default function SetRow(props: Props) {
               target={props.set.weight}
               onSuggest={target => {
                 if (!props.bandProfile) return
-                const load = suggestBandLoad(props.bandProfile, target, settings.plates)
+                const load = suggestBandLoad(props.bandProfile, target, settings.plates, settings.bands)
                 setEditBandLoad(load); setEditWeight(effectiveBandLoad(load))
               }}
               onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />

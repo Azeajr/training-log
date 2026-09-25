@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { vi, describe, it, expect } from 'vitest'
 import type { TrainingDB } from '../db'
+import type { BandLoad } from '../types/domain'
 
 // seedDatabase() caches its promise in a module-level `_seed` variable.
 // vi.resetModules() resets that cache AND creates a fresh in-process SQLite DB
@@ -129,6 +130,26 @@ describe('seedDatabase — partial recovery', () => {
 
     expect((await db.exercises.get(legId))?.category).toBe('legs')
     expect((await db.exercises.get(customId))?.category).toBe('legs')
+  })
+
+  it('names each stored band load\'s bands as a list, drop rounds included', async () => {
+    const { db, seedDatabase } = await freshContext()
+    // As the build before stacking wrote them: one `band`, or null for none.
+    const legacy = (band: string | null) => ({ band, rawLoad: 191, assistance: band ? 50 : 0, addedWeight: 0 }) as unknown as BandLoad
+    const setId = await db.sets.add({ sessionId: 1, type: 'main', setNumber: 1, weight: 141, reps: 5, isAmrap: false, bandLoad: legacy('Green') })
+    const accId = await db.accessorySets.add({ sessionId: 1, exerciseId: 1, setNumber: 1, weight: 191, reps: 8, duration: null, distance: null,
+      bandLoad: legacy(null), dropRounds: [{ weight: 141, reps: 6, bandLoad: legacy('Green') }, { weight: 100, reps: 4, bandLoad: null }] })
+
+    await seedDatabase()
+
+    const set = await db.sets.get(setId)
+    expect(set?.bandLoad).toEqual({ bands: ['Green'], rawLoad: 191, assistance: 50, addedWeight: 0 })
+    const acc = await db.accessorySets.get(accId)
+    expect(acc?.bandLoad).toEqual({ bands: [], rawLoad: 191, assistance: 0, addedWeight: 0 })
+    expect(acc?.dropRounds).toEqual([
+      { weight: 141, reps: 6, bandLoad: { bands: ['Green'], rawLoad: 191, assistance: 50, addedWeight: 0 } },
+      { weight: 100, reps: 4, bandLoad: null },
+    ])
   })
 
   it('preserves a custom exercise category that is not the legacy tag', async () => {

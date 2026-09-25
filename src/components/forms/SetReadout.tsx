@@ -1,6 +1,7 @@
 import type { BandLoad } from '../../types/domain'
 import type { JSX } from 'solid-js'
 import { Show } from 'solid-js'
+import { bandsLabel } from '../../lib/band-loading'
 
 interface Props {
   bandLoad?: BandLoad | null
@@ -51,7 +52,7 @@ export default function SetReadout(props: Props) {
         <span class={`${lg() ? 'text-xl text-text' : ''} ${hover()}`}>× {props.value}</span>
       </Show>
       <Show when={props.bandLoad}>
-        <span class="text-faint text-xs">{props.bandLoad!.band ?? 'Unassisted'} · raw {props.bandLoad!.rawLoad}lb · +{props.bandLoad!.addedWeight}lb</span>
+        <span class="text-faint text-xs">{bandsLabel(props.bandLoad!.bands) || 'Unassisted'} · raw {props.bandLoad!.rawLoad}lb · +{props.bandLoad!.addedWeight}lb</span>
       </Show>
       {props.badges}
     </>
