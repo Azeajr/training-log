@@ -111,6 +111,6 @@ describe('applyAccessoryTm', () => {
 
 
 it('uses effective load from band-assisted work for assistance TM recommendations', () => {
-  const loggedSets = sets(60).map(s => ({ ...s, bandLoad: { band: 'Green', rawLoad: 100, assistance: 40, addedWeight: 0 } }))
+  const loggedSets = sets(60).map(s => ({ ...s, bandLoad: { bands: ['Green'], rawLoad: 100, assistance: 40, addedWeight: 0 } }))
   expect(getAccessoryTmRecommendations([{ ...acc(), loggedSets }])).toMatchObject([{ workedWeight: 60, suggestedTm: 80 }])
 })

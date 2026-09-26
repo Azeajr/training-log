@@ -149,7 +149,8 @@ CREATE TABLE IF NOT EXISTS settings (
   barWeight REAL,
   plates TEXT,
   supplementalTemplate TEXT,
-  restTimerNotifications INTEGER
+  restTimerNotifications INTEGER,
+  bands TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_trainingMaxes_liftId ON trainingMaxes(liftId);
 CREATE INDEX IF NOT EXISTS idx_sessions_cycleId ON sessions(cycleId);
@@ -308,6 +309,10 @@ export const ADDITIVE_MIGRATIONS = [
   // existed; those and only those infer their context from what they stored.
   `ALTER TABLE ptSetChecks ADD COLUMN measure TEXT`,
   `ALTER TABLE ptSetChecks ADD COLUMN resistanceKind TEXT`,
+  // The bands you own, and how many of each: equipment, like plates. NULL on
+  // a database from before it existed; `reconcileBandInventory` fills it from
+  // the bands its movements already calibrate.
+  `ALTER TABLE settings ADD COLUMN bands TEXT`,
 ] as const
 
 export const ALL_TABLES = [

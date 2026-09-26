@@ -57,7 +57,7 @@ export default function AccessoryLog(props: Props) {
 
   const [weight, setWeight] = createSignal(initWeight())
   const changeBandLoad = (load: BandLoad) => { setBandLoad(load); setWeight(effectiveBandLoad(load)) }
-  const suggest = (target: number) => { if (profile()) changeBandLoad(suggestBandLoad(profile()!, target, settings.plates)) }
+  const suggest = (target: number) => { if (profile()) changeBandLoad(suggestBandLoad(profile()!, target, settings.plates, settings.bands)) }
   createEffect(on(profile, (p, previous) => {
     if (!p) {
       // Bands off. `weight` only ever moves through `changeBandLoad` here, so
@@ -70,7 +70,7 @@ export default function AccessoryLog(props: Props) {
     }
     const last = props.accessory.loggedSets.at(-1)?.bandLoad
     const current = bandLoad() ?? last
-    if (current) changeBandLoad(makeBandLoad(p, current.band, current.addedWeight))
+    if (current) changeBandLoad(makeBandLoad(p, current.bands, current.addedWeight))
     else suggest(props.accessory.calculatedWeight)
   }))
   const [reps, setReps] = createSignal(ACCESSORY_REPS)
@@ -277,7 +277,7 @@ export default function AccessoryLog(props: Props) {
                       target={props.accessory.calculatedWeight}
                       onSuggest={target => {
                         if (!profile()) return
-                        const load = suggestBandLoad(profile()!, target, settings.plates)
+                        const load = suggestBandLoad(profile()!, target, settings.plates, settings.bands)
                         setEditBandLoad(load); setEditWeight(effectiveBandLoad(load))
                       }}
                       onChange={load => { setEditBandLoad(load); setEditWeight(effectiveBandLoad(load)) }} />

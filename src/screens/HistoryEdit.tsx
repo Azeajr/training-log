@@ -404,7 +404,7 @@ export default function HistoryEdit() {
                               onSuggest={target => {
                                 const profile = liftProfiles().get(row().s.liftId ?? liftId()!)
                                 if (!profile) return
-                                const bandLoad = suggestBandLoad(profile, target, settings.plates)
+                                const bandLoad = suggestBandLoad(profile, target, settings.plates, settings.bands)
                                 setEditSets(prev => prev.map((s, i) => i === row().i ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s))
                               }}
                               onChange={bandLoad => setEditSets(prev => prev.map((s, i) => i === row().i ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s))} />
@@ -469,7 +469,7 @@ export default function HistoryEdit() {
                                 onSuggest={target => {
                                   const profile = exerciseProfiles().get(accAcc().exerciseId)
                                   if (!profile) return
-                                  const bandLoad = suggestBandLoad(profile, target, settings.plates)
+                                  const bandLoad = suggestBandLoad(profile, target, settings.plates, settings.bands)
                                   setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))
                                 }}
                                 onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />
@@ -502,7 +502,7 @@ export default function HistoryEdit() {
                                 onSuggest={target => {
                                   const profile = exerciseProfiles().get(accAcc().exerciseId)
                                   if (!profile) return
-                                  const bandLoad = suggestBandLoad(profile, target, settings.plates)
+                                  const bandLoad = suggestBandLoad(profile, target, settings.plates, settings.bands)
                                   setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))
                                 }}
                                 onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />
@@ -526,7 +526,7 @@ export default function HistoryEdit() {
                                 onSuggest={target => {
                                   const profile = exerciseProfiles().get(accAcc().exerciseId)
                                   if (!profile) return
-                                  const bandLoad = suggestBandLoad(profile, target, settings.plates)
+                                  const bandLoad = suggestBandLoad(profile, target, settings.plates, settings.bands)
                                   setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))
                                 }}
                                 onChange={bandLoad => setEditAccessories(prev => prev.map((acc, idx) => idx === ai ? { ...acc, sets: acc.sets.map((s, n) => n === si ? { ...s, bandLoad, weight: effectiveBandLoad(bandLoad) } : s) } : acc))} />

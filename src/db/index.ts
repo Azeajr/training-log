@@ -41,7 +41,7 @@ class TrainingSQLiteDB {
   ptSessions = new SQLiteTable<PtSession>('ptSessions', { dateFields: ['date'] })
   ptSetChecks = new SQLiteTable<PtSetCheck>('ptSetChecks', { boolFields: ['done', 'recorded'] })
   ptNotes = new SQLiteTable<PtNote>('ptNotes')
-  settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates'], boolFields: ['hasDeloadWeek', 'restTimerNotifications'] })
+  settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates', 'bands'], boolFields: ['hasDeloadWeek', 'restTimerNotifications'] })
 
   transaction(fn: () => Promise<void>): Promise<void> {
     return sqliteClient.transaction(fn)

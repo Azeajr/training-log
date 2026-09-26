@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
+import { render, screen, fireEvent, waitFor, within } from '@solidjs/testing-library'
 import Settings from './Settings'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
@@ -1259,8 +1259,10 @@ describe('Settings — lift roster', () => {
   it('renaming a lift updates its name in the DB', async () => {
     const [squatId] = await seedLifts()
     renderSettings()
-    await screen.findAllByText('rename')
-    fireEvent.click(screen.getAllByText('rename')[0])
+    // The lift's own row: equipment bands have rename buttons too, and they
+    // render before the lifts have loaded.
+    const squat = (await screen.findAllByText('Squat')).find(el => el.closest('div')?.textContent?.includes('rename'))!
+    fireEvent.click(within(squat.closest('div')!).getByText('rename'))
 
     const input = await waitFor(() => {
       const el = screen.getAllByDisplayValue('Squat').find(e => e.tagName === 'INPUT')

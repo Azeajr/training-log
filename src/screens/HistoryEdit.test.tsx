@@ -866,9 +866,9 @@ describe('HistoryEdit — cross sets', () => {
 it('edits recorded band loads without recalibrating untouched rounds', async () => {
   const { sessionId } = await seedSession()
   const exerciseId = await db.exercises.add({ name: 'Chin-ups', type: 'reps' })
-  const bandLoad = { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 }
+  const bandLoad = { bands: ['Green'], rawLoad: 191, assistance: 48, addedWeight: 0 }
   const id = await db.accessorySets.add({ sessionId, exerciseId, setNumber: 1, weight: 145, reps: 10, duration: null, distance: null, bandLoad,
-    dropRounds: [{ weight: 145, reps: 8, bandLoad }, { weight: 85, reps: 6, bandLoad: { ...bandLoad, band: 'Orange', assistance: 104 } }] })
+    dropRounds: [{ weight: 145, reps: 8, bandLoad }, { weight: 85, reps: 6, bandLoad: { ...bandLoad, bands: ['Orange'], assistance: 104 } }] })
   renderHistoryEdit(sessionId)
   fireEvent.click(await screen.findByRole('button', { name: 'Increase drop 1 added weight' }))
   fireEvent.click(screen.getByText('SAVE'))
@@ -876,7 +876,7 @@ it('edits recorded band loads without recalibrating untouched rounds', async () 
   // 191 raw − 48 assistance + 2.5 added = 145.5 exactly. The top set and the
   // second round keep the weights they were recorded with, untouched.
   expect(await db.accessorySets.get(id)).toMatchObject({ weight: 145, bandLoad,
-    dropRounds: [{ weight: 145.5, bandLoad: { ...bandLoad, addedWeight: 2.5 } }, { weight: 85, bandLoad: { ...bandLoad, band: 'Orange', assistance: 104 } }] })
+    dropRounds: [{ weight: 145.5, bandLoad: { ...bandLoad, addedWeight: 2.5 } }, { weight: 85, bandLoad: { ...bandLoad, bands: ['Orange'], assistance: 104 } }] })
 })
 
 // ── C2 ──────────────────────────────────────────────────────────────────────
@@ -895,7 +895,7 @@ describe('HistoryEdit — the load separator carries exactly one unit', () => {
 
   afterEach(drain)
 
-  const bandLoad = { band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 }
+  const bandLoad = { bands: ['Green'], rawLoad: 191, assistance: 48, addedWeight: 0 }
   const text = () => (document.body.textContent ?? '').replace(/\s+/g, ' ')
 
   /** A completed session whose main set carries a band load. */

@@ -1,7 +1,8 @@
 import { createSignal, Index, Show } from 'solid-js'
 import type { BandProfile, Exercise, Lift } from '../../types/domain'
-import { BAND_NAMES, defaultBandProfile, validBandProfile } from '../../lib/band-loading'
+import { defaultBandProfile, validBandProfile } from '../../lib/band-loading'
 import { db } from '../../db'
+import { settings } from '../../store/settings-store'
 import Modal from '../modals/Modal'
 import Stepper from './Stepper'
 
@@ -29,7 +30,7 @@ export default function BandSettings(props: {
   const open = () => {
     const saved = props.entity.bandProfile
     const template = defaultBandProfile(props.entity.name) ?? {
-      enabled: false, rawLoad: 0, maxAddedWeight: null, bands: BAND_NAMES.map(name => ({ name, assistance: 0 })),
+      enabled: false, rawLoad: 0, maxAddedWeight: null, bands: [],
     }
     // A measured calibration prefills the numbers; it never answers the
     // question this dialog exists to ask. `defaultBandProfile` is `enabled:
@@ -39,7 +40,11 @@ export default function BandSettings(props: {
     // spelled like a chin-up, save any unrelated field, and the weight stepper
     // was gone. Only a SAVED profile decides whether the box starts ticked.
     const initial = saved ?? { ...template, enabled: false }
-    setDraft({ ...initial, bands: initial.bands.map(b => ({ ...b })) })
+    // One row per band in the equipment, in its order: the inventory says
+    // which bands exist and this dialog measures them. A band added there since
+    // the last save has no measurement here yet, and starts at none.
+    const measured = (name: string) => initial.bands.find(b => b.name === name)?.assistance ?? 0
+    setDraft({ ...initial, bands: settings.bands.map(({ name }) => ({ name, assistance: measured(name) })) })
     setError('')
   }
   // Assistance stays fixed as raw load moves, but it can never exceed it: a band
@@ -51,33 +56,9 @@ export default function BandSettings(props: {
   const setRawLoad = (rawLoad: number) => setDraft(p => ({
     ...p!, rawLoad, bands: p!.bands.map(b => ({ ...b, assistance: Math.min(b.assistance, rawLoad) })),
   }))
-  const renameBand = (index: number, name: string) =>
-    setDraft(p => ({ ...p!, bands: p!.bands.map((b, n) => n === index ? { ...b, name } : b) }))
-
-  const removeBand = (index: number) =>
-    setDraft(p => ({ ...p!, bands: p!.bands.filter((_, n) => n !== index) }))
-
-  const addBand = () =>
-    setDraft(p => ({ ...p!, bands: [...p!.bands, { name: '', assistance: 0 }] }))
-
-  /**
-   * Said in the form rather than at save.
-   *
-   * A name is the selection key — `BandLoadControls` resolves a recorded set's
-   * band by it — so `validBandProfile` already refuses a blank or a duplicate.
-   * Refusing at save means typing the whole calibration first and being told
-   * afterwards.
-   */
-  const nameError = (): string | null => {
-    const names = draft()?.bands.map(b => b.name.trim()) ?? []
-    if (names.some(n => n === '')) return 'Every band needs a name.'
-    if (new Set(names).size !== names.length) return 'Two bands cannot share a name.'
-    return null
-  }
-
   const save = async () => {
     const profile = draft()
-    if (!profile || busy() || nameError()) return
+    if (!profile || busy()) return
     if (!validBandProfile(profile) || props.entity.id == null) {
       setError('These band settings are incomplete. Check the raw load and each band.')
       return
@@ -87,9 +68,7 @@ export default function BandSettings(props: {
       const table = props.kind === 'lift' ? db.lifts : db.exercises
       // Stamped here and nowhere else: this is the one path a person
       // saves through, and it is what keeps the boot-time seed undo off it.
-      // Trimmed on the way out: a trailing space is invisible in the input and
-      // would make an otherwise-identical name a different selection key.
-      const saved: BandProfile = { ...profile, accepted: true, bands: profile.bands.map(b => ({ ...b, name: b.name.trim() })) }
+      const saved: BandProfile = { ...profile, accepted: true }
       await table.update(props.entity.id, { bandProfile: saved })
       props.onSaved?.(saved)
       setDraft(null)
@@ -114,35 +93,28 @@ export default function BandSettings(props: {
           </div>
           <p class="text-muted text-xs">Raw load is what this movement weighs with no band on — the load you are actually lifting unassisted, not your bodyweight. Each band's measured load below is what it weighs with that band on, at this raw load.</p>
           <p class="text-muted text-xs">Changing raw load keeps each band's assistance fixed. To recalibrate, enter its measured effective load below at the current raw load. Logged sets stay unchanged.</p>
-          {/* `Index`, not `For`. A row's identity here is its POSITION, not its
-              name: `For` keys on the item, so rebuilding the array on every
-              keystroke of a rename replaced the row, which remounts the input
-              and takes the caret with it mid-word. The model has always allowed
-              any name — `BandCalibration.name` is a free string and
-              `BandLoadControls` resolves by it — only this form did not. */}
+          <p class="text-muted text-xs">Bands stack: put several on a set and their assistance adds up, so measure each band on its own.</p>
+          <p class="text-muted text-xs">Which bands you own, and how many, is in Settings › Equipment.</p>
+          {/* `Index`, not `For`: every stepper press rebuilds the array, and
+              `For` keys on the item, so it would remount the row under the
+              finger holding + down. A row is its position in the inventory. */}
           <Index each={draft()!.bands}>{(band, i) => (
             <div class="flex items-center flex-wrap gap-2">
-              <input
-                type="text"
-                value={band().name}
-                onInput={e => renameBand(i, e.currentTarget.value)}
-                aria-label={`band ${i + 1} name`}
-                class="bg-surface border border-border text-text px-2 py-1 text-sm w-28 focus:outline-none focus:border-accent"
-              />
+              <span class="uppercase tracking-widest text-xs w-24 break-words">{band().name}</span>
               <span>measured lb</span>
-              <Stepper value={Math.max(0, draft()!.rawLoad - band().assistance)} min={0} max={draft()!.rawLoad} fieldLabel={`${band().name.trim() || `band ${i + 1}`} measured load`} emphasized
+              <Stepper value={Math.max(0, draft()!.rawLoad - band().assistance)} min={0} max={draft()!.rawLoad} fieldLabel={`${band().name} measured load`} emphasized
                 onChange={measured => setDraft(p => ({ ...p!, bands: p!.bands.map((b, n) => n === i ? { ...b, assistance: p!.rawLoad - measured } : b) }))} />
-              <button type="button" aria-label={`Remove band ${i + 1}`} onClick={() => removeBand(i)} class="text-muted text-xs">remove</button>
+              {/* Measured load equal to raw is no assistance: a band that has
+                  not been measured on this movement, and is not offered on it. */}
+              <Show when={band().assistance === 0}><span class="text-faint text-xs">not measured</span></Show>
             </div>
           )}</Index>
-          <button type="button" onClick={addBand} class="text-accent text-xs text-left">+ ADD BAND</button>
-          <Show when={nameError()}>{msg => <p role="alert" class="text-warn text-xs">{msg()}</p>}</Show>
           <label><input type="checkbox" checked={draft()!.maxAddedWeight != null} onChange={e => setDraft(p => ({ ...p!, maxAddedWeight: e.currentTarget.checked ? 0 : null }))} /> Limit suggested added weight</label>
           <Show when={draft()!.maxAddedWeight != null}>
             <Stepper value={draft()!.maxAddedWeight!} onChange={maxAddedWeight => setDraft(p => ({ ...p!, maxAddedWeight }))} step={2.5} min={0} fieldLabel="maximum added weight" emphasized />
           </Show>
           <Show when={error()}><p role="alert">{error()}</p></Show>
-          <button type="button" disabled={busy() || nameError() != null} onClick={() => void save()} class="border border-accent text-accent p-3 disabled:opacity-40">SAVE BAND SETTINGS</button>
+          <button type="button" disabled={busy()} onClick={() => void save()} class="border border-accent text-accent p-3 disabled:opacity-40">SAVE BAND SETTINGS</button>
         </div>
       </Modal>
     </Show>

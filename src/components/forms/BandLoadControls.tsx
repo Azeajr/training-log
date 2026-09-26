@@ -1,9 +1,10 @@
-import { createSignal, For, Show } from 'solid-js'
+import { createSignal, Index, Show } from 'solid-js'
 import type { BandLoad, BandProfile } from '../../types/domain'
 import type { PlateLoading } from '../../lib/plate-loading'
-import { effectiveBandLoad, makeBandLoad, suggestBandLoadDetailed } from '../../lib/band-loading'
+import { effectiveBandLoad, makeBandLoad, ownedCount, suggestBandLoadDetailed } from '../../lib/band-loading'
 import { settings } from '../../store/settings-store'
 import Stepper from './Stepper'
+import ToggleChip from '../ui/ToggleChip'
 import PlateDisplay from './PlateDisplay'
 
 export default function BandLoadControls(props: {
@@ -57,11 +58,17 @@ export default function BandLoadControls(props: {
   // lists the old name at the old assistance, so the check above is satisfied
   // while the live profile has no such band at all. Marking it keeps the set's
   // own name distinguishable from the ones currently on offer.
-  const match = props.value.band ? atMount.find(b => b.name === props.value.band) : undefined
-  const renamedAway = props.value.band != null && props.profile != null
-    && !props.profile.bands.some(b => b.name === props.value.band)
-  const recorded = props.value.band && (match?.assistance !== props.value.assistance || renamedAway)
-    ? { name: props.value.band, assistance: props.value.assistance }
+  //
+  // Single-band rows only. A row with no snapshot is one written before bands
+  // could stack, so it names one band at most — and a stack records the table
+  // its assistances came from, so it never has to be reconstructed from one
+  // total that cannot be split back into its bands.
+  const [single] = props.value.bands.length === 1 ? props.value.bands : []
+  const match = single ? atMount.find(b => b.name === single) : undefined
+  const renamedAway = single != null && props.profile != null
+    && !props.profile.bands.some(b => b.name === single)
+  const recorded = single && (match?.assistance !== props.value.assistance || renamedAway)
+    ? { name: single, assistance: props.value.assistance }
     : null
 
   const choices = () => {
@@ -76,8 +83,7 @@ export default function BandLoadControls(props: {
     merged[at] = recorded
     return merged
   }
-  const changeBand = (band: string) => {
-    if ((band || null) === props.value.band) return
+  const changeBands = (bands: string[]) => {
     props.onChange(makeBandLoad(
       {
         enabled: true,
@@ -85,9 +91,26 @@ export default function BandLoadControls(props: {
         maxAddedWeight: props.profile?.maxAddedWeight ?? null,
         bands: choices(),
       },
-      band || null,
+      bands,
       props.value.addedWeight,
     ))
+  }
+  const countOn = (bands: readonly string[], name: string) => bands.filter(b => b === name).length
+  // What this set had on when it opened. A finished set keeps what it was
+  // recorded with, even once the equipment no longer has that many.
+  const onAtMount = [...props.value.bands]
+  const most = (name: string) => Math.max(ownedCount(settings.bands, name), countOn(onAtMount, name))
+  // The bands you could put on: owned, and measured on this movement — one
+  // with no assistance would add a band to rig and change nothing. Plus
+  // whatever the set already has, so it can always be taken off.
+  const offered = () => choices().filter(b =>
+    countOn(onAtMount, b.name) > 0 || (b.assistance > 0 && ownedCount(settings.bands, b.name) > 0))
+  // Not a pick-one: bands stack, and a stack assists their sum. Each tap puts
+  // one more of a band on, up to as many as you own, and the next takes them
+  // all off — with one of each, that is simply on and off.
+  const stepBand = (band: string) => {
+    const next = countOn(props.value.bands, band) >= most(band) ? 0 : countOn(props.value.bands, band) + 1
+    changeBands([...props.value.bands.filter(b => b !== band), ...Array<string>(next).fill(band)])
   }
   const addedLoading = (): PlateLoading => ({ mode: props.loading?.mode ?? 'total', base: 0 })
 
@@ -103,15 +126,15 @@ export default function BandLoadControls(props: {
    * Why the suggestion is where it is.
    *
    * Two independent facts, either or both of which can apply. Range is about
-   * what the setup can reach at all — only a band takes load off, so nothing
-   * below the strongest band's assisted load exists however the plates are
+   * what the setup can reach at all — only bands take load off, so nothing
+   * below the strongest stack's assisted load exists however the plates are
    * arranged. Preference is the algorithm deliberately taking a simpler setup
    * over the nearest one, which is a note and never a warning.
    */
   const suggestion = () => {
     const t = target()
     return props.profile && t != null
-      ? suggestBandLoadDetailed(props.profile, t, settings.plates)
+      ? suggestBandLoadDetailed(props.profile, t, settings.plates, settings.bands)
       : null
   }
 
@@ -150,15 +173,20 @@ export default function BandLoadControls(props: {
       <Show when={props.target != null}>
         <span class="text-muted text-xs">{label()}: {props.target}lb effective</span>
       </Show>
-      <label class="flex items-center gap-2">Band
-        <select aria-label={`${props.label ?? ''} band`.trim()} value={props.value.band ?? ''}
-          onChange={e => changeBand(e.currentTarget.value)} class="bg-surface border border-border p-2 text-text">
-          <option value="">None</option>
-          <For each={choices()}>{b =>
-            <option value={b.name}>{b.name}{recorded && b.name === recorded.name ? ' (recorded)' : ''}</option>
-          }</For>
-        </select>
-      </label>
+      {/* Chips, the app's one toggle idiom — and a select cannot hold two
+          bands at once. `Index`, not `For`: every change snapshots a fresh
+          calibration, so `choices()` hands back new objects each time and
+          `For` would remount every chip under the finger that pressed it. */}
+      <div role="group" aria-label={`${props.label ?? ''} bands`.trim()} class="flex items-center gap-1 flex-wrap">
+        <span class="mr-1">Bands</span>
+        <ToggleChip active={props.value.bands.length === 0} onClick={() => { if (props.value.bands.length) changeBands([]) }}>NONE</ToggleChip>
+        <Index each={offered()}>{b => {
+          const n = () => countOn(props.value.bands, b().name)
+          return <ToggleChip active={n() > 0} onClick={() => stepBand(b().name)} class="uppercase">
+            {b().name}{n() > 1 ? ` ×${n()}` : ''}{recorded && b().name === recorded.name ? ' (recorded)' : ''}
+          </ToggleChip>
+        }}</Index>
+      </div>
       <div class="flex items-center gap-2 flex-wrap">
         <span>Added lb</span>
         <Stepper value={props.value.addedWeight} onChange={addedWeight => props.onChange({ ...props.value, addedWeight })}

@@ -1,4 +1,4 @@
-import { clearSeededBandProfiles, validBandLoad, validBandProfile } from './band-loading'
+import { bandsLabel, clearSeededBandProfiles, legacyBandFields, reconcileBandInventory, upgradeBandLoad, validBandInventory, validBandLoad, validBandProfile } from './band-loading'
 import type { BandLoad } from '../types/domain'
 import type { TrainingDB } from '../db/index'
 import type { PtExercise, PtSetCheck } from '../types/domain'
@@ -128,7 +128,7 @@ const COLS = {
   // set back to the current prescription to interpret.
   ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done', 'reps', 'seconds', 'distance', 'distanceUnit', 'weight', 'band', 'equipmentHeight', 'equipmentHeightUnit', 'recorded', 'measure', 'resistanceKind'],
   ptNotes: ['id', 'sessionId', 'ptExerciseId', 'notes'],
-  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek'],
+  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek', 'bands'],
 } as const
 
 // Reject malformed table payloads BEFORE the destructive clear. Without this,
@@ -188,13 +188,20 @@ function validateImportShape(d: Record<string, unknown>): void {
           throw new Error('Invalid backup: accessory drop rounds require finite weights and nonnegative integer reps')
         }
       }
+      // Band names key every calibration, so the list they come from is held to
+      // the same standard as the calibrations themselves.
+      if (name === 'settings' && r.bands != null && !validBandInventory(r.bands)) {
+        throw new Error('Invalid backup: invalid band inventory')
+      }
       if ((name === 'lifts' || name === 'exercises') && r.bandProfile != null && !validBandProfile(r.bandProfile)) {
         throw new Error('Invalid backup: invalid band calibration')
       }
-      if ((name === 'sets' || name === 'accessorySets') && r.bandLoad != null && !validBandLoad(r.bandLoad)) {
+      // Judged as they will be stored: a backup from before bands stacked names
+      // one `band`, and `importFromRawData` upgrades it on the way in.
+      if ((name === 'sets' || name === 'accessorySets') && r.bandLoad != null && !validBandLoad(upgradeBandLoad(r.bandLoad))) {
         throw new Error('Invalid backup: invalid band load')
       }
-      if (name === 'accessorySets' && Array.isArray(r.dropRounds) && r.dropRounds.some(round => round.bandLoad != null && !validBandLoad(round.bandLoad))) {
+      if (name === 'accessorySets' && Array.isArray(r.dropRounds) && r.dropRounds.some(round => round.bandLoad != null && !validBandLoad(upgradeBandLoad(round.bandLoad)))) {
         throw new Error('Invalid backup: invalid drop-round band load')
       }
       const id = r.id
@@ -257,6 +264,10 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
       if (key === 'exercises') {
         parsed = parsed.map(r => r.category === 'single_leg' ? { ...r, category: 'legs' } : r)
       }
+      // One `band` to a list of `bands`, mirroring the boot-time upgrade.
+      if (key === 'sets' || key === 'accessorySets') {
+        parsed = parsed.map(r => ({ ...r, ...legacyBandFields(r) }))
+      }
       // One cross-lift block per (lift, movement) — the same invariant the
       // migration establishes. A backup taken before that index existed can
       // carry duplicates, and restoring them verbatim is how they got in
@@ -291,6 +302,10 @@ export async function importFromRawData(db: TrainingDB, d: Record<string, any>):
   // to run wherever rows arrive, not only at boot. Byte-identical rows only,
   // so a profile the user saved is still theirs.
   await clearSeededBandProfiles(db)
+  // A backup from before the inventory has calibrations and no inventory, and
+  // one from after may name a band its inventory lacks. Either way, after the
+  // seed undo, so a profile it clears lends no names to the equipment.
+  await reconcileBandInventory(db)
 }
 
 export async function exportCsv(db: TrainingDB): Promise<void> {
@@ -317,7 +332,7 @@ export async function exportCsv(db: TrainingDB): Promise<void> {
   const hasBands = sets.some(s => s.bandLoad) || accessorySets.some(s => s.bandLoad || s.dropRounds?.some(r => r.bandLoad))
   if (hasBands) rows[0].push('band', 'raw_load_lb', 'band_assistance_lb', 'added_weight_lb')
   const bandColumns = (load?: BandLoad | null): string[] => !hasBands ? [] : load
-    ? [load.band ?? 'None', String(load.rawLoad), String(load.assistance), String(load.addedWeight)]
+    ? [bandsLabel(load.bands) || 'None', String(load.rawLoad), String(load.assistance), String(load.addedWeight)]
     : ['', '', '', '']
 
   for (const session of sessions) {

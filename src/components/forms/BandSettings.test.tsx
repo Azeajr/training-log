@@ -1,12 +1,21 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
+import { afterEach, describe, it, expect } from 'vitest'
+import { render, screen, fireEvent, waitFor, within } from '@solidjs/testing-library'
 import { createSignal } from 'solid-js'
 import { db } from '../../db'
-import { BAND_NAMES, bandProfileFor, clearSeededBandProfiles, defaultBandProfile, effectiveBandLoad } from '../../lib/band-loading'
+import { BAND_NAMES, DEFAULT_BANDS, bandProfileFor, clearSeededBandProfiles, defaultBandProfile, effectiveBandLoad } from '../../lib/band-loading'
+import { updateSettings } from '../../store/settings-store'
 import type { Exercise } from '../../types/domain'
 import BandSettings from './BandSettings'
 import BandLoadControls from './BandLoadControls'
 import type { BandLoad, BandProfile } from '../../types/domain'
+
+// The band chips of one BandLoadControls, found by its group label.
+const chips = (group: string) => within(screen.getByRole('group', { name: group })).getAllByRole('button')
+const chipNames = (group: string) => chips(group).map(c => c.textContent)
+const chip = (group: string, name: string) => within(screen.getByRole('group', { name: group })).getByRole('button', { name })
+const pressed = (group: string) => chips(group).filter(c => c.getAttribute('aria-pressed') === 'true').map(c => c.textContent)
+/** Swap to exactly this band: clear the stack, then put it on. */
+const pickOnly = (group: string, name: string) => { fireEvent.click(chip(group, 'NONE')); fireEvent.click(chip(group, name)) }
 
 it('saves raw-load changes with fixed assistance and keeps each exercise independent', async () => {
   const bandProfile = defaultBandProfile('Pull-ups')!
@@ -35,23 +44,22 @@ describe('BandLoadControls band selection', () => {
     // dropping to None silently changes the set's load by 60lb.
     const profile = defaultBandProfile('Chin-ups')!
     const [value, setValue] = createSignal<BandLoad>(
-      { band: 'Blue', rawLoad: profile.rawLoad, assistance: 60, addedWeight: 0 },
+      { bands: ['Blue'], rawLoad: profile.rawLoad, assistance: 60, addedWeight: 0 },
     )
-    const { getByLabelText } = render(() => (
+    render(() => (
       <BandLoadControls profile={profile} value={value()} onChange={setValue} label="set 1" />
     ))
-    const select = getByLabelText('set 1 band') as HTMLSelectElement
-    expect([...select.options].map(o => o.textContent)).toContain('Blue (recorded)')
+    expect(chipNames('set 1 bands')).toContain('Blue (recorded)')
 
-    fireEvent.change(select, { target: { value: 'Green' } })
-    expect(value().band).toBe('Green')
-    fireEvent.change(select, { target: { value: 'Blue' } })
-    expect(value()).toMatchObject({ band: 'Blue', assistance: 60 })
+    pickOnly('set 1 bands', 'Green')
+    expect(value().bands).toEqual(['Green'])
+    pickOnly('set 1 bands', 'Blue (recorded)')
+    expect(value()).toMatchObject({ bands: ['Blue'], assistance: 60 })
   })
 
   it('shows the added weight as singles or pairs according to the lift', () => {
     const profile = defaultBandProfile('Chin-ups')!
-    const value = { band: null, rawLoad: 191, assistance: 0, addedWeight: 50 }
+    const value = { bands: [], rawLoad: 191, assistance: 0, addedWeight: 50 }
     const belt = render(() => (
       <BandLoadControls profile={profile} value={value} onChange={() => {}}
         loading={{ mode: 'total', base: 0 }} />
@@ -84,8 +92,8 @@ describe('band settings state', () => {
     const box = screen.getByRole('checkbox', { name: /Use raw load and bands/ }) as HTMLInputElement
     expect(box.checked).toBe(false)
     // The measured calibration still prefills the numbers — it just doesn't
-    // answer the question the checkbox asks. The name is an input since D3.
-    expect(screen.getByLabelText('band 1 name')).toHaveValue('Orange')
+    // answer the question the checkbox asks.
+    expect(screen.getByRole('button', { name: 'Edit Orange measured load, currently 70' })).toBeTruthy()
 
     fireEvent.click(box)
     fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
@@ -183,14 +191,14 @@ describe('editing a set recorded under a superseded calibration', () => {
 
   const editing = (value: BandLoad) => {
     const [load, setLoad] = createSignal(value)
-    const view = render(() => <BandLoadControls profile={NOW} value={load()} onChange={setLoad} />)
-    const select = view.getByLabelText('band') as HTMLSelectElement
-    return { load, select, pick: (b: string) => fireEvent.change(select, { target: { value: b } }) }
+    render(() => <BandLoadControls profile={NOW} value={load()} onChange={setLoad} />)
+    const pick = (b: string) => pickOnly('bands', chipNames('bands').find(n => n?.replace(' (recorded)', '') === b)!)
+    return { load, pick }
   }
 
   it('prices a band change against the calibration the set was recorded under', () => {
     // Logged at 191 − 48 = 143, under the estimates.
-    const { load, pick } = editing({ band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0, calibration: OLD })
+    const { load, pick } = editing({ bands: ['Green'], rawLoad: 191, assistance: 48, addedWeight: 0, calibration: OLD })
     expect(effectiveBandLoad(load())).toBe(143)
     // Purple was 31 then and is 30 now. 191 − 31 = 160 is what that set would
     // have been; 191 − 30 = 161 mixes a recorded raw load with a measurement
@@ -204,9 +212,9 @@ describe('editing a set recorded under a superseded calibration', () => {
   it('keeps the recorded pairing reachable on a row with no calibration', () => {
     // Written before the snapshot existed, so the live profile is all there is
     // to price the OTHER bands with — but the set's own 48 is on the row and
-    // has to survive a round trip through the dropdown.
-    const { load, select, pick } = editing({ band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 })
-    expect([...select.options].map(o => o.textContent)).toContain('Green (recorded)')
+    // has to survive a round trip through the chips.
+    const { load, pick } = editing({ bands: ['Green'], rawLoad: 191, assistance: 48, addedWeight: 0 })
+    expect(chipNames('bands')).toContain('Green (recorded)')
     pick('Purple')
     expect(effectiveBandLoad(load())).toBe(161)   // nothing better than today's 30
     pick('Green')
@@ -214,16 +222,16 @@ describe('editing a set recorded under a superseded calibration', () => {
   })
 
   it('offers each band once when the recorded one is still listed', () => {
-    // Two options reading "Green" are indistinguishable, and `makeBandLoad`
+    // Two chips reading "Green" are indistinguishable, and `makeBandLoad`
     // resolves by name and would take whichever came first.
-    const { select } = editing({ band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 })
-    const names = [...select.options].map(o => o.textContent!.replace(' (recorded)', ''))
+    editing({ bands: ['Green'], rawLoad: 191, assistance: 48, addedWeight: 0 })
+    const names = chipNames('bands').map(n => n!.replace(' (recorded)', ''))
     expect(names).toEqual([...new Set(names)])
-    expect(names).toEqual(['None', ...BAND_NAMES])
+    expect(names).toEqual(['NONE', ...BAND_NAMES])
   })
 
   it('stamps what it resolved, so the row prices itself from then on', () => {
-    const { load, pick } = editing({ band: 'Green', rawLoad: 191, assistance: 48, addedWeight: 0 })
+    const { load, pick } = editing({ bands: ['Green'], rawLoad: 191, assistance: 48, addedWeight: 0 })
     pick('Purple')
     expect(load().calibration).toEqual(cal([105, 48, 30, 10]))
   })
@@ -261,83 +269,47 @@ it('still clears a profile the seeding build wrote', async () => {
 // anyone on another brand calibrates four mislabelled rows. The model already
 // allowed any name — `BandCalibration.name` is a free string and
 // `BandLoadControls` resolves a recorded set by it — only this form did not.
-describe('band names', () => {
+describe('bands come from the equipment', () => {
+  // Settings › Equipment owns which bands exist and what they are called; this
+  // dialog measures them. Renames and removals live there (BandInventory).
   const openFor = async (name: string, bandProfile?: BandProfile) => {
     const id = await db.exercises.add({ name, type: 'reps', bandProfile })
     render(() => <BandSettings entity={{ id, name, type: 'reps', bandProfile }} kind="exercise" />)
     fireEvent.click(screen.getByRole('button', { name: `Band settings for ${name}` }))
     return id
   }
-
-  const nameInput = (n: number) => screen.getByLabelText(`band ${n} name`) as HTMLInputElement
   const saveSettings = async () => {
     fireEvent.click(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   }
+  afterEach(async () => { await updateSettings({ bands: DEFAULT_BANDS }) })
 
-  it('renames, adds and removes bands, and keeps them through a reload', async () => {
-    const id = await openFor('D3 rename', defaultBandProfile('Pull-ups')!)
+  it('lists the equipment\'s bands in its order, with nothing to rename, add or remove here', async () => {
+    await updateSettings({ bands: [{ name: 'Red', count: 1 }, { name: 'Orange', count: 2 }] })
+    const id = await openFor('Inventory order', defaultBandProfile('Pull-ups')!)
 
-    fireEvent.input(nameInput(1), { target: { value: 'Rogue monster mini' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Remove band 4' }))
-    fireEvent.click(screen.getByRole('button', { name: '+ ADD BAND' }))
-    fireEvent.input(nameInput(4), { target: { value: 'Elitefts pro short' } })
+    const fields = screen.getAllByRole('button', { name: /measured load, currently/ }).map(b => b.getAttribute('aria-label'))
+    expect(fields).toEqual(['Edit Red measured load, currently 181', 'Edit Orange measured load, currently 86'])
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByText('+ ADD BAND')).toBeNull()
+    expect(screen.queryByText('remove')).toBeNull()
+
     await saveSettings()
-
-    const saved = (await db.exercises.get(id))!.bandProfile!
-    expect(saved.bands.map(b => b.name)).toEqual([
-      'Rogue monster mini', 'Green', 'Purple', 'Elitefts pro short',
-    ])
-    // Renaming a row leaves its measurement where it was.
-    expect(saved.bands[0].assistance).toBe(105)
+    // Saved in the equipment's order, and only the bands it has.
+    expect((await db.exercises.get(id))!.bandProfile!.bands).toEqual([{ name: 'Red', assistance: 10 }, { name: 'Orange', assistance: 105 }])
   })
 
-  /**
-   * The trap. A row's identity was its NAME, so rebuilding the list on every
-   * keystroke replaced the row — remounting the input and taking the caret with
-   * it after one character.
-   */
-  it('keeps the caret in the field while a name is being typed', async () => {
-    await openFor('D3 focus', defaultBandProfile('Pull-ups')!)
+  it('shows a band new to the equipment as not measured, and saves it unassisting', async () => {
+    await updateSettings({ bands: [...DEFAULT_BANDS, { name: 'Blue', count: 1 }] })
+    const id = await openFor('New band', { ...defaultBandProfile('Pull-ups')!, accepted: true })
 
-    const input = nameInput(1)
-    input.focus()
-    for (const value of ['O', 'Or', 'Ora', 'Oran']) {
-      fireEvent.input(input, { target: { value } })
-      expect(document.activeElement).toBe(input)
-    }
-    expect(nameInput(1)).toBe(input)
-    expect(nameInput(1).value).toBe('Oran')
-  })
+    expect(screen.getByRole('button', { name: 'Edit Blue measured load, currently 191' })).toBeTruthy()
+    expect(screen.getAllByText('not measured')).toHaveLength(1)
+    fireEvent.click(screen.getByLabelText('Decrease Blue measured load'))
+    expect(screen.queryByText('not measured')).toBeNull()
 
-  it('refuses a blank name in the form, not at save', async () => {
-    const id = await openFor('D3 blank', defaultBandProfile('Pull-ups')!)
-
-    fireEvent.input(nameInput(2), { target: { value: '  ' } })
-    expect(screen.getByRole('alert').textContent).toMatch(/needs a name/i)
-    expect(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' })).toBeDisabled()
-
-    fireEvent.input(nameInput(2), { target: { value: 'Green' } })
-    expect(screen.queryByRole('alert')).toBeNull()
     await saveSettings()
-    expect((await db.exercises.get(id))!.bandProfile!.bands).toHaveLength(4)
-  })
-
-  it('refuses two bands sharing a name', async () => {
-    await openFor('D3 duplicate', defaultBandProfile('Pull-ups')!)
-
-    fireEvent.input(nameInput(2), { target: { value: 'Orange' } })
-    expect(screen.getByRole('alert').textContent).toMatch(/cannot share a name/i)
-    expect(screen.getByRole('button', { name: 'SAVE BAND SETTINGS' })).toBeDisabled()
-  })
-
-  it('trims a name on the way out, so a stray space is not a second band', async () => {
-    const id = await openFor('D3 trim', defaultBandProfile('Pull-ups')!)
-
-    fireEvent.input(nameInput(1), { target: { value: '  Olive  ' } })
-    await saveSettings()
-
-    expect((await db.exercises.get(id))!.bandProfile!.bands[0].name).toBe('Olive')
+    expect((await db.exercises.get(id))!.bandProfile!.bands.at(-1)).toEqual({ name: 'Blue', assistance: 1 })
   })
 })
 
@@ -345,7 +317,7 @@ describe('band names', () => {
 // that already happened, and the recorded pairing has to stay selectable.
 describe('a set recorded under a band that has since been renamed', () => {
   const recorded: BandLoad = {
-    band: 'Green', rawLoad: 191, assistance: 50, addedWeight: 0,
+    bands: ['Green'], rawLoad: 191, assistance: 50, addedWeight: 0,
     calibration: [{ name: 'Orange', assistance: 105 }, { name: 'Green', assistance: 50 }],
   }
   const renamed: BandProfile = {
@@ -358,11 +330,9 @@ describe('a set recorded under a band that has since been renamed', () => {
     render(() => <BandLoadControls profile={renamed} value={value()} onChange={setValue} />)
 
     expect(effectiveBandLoad(value())).toBe(141)
-    const options = [...screen.getByRole('combobox', { name: 'band' }).querySelectorAll('option')]
-      .map(o => o.textContent)
     // Marked, because the live profile no longer has a band by that name —
     // the snapshot agrees about the assistance, so nothing else would say so.
-    expect(options).toContain('Green (recorded)')
-    expect(screen.getByRole('combobox', { name: 'band' })).toHaveValue('Green')
+    expect(chipNames('bands')).toContain('Green (recorded)')
+    expect(pressed('bands')).toEqual(['Green (recorded)'])
   })
 })

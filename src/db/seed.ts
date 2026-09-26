@@ -1,4 +1,4 @@
-import { clearSeededBandProfiles } from '../lib/band-loading'
+import { clearSeededBandProfiles, reconcileBandInventory, upgradeLegacyBandLoads } from '../lib/band-loading'
 import { db } from './index'
 import { SETTINGS_DEFAULTS } from '../store/settings-store'
 
@@ -87,10 +87,14 @@ async function _seedDatabase() {
   }
 
   await clearSeededBandProfiles(db)
+  await upgradeLegacyBandLoads(db)
 
   // Seed settings if missing
   const settingsCount = await db.settings.count()
   if (settingsCount === 0) {
     await db.settings.add(SETTINGS_DEFAULTS)
   }
+
+  // After the settings row exists: the inventory lives on it.
+  await reconcileBandInventory(db)
 }

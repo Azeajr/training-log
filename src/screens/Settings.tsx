@@ -22,6 +22,7 @@ import SectionLabel from '../components/layout/SectionLabel'
 import ToggleChip from '../components/ui/ToggleChip'
 import Stepper from '../components/forms/Stepper'
 import BandSettings from '../components/forms/BandSettings'
+import BandInventory from '../components/forms/BandInventory'
 import ExerciseEditor from '../components/forms/ExerciseEditor'
 import DiagnosticsPanel from '../components/settings/DiagnosticsPanel'
 
@@ -877,6 +878,8 @@ export default function Settings() {
             )
           }}</For>
         </div>
+
+        <BandInventory onChanged={() => void load()} />
 
         <div class="mb-6">
           <SectionLabel class="mb-2">EXERCISES</SectionLabel>
