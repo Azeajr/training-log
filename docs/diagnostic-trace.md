@@ -93,8 +93,8 @@ There is **no service-worker half**. There was one, writing to IndexedDB, and it
 recorded nothing in any capture taken from a real device — a zero that means
 "the sink never worked" reads exactly like a zero that means "the worker did
 nothing", so it was removed rather than left to mislead. What the SW does is
-therefore inferred from the page side, not observed. See
-`docs/verification/2026-09-17-keepalive-and-audio-clock.md`.
+therefore inferred from the page side, not observed. The remaining iOS audio
+issue is tracked in `ROADMAP.md`.
 
 ---
 

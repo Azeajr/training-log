@@ -7,7 +7,7 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 ## Features
 
 - **5/3/1 program logic** — calculates warmup, main, and supplemental sets from your training max each week; warmup follows Wendler's 40/50/60% TM prescription (3 sets × 5/5/3 reps)
-- **AMRAP tracking** — logs the third main set as AMRAP; detects rep PRs (more reps at the same weight) and e1RM PRs (higher Wathan estimated 1RM than any prior AMRAP) and shows a toast; shows a rep target derived from recent performance
+- **AMRAP tracking** — logs the third main set as AMRAP; detects rep PRs (more reps at the same weight) and e1RM PRs (higher Wathan estimated 1RM than prior working sets) and shows a toast; shows a rep target derived from recent performance
 - **Joker sets** — unlock extra sets after a strong AMRAP; weight increment scales with performance
 - **Supplemental template** — global selector in Settings (defaults to FSL+BBB): FSL (5×5 at the first working weight), SSL (5×5 at the second), BBB (5×10 at 50% TM), FSL+BBB (5×10 at the first set weight), SSL+BBB (5×10 at the second set weight), BBS (10×5 at 60/70/80% TM), or None
 - **Cross-lift supplemental** — optional per-training-day blocks that run volume sets of *another* main lift's movement, loaded at that lift's FSL weight or a straight percentage of its TM
@@ -16,9 +16,10 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 - **Rest timer** — every completed set gets configurable first and second recovery bells; a missed set gets one longer bell; Screen Wake Lock keeps the countdown visible
 - **Configurable cycle shape** — 3-week (no deload) or 4-week (deload) cycles; on a deload week, supplemental volume can be skipped, run at deload percentages, or run at week-1 percentages. TMs progress and the next cycle opens automatically at the end; manual week override and SKIP DELOAD in Settings; the cycle-complete modal shows old → new TM per lift
 - **History** — browse completed sessions by lift, by date, or on a calendar heatmap; editable after the fact; estimated-1RM history charted alongside TM
+- **PT checklists** — build and run separate rehab routines with per-set results and dated history; PT records do not affect training-max calculations
 - **Stats** — best estimated 1RM and heaviest actual lift per lift, plus training-max progression
 - **Theming** — 11 themes (OLED, OLED Light, Rosé Pine, Frappé, Macchiato, Mocha, Latte, Solarized, Gruvbox, Nord, Dracula) driven by 14 CSS-variable tokens
-- **Export / Import** — full JSON or CSV backup and restore
+- **Export / Import** — full JSON backup and restore; CSV export for training and PT history
 - **PWA** — installable, works offline
 
 ## Stack
@@ -26,7 +27,7 @@ A progressive strength training tracker built for the **5/3/1 program**. Designe
 | Layer | Library |
 |---|---|
 | UI | SolidJS 1.9, TypeScript 6, Tailwind CSS 4 |
-| Routing | @solidjs/router 0.16 |
+| Routing | @solidjs/router 1 |
 | State | SolidJS stores |
 | Database | SQLite Wasm (dedicated Web Worker + OPFS) |
 | Charts | Custom SVG |
@@ -102,4 +103,4 @@ TM progression at the end of each cycle is per-lift (`progressionIncrement`, see
 
 ## Deployment
 
-Pull requests run lint, coverage, and a production build via `.github/workflows/ci.yml`. Pushes to `main` deploy automatically to Cloudflare Pages via `.github/workflows/deploy.yml`; the deployment is path-filtered to source and config changes and runs the same checks before publishing.
+Pull requests always report a CI status; code changes run lint, coverage, a production build, service-worker verification, and E2E checks via `.github/workflows/ci.yml`. Prose-only changes skip those suites. Pushes to `main` deploy automatically to Cloudflare Pages via `.github/workflows/deploy.yml`; deployment is path-filtered to source and config changes and runs the same checks before publishing.

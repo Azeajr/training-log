@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Headless verification of the SW-hardening legs A-E recorded in
- * docs/verification/2026-08-09-swe-hardening.md. Requires a production build
+ * Headless verification of the service worker, notifications and diagnostic trace.
+ * Requires a production build
  * (dist/) - run `pnpm build` first, then:
  *
  *   node scripts/verify-notify-hardening.js

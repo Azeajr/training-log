@@ -4,9 +4,6 @@
 # Session files (load only when explicitly requested)
 .claude/sessions/**
 
-# Archived documentation (load only when explicitly requested)
-docs/archive/**
-
 # Node modules and dependencies
 node_modules/**
 dist/**

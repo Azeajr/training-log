@@ -7,7 +7,7 @@
 // IndexedDB. It recorded nothing in any capture taken from a real device, and a
 // zero that means "the sink never worked" reads exactly like a zero that means
 // "the worker did nothing" — so it was removed rather than left to mislead.
-// `docs/verification/2026-09-17-keepalive-and-audio-clock.md` has the detail.
+// `ROADMAP.md` tracks the remaining audio-clock issue.
 
 import { readTrace, traceStats, type TraceEvent } from './trace'
 

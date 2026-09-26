@@ -19,8 +19,9 @@ Tailwind 4, Vitest. Package manager is **pnpm**.
 path-filtered, and it **does** gate: it runs `pnpm run check:ci` (`lint` + `test:coverage` + `build`)
 before deploying, so a failure blocks the deploy. Note `test:coverage`, not plain `test` — the
 coverage thresholds only ever run in CI, which is why their `include` scope matters.
-`.github/workflows/ci.yml` runs the same `check:ci` on every PR, plus a `verify-sw` job driving the
-real service worker against a production build (`pnpm run verify:sw`).
+`.github/workflows/ci.yml` always reports a status on PRs. Code changes run `check:ci`,
+`verify-sw` (real service worker against a production build), and E2E; prose-only changes skip
+those suites.
 
 ## Gotchas that cost time
 
@@ -35,18 +36,11 @@ real service worker against a production build (`pnpm run verify:sw`).
 ## Key Docs
 
 - **Common Mistakes**: `.claude/COMMON_MISTAKES.md` ⚠️
-- **Quick Start**: `.claude/QUICK_START.md`
-- **Architecture**: `.claude/ARCHITECTURE_MAP.md`
-- **Engineering Passes**: `ENGINEERING_PASSES.md` — reusable agent prompts for refactor / security /
-  testing / mutation / bug-hunt / UI / schema work
-- **Roadmap & changelog**: `ROADMAP.md`
-- **Doc map**: `docs/INDEX.md`
-
-**⚠️ NEVER auto-load:**
-- `.claude/completions/` — only on explicit request
-- `.claude/sessions/` — only on explicit request
-- `docs/archive/` — only on explicit request
+- **Commands and setup**: `README.md`
+- **Open work**: `ROADMAP.md`
+- **Rest/audio diagnostic procedure**: `docs/diagnostic-trace.md`
+- **Band loading behavior**: `docs/design/band-loading.md`
 
 ---
 
-**Last Updated**: 2026-09-17
+**Last Updated**: 2026-09-25

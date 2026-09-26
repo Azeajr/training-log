@@ -88,14 +88,9 @@ identity is stable and whose order actually moves.
 ### 7. There is no demo data
 
 **Symptom**: Expecting demo content on a fresh deploy and finding the DB empty.
-**Check**: There is none to find. `demo-seed.json` sat in `public/`, which is published verbatim, so
-45 KB of real training history was fetchable at `/demo-seed.json` on the deployed site (F82). B10
-moved it to `fixtures/`; it was deleted outright on 2026-09-17, because nothing read it and the one
-purpose it had — hand-import through Settings to reach a demo state — was not worth keeping a copy
-of the user's own history in the repo for. The `VITE_DEMO` declaration was removed long before.
-**Fix**: Use an export of the real DB if a populated state is needed, or `pnpm test:e2e` for a true
-first-run one. If automatic demo seeding is ever wanted, wire it in `main.tsx` between `dbReady` and
-`seedDatabase` — don't reintroduce the env var.
+**Check**: There is no demo history. Fresh installs seed lifts and an exercise library only.
+**Fix**: Use `pnpm test:e2e` for a first-run state, or import a private JSON backup when
+populated history is needed. Never put a personal backup under `public/`; Vite publishes it.
 
 ---
 
