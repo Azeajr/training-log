@@ -25,19 +25,11 @@ dist-ssr
 scripts/screenshot.png
 
 # Local tooling
-# `.claude/` was ignored wholesale, yet five files under it are tracked —
-# ARCHITECTURE_MAP.md, COMMON_MISTAKES.md, QUICK_START.md and the two READMEs —
-# and CLAUDE.md points contributors at the first three as the project's key
-# documents. An ignore rule cannot untrack what is already tracked, so those
-# five kept working and nothing looked wrong; but anything NEW written beside
-# them was silently invisible to `git status` and never reached the repo (F83).
-# So the local scratch is named instead of the whole directory.
+# Ignore local Claude scratch while keeping the tracked guides and any new docs visible.
 .claude/settings.local.json
 .claude/agents/
 .claude/completions/*
-!.claude/completions/README.md
 .claude/sessions/*
-!.claude/sessions/README.md
 .playwright-mcp/
 .agents/
 skills-lock.json

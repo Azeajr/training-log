@@ -258,8 +258,7 @@ describe('notifications — SW present (production)', () => {
 // and are never re-armed. The first bell is 90 s out, so the page stood aside
 // for a worker that was, by then, usually gone. Nobody fired.
 //
-// "The in-app rest UI already alerts the user there" (deep-code-review.md:3377,
-// which checked this line and ruled it justified) does not hold on the platform
+// "The in-app rest UI already alerts the user there" does not hold on the platform
 // this PWA targets: on an installed iOS PWA with the app open and visible, the
 // reporter got no audio cue and no notification. Whether the audio failure is
 // the AudioContext or a frozen tick worker is still open; either way it is not a
