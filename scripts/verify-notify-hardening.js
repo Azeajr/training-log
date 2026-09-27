@@ -6,7 +6,8 @@
  *
  *   node scripts/verify-notify-hardening.js
  *
- * Drives the REAL app in Chromium headless against `vite preview`:
+ * Drives the REAL app in Chromium headless against the harness static server
+ * (`web-harness serve`: public/_headers applied as real headers, like Pages):
  *   A. offline hard reload at / and /workout renders the shell
  *   C. visible tab + SW control: page fires too (F107) - page 1, SW 1
  *   E. reload mid-rest fires the past-due nudge exactly once (SW)
@@ -20,28 +21,19 @@
  */
 
 import { chromium } from 'playwright'
-import { spawn } from 'child_process'
+import { createStaticServer } from '@azeajr/web-harness/static-server'
 
-const BASE = 'http://localhost:5175'
+const BASE = 'http://127.0.0.1:5175'
 const PORT = 5175
 const REST_MS = 90_000 // normal-rest threshold used by scheduleRest
 
 const results = []
 
-async function waitForServer(url, tries = 60) {
-  for (let i = 0; i < tries; i++) {
-    try { await fetch(url); return } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 500))
-  }
-  throw new Error(`preview server did not come up at ${url}`)
-}
-
-async function spawnPreview() {
-  const p = spawn('pnpm', ['exec', 'vite', 'preview', '--port', String(PORT), '--strictPort'], {
-    stdio: 'ignore',
-  })
-  await waitForServer(`${BASE}/`)
-  return p
+// In-process, not a child: killing a `pnpm exec` wrapper does not reach the
+// server under it, so the old spawned preview outlived every run and held the
+// port — the next run then either failed on it or, worse, tested it.
+async function startServer() {
+  return createStaticServer({ dir: 'dist', port: PORT })
 }
 
 // ─── app flow helpers ────────────────────────────────────────────────────────
@@ -199,7 +191,7 @@ async function main() {
   // a fully passing run still sat here for 200s and then exited 3.
   setTimeout(() => { console.error('watchdog: 200s cap hit, forcing exit'); process.exit(3) }, 200_000).unref()
   const browser = await chromium.launch()
-  const preview = await spawnPreview()
+  const server = await startServer()
   try {
     await leg('A: offline reload renders shell (/ and /workout)', async () => {
       const { context, page } = await freshContext(browser)
@@ -386,7 +378,7 @@ async function main() {
 
   } finally {
     await browser.close()
-    preview?.kill()
+    await server.close()
   }
 
   for (const r of results) {

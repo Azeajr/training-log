@@ -99,9 +99,11 @@ populated history is needed. Never put a personal backup under `public/`; Vite p
 **Symptom**: Green suite, then "no such column" in production for existing users only.
 **Check**: The vitest client builds every DB from a fresh `SCHEMA`, so the `ADDITIVE_MIGRATIONS` path
 is never the one under test.
-**Fix**: After any schema change, run the app against a database that already holds data
-(`pnpm dev` in a browser profile with existing OPFS state, or `pnpm debug:browser:nowipe`) and confirm
-both the absent-column error is gone and existing rows resolve to the intended default.
+**Fix**: After any schema change, run the app against a database that already holds data and
+confirm both the absent-column error is gone and existing rows resolve to the intended default. The
+harness keeps a persistent profile across code changes: `pnpm harness start` (on the pre-change
+code, so the fixture writes old-schema rows), make the change, then `pnpm harness restart` and
+`pnpm harness check` / `pnpm harness state` against the same OPFS database.
 
 ---
 

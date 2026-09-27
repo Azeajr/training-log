@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config'
 import solid from 'vite-plugin-solid'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { webHarness } from '@azeajr/web-harness/vite'
 // Extension included deliberately: Vite's native config loader, which becomes
 // the default in a later major, cannot resolve an extensionless import here.
 import { PWA_MANIFEST } from './src/pwa-manifest.ts'
@@ -56,17 +57,11 @@ export default defineConfig(() => {
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm'],
   },
-  preview: {
-    port: 5175,
-    headers: {
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'",
-      'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'no-referrer',
-    },
-  },
   plugins: [
     solid(),
     tailwindcss(),
+    // Dev-server identity for the agent harness; serve-only, never in a build.
+    webHarness(),
     VitePWA({
       // injectManifest mode: use the audited custom SW in src/service-worker.ts
       // instead of an auto-generated one. srcDir/filename tell the plugin where

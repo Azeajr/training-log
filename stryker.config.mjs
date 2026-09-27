@@ -13,6 +13,9 @@ export default {
   reporters: ['html', 'json', 'clear-text', 'progress'],
   thresholds: { high: 80, low: 60, break: 40 },
   coverageAnalysis: 'perTest',
+  // inPlace rewrites src/ while it runs, so it is only ever run through
+  // `pnpm test:mutation` (web-harness mutate), which copies the working tree to
+  // a throwaway directory first. Never `stryker run` in a checkout you use.
   inPlace: true,
   disableTypeChecks: false,
   cleanTempDir: 'always',

@@ -54,3 +54,6 @@ playwright-report/
 # months — machine-specific, regenerated on every run.
 __pycache__/
 *.pyc
+
+# Agent harness sessions and smoke reports
+.web-harness/

@@ -8,17 +8,18 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc -b",
-    "preview": "vite preview",
+    "preview": "web-harness serve --dir dist --port 5175",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:mutation": "stryker run",
+    "test:mutation": "web-harness mutate",
     "check": "pnpm build && pnpm test",
     "check:local": "eslint . --cache --cache-location node_modules/.cache/eslint && tsc -b",
     "check:ci": "pnpm lint && pnpm test:coverage && pnpm build",
     "test:e2e": "playwright test",
     "verify:sw": "pnpm build && node scripts/verify-notify-hardening.js",
-    "debug:browser": "node scripts/debug-browser.js",
-    "debug:browser:nowipe": "node scripts/debug-browser.js --no-wipe"
+    "harness": "web-harness",
+    "smoke": "web-harness smoke",
+    "test:e2e:container": "web-harness e2e"
   },
   "dependencies": {
     "@solidjs/router": "^1.0.0",
@@ -28,6 +29,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@azeajr/web-harness": "github:Azeajr/web-harness#v0.1.2",
     "@eslint/js": "^10.0.1",
     "@solidjs/testing-library": "^0.8.10",
     "@stryker-mutator/core": "^9.6.1",
