@@ -1,177 +1,98 @@
 name: CI
 
-# NO paths filter on the triggers, deliberately. `checks` is a REQUIRED status
-# check on main, and a workflow skipped by `paths-ignore` never reports one — the
-# PR then sits on "Expected — waiting for status to be reported" and can never
-# merge. #165, a docs-only change on the old ignore list, hit exactly that:
-# zero checks, mergeState BLOCKED, no runs
-# on the branch at all.
+# One workflow proves a change and ships it (web-harness CI shape):
 #
-# So the filtering moved INTO the jobs. `checks` always starts and always
-# reports; for a prose-only change every step after the scope check is skipped,
-# which costs a checkout and a few seconds instead of the full suite.
+#   scope → checks (lint, coverage, build → dist artifact) → e2e ∥ smoke ∥ verify-sw → verdict
+#                                                          └→ deploy (main only: checks + smoke)
+#
+# NO paths filter on the triggers, deliberately. A workflow skipped by
+# `paths-ignore` never reports, and a REQUIRED check that never reports leaves
+# the PR on "Expected — waiting for status" forever (#165). `verdict` always
+# runs and always reports; `scope` decides inside the workflow what a change
+# needs, with a skip-list for prose so an unknown file counts as code.
+#
+# Deploy ships the exact bytes `checks` built and `smoke` proved (digest-checked),
+# never a second build. It waits for the smoke, not for E2E: a flaky browser
+# test must not block shipping, and E2E is already required to merge.
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  # pull_request.number is empty on a push event, which would collapse every
-  # main push into one shared group; fall back to the ref.
+  # pull_request.number is empty on a push event; fall back to the ref.
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A newer push makes an older PR run pointless. A main run may be deploying.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # What changed, and does it need checking? One job, one list — the previous
-  # version duplicated its ignore list across two triggers because the Actions
-  # parser has no YAML anchors, and keeping them in step was manual.
   scope:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      code: ${{ steps.decide.outputs.code }}
+      code: ${{ steps.scope.outputs.code }}
+      deploy: ${{ steps.scope.outputs.deploy }}
     steps:
-      - uses: actions/checkout@v7
+      - id: scope
+        uses: Azeajr/web-harness/.github/actions/scope@v0.1.2
         with:
-          persist-credentials: false
-          # Needed to diff against the base; the default shallow clone has no
-          # merge base to compare with.
-          fetch-depth: 0
+          # Only prose that no test reads belongs here.
+          skip: '^(README\.md|ROADMAP\.md|CLAUDE\.md|\.claude/COMMON_MISTAKES\.md|docs/diagnostic-trace\.md|docs/design/band-loading\.md)$'
+          deploy-include: '^(src/|public/|index\.html$|package\.json$|pnpm-lock\.yaml$|vite\.config\.|tsconfig)'
+          deploy-exclude: '\.test\.|^src/test-setup\.ts$'
 
-      - id: decide
-        env:
-          # Interpolated into env, never into the script body: a branch name is
-          # attacker-controllable on a fork PR and `${{ }}` inside `run:` is a
-          # shell injection.
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BEFORE_SHA: ${{ github.event.before }}
-          EVENT: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
-
-          if [ "$EVENT" = "pull_request" ]; then
-            base="$BASE_SHA"
-          else
-            base="$BEFORE_SHA"
-          fi
-
-          # A new branch, a force-push, or anything else that leaves no usable
-          # base: run everything. Failing open is the only safe default here —
-          # the cost is a redundant suite, the alternative is an unchecked merge.
-          if [ -z "${base:-}" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
-             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo "no usable base ref — running everything"
-            echo "code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          changed=$(git diff --name-only "$base" "$GITHUB_SHA")
-          echo "changed files:"
-          echo "$changed" | sed 's/^/  /'
-
-          # A SKIP-LIST, not an allowlist. An allowlist is what produced F75: the
-          # deploy workflow's filter left eslint.config.js, scripts/**,
-          # tests/e2e/** and .github/** with no workflow at all. Listing what to
-          # skip keeps "everything else is code" as the default, so a new file or
-          # directory is covered by not being here.
-          #
-          # Only prose that no test reads belongs below.
-          skip='^(README\.md|ROADMAP\.md|CLAUDE\.md|\.claude/COMMON_MISTAKES\.md|docs/diagnostic-trace\.md|docs/design/band-loading\.md)$'
-
-          if echo "$changed" | grep -qvE "$skip"; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
-            echo "→ code changed, running checks"
-          else
-            echo "code=false" >> "$GITHUB_OUTPUT"
-            echo "→ prose only, skipping the suite"
-          fi
-
-  # REQUIRED status check. This job always runs and always reports, whatever
-  # changed — that is the whole point of the restructure. Only its steps are
-  # conditional, rather than the job, because a skipped job's effect on a
-  # required check has changed across GitHub versions and a success reported by
-  # a job that genuinely ran is unambiguous.
   checks:
-    needs: scope
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - if: needs.scope.outputs.code == 'true'
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - if: needs.scope.outputs.code == 'true'
-        uses: pnpm/action-setup@v6
-
-      - if: needs.scope.outputs.code == 'true'
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - if: needs.scope.outputs.code == 'true'
-        run: pnpm install --frozen-lockfile
-
-      - if: needs.scope.outputs.code == 'true'
-        run: pnpm run check:ci
-
-      - if: needs.scope.outputs.code != 'true'
-        run: echo "Prose-only change — no code to check."
-
-  # Not a required check, so these two skip at the JOB level and cost no runner
-  # at all on a docs change.
-  #
-  # Separate job: this one needs a Chromium download and drives a real browser
-  # against `vite preview`, so it is too slow to belong inside check:ci.
-  verify-sw:
     needs: scope
     if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.1.2
         with:
           node-version: 24
-          cache: pnpm
+      # Supply-chain gate before anything runs installed code.
+      - run: pnpm audit signatures
+      - run: pnpm run check:ci
+      # Every critical journey maps to a test that exists, or says why not.
+      - run: pnpm exec web-harness scenarios
+      - id: digest
+        run: echo "digest=$(pnpm exec web-harness digest dist)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run verify:sw
-
-  # Separate job, like verify-sw: it needs a Chromium download and a production
-  # build. The suite ran in NO workflow at all before this, and 6 of its 32
-  # specs were failing — dormant is the worst of the options (F74, F85).
   e2e:
-    needs: scope
+    needs: [scope, checks]
     if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.1.2
         with:
           node-version: 24
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run test:e2e
-
+          browsers: chromium
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+      - run: pnpm exec web-harness digest dist --expect "$DIGEST"
+        env:
+          DIGEST: ${{ needs.checks.outputs.digest }}
+      # The suite serves the artifact instead of rebuilding it.
+      - run: pnpm test:e2e --reporter=list,json
+        env:
+          WEB_HARNESS_PREBUILT: '1'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-results.json
+      - run: pnpm exec web-harness scenarios --results e2e-results.json
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
@@ -180,3 +101,86 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  smoke:
+    needs: [scope, checks]
+    if: needs.scope.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.1.2
+        with:
+          node-version: 24
+          browsers: chromium
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+      - run: pnpm exec web-harness digest dist --expect "$DIGEST"
+        env:
+          DIGEST: ${{ needs.checks.outputs.digest }}
+      - run: pnpm smoke
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-report
+          path: .web-harness/smoke/
+          include-hidden-files: true
+          retention-days: 7
+
+  # Offline shell, SW cache hygiene and the notification paths, against the
+  # same artifact. OS delivery of a notification is outside what it can prove.
+  verify-sw:
+    needs: [scope, checks]
+    if: needs.scope.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.1.2
+        with:
+          node-version: 24
+          browsers: chromium
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+      - run: node scripts/verify-notify-hardening.js
+
+  # THE required status check.
+  verdict:
+    needs: [scope, checks, e2e, smoke, verify-sw]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: Azeajr/web-harness/.github/actions/verdict@v0.1.2
+        with:
+          needs: ${{ toJSON(needs) }}
+          code: ${{ needs.scope.outputs.code }}
+          required: checks e2e smoke verify-sw
+
+  deploy:
+    needs: [scope, checks, smoke]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.scope.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      # Installs the lockfile-pinned, signature-audited wrangler; nothing is rebuilt.
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.1.2
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+      - run: pnpm exec web-harness digest dist --expect "$DIGEST"
+        env:
+          DIGEST: ${{ needs.checks.outputs.digest }}
+      - name: Deploy to Cloudflare Pages
+        run: pnpm exec wrangler pages deploy dist --project-name 531-log
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5141f0dec18e8fb0aa0942a9f09f982d

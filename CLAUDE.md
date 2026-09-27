@@ -15,13 +15,18 @@ Tailwind 4, Vitest. Package manager is **pnpm**.
 
 **Database**: `@sqlite.org/sqlite-wasm` runs in a Web Worker + OPFS in prod, but in-process under vitest.
 
-**Deployment**: Cloudflare Pages (static, no server; `.github/workflows/deploy.yml`). The workflow is
-path-filtered, and it **does** gate: it runs `pnpm run check:ci` (`lint` + `test:coverage` + `build`)
-before deploying, so a failure blocks the deploy. Note `test:coverage`, not plain `test` — the
-coverage thresholds only ever run in CI, which is why their `include` scope matters.
-`.github/workflows/ci.yml` always reports a status on PRs. Code changes run `check:ci`,
-`verify-sw` (real service worker against a production build), and E2E; prose-only changes skip
-those suites.
+**Deployment**: Cloudflare Pages (static, no server), from the `deploy` job in
+`.github/workflows/ci.yml`. `checks` runs `pnpm run check:ci` (`lint` + `test:coverage` + `build`)
+and uploads `dist/`; `e2e`, `smoke` and `verify-sw` test that artifact; `deploy` ships the same
+bytes (digest-checked) on `main` once `checks` + `smoke` pass. Note `test:coverage`, not plain
+`test` — the coverage thresholds only ever run in CI, which is why their `include` scope matters.
+`verdict` is the one required status check and always reports; prose-only changes skip the suites.
+
+**Agent harness**: `harness.config.mjs` + [web-harness](https://github.com/Azeajr/web-harness).
+`pnpm harness start` gives an owned dev server and an iPhone 13 Mini WebKit session in Docker;
+`run FILE` batches a journey, `state` reads `src/dev/harness.ts` (dev-only, read-only),
+`restart` relaunches on the same profile. E2E uses the same fault policy
+(`createHarnessTest` in `tests/e2e/fixtures.ts`): a console error fails a passing test.
 
 ## Gotchas that cost time
 

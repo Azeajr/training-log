@@ -7,10 +7,13 @@
       - 'wasm-unsafe-eval' required by @sqlite.org/sqlite-wasm
       - 'unsafe-inline' on style-src kept for Tailwind dynamic styles & runtime CSS vars
       - worker-src blob: required by vite-plugin-pwa service worker registration
-      - object-src/base-uri/frame-ancestors locked down (no plugins, no <base> hijack, no embedding)
-      Mirror any change in vite.config.ts (preview server) and public/_headers (production).
+      - object-src/base-uri locked down (no plugins, no <base> hijack)
+      - frame-ancestors (no embedding) lives ONLY in public/_headers: browsers ignore it in a
+        meta CSP and log a console error saying so, which the harness fault policy fails on.
+      Mirror any other change in public/_headers, which production AND every harness-served
+      build (E2E, smoke) send as real headers.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- iOS ignores the manifest's icons for the home screen and reads this
          instead, so without it the installed app had no icon at all (F70). -->

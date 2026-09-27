@@ -47,13 +47,34 @@ Open `http://localhost:5173` and enter your training maxes to begin.
 ## Running Tests
 
 ```bash
-pnpm test             # unit + component integration (Vitest)
-pnpm test:e2e         # end-to-end (Playwright)
-pnpm test:coverage    # coverage report (v8)
-pnpm test:mutation    # mutation score (Stryker)
-pnpm check:local      # fast cached lint + typecheck
-pnpm check:ci         # lint + coverage + production build
+pnpm test               # unit + component integration (Vitest)
+pnpm test:e2e           # end-to-end (Playwright) against the production build
+pnpm test:e2e:container # the same, in the pinned Playwright image (CI's environment)
+pnpm test:coverage      # coverage report (v8)
+pnpm test:mutation      # mutation score (Stryker, in a throwaway copy of the tree)
+pnpm smoke              # production smoke: headers, SW, persistence, offline (needs dist/)
+pnpm verify:sw          # service-worker and notification legs (builds first)
+pnpm check:local        # fast cached lint + typecheck
+pnpm check:ci           # lint + coverage + production build
 ```
+
+### Agent harness
+
+`harness.config.mjs` adapts this app to [web-harness](https://github.com/Azeajr/web-harness):
+an owned dev or production server, a bounded browser in the pinned Playwright image, fixtures
+applied through the real UI, and one fault policy shared with the E2E suite.
+
+```bash
+pnpm harness start                       # dev server + iPhone 13 Mini WebKit, `configured` fixture
+pnpm harness start --target production   # the built bundle, served with public/_headers
+pnpm harness run tests/harness/log-first-warmup.js   # batched journey → compact JSON
+pnpm harness state                       # read-only app state (dev target only)
+pnpm harness restart                     # same browser profile: durability across a relaunch
+pnpm harness reset | check | stop
+pnpm harness scenarios                   # critical journeys → the tests that prove them
+```
+
+Session evidence (screenshots, faults, events, batch reports) lands in `.web-harness/`.
 
 **Arch Linux**: Playwright's bundled Chromium requires system libs not installed by default:
 
@@ -71,7 +92,7 @@ Tests are split into three layers:
 
 Component integration tests render the full component tree and interact through the DOM. Every screen exercises the full stack: UI event → SolidJS store → in-process SQLite (no Worker, no OPFS) → rendered output. The vitest alias `/sqlite-client$/` swaps the production worker-based client for the in-process one, which shares the rest of the query layer. No DB layer is mocked.
 
-Coverage gate: ≥80% line, branch, function, and statement across `src/lib`, `src/screens`, `src/store`.
+Coverage gate: every file under `src/` with named exclusions (see `vite.config.ts` for the thresholds).
 Mutation testing runs over `src/lib`; the Stryker run fails below a 40% score, with 80% as the target.
 
 ## Program Structure
@@ -103,4 +124,4 @@ TM progression at the end of each cycle is per-lift (`progressionIncrement`, see
 
 ## Deployment
 
-Pull requests always report a CI status; code changes run lint, coverage, a production build, service-worker verification, and E2E checks via `.github/workflows/ci.yml`. Prose-only changes skip those suites. Pushes to `main` deploy automatically to Cloudflare Pages via `.github/workflows/deploy.yml`; deployment is path-filtered to source and config changes and runs the same checks before publishing.
+One workflow, `.github/workflows/ci.yml`, proves and ships. `checks` (lint, coverage, production build) uploads the built `dist/`; `e2e`, `smoke` and `verify-sw` each test that same artifact (content digest checked). `verdict` always reports and is the one required status check, so prose-only pull requests still get a status. On `main`, when deployable paths changed, `deploy` publishes that exact artifact to Cloudflare Pages once `checks` and `smoke` pass — no second build.

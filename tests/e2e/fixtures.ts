@@ -1,14 +1,16 @@
 import { test as base } from 'playwright/test'
+import { createHarnessTest } from '@azeajr/web-harness/playwright'
+import harness from '../../harness.config.mjs'
 import { freshStart } from './helpers'
 
-export const test = base.extend<{ _noPageErrors: void; _freshDb: void }>({
-  _noPageErrors: [async ({ page }, use) => {
-    const errors: string[] = []
-    page.on('pageerror', err => errors.push(err.message))
-    await use()
-    if (errors.length > 0) throw new Error(`Page errors:\n${errors.join('\n')}`)
-  }, { auto: true }],
+// The shared fault guard (web-harness): page errors, console errors, failed or
+// erroring same-origin requests and escaped external calls fail a passing
+// test — the same policy an agent's harness session is judged by. A test that
+// causes a fault on purpose declares it with `allowPageFaults` or
+// `expectPageFault`, for that test alone.
+const harnessTest = createHarnessTest(base, harness)
 
+export const test = harnessTest.extend<{ _freshDb: void }>({
   // Reset OPFS DB + localStorage before every test so each starts on a fresh
   // setup wizard. Tests that need a completed setup call `completeSetupWizard`
   // themselves in their own beforeEach.

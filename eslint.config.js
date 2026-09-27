@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'coverage', 'test-results', 'playwright-report']),
+  globalIgnores(['dist', 'coverage', 'test-results', 'playwright-report', '.web-harness', 'reports']),
   // Every block below is scoped to .ts/.tsx, so before this one NO rule applied
   // to any .js or .mjs file in the repo — `eslint --print-config` resolved 0
   // rules for scripts/*.js against 92 for a src file. That left ~400 lines of

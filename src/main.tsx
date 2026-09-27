@@ -42,3 +42,8 @@ void prepareApp({ dbReady, seed: seedDatabase, loadSettings }).then((result) => 
   }
   startApp()
 })
+
+// Read-only state accessor for the agent harness (harness.config.mjs). The
+// dynamic import sits behind the DEV constant, so production builds drop it
+// entirely — and the production smoke fails if `__harness` ever ships.
+if (import.meta.env.DEV) void import('./dev/harness').then((harness) => harness.installHarnessAccessor())
