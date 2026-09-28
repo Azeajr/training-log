@@ -27,6 +27,8 @@ bytes (digest-checked) on `main` once `checks` + `smoke` pass. Note `test:covera
 `run FILE` batches a journey, `state` reads `src/dev/harness.ts` (dev-only, read-only),
 `restart` relaunches on the same profile. E2E uses the same fault policy
 (`createHarnessTest` in `tests/e2e/fixtures.ts`): a console error fails a passing test.
+The `web-harness` skill (`.claude/skills/web-harness`) is the shared how-to; after bumping
+web-harness, reinstall it with `pnpm harness skill install`.
 
 ## Gotchas that cost time
 
@@ -48,4 +50,4 @@ bytes (digest-checked) on `main` once `checks` + `smoke` pass. Note `test:covera
 
 ---
 
-**Last Updated**: 2026-09-25
+**Last Updated**: 2026-09-28
