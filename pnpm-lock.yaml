@@ -129,8 +129,8 @@ importers:
         version: 4.3.3
     devDependencies:
       '@azeajr/web-harness':
-        specifier: github:Azeajr/web-harness#v0.1.2
-        version: https://codeload.github.com/Azeajr/web-harness/tar.gz/b921ae95d3c9b08bc75ffed624905adf94275ed3(playwright@1.63.0)
+        specifier: github:Azeajr/web-harness#v0.2.0
+        version: https://codeload.github.com/Azeajr/web-harness/tar.gz/45754c2cd2c0550fd0128b0eb9ae704c70fffdf7(playwright@1.63.0)
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.11.0(jiti@2.7.0)(supports-color@10.2.2))
@@ -214,13 +214,17 @@ packages:
     resolution: {integrity: sha512-NT4s3yZLjovPpliRpTvdsdzyPjqRqiCZj9MxnarBihbaY5MbAG7DWAJcrLlhmC7xKTNCXsTELcqB8YsqpLnUFQ==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
-  '@azeajr/web-harness@https://codeload.github.com/Azeajr/web-harness/tar.gz/b921ae95d3c9b08bc75ffed624905adf94275ed3':
-    resolution: {gitHosted: true, integrity: sha512-I9rw1Vwf9OuSKVoP7mZk63OaNIin8WZL7aqDphV5Wc6rBbmLC5d/LYQEgIzenHwWNq6o4jIZf29cMCLFLl4+7g==, tarball: https://codeload.github.com/Azeajr/web-harness/tar.gz/b921ae95d3c9b08bc75ffed624905adf94275ed3}
-    version: 0.1.2
+  '@azeajr/web-harness@https://codeload.github.com/Azeajr/web-harness/tar.gz/45754c2cd2c0550fd0128b0eb9ae704c70fffdf7':
+    resolution: {gitHosted: true, integrity: sha512-JzZSy30VEKLXUglvNdjlGki8XGa3jDa6Wma6IOsp/wKK9m/DqNTunN/jPSYHrMa/3eKeHBBpYrOkmDeaB5h/zA==, tarball: https://codeload.github.com/Azeajr/web-harness/tar.gz/45754c2cd2c0550fd0128b0eb9ae704c70fffdf7}
+    version: 0.2.0
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
+      axe-core: '>=4.10.0'
       playwright: '>=1.62.0'
+    peerDependenciesMeta:
+      axe-core:
+        optional: true
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -4003,7 +4007,7 @@ snapshots:
       is-potential-custom-element-name: 1.0.1
       lru-cache: 11.5.3
 
-  '@azeajr/web-harness@https://codeload.github.com/Azeajr/web-harness/tar.gz/b921ae95d3c9b08bc75ffed624905adf94275ed3(playwright@1.63.0)':
+  '@azeajr/web-harness@https://codeload.github.com/Azeajr/web-harness/tar.gz/45754c2cd2c0550fd0128b0eb9ae704c70fffdf7(playwright@1.63.0)':
     dependencies:
       playwright: 1.63.0
 

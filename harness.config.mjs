@@ -83,6 +83,9 @@ export default defineHarness({
       if (await page.getByRole('button', { name: 'START TRAINING' }).isVisible())
         throw new Error('Setup did not persist: the wizard is back.')
     },
+    // The update phase publishes a second version by changing the worker script's bytes; ours is
+    // the injectManifest build of src/service-worker.ts, not the default sw.js.
+    update: { sw: 'service-worker.js' },
   },
   e2e: { config: 'playwright.config.ts', snapshots: ['tests/e2e'] },
   // Critical journeys and what proves each (`pnpm harness scenarios`; CI checks the mapping, and
