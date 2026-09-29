@@ -29,7 +29,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
-    "@azeajr/web-harness": "github:Azeajr/web-harness#v0.2.0",
+    "@azeajr/web-harness": "github:Azeajr/web-harness#v0.2.2",
     "@eslint/js": "^10.0.1",
     "@solidjs/testing-library": "^0.8.10",
     "@stryker-mutator/core": "^9.6.1",
