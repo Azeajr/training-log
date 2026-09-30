@@ -5,8 +5,9 @@ import { __resetForTest } from '../db/sqlite-client'
 import {
   createLift, updateLift, archiveLift, unarchiveLift, moveLift, deleteLift,
   addLiftSupplemental, updateLiftSupplemental, removeLiftSupplemental,
-  liftsCrossReferencing,
+  liftsCrossReferencing, loadCrossPlan,
 } from './lift'
+import { setTm } from './training-max'
 
 beforeEach(async () => { await __resetForTest() })
 
@@ -182,6 +183,64 @@ describe('cross-lift supplemental CRUD', () => {
 
     await removeLiftSupplemental(db, id)
     expect(await db.liftSupplementals.get(id)).toBeUndefined()
+  })
+})
+
+// Today's preview and the Workout screen each carried their own copy of this
+// loop, and the copies disagreed on a block with no sets — so the one loader
+// has to settle every rule the two used to decide separately.
+describe('loadCrossPlan', () => {
+  const opts = { deloadSupplemental: 'normal' as const, barWeight: 45 }
+
+  const seed = async () => {
+    const day = await createLift(db, { name: 'Bench', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const ohp = await createLift(db, { name: 'OHP', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    const row = await createLift(db, { name: 'Row', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
+    await setTm(db, ohp, 100)
+    await setTm(db, row, 200)
+    const ohpBlock = await addLiftSupplemental(db, { liftId: day, movementLiftId: ohp, weightMode: 'percent', percent: 0.5, sets: 5, reps: 10 })
+    const rowBlock = await addLiftSupplemental(db, { liftId: day, movementLiftId: row, weightMode: 'fsl', percent: null, sets: 3, reps: 5 })
+    return { day, ohp, row, ohpBlock, rowBlock }
+  }
+
+  it('computes each block from its movement TM, in block order', async () => {
+    const { day, ohpBlock } = await seed()
+    // Insertion order is OHP then Row; `order`, not insertion, decides.
+    await updateLiftSupplemental(db, ohpBlock, { order: 5 })
+
+    const plan = await loadCrossPlan(db, day, 1, opts)
+    expect(plan.map(p => p.movement.name)).toEqual(['Row', 'OHP'])
+    // Row: FSL = week-1 first main set, 65% of 200.
+    expect(plan[0].sets).toHaveLength(3)
+    expect(plan[0].sets[0]).toMatchObject({ weight: 130, reps: 5, type: 'cross' })
+    // OHP: straight 50% of 100.
+    expect(plan[1].sets).toHaveLength(5)
+    expect(plan[1].sets[0]).toMatchObject({ weight: 50, reps: 10 })
+  })
+
+  it('follows the deload-week supplemental setting', async () => {
+    const { day } = await seed()
+    expect(await loadCrossPlan(db, day, 4, { ...opts, deloadSupplemental: 'skip' })).toEqual([])
+    // normal → week-1 loading; deload → week-4 loading (40% of 200).
+    const normal = await loadCrossPlan(db, day, 4, opts)
+    expect(normal.find(p => p.movement.name === 'Row')?.sets[0].weight).toBe(130)
+    const deload = await loadCrossPlan(db, day, 4, { ...opts, deloadSupplemental: 'deload' })
+    expect(deload.find(p => p.movement.name === 'Row')?.sets[0].weight).toBe(80)
+  })
+
+  it('leaves out a block with no sets and one whose movement lift is gone', async () => {
+    const { day, ohpBlock } = await seed()
+    // The setup stepper stops at 1; a zero only arrives by import or an old row.
+    await updateLiftSupplemental(db, ohpBlock, { sets: 0 })
+    await db.liftSupplementals.add({ liftId: day, movementLiftId: 999, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 9 })
+
+    const plan = await loadCrossPlan(db, day, 1, opts)
+    expect(plan.map(p => p.movement.name)).toEqual(['Row'])
+  })
+
+  it('is empty for a day with no blocks', async () => {
+    const { ohp } = await seed()
+    expect(await loadCrossPlan(db, ohp, 1, opts)).toEqual([])
   })
 })
 

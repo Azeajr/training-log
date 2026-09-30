@@ -3,13 +3,14 @@ import { useNavigate, A } from '@solidjs/router'
 import { db } from '../db/index'
 import type { Lift, PtRoutine } from '../types/domain'
 import { workout, startSession, resumeSession, clearSession, addAccessory, toActiveAccessory } from '../store/workout-store'
-import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, calcCrossSets, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
+import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
 import { getNextSessionAdvancingIfDone } from '../lib/cycle'
 import {
   discardPendingSession, hydrateSessionState, reconcileActiveSession, startOrResumePendingSession,
 } from '../lib/session'
 import { getCurrentTm } from '../lib/training-max'
+import { loadCrossPlan } from '../lib/lift'
 import { getAssistanceDefaults, getAssistanceDefaultPicks, ASSISTANCE_SECTIONS, SECTION_LABEL, type AssistanceSection } from '../lib/assistance'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
@@ -305,25 +306,16 @@ export default function Today() {
     return getSupplementalLabel(settings.supplementalTemplate ?? 'fsl+bbb', supplementalSets(), e)
   }
 
-  // Cross-lift supplemental preview for the selected lift. Mirrors the Workout
-  // screen: each block computed from its movement lift's TM, skipped on deload.
+  // Cross-lift supplemental preview for the selected lift — the same plan the
+  // Workout screen loads, so the two cannot disagree about which blocks run.
   const [crossPreview] = createResource(
     () => ({ liftId: selectedLiftId(), week: currentWeek(), mode: settings.deloadSupplemental }),
     async ({ liftId, week, mode }) => {
-      const eff = effectiveSupplementalWeek(week, mode)
-      if (!liftId || eff === null) return []
-      const blocks = (await db.liftSupplementals.where('liftId').equals(liftId).toArray())
-        .sort((a, b) => a.order - b.order)
-      const allLifts = await db.lifts.toArray()
-      const out: Array<{ label: string; weight: number; reps: number }> = []
-      for (const b of blocks) {
-        const mLift = allLifts.find(l => l.id === b.movementLiftId)
-        if (!mLift) continue
-        const mTm = await getCurrentTm(db, b.movementLiftId)
-        const sets = calcCrossSets(b, mTm, eff, settings.barWeight)
-        if (sets.length > 0) out.push({ label: getCrossLabel(b, mLift.name), weight: sets[0].weight, reps: sets[0].reps })
-      }
-      return out
+      if (!liftId) return []
+      const plan = await loadCrossPlan(db, liftId, week, { deloadSupplemental: mode, barWeight: settings.barWeight })
+      return plan.map(({ block, movement, sets }) => ({
+        label: getCrossLabel(block, movement.name), weight: sets[0].weight, reps: sets[0].reps,
+      }))
     },
   )
 
