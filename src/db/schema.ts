@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS liftSupplementals (
   percent REAL,
   sets INTEGER NOT NULL,
   reps INTEGER NOT NULL,
-  "order" INTEGER NOT NULL
+  "order" INTEGER NOT NULL,
+  paused INTEGER
 );
 CREATE TABLE IF NOT EXISTS accessoryTrainingMaxes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -313,6 +314,10 @@ export const ADDITIVE_MIGRATIONS = [
   // a database from before it existed; `reconcileBandInventory` fills it from
   // the bands its movements already calibrate.
   `ALTER TABLE settings ADD COLUMN bands TEXT`,
+  // A cross-lift block switched off without losing its prescription. NULL on
+  // every block from before it existed, and NULL reads as running — which is
+  // what those blocks were doing.
+  `ALTER TABLE liftSupplementals ADD COLUMN paused INTEGER`,
 ] as const
 
 export const ALL_TABLES = [

@@ -28,6 +28,13 @@ import AccessoryPicker from '../components/workout/AccessoryPicker'
 const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
 
+// One cross-lift block on the preview. `readout` is null for a paused block:
+// listed so it is not forgotten, but with nothing to lift.
+interface CrossPreview {
+  label: string
+  readout: { weight: number; reps: number } | null
+}
+
 interface WeekStatus {
   liftId: number
   name: string
@@ -313,8 +320,9 @@ export default function Today() {
     async ({ liftId, week, mode }) => {
       if (!liftId) return []
       const plan = await loadCrossPlan(db, liftId, week, { deloadSupplemental: mode, barWeight: settings.barWeight })
-      return plan.map(({ block, movement, sets }) => ({
-        label: getCrossLabel(block, movement.name), weight: sets[0].weight, reps: sets[0].reps,
+      return plan.map(({ block, movement, sets, paused }): CrossPreview => ({
+        label: getCrossLabel(block, movement.name),
+        readout: paused ? null : { weight: sets[0].weight, reps: sets[0].reps },
       }))
     },
   )
@@ -323,7 +331,7 @@ export default function Today() {
   // throws, and that throw came back out of `setLoading(false)` — so one
   // optional preview failing left the entire screen stuck on "Loading…"
   // (F106). Checking `.error` first reads the failure without re-raising it.
-  const crossPreviewSafe = (): Array<{ label: string; weight: number; reps: number }> =>
+  const crossPreviewSafe = (): CrossPreview[] =>
     crossPreview.error ? [] : (crossPreview() ?? [])
 
   // Status owns the colour, permanently — selecting a finished lift must not
@@ -479,8 +487,10 @@ export default function Today() {
                   <For each={crossPreviewSafe()}>
                     {block => (
                       <div>
-                        <SectionLabel class="mb-1">{block.label}</SectionLabel>
-                        <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={block.weight} value={`${block.reps}`} />
+                        <SectionLabel class="mb-1" tone={block.readout ? undefined : 'text-faint'}>{block.label}</SectionLabel>
+                        <Show when={block.readout} fallback={<div class="pl-2 text-faint text-xs tracking-widest">paused</div>}>
+                          <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={block.readout!.weight} value={`${block.readout!.reps}`} />
+                        </Show>
                       </div>
                     )}
                   </For>
