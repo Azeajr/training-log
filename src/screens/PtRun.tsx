@@ -88,8 +88,8 @@ export default function PtRun() {
     // A parked draft whose routine cannot be loaded is dropped, not treated as
     // a reason to refuse the whole session. Every id here is either the one the
     // user just asked for or one carried in from `pt-store`, and the store
-    // outlives the database: an IMPORT clears every table and leaves the
-    // localStorage draft pointing at routine ids that no longer exist. Failing
+    // outlives the database: a draft saved before IMPORT began clearing them, or
+    // left by another tab, can point at routine ids that no longer exist. Failing
     // the load on any bad id meant one stale draft bounced the user back to /pt
     // from every routine they tried to start, forever, with no way to clear the
     // draft because the routine it names is not on the list to delete.

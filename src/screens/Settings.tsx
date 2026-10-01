@@ -3,6 +3,7 @@ import { db } from '../db/index'
 import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode, DeloadSupplemental } from '../types/domain'
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { clearSession } from '../store/workout-store'
+import { clearAllPtRuns } from '../store/pt-store'
 import { exportJson, importJson, exportCsv, exportPtCsv } from '../lib/export-import'
 import { deloadTms, planDeload, applyDeload, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
@@ -502,6 +503,10 @@ export default function Settings() {
       // The persisted workout store references pre-import session ids; a stale
       // active session would resume against whatever row inherited that id.
       clearSession()
+      // The same for a PT run in progress: its ticks are keyed by routine and
+      // exercise ids, and a backup's routines reuse those ids for whatever they
+      // were when it was taken.
+      clearAllPtRuns()
       await loadSettings()
       await load()
       showToast('Import complete')

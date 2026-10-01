@@ -5,10 +5,11 @@ import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmati
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import { db } from '../db/index'
 import { DEFAULT_PLATES, loadSettings } from '../store/settings-store'
-import { toast } from '../store/toast-store'
+import { showToast, toast } from '../store/toast-store'
 import { commitPtRun, getPtRoutine, savePtRoutine } from '../lib/pt'
 import { deloadTms } from '../lib/cycle'
 import { getCurrentTm, setTm } from '../lib/training-max'
+import { clearAllPtRuns, ptSessionRoutineIds, startPtRun } from '../store/pt-store'
 
 function renderSettings() {
   const api = createConfirmation()
@@ -987,6 +988,29 @@ describe('Settings — import error', () => {
     fireEvent.click(screen.getByText('IMPORT'))
 
     await waitFor(() => expect(toast()).toBe('Import complete'))
+  })
+
+  // An import replaces every routine; a run in progress keyed by the old ids
+  // would otherwise resume against whatever the backup put at those ids.
+  it('drops a PT run in progress, as it does the workout session', async () => {
+    startPtRun(7)
+    showToast('') // the test before this one leaves "Import complete" standing
+    try {
+      renderSettings()
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const empty = JSON.stringify({
+        exportedAt: new Date().toISOString(), version: 1,
+        lifts: [], trainingMaxes: [], cycles: [], sessions: [], sets: [], exercises: [], settings: [],
+      })
+      Object.defineProperty(fileInput, 'files', { value: [new File([empty], 'export.json')], configurable: true })
+      fireEvent.change(fileInput)
+      fireEvent.click(await screen.findByText('IMPORT'))
+
+      await waitFor(() => expect(toast()).toBe('Import complete'))
+      expect(ptSessionRoutineIds()).toEqual([])
+    } finally {
+      clearAllPtRuns()
+    }
   })
 
   it('cancelling import confirmation dialog closes dialog without running import', async () => {

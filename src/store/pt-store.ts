@@ -277,7 +277,7 @@ export function clearPtRun(routineId: number | null = ptRun.routineId): void {
   })
 }
 
-/** Reset all drafts, for test isolation. */
+/** Drop every run in progress: on an import, which replaces the routines they belong to. */
 export function clearAllPtRuns(): void {
   batch(() => {
     setPausedRuns(reconcile({}, RECONCILE_BY_INDEX))
