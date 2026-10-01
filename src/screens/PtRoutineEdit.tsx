@@ -284,7 +284,7 @@ export default function PtRoutineEdit() {
     )) return
     try {
       await archivePtRoutine(db, id)
-      showToast('Routine archived.')
+      showToast(`${name().trim() || 'Routine'} archived.`)
       navigate('/pt')
     } catch (err) {
       showToast(`Could not archive that routine: ${message(err)}`)

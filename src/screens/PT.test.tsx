@@ -578,6 +578,83 @@ describe('PT screen', () => {
     })
   })
 
+  // A routine that leaves the list has to leave the selection, or START SESSION
+  // keeps counting it and then starts without it.
+  describe('removing a selected routine', () => {
+    const seedTwo = async () => {
+      await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft()] })
+      await savePtRoutine(db, { name: 'Shoulder', exercises: [repsDraft()] })
+      renderPT()
+      fireEvent.click(await screen.findByLabelText('Include Knee'))
+      fireEvent.click(screen.getByLabelText('Include Shoulder'))
+      expect(screen.getByRole('button', { name: 'START SESSION (2)' })).toBeTruthy()
+    }
+
+    it('ARCHIVE deselects it', async () => {
+      await seedTwo()
+      fireEvent.click(screen.getByLabelText('Remove Knee'))
+      fireEvent.click(await screen.findByRole('button', { name: 'ARCHIVE' }))
+
+      await screen.findByText('ARCHIVED')
+      expect(await screen.findByRole('button', { name: 'START SESSION (1)' })).toBeTruthy()
+    })
+
+    it('DELETE deselects it', async () => {
+      await seedTwo()
+      fireEvent.click(screen.getByLabelText('Remove Knee'))
+      fireEvent.click(await screen.findByRole('button', { name: 'DELETE' }))
+
+      await waitFor(async () => expect(await db.ptRoutines.count()).toBe(1))
+      expect(await screen.findByRole('button', { name: 'START SESSION (1)' })).toBeTruthy()
+    })
+  })
+
+  // deleteRoutine clears a run in progress, and its ticks are not saved
+  // anywhere — the confirm that names DELETE's cost has to name that too.
+  describe('a routine with a run in progress', () => {
+    it("names it in a live routine's choice", async () => {
+      const id = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft()] })
+      startPtRun(id)
+      renderPT()
+      fireEvent.click(await screen.findByLabelText('Remove Knee'))
+
+      expect(await screen.findByText(
+        'Archive Knee, or delete it? Deleting cannot be undone. Deleting also discards the run in progress.',
+      )).toBeTruthy()
+    })
+
+    it("names it in an archived routine's confirm", async () => {
+      const id = await savePtRoutine(db, { name: 'Old block', exercises: [repsDraft()] })
+      startPtRun(id)
+      await archivePtRoutine(db, id)
+      renderPT()
+      await screen.findByText('ARCHIVED')
+      fireEvent.click(screen.getByLabelText('Delete Old block'))
+
+      expect(await screen.findByText(
+        'Delete Old block? This cannot be undone. It also discards the run in progress.',
+      )).toBeTruthy()
+    })
+  })
+
+  // The ✕ handlers are fired with `void`, so a failed count used to open no
+  // dialog and say nothing.
+  it('says so when it cannot read how many runs a routine has', async () => {
+    await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft()] })
+    renderPT()
+    const remove = await screen.findByLabelText('Remove Knee')
+    const spy = vi.spyOn(db.ptSessions, 'where').mockImplementationOnce(() => {
+      throw new Error('disk full')
+    })
+    try {
+      fireEvent.click(remove)
+      await waitFor(() => expect(toast()).toBe("Could not read that routine's runs: disk full"))
+      expect(screen.queryByRole('dialog')).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('shows no ARCHIVED section when nothing is archived', async () => {
     await savePtRoutine(db, { name: 'Current', exercises: [repsDraft()] })
     renderPT()

@@ -1,7 +1,8 @@
 import type { TrainingDB } from '../db/index'
 import { discardPendingSessionRows } from './session'
 import { getCurrentTm } from './training-max'
-import { calcCrossSets, effectiveSupplementalWeek, type CrossSet } from './calc'
+import { calcCrossSets, effectiveSupplementalWeek } from './calc'
+import type { CrossBlockPlan } from './workout-compose'
 import type { DeloadSupplemental, Lift, LiftSupplemental } from '../types/domain'
 
 export async function createLift(
@@ -127,11 +128,14 @@ export async function removeLiftSupplemental(db: TrainingDB, id: number): Promis
   await db.liftSupplementals.delete(id)
 }
 
-/** A cross-lift block as its training day runs it in a given week. */
-export interface CrossPlanBlock {
+/**
+ * A cross-lift block as its training day runs it in a given week: what
+ * composition needs (`CrossBlockPlan`), plus the block and movement lift the
+ * screens label it with.
+ */
+export interface CrossBlockForDay extends CrossBlockPlan {
   block: LiftSupplemental
   movement: Lift
-  sets: CrossSet[]
 }
 
 // The cross-lift blocks a training day runs in a given week, in block order —
@@ -147,7 +151,7 @@ export async function loadCrossPlan(
   liftId: number,
   week: 1 | 2 | 3 | 4,
   opts: { deloadSupplemental: DeloadSupplemental; barWeight: number; crossLiftSupplemental: boolean },
-): Promise<CrossPlanBlock[]> {
+): Promise<CrossBlockForDay[]> {
   if (!opts.crossLiftSupplemental) return []
   const eff = effectiveSupplementalWeek(week, opts.deloadSupplemental)
   if (eff === null) return []
@@ -155,14 +159,14 @@ export async function loadCrossPlan(
     .sort((a, b) => a.order - b.order)
   if (blocks.length === 0) return []
   const lifts = await db.lifts.toArray()
-  const plan: CrossPlanBlock[] = []
+  const plan: CrossBlockForDay[] = []
   for (const block of blocks) {
     const movement = lifts.find(l => l.id === block.movementLiftId)
     if (!movement) continue
     const tm = await getCurrentTm(db, block.movementLiftId)
-    const sets = calcCrossSets(block, tm, eff, opts.barWeight)
-    if (sets.length === 0) continue
-    plan.push({ block, movement, sets })
+    const computed = calcCrossSets(block, tm, eff, opts.barWeight)
+    if (computed.length === 0) continue
+    plan.push({ block, movement, movementLiftId: block.movementLiftId, computed })
   }
   return plan
 }

@@ -5,10 +5,11 @@ import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmati
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
 import { db } from '../db/index'
 import { DEFAULT_PLATES, loadSettings } from '../store/settings-store'
-import { toast } from '../store/toast-store'
+import { showToast, toast } from '../store/toast-store'
 import { commitPtRun, getPtRoutine, savePtRoutine } from '../lib/pt'
 import { deloadTms } from '../lib/cycle'
-import { getCurrentTm } from '../lib/training-max'
+import { getCurrentTm, setTm } from '../lib/training-max'
+import { clearAllPtRuns, ptSessionRoutineIds, startPtRun } from '../store/pt-store'
 
 function renderSettings() {
   const api = createConfirmation()
@@ -356,9 +357,65 @@ describe('Settings — deload', () => {
 
     fireEvent.click(await screen.findByText(/CUT ALL TMS/))
 
-    await waitFor(() => expect(toast()).toBe('Already cut this cycle — edit a TM to change it'))
+    await waitFor(() => expect(toast()).toBe('Nothing to cut. Already cut this cycle: OHP'))
     expect(screen.queryByText('CUT TMS')).not.toBeInTheDocument()
     expect(await getCurrentTm(db, liftId)).toBe(190)
+  })
+
+  // 5% of a 45 lb TM rounds back to 45. Listing "OHP: 45 → 45" as a cut, and
+  // writing it, spent the once-per-cycle guard on a cut that never happened.
+  it('names a TM too light for the cut, and cuts only the rest', async () => {
+    const ohp   = await db.lifts.add({ name: 'OHP',   order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const bench = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId: ohp,   weight: 45,  setAt: new Date('2026-01-01') })
+    await db.trainingMaxes.add({ liftId: bench, weight: 300, setAt: new Date('2026-01-01') })
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Decrease deload percent' }))
+    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+
+    await screen.findByText(/Cut training maxes by 5%\?/)
+    expect(screen.getByText(/Bench: 300 → 285 lb/)).toBeInTheDocument()
+    expect(screen.getByText(/−5% rounds back to the same TM: OHP/)).toBeInTheDocument()
+    expect(screen.queryByText(/OHP: 45 → 45/)).toBeNull()
+    fireEvent.click(screen.getByText('CUT TMS'))
+
+    await waitFor(() => expect(toast()).toBe('Cut 1 TM −5%'))
+    expect(await db.trainingMaxes.where('liftId').equals(ohp).toArray()).toHaveLength(1)
+  })
+
+  // The write is the plan the confirm showed, not one worked out after the tap:
+  // a TM that moved while the dialog was open is not cut from a base the user
+  // never saw.
+  it('writes the plan it showed, leaving a TM that moved meanwhile alone', async () => {
+    const ohp   = await db.lifts.add({ name: 'OHP',   order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const bench = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId: ohp,   weight: 200, setAt: new Date('2026-01-01') })
+    await db.trainingMaxes.add({ liftId: bench, weight: 300, setAt: new Date('2026-01-01') })
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+    await screen.findByText(/OHP: 200 → 180 lb/)
+    await setTm(db, ohp, 250) // another tab, while the confirm is open
+    fireEvent.click(screen.getByText('CUT TMS'))
+
+    await waitFor(() => expect(toast()).toBe('Cut 1 TM −10%'))
+    expect(await getCurrentTm(db, ohp)).toBe(250)
+    expect(await getCurrentTm(db, bench)).toBe(270)
+  })
+
+  // A deload appends rows and an edit puts the TM back, so by the rule on
+  // `destructive` its confirm is not the red one.
+  it('does not danger-style the cut', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') })
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+    expect(await screen.findByText('CUT TMS')).not.toHaveClass('text-danger')
   })
 })
 
@@ -933,6 +990,29 @@ describe('Settings — import error', () => {
     await waitFor(() => expect(toast()).toBe('Import complete'))
   })
 
+  // An import replaces every routine; a run in progress keyed by the old ids
+  // would otherwise resume against whatever the backup put at those ids.
+  it('drops a PT run in progress, as it does the workout session', async () => {
+    startPtRun(7)
+    showToast('') // the test before this one leaves "Import complete" standing
+    try {
+      renderSettings()
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const empty = JSON.stringify({
+        exportedAt: new Date().toISOString(), version: 1,
+        lifts: [], trainingMaxes: [], cycles: [], sessions: [], sets: [], exercises: [], settings: [],
+      })
+      Object.defineProperty(fileInput, 'files', { value: [new File([empty], 'export.json')], configurable: true })
+      fireEvent.change(fileInput)
+      fireEvent.click(await screen.findByText('IMPORT'))
+
+      await waitFor(() => expect(toast()).toBe('Import complete'))
+      expect(ptSessionRoutineIds()).toEqual([])
+    } finally {
+      clearAllPtRuns()
+    }
+  })
+
   it('cancelling import confirmation dialog closes dialog without running import', async () => {
     // Seed a lift so we can verify it's not cleared by an import
     await db.lifts.add({ name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
@@ -1000,16 +1080,16 @@ describe('Settings — SUPPLEMENTAL', () => {
   // One switch for all cross-lift work, rather than a pause on each block.
   it('turns cross-lift supplemental off and back on, and saves it', async () => {
     renderSettings()
-    const group = await screen.findByRole('group', { name: 'Cross-lift supplemental' })
-    const on = within(group).getByRole('button', { name: 'ON' })
-    const off = within(group).getByRole('button', { name: 'OFF' })
-    expect(on).toHaveAttribute('aria-pressed', 'true')
+    const chip = await screen.findByRole('button', { name: 'Cross-lift supplemental' })
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    expect(chip).toHaveTextContent('ON')
 
-    fireEvent.click(off)
+    fireEvent.click(chip)
     await waitFor(async () => expect((await db.settings.toArray())[0].crossLiftSupplemental).toBe(false))
-    expect(off).toHaveAttribute('aria-pressed', 'true')
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
+    expect(chip).toHaveTextContent('OFF')
 
-    fireEvent.click(on)
+    fireEvent.click(chip)
     await waitFor(async () => expect((await db.settings.toArray())[0].crossLiftSupplemental).toBe(true))
   })
 

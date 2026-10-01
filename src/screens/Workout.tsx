@@ -266,8 +266,8 @@ export default function Workout() {
     // Load cross-lift supplemental blocks for this day before composing — the
     // composition reads crossBlocks(). Today's preview reads the same plan.
     const plan = await loadCrossPlan(db, session.liftId, session.week, settings)
-    const loaded: LoadedCrossBlock[] = plan.map(({ block, movement, sets }) => ({
-      movementLiftId: block.movementLiftId,
+    const loaded: LoadedCrossBlock[] = plan.map(({ block, movement, movementLiftId, computed }) => ({
+      movementLiftId,
       movementName: movement.name,
       movementLoading: resolveLiftLoading(movement, settings.barWeight),
       movement,
@@ -275,18 +275,20 @@ export default function Workout() {
       percent: block.percent,
       sets: block.sets,
       reps: block.reps,
-      computed: sets,
+      computed,
     }))
     // Cross work that was logged and then lost its plan — the block was removed
-    // or cross-lift was switched off mid-session, or `deloadSupplemental` moved to `skip` during a week-4
-    // session. `composeCrossSets` restores those sets, but the page renders one
-    // section per *block*, so without a block to hang them on they would still
-    // be invisible while their rows keep counting toward History, PRs and Stats
-    // (F32). Given a block, the existing "extra sets logged beyond the plan"
-    // tail does the rest.
+    // or cross-lift was switched off mid-session, or `deloadSupplemental` moved
+    // to `skip` during a week-4 session. `composeCrossSets` restores those sets,
+    // but the page renders one section per *block*, so without a block to hang
+    // them on they would still be invisible while their rows keep counting
+    // toward History, PRs and Stats (F32). Given a block, the existing "extra
+    // sets logged beyond the plan" tail does the rest. The lifts table is read
+    // only when there is such work: loadCrossPlan has already read it once.
     const plannedIds = new Set(loaded.map(b => b.movementLiftId))
-    const allLifts = await db.lifts.toArray()
-    for (const s of workout.loggedCrossSets) {
+    const orphaned = workout.loggedCrossSets.filter(s => s.liftId != null && !plannedIds.has(s.liftId))
+    const allLifts = orphaned.length > 0 ? await db.lifts.toArray() : []
+    for (const s of orphaned) {
       if (s.liftId == null || plannedIds.has(s.liftId)) continue
       const mLift = allLifts.find(l => l.id === s.liftId)
       if (!mLift) continue

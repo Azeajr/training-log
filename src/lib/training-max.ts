@@ -46,11 +46,24 @@ const isNewer = (a: TrainingMax, b: TrainingMax): boolean => {
   return at !== bt ? at > bt : (a.id ?? 0) > (b.id ?? 0)
 }
 
+/**
+ * Each lift's newest training-max row, by the rule above. The row and not just
+ * its weight, for callers that read its provenance (the deload guard). A caller
+ * that sorted by `setAt` and took the last row would leave a tie to SQLite's
+ * unspecified order instead.
+ */
+export function latestTmByLift(tms: readonly TrainingMax[]): Map<number, TrainingMax> {
+  const best = new Map<number, TrainingMax>()
+  for (const tm of tms) {
+    const held = best.get(tm.liftId)
+    if (!held || isNewer(tm, held)) best.set(tm.liftId, tm)
+  }
+  return best
+}
+
 export async function getCurrentTm(db: TrainingDB, liftId: number): Promise<number> {
   const tms = await db.trainingMaxes.where('liftId').equals(liftId).toArray()
-  let best: TrainingMax | undefined
-  for (const tm of tms) if (!best || isNewer(tm, best)) best = tm
-  return best?.weight ?? 0
+  return latestTmByLift(tms).get(liftId)?.weight ?? 0
 }
 
 /**
@@ -91,15 +104,10 @@ export async function getLatestAccessoryTms(
 export async function getAllCurrentTms(
   db: TrainingDB
 ): Promise<Record<number, number>> {
-  const tms = await db.trainingMaxes.toArray()
-  const best = new Map<number, TrainingMax>()
-  for (const tm of tms) {
-    const held = best.get(tm.liftId)
-    // Same rule as getCurrentTm. This used to compare with a strict `>` on the
-    // timestamp alone over table order, so at an equal instant the FIRST row
-    // won here and the LAST row won there (F36).
-    if (!held || isNewer(tm, held)) best.set(tm.liftId, tm)
-  }
+  // Same rule as getCurrentTm. This used to compare with a strict `>` on the
+  // timestamp alone over table order, so at an equal instant the FIRST row
+  // won here and the LAST row won there (F36).
+  const best = latestTmByLift(await db.trainingMaxes.toArray())
   const result: Record<number, number> = {}
   for (const [liftId, tm] of best) result[liftId] = tm.weight
   return result

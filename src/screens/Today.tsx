@@ -320,8 +320,8 @@ export default function Today() {
     async ({ liftId, week, mode, on }) => {
       if (!liftId) return []
       const plan = await loadCrossPlan(db, liftId, week, { deloadSupplemental: mode, barWeight: settings.barWeight, crossLiftSupplemental: on })
-      return plan.map(({ block, movement, sets }): CrossPreview => ({
-        label: getCrossLabel(block, movement.name), weight: sets[0].weight, reps: sets[0].reps,
+      return plan.map(({ block, movement, computed }): CrossPreview => ({
+        label: getCrossLabel(block, movement.name), weight: computed[0].weight, reps: computed[0].reps,
       }))
     },
   )

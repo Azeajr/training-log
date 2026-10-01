@@ -10,6 +10,7 @@ import {
   computeClosedThroughWeek,
   deloadTms,
   planDeload,
+  applyDeload,
   getNextSessionAdvancingIfDone,
   getRecentWorkingSets,
   applyCycleDoubling,
@@ -1081,5 +1082,64 @@ describe('planDeload', () => {
 
     expect(plan.changes.map(c => c.liftId)).toEqual([lifts[0].id])
     expect(plan.alreadyCut).toEqual(lifts.slice(1).map(l => l.name))
+  })
+
+  // 5% of 45 is 2.25, and 42.75 rounds back to 45. Writing that row cut nothing
+  // and still spent the once-per-cycle guard, so the 10% the user tried next
+  // was refused as "already cut".
+  it('names a lift whose cut rounds back to the same TM instead of planning it', async () => {
+    const lifts = await setup()
+    await setTm(db, lifts[0].id!, 45)
+
+    const plan = await planDeload(db, 0.05)
+
+    expect(plan.tooLight).toEqual([lifts[0].name])
+    expect(plan.changes.map(c => c.liftId)).not.toContain(lifts[0].id)
+    expect(plan.changes).toHaveLength(lifts.length - 1)
+  })
+
+  it('writes nothing for that lift, so a bigger cut later in the cycle still applies', async () => {
+    const lifts = await setup()
+    await setTm(db, lifts[0].id!, 45)
+    const history = () => db.trainingMaxes.where('liftId').equals(lifts[0].id!).toArray()
+    const rows = (await history()).length
+
+    await deloadTms(db, 0.05)
+    expect(await history()).toHaveLength(rows)
+
+    await deloadTms(db, 0.10)
+    expect(await getCurrentTm(db, lifts[0].id!)).toBe(40) // 40.5 → 40
+  })
+})
+
+// The confirm shows a plan; the write has to be that plan, not a second one
+// worked out after the tap.
+describe('applyDeload', () => {
+  const setup = async () => {
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+    await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    return lifts
+  }
+
+  it('leaves a lift alone whose TM moved after the plan was made', async () => {
+    const lifts = await setup()
+    const plan = await planDeload(db, 0.10)
+    await setTm(db, lifts[0].id!, 250) // another tab, while the confirm was open
+
+    const written = await applyDeload(db, plan)
+
+    expect(written.map(c => c.liftId)).toEqual(lifts.slice(1).map(l => l.id))
+    expect(await getCurrentTm(db, lifts[0].id!)).toBe(250)
+    expect(await getCurrentTm(db, lifts[1].id!)).toBe(180)
+  })
+
+  it('cuts once when the same plan is written twice', async () => {
+    const lifts = await setup()
+    const plan = await planDeload(db, 0.10)
+
+    await applyDeload(db, plan)
+    expect(await applyDeload(db, plan)).toEqual([])
+    expect(await getCurrentTm(db, lifts[0].id!)).toBe(180)
   })
 })

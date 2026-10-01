@@ -118,3 +118,25 @@ describe('bulkAdd inside a caller transaction', () => {
     expect(await db.lifts.count()).toBe(1)
   })
 })
+
+describe('Query.count', () => {
+  const seed = async () => {
+    for (const [routineId, n] of [[1, 3], [2, 1]] as const) {
+      for (let i = 0; i < n; i++) await db.ptSessions.add({ routineId, date: new Date(), notes: null } as never)
+    }
+  }
+
+  it('counts the rows its WHERE matches', async () => {
+    await seed()
+    expect(await db.ptSessions.where('routineId').equals(1).count()).toBe(3)
+    expect(await db.ptSessions.where('routineId').anyOf([1, 2]).count()).toBe(4)
+    expect(await db.ptSessions.where('routineId').equals(9).count()).toBe(0)
+  })
+
+  it('counts what a JS filter keeps, not what the WHERE matched', async () => {
+    await seed()
+    const first = (await db.ptSessions.where('routineId').equals(1).toArray())[0]
+    const q = db.ptSessions.where('routineId').equals(1).filter(s => s.id !== first.id)
+    expect(await q.count()).toBe(2)
+  })
+})

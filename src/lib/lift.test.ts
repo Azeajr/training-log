@@ -211,11 +211,11 @@ describe('loadCrossPlan', () => {
     const plan = await loadCrossPlan(db, day, 1, opts)
     expect(plan.map(p => p.movement.name)).toEqual(['Row', 'OHP'])
     // Row: FSL = week-1 first main set, 65% of 200.
-    expect(plan[0].sets).toHaveLength(3)
-    expect(plan[0].sets[0]).toMatchObject({ weight: 130, reps: 5, type: 'cross' })
+    expect(plan[0].computed).toHaveLength(3)
+    expect(plan[0].computed[0]).toMatchObject({ weight: 130, reps: 5, type: 'cross' })
     // OHP: straight 50% of 100.
-    expect(plan[1].sets).toHaveLength(5)
-    expect(plan[1].sets[0]).toMatchObject({ weight: 50, reps: 10 })
+    expect(plan[1].computed).toHaveLength(5)
+    expect(plan[1].computed[0]).toMatchObject({ weight: 50, reps: 10 })
   })
 
   it('follows the deload-week supplemental setting', async () => {
@@ -223,9 +223,9 @@ describe('loadCrossPlan', () => {
     expect(await loadCrossPlan(db, day, 4, { ...opts, deloadSupplemental: 'skip' })).toEqual([])
     // normal → week-1 loading; deload → week-4 loading (40% of 200).
     const normal = await loadCrossPlan(db, day, 4, opts)
-    expect(normal.find(p => p.movement.name === 'Row')?.sets[0].weight).toBe(130)
+    expect(normal.find(p => p.movement.name === 'Row')?.computed[0].weight).toBe(130)
     const deload = await loadCrossPlan(db, day, 4, { ...opts, deloadSupplemental: 'deload' })
-    expect(deload.find(p => p.movement.name === 'Row')?.sets[0].weight).toBe(80)
+    expect(deload.find(p => p.movement.name === 'Row')?.computed[0].weight).toBe(80)
   })
 
   it('leaves out a block with no sets and one whose movement lift is gone', async () => {

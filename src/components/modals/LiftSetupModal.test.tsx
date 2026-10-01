@@ -133,8 +133,15 @@ describe('LiftSetupModal — a rejected commit (F50)', () => {
 // Blocks are still set up here with cross-lift switched off in Settings; say
 // so, or they look live and then never appear.
 describe('LiftSetupModal — cross-lift switched off', () => {
-  it('says the blocks will not run', async () => {
+  const seedBlock = async () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' } as never)
+    const squat = await db.lifts.add({ name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' } as never)
+    await db.liftSupplementals.add({ liftId, movementLiftId: squat, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1 })
+    return liftId
+  }
+
+  it('says the blocks will not run', async () => {
+    const liftId = await seedBlock()
     setSettings({ crossLiftSupplemental: false })
     try {
       render(() => <LiftSetupModal liftId={liftId} onCommit={() => {}} onCancel={() => {}} />)
@@ -144,10 +151,23 @@ describe('LiftSetupModal — cross-lift switched off', () => {
     }
   })
 
-  it('says nothing when it is on', async () => {
+  // Above "none" the note warned about blocks that do not exist.
+  it('says nothing when there are no blocks', async () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' } as never)
+    setSettings({ crossLiftSupplemental: false })
+    try {
+      render(() => <LiftSetupModal liftId={liftId} onCommit={() => {}} onCancel={() => {}} />)
+      await screen.findByText('none')
+      expect(screen.queryByText(/off in Settings/)).toBeNull()
+    } finally {
+      setSettings({ crossLiftSupplemental: true })
+    }
+  })
+
+  it('says nothing when it is on', async () => {
+    const liftId = await seedBlock()
     render(() => <LiftSetupModal liftId={liftId} onCommit={() => {}} onCancel={() => {}} />)
-    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
+    await waitFor(() => expect(screen.queryByText('none')).toBeNull())
     expect(screen.queryByText(/off in Settings/)).toBeNull()
   })
 })
