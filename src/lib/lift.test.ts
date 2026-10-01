@@ -238,17 +238,6 @@ describe('loadCrossPlan', () => {
     expect(plan.map(p => p.movement.name)).toEqual(['Row'])
   })
 
-  it('flags a paused block and computes none of its sets', async () => {
-    const { day, ohpBlock } = await seed()
-    await updateLiftSupplemental(db, ohpBlock, { paused: true })
-
-    const plan = await loadCrossPlan(db, day, 1, opts)
-    // Still listed, in its place — Today shows it so it is not forgotten.
-    expect(plan.map(p => [p.movement.name, p.paused])).toEqual([['OHP', true], ['Row', false]])
-    expect(plan[0].sets).toEqual([])
-    expect(plan[1].sets).toHaveLength(3)
-  })
-
   it('is empty for a day with no blocks', async () => {
     const { ohp } = await seed()
     expect(await loadCrossPlan(db, ohp, 1, opts)).toEqual([])

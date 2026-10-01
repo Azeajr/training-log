@@ -131,9 +131,7 @@ export async function removeLiftSupplemental(db: TrainingDB, id: number): Promis
 export interface CrossPlanBlock {
   block: LiftSupplemental
   movement: Lift
-  /** Empty when paused: the block stays on the plan but is not run. */
   sets: CrossSet[]
-  paused: boolean
 }
 
 // The cross-lift blocks a training day runs in a given week, in block order —
@@ -143,8 +141,7 @@ export interface CrossPlanBlock {
 // Cross work follows the same effective week as self-supplemental (deload may
 // remap or skip it), and each block is computed from its movement lift's
 // current TM. A block whose movement lift is gone, or that prescribes no sets,
-// is left out. A paused block comes back flagged and with no sets, rather than
-// left out: Today still lists it so it is not forgotten, Workout skips it.
+// is left out.
 export async function loadCrossPlan(
   db: TrainingDB,
   liftId: number,
@@ -161,14 +158,10 @@ export async function loadCrossPlan(
   for (const block of blocks) {
     const movement = lifts.find(l => l.id === block.movementLiftId)
     if (!movement) continue
-    if (block.paused) {
-      plan.push({ block, movement, sets: [], paused: true })
-      continue
-    }
     const tm = await getCurrentTm(db, block.movementLiftId)
     const sets = calcCrossSets(block, tm, eff, opts.barWeight)
     if (sets.length === 0) continue
-    plan.push({ block, movement, sets, paused: false })
+    plan.push({ block, movement, sets })
   }
   return plan
 }

@@ -148,21 +148,6 @@ describe('Workout screen — with active session', () => {
     await screen.findAllByText('SQUAT')
   })
 
-  it('does not run a paused cross-lift block', async () => {
-    await db.lifts.add({ id: 2, name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
-    await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
-    await db.liftSupplementals.add({
-      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1, paused: true,
-    })
-    startSession(BENCH)
-    renderWorkout()
-    // MAIN renders before loadData lands; the set rows come after crossBlocks
-    // is set, so they are what says the absence below is real.
-    await screen.findAllByText('LOG')
-    expect(screen.queryByText(/CROSS-LIFT SUPPLEMENTAL/)).not.toBeInTheDocument()
-    expect(screen.queryByText('SQUAT')).not.toBeInTheDocument()
-  })
-
   it('logs a cross-lift set before any own-lift set, without touching currentSetIndex', async () => {
     // Cross supplemental must be loggable independently of the linear cursor
     // (issue #54) — like assistance exercises, no waiting for warmup/main.
@@ -2489,18 +2474,6 @@ describe('Workout screen — cross work with no remaining block', () => {
 
     await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
     expect((await screen.findAllByText(/SQUAT/)).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('225').length).toBeGreaterThan(0)
-  })
-
-  it('still shows them when the block was paused mid-session', async () => {
-    await seedSquat()
-    await db.liftSupplementals.add({ liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1, paused: true })
-    startSession(BENCH)
-    loggedSquatCrossSets()
-    renderWorkout()
-
-    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
-    expect(screen.getByText(/no longer prescribed/)).toBeInTheDocument()
     expect(screen.getAllByText('225').length).toBeGreaterThan(0)
   })
 

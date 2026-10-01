@@ -29,7 +29,7 @@ class TrainingSQLiteDB {
   sessions = new SQLiteTable<Session>('sessions', { dateFields: ['date'] })
   sets = new SQLiteTable<Set>('sets', { boolFields: ['isAmrap'], jsonFields: ['bandLoad'] })
   exercises = new SQLiteTable<Exercise>('exercises', { boolFields: ['archived', 'usesBarbell'], jsonFields: ['bandProfile'] })
-  liftSupplementals = new SQLiteTable<LiftSupplemental>('liftSupplementals', { boolFields: ['paused'] })
+  liftSupplementals = new SQLiteTable<LiftSupplemental>('liftSupplementals')
   accessoryTrainingMaxes = new SQLiteTable<AccessoryTrainingMax>('accessoryTrainingMaxes', {
     dateFields: ['setAt'],
   })

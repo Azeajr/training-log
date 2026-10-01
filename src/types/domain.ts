@@ -103,9 +103,6 @@ export interface LiftSupplemental {
   sets: number
   reps: number
   order: number
-  // Switched off for now: kept with its prescription, but not run. Absent on
-  // blocks from before the column existed, which read as running.
-  paused?: boolean
 }
 
 /**

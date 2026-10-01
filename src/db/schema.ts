@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS liftSupplementals (
   sets INTEGER NOT NULL,
   reps INTEGER NOT NULL,
   "order" INTEGER NOT NULL,
-  paused INTEGER
+  paused INTEGER -- unused; see the migration of the same name
 );
 CREATE TABLE IF NOT EXISTS accessoryTrainingMaxes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -314,9 +314,9 @@ export const ADDITIVE_MIGRATIONS = [
   // a database from before it existed; `reconcileBandInventory` fills it from
   // the bands its movements already calibrate.
   `ALTER TABLE settings ADD COLUMN bands TEXT`,
-  // A cross-lift block switched off without losing its prescription. NULL on
-  // every block from before it existed, and NULL reads as running — which is
-  // what those blocks were doing.
+  // A per-block pause, shipped in #192 and withdrawn in favour of one global
+  // cross-lift switch in Settings. Nothing reads the column any more; it stays
+  // because this list is append-only and deployed databases already carry it.
   `ALTER TABLE liftSupplementals ADD COLUMN paused INTEGER`,
 ] as const
 
