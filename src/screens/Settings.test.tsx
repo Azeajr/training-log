@@ -7,6 +7,8 @@ import { db } from '../db/index'
 import { DEFAULT_PLATES, loadSettings } from '../store/settings-store'
 import { toast } from '../store/toast-store'
 import { commitPtRun, getPtRoutine, savePtRoutine } from '../lib/pt'
+import { deloadTms } from '../lib/cycle'
+import { getCurrentTm } from '../lib/training-max'
 
 function renderSettings() {
   const api = createConfirmation()
@@ -316,6 +318,47 @@ describe('Settings — deload', () => {
       expect(tms).toHaveLength(1)
       expect(tms[0].weight).toBe(200)
     })
+  })
+
+  it('cuts by the percentage on the stepper, and the confirm lists each lift before → after', async () => {
+    const liftId1 = await db.lifts.add({ name: 'OHP',   order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const liftId2 = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId: liftId1, weight: 200, setAt: new Date('2026-01-01') })
+    await db.trainingMaxes.add({ liftId: liftId2, weight: 300, setAt: new Date('2026-01-01') })
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Increase deload percent' }))
+    fireEvent.click(await screen.findByText('CUT ALL TMS −15%', { normalizer: s => s.replace(/\s+/g, ' ').trim() }))
+
+    await screen.findByText(/Cut training maxes by 15%\?/)
+    expect(screen.getByText(/OHP: 200 → 170 lb/)).toBeInTheDocument()
+    expect(screen.getByText(/Bench: 300 → 255 lb/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('CUT TMS'))
+
+    await waitFor(async () => {
+      expect(await getCurrentTm(db, liftId1)).toBe(170)
+      expect(await getCurrentTm(db, liftId2)).toBe(255)
+    })
+    await waitFor(() => expect(toast()).toBe('Cut 2 TMs −15%'))
+  })
+
+  // The once-per-cycle guard makes a second cut a no-op. Before the percentage
+  // was choosable that only ever caught a double tap; now it also catches
+  // "5% wasn't enough, try 10%", and the screen must not claim a cut it skipped.
+  it('says so, and asks nothing, when every lift was already cut this cycle', async () => {
+    const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') })
+    await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 0 })
+    await deloadTms(db, 0.05)
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+
+    await waitFor(() => expect(toast()).toBe('Already cut this cycle — edit a TM to change it'))
+    expect(screen.queryByText('CUT TMS')).not.toBeInTheDocument()
+    expect(await getCurrentTm(db, liftId)).toBe(190)
   })
 })
 

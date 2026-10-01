@@ -9,6 +9,7 @@ import {
   applyAccessoryTmProgression,
   computeClosedThroughWeek,
   deloadTms,
+  planDeload,
   getNextSessionAdvancingIfDone,
   getRecentWorkingSets,
   applyCycleDoubling,
@@ -1043,5 +1044,42 @@ describe('deloadTms is idempotent within a cycle (F100)', () => {
 
     // 190 × 0.9 = 171 → 170. The user's number is what gets cut, as it should be.
     expect(await getCurrentTm(db, lifts[0].id!)).toBe(170)
+  })
+})
+
+// The confirm in Settings shows this plan before the write, so it has to be the
+// write's own arithmetic and the write's own guard — not a copy of either.
+describe('planDeload', () => {
+  const setup = async () => {
+    const lifts = await seedLifts()
+    await seedTms(lifts, 200)
+    await db.cycles.add({ number: 1, startDate: new Date(), endDate: null })
+    return lifts
+  }
+
+  it('reports exactly what deloadTms then writes', async () => {
+    await setup()
+    const plan = await planDeload(db, 0.15)
+    const written = await deloadTms(db, 0.15)
+    expect(plan.changes).toEqual(written)
+    expect(plan.changes[0]).toMatchObject({ oldWeight: 200, weight: 170 })
+  })
+
+  it('writes nothing', async () => {
+    await setup()
+    const before = await db.trainingMaxes.count()
+    await planDeload(db, 0.10)
+    expect(await db.trainingMaxes.count()).toBe(before)
+  })
+
+  it('names the lifts already cut this cycle instead of planning a cut for them', async () => {
+    const lifts = await setup()
+    await deloadTms(db, 0.05)
+    await setTm(db, lifts[0].id!, 190) // re-opened by hand
+
+    const plan = await planDeload(db, 0.10)
+
+    expect(plan.changes.map(c => c.liftId)).toEqual([lifts[0].id])
+    expect(plan.alreadyCut).toEqual(lifts.slice(1).map(l => l.name))
   })
 })
