@@ -11,6 +11,10 @@ export interface ConfirmOptions {
   cancelLabel?: string
   // When set, a third (danger-styled) button is shown that resolves 'secondary'.
   secondaryLabel?: string
+  // Danger-styles CONFIRM. For a choice that throws something away: a delete,
+  // a discard, skipping or ending what's in progress. Not for one the user can
+  // reverse in place — archive has unarchive — or red stops meaning anything.
+  // When nothing can bring the data back, the message says "cannot be undone".
   destructive?: boolean
 }
 

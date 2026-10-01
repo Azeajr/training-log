@@ -211,7 +211,7 @@ export default function Settings() {
       if (choice === 'cancel') return
       await archiveLift(db, id, { removeCrossRefs: choice === 'secondary' })
     } else {
-      if (!await confirm('Archive this lift? History is kept; it leaves the active roster next.', { destructive: true, confirmLabel: 'ARCHIVE' })) return
+      if (!await confirm('Archive this lift? History is kept; it leaves the active roster next.', { confirmLabel: 'ARCHIVE' })) return
       await archiveLift(db, id)
     }
     await load()
@@ -268,7 +268,7 @@ export default function Settings() {
   }
 
   const handleArchiveExercise = async (id: number) => {
-    if (!await confirm('Archive this exercise?', { destructive: true, confirmLabel: 'ARCHIVE' })) return
+    if (!await confirm('Archive this exercise?', { confirmLabel: 'ARCHIVE' })) return
     await archiveExercise(db, id)
     await load()
   }
@@ -395,7 +395,7 @@ export default function Settings() {
     const week = currentCycleWeek()
     const cycleId = currentCycleId()
     if (!week || !cycleId) return
-    if (!await confirm('End the cycle now? Remaining sessions will be marked skipped and TMs will progress.', { destructive: true, confirmLabel: 'END CYCLE' })) return
+    if (!await confirm('End the cycle now? Remaining sessions will be marked skipped and TMs will progress. This cannot be undone.', { destructive: true, confirmLabel: 'END CYCLE' })) return
 
     const allLifts = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived)
     await db.transaction(async () => {

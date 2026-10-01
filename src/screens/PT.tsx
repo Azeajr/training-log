@@ -142,7 +142,7 @@ export default function PT() {
 
   const handleDeleteSession = async (summary: PtSessionSummary) => {
     if (!await confirm(
-      `Delete the ${runWhen(summary.session.date)} ${summary.routineName} run?`,
+      `Delete the ${runWhen(summary.session.date)} ${summary.routineName} run? This cannot be undone.`,
       { destructive: true, confirmLabel: 'DELETE' },
     )) return
     try {

@@ -60,7 +60,7 @@ export default function BandInventory(props: {
 
   const remove = async (name: string) => {
     if (!await confirm(
-      `Remove ${name}? Its measured load goes from every movement's band settings. Sets already logged keep it. To put a band aside and keep its measurements, set its count to 0.`,
+      `Remove ${name}? Its measured load goes from every movement's band settings, and cannot be restored. Sets already logged keep it. To put a band aside and keep its measurements, set its count to 0.`,
       { destructive: true, confirmLabel: 'REMOVE' },
     )) return
     try {
