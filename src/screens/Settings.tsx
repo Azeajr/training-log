@@ -1079,9 +1079,24 @@ export default function Settings() {
                 EXPORT PT CSV
               </button>
             </Show>
+          </div>
+
+          <div class="text-faint text-xs leading-relaxed mb-8">
+            JSON backup holds all history, PT included. CSV exports completed sessions for
+            spreadsheets; PT runs get their own file, since a rehab check has no lift or week.
+          </div>
+
+          {/* Only what has no way back: each of these deletes rows outright.
+              Import lives here rather than beside EXPORT — restoring a backup
+              wipes every table first, which makes it the most destructive
+              button in the app, and next to the exports it read as one more
+              harmless file operation. Anything the user can put back by hand
+              (a deload, an archive) belongs beside what it changes. */}
+          <SectionLabel tone="text-danger" class="mb-2">IRREVERSIBLE</SectionLabel>
+          <div class="border border-danger/40 p-3">
             <button
               onClick={() => fileInputRef.click()}
-              class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
+              class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
             >
               IMPORT JSON
             </button>
@@ -1092,22 +1107,12 @@ export default function Settings() {
               class="hidden"
               onChange={handleFileSelected}
             />
-          </div>
-
-          <Show when={importError()}>
-            <div class="text-danger text-xs mb-3">{importError()}</div>
-          </Show>
-
-          <div class="text-faint text-xs leading-relaxed mb-8">
-            JSON backup restores all history, PT included. CSV exports completed sessions for
-            spreadsheets; PT runs get their own file, since a rehab check has no lift or week.
-          </div>
-
-          {/* Everything below rewrites data and cannot be undone. Gathered here
-              rather than sitting inline between a training max and a theme
-              swatch, where a thumb-scroll could reach it. */}
-          <SectionLabel tone="text-danger" class="mb-2">IRREVERSIBLE</SectionLabel>
-          <div class="border border-danger/40 p-3">
+            <Show when={importError()}>
+              <div class="text-danger text-xs mt-1">{importError()}</div>
+            </Show>
+            <p class="text-faint text-xs mt-1 mb-4">
+              Replaces everything with the backup file. Export first.
+            </p>
             <button
               onClick={() => void handleCleanupAccessoryData()}
               class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
