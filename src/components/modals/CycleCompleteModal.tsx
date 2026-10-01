@@ -1,5 +1,6 @@
-import { Show, For } from 'solid-js'
+import { Show, For, createSignal } from 'solid-js'
 import Modal from './Modal'
+import Stepper from '../forms/Stepper'
 import { useSingleFlight } from '../../hooks/use-single-flight'
 
 // Defined in lib/cycle.ts alongside the logic that builds and updates it;
@@ -10,7 +11,8 @@ import type { CycleCompleteData } from '../../lib/cycle'
 interface Props {
   data: CycleCompleteData | null
   onDismiss: () => void | Promise<void>
-  onDeload: () => void | Promise<void>
+  /** `pct` is a fraction: 0.10 cuts 10%. */
+  onDeload: (pct: number) => void | Promise<void>
   onDoubleIncrement: (liftId: number, progressionIncrement: number) => void | Promise<void>
 }
 
@@ -19,12 +21,14 @@ export default function CycleCompleteModal(props: Props) {
   // while one is in flight every button is disabled and Modal's own close paths
   // (Escape, "← BACK") are suppressed.
   const { busy, guard } = useSingleFlight()
+  // How hard to cut is decided per deload, as in Settings, not fixed at 10%.
+  const [deloadPct, setDeloadPct] = createSignal(10)
 
   return (
     <Show when={props.data}>
       {data => (
         // Escape dismisses rather than deloads: dismiss is the non-destructive
-        // arm, and "CUT ALL TMS −10%" is not something a stray keypress does.
+        // arm, and "CUT ALL TMS −X%" is not something a stray keypress does.
         <Modal
           title="CYCLE COMPLETE"
           onClose={() => { void guard(props.onDismiss)() }}
@@ -79,12 +83,16 @@ export default function CycleCompleteModal(props: Props) {
             >
               CONTINUE
             </button>
+            <div class="flex items-center gap-2 mb-2">
+              <Stepper value={deloadPct()} onChange={setDeloadPct} step={5} min={5} max={30} fieldLabel="deload percent" disabled={busy()} />
+              <span class="text-muted text-xs">%</span>
+            </div>
             <button
-              onClick={() => { void guard(props.onDeload)() }}
+              onClick={() => { void guard(() => props.onDeload(deloadPct() / 100))() }}
               disabled={busy()}
               class="w-full border border-border text-muted py-3 text-xs tracking-widest font-mono hover:border-danger hover:text-danger disabled:opacity-40"
             >
-              CUT ALL TMS INSTEAD  −10%
+              CUT ALL TMS INSTEAD  −{deloadPct()}%
             </button>
           </div>
         </Modal>

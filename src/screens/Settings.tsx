@@ -1155,7 +1155,7 @@ export default function Settings() {
       <CycleCompleteModal
         data={cycleCompleteData()}
         onDismiss={async () => { setCycleCompleteData(null); await load() }}
-        onDeload={async () => { await deloadTms(db); setCycleCompleteData(null); await load() }}
+        onDeload={async (pct) => { await deloadTms(db, pct); setCycleCompleteData(null); await load() }}
         onDoubleIncrement={async (liftId, progressionIncrement) => {
           setCycleCompleteData(await applyCycleDoubling(db, cycleCompleteData(), liftId, progressionIncrement))
         }}
