@@ -4,7 +4,7 @@ import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode,
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { clearSession } from '../store/workout-store'
 import { exportJson, importJson, exportCsv, exportPtCsv } from '../lib/export-import'
-import { deloadTms, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
+import { deloadTms, planDeload, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { applyPtCleanup, planPtCleanup, ptCleanupCount } from '../lib/pt'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
@@ -92,6 +92,8 @@ export default function Settings() {
   const [currentCycleWeek, setCurrentCycleWeek] = createSignal<1 | 2 | 3 | 4 | null>(null)
   const [currentCycleId, setCurrentCycleId] = createSignal<number | null>(null)
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
+  // A one-off choice, not a setting: how hard to cut is decided per deload.
+  const [deloadPct, setDeloadPct] = createSignal(10)
 
   const [importError, setImportError] = createSignal<string | null>(null)
 
@@ -209,7 +211,7 @@ export default function Settings() {
       if (choice === 'cancel') return
       await archiveLift(db, id, { removeCrossRefs: choice === 'secondary' })
     } else {
-      if (!await confirm('Archive this lift? History is kept; it leaves the active roster next.', { destructive: true, confirmLabel: 'ARCHIVE' })) return
+      if (!await confirm('Archive this lift? History is kept; it leaves the active roster next.', { confirmLabel: 'ARCHIVE' })) return
       await archiveLift(db, id)
     }
     await load()
@@ -266,7 +268,7 @@ export default function Settings() {
   }
 
   const handleArchiveExercise = async (id: number) => {
-    if (!await confirm('Archive this exercise?', { destructive: true, confirmLabel: 'ARCHIVE' })) return
+    if (!await confirm('Archive this exercise?', { confirmLabel: 'ARCHIVE' })) return
     await archiveExercise(db, id)
     await load()
   }
@@ -393,7 +395,7 @@ export default function Settings() {
     const week = currentCycleWeek()
     const cycleId = currentCycleId()
     if (!week || !cycleId) return
-    if (!await confirm('End the cycle now? Remaining sessions will be marked skipped and TMs will progress.', { destructive: true, confirmLabel: 'END CYCLE' })) return
+    if (!await confirm('End the cycle now? Remaining sessions will be marked skipped and TMs will progress. This cannot be undone.', { destructive: true, confirmLabel: 'END CYCLE' })) return
 
     const allLifts = (await db.lifts.orderBy('order').toArray()).filter(l => !l.archived)
     await db.transaction(async () => {
@@ -459,11 +461,25 @@ export default function Settings() {
     }
   }
 
+  // The confirm lists the cut per lift from the same plan the write uses, and
+  // names the lifts the once-per-cycle guard will leave alone. With a choosable
+  // percentage that guard is no longer invisible: cutting 5% and then trying 10%
+  // does nothing the second time, and saying "cut −10%" over that would be false.
   const handleDeload = async () => {
-    if (!await confirm('Drop all TMs by 10%?', { destructive: true, confirmLabel: 'CUT TMS' })) return
-    await deloadTms(db)
+    const pct = deloadPct()
+    const { changes, alreadyCut } = await planDeload(db, pct / 100)
+    if (changes.length === 0) {
+      showToast(alreadyCut.length > 0
+        ? 'Already cut this cycle — edit a TM to change it'
+        : 'No training maxes to cut')
+      return
+    }
+    const lines = changes.map(c => `${c.liftName}: ${c.oldWeight} → ${c.weight} lb`)
+    if (alreadyCut.length > 0) lines.push(`Already cut this cycle: ${alreadyCut.join(', ')}`)
+    if (!await confirm(`Cut training maxes by ${pct}%?\n\n${lines.join('\n')}`, { destructive: true, confirmLabel: 'CUT TMS' })) return
+    const cut = await deloadTms(db, pct / 100)
     await load()
-    showToast('All TMs cut −10%')
+    showToast(`Cut ${cut.length} TM${cut.length === 1 ? '' : 's'} −${pct}%`)
   }
 
   const handleFileSelected = (e: Event & { currentTarget: HTMLInputElement }) => {
@@ -662,6 +678,26 @@ export default function Settings() {
               </Show>
             </div>
           )}</For>
+          <Show when={activeLifts().some(l => tms()[l.id!] != null)}>
+            <div class="mt-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-2">
+                  <Stepper value={deloadPct()} onChange={setDeloadPct} step={5} min={5} max={30} fieldLabel="deload percent" />
+                  <span class="text-muted text-xs">%</span>
+                </div>
+                <button
+                  onClick={() => void handleDeload()}
+                  class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
+                >
+                  CUT ALL TMS  −{deloadPct()}%
+                </button>
+              </div>
+              <p class="text-faint text-xs mt-1">
+                Drops every lift's training max by {deloadPct()}%, effective from your next
+                session. Once per cycle; edit a TM above to undo it.
+              </p>
+            </div>
+          </Show>
         </div>
 
         <div class="mb-6">
@@ -1043,9 +1079,24 @@ export default function Settings() {
                 EXPORT PT CSV
               </button>
             </Show>
+          </div>
+
+          <div class="text-faint text-xs leading-relaxed mb-8">
+            JSON backup holds all history, PT included. CSV exports completed sessions for
+            spreadsheets; PT runs get their own file, since a rehab check has no lift or week.
+          </div>
+
+          {/* Only what has no way back: each of these deletes rows outright.
+              Import lives here rather than beside EXPORT — restoring a backup
+              wipes every table first, which makes it the most destructive
+              button in the app, and next to the exports it read as one more
+              harmless file operation. Anything the user can put back by hand
+              (a deload, an archive) belongs beside what it changes. */}
+          <SectionLabel tone="text-danger" class="mb-2">IRREVERSIBLE</SectionLabel>
+          <div class="border border-danger/40 p-3">
             <button
               onClick={() => fileInputRef.click()}
-              class="border border-border px-4 py-2 text-muted text-xs uppercase tracking-widest hover:border-warn hover:text-warn"
+              class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
             >
               IMPORT JSON
             </button>
@@ -1056,40 +1107,21 @@ export default function Settings() {
               class="hidden"
               onChange={handleFileSelected}
             />
-          </div>
-
-          <Show when={importError()}>
-            <div class="text-danger text-xs mb-3">{importError()}</div>
-          </Show>
-
-          <div class="text-faint text-xs leading-relaxed mb-8">
-            JSON backup restores all history, PT included. CSV exports completed sessions for
-            spreadsheets; PT runs get their own file, since a rehab check has no lift or week.
-          </div>
-
-          {/* Everything below rewrites data and cannot be undone. Gathered here
-              rather than sitting inline between a training max and a theme
-              swatch, where a thumb-scroll could reach it. */}
-          <SectionLabel tone="text-danger" class="mb-2">IRREVERSIBLE</SectionLabel>
-          <div class="border border-danger/40 p-3">
+            <Show when={importError()}>
+              <div class="text-danger text-xs mt-1">{importError()}</div>
+            </Show>
+            <p class="text-faint text-xs mt-1 mb-4">
+              Replaces everything with the backup file. Export first.
+            </p>
             <button
               onClick={() => void handleCleanupAccessoryData()}
               class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
             >
               CLEANUP ORPHANS
             </button>
-            <p class="text-faint text-xs mt-1 mb-4">
+            <p class="text-faint text-xs mt-1">
               Deletes accessory and PT rows whose session, routine or exercise is gone, and
               archives exercises nothing uses.
-            </p>
-            <button
-              onClick={() => void handleDeload()}
-              class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
-            >
-              CUT ALL TMS  −10%
-            </button>
-            <p class="text-faint text-xs mt-1">
-              Drops every lift's training max by 10%, effective from your next session.
             </p>
           </div>
         </div>

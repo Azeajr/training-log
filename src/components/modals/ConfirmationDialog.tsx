@@ -20,7 +20,8 @@ export default function ConfirmationDialog() {
           initialFocus="container"
           class="bg-surface border border-border p-6 font-mono max-w-sm w-full"
         >
-          <div class="text-text-dim text-sm mb-6">{req().message}</div>
+          {/* pre-line: a message may carry a list (one lift per line). */}
+          <div class="text-text-dim text-sm mb-6 whitespace-pre-line">{req().message}</div>
           <div class="flex flex-col gap-3">
             <div class="flex gap-3">
               <button

@@ -121,6 +121,27 @@ export interface TmChange {
   weight: number
 }
 
+// What `progressTms` would write, without writing it. Split out so a confirm can
+// show the exact before → after the write will produce, rather than a second
+// copy of the arithmetic that could drift from it.
+async function planTmChanges(
+  db: TrainingDB,
+  nextWeight: (current: TrainingMax, lift: Lift) => number,
+  skip?: (tms: TrainingMax[]) => boolean,
+): Promise<{ changes: TmChange[]; skipped: Lift[] }> {
+  const lifts = await activeLiftsOrdered(db)
+  const changes: TmChange[] = []
+  const skipped: Lift[] = []
+  for (const lift of lifts) {
+    const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
+    const current = tms[tms.length - 1]
+    if (!current) continue
+    if (skip?.(tms)) { skipped.push(lift); continue }
+    changes.push({ liftId: lift.id!, liftName: lift.name, oldWeight: current.weight, weight: nextWeight(current, lift) })
+  }
+  return { changes, skipped }
+}
+
 async function progressTms(
   db: TrainingDB,
   nextWeight: (current: TrainingMax, lift: Lift) => number,
@@ -128,17 +149,10 @@ async function progressTms(
   cycleId: number | null,
   skip?: (tms: TrainingMax[]) => boolean,
 ): Promise<TmChange[]> {
-  const lifts = await activeLiftsOrdered(db)
-  const changes: TmChange[] = []
-  for (const lift of lifts) {
-    const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
-    const current = tms[tms.length - 1]
-    if (!current) continue
-    if (skip?.(tms)) continue
-    const weight = nextWeight(current, lift)
-    await db.trainingMaxes.add({ liftId: lift.id!, weight, setAt: new Date(), source, cycleId })
+  const { changes } = await planTmChanges(db, nextWeight, skip)
+  for (const { liftId, weight } of changes) {
+    await db.trainingMaxes.add({ liftId, weight, setAt: new Date(), source, cycleId })
     noteTrainingMaxAdded()
-    changes.push({ liftId: lift.id!, liftName: lift.name, oldWeight: current.weight, weight })
   }
   return changes
 }
@@ -254,16 +268,30 @@ export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: numbe
  */
 export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<TmChange[]> {
   const cycleId = await currentCycleId(db)
-  return progressTms(
-    db,
-    current => roundToNearest5(current.weight * (1 - pct)),
-    'deload',
-    cycleId,
-    tms => {
-      const newest = tms[tms.length - 1]
-      return cycleId != null && newest?.source === 'deload' && newest.cycleId === cycleId
-    },
-  )
+  return progressTms(db, deloadWeight(pct), 'deload', cycleId, deloadedIn(cycleId))
+}
+
+/**
+ * What `deloadTms(db, pct)` would do right now: the cut for each lift it would
+ * touch, and the lifts it would skip because they were already cut this cycle.
+ * The guard means a second cut at a different percentage is a no-op, so a
+ * caller that let the user pick one has to say so rather than report a cut that
+ * never happened.
+ */
+export async function planDeload(
+  db: TrainingDB,
+  pct = 0.10,
+): Promise<{ changes: TmChange[]; alreadyCut: string[] }> {
+  const { changes, skipped } = await planTmChanges(db, deloadWeight(pct), deloadedIn(await currentCycleId(db)))
+  return { changes, alreadyCut: skipped.map(l => l.name) }
+}
+
+const deloadWeight = (pct: number) => (current: TrainingMax) =>
+  roundToNearest5(current.weight * (1 - pct))
+
+const deloadedIn = (cycleId: number | null) => (tms: TrainingMax[]) => {
+  const newest = tms[tms.length - 1]
+  return cycleId != null && newest?.source === 'deload' && newest.cycleId === cycleId
 }
 
 // The end-of-cycle summary: what every TM moved to, plus which lifts earned the
