@@ -724,17 +724,18 @@ export default function Settings() {
           </div>
 
           {/* One switch for every cross-lift block on every day. Off leaves each
-              block's setup alone, so turning it back on restores them as they were. */}
-          <SectionLabel class="mt-3 mb-1">Cross-lift</SectionLabel>
-          <div class="flex gap-1" role="group" aria-label="Cross-lift supplemental">
-            <For each={([[true, 'ON'], [false, 'OFF']] as const)}>{([on, label]) => (
-              <ToggleChip
-                active={settings.crossLiftSupplemental === on}
-                onClick={() => void updateSettings({ crossLiftSupplemental: on })}
-              >
-                {label}
-              </ToggleChip>
-            )}</For>
+              block's setup alone, so turning it back on restores them as they were.
+              The one-chip ON/OFF row TRACE and REST NOTIFICATIONS use for a
+              boolean; a chip pair is for choosing one of several. */}
+          <div class="flex items-center justify-between py-1 mt-3">
+            <span class="text-muted text-xs uppercase tracking-widest">CROSS-LIFT</span>
+            <ToggleChip
+              active={settings.crossLiftSupplemental}
+              onClick={() => void updateSettings({ crossLiftSupplemental: !settings.crossLiftSupplemental })}
+              ariaLabel="Cross-lift supplemental"
+            >
+              {settings.crossLiftSupplemental ? 'ON' : 'OFF'}
+            </ToggleChip>
           </div>
           <p class="text-faint text-xs mt-1">
             Off: no cross-lift blocks on Today or in workouts. Each lift's blocks stay set up.

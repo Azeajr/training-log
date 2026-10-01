@@ -1080,16 +1080,16 @@ describe('Settings — SUPPLEMENTAL', () => {
   // One switch for all cross-lift work, rather than a pause on each block.
   it('turns cross-lift supplemental off and back on, and saves it', async () => {
     renderSettings()
-    const group = await screen.findByRole('group', { name: 'Cross-lift supplemental' })
-    const on = within(group).getByRole('button', { name: 'ON' })
-    const off = within(group).getByRole('button', { name: 'OFF' })
-    expect(on).toHaveAttribute('aria-pressed', 'true')
+    const chip = await screen.findByRole('button', { name: 'Cross-lift supplemental' })
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    expect(chip).toHaveTextContent('ON')
 
-    fireEvent.click(off)
+    fireEvent.click(chip)
     await waitFor(async () => expect((await db.settings.toArray())[0].crossLiftSupplemental).toBe(false))
-    expect(off).toHaveAttribute('aria-pressed', 'true')
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
+    expect(chip).toHaveTextContent('OFF')
 
-    fireEvent.click(on)
+    fireEvent.click(chip)
     await waitFor(async () => expect((await db.settings.toArray())[0].crossLiftSupplemental).toBe(true))
   })
 
