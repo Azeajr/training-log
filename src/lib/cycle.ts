@@ -128,8 +128,9 @@ async function planTmChanges(
   db: TrainingDB,
   nextWeight: (current: TrainingMax, lift: Lift) => number,
   skip?: (current: TrainingMax) => boolean,
+  liftIds?: readonly number[],
 ): Promise<{ changes: TmChange[]; skipped: Lift[] }> {
-  const lifts = await activeLiftsOrdered(db)
+  const lifts = (await activeLiftsOrdered(db)).filter(l => !liftIds || liftIds.includes(l.id!))
   const changes: TmChange[] = []
   const skipped: Lift[] = []
   // One read for every lift, and the current row picked by getCurrentTm's own
@@ -297,10 +298,13 @@ export interface DeloadPlan {
  * touch, and the lifts it leaves alone and why. The guard means a second cut at
  * a different percentage is a no-op, so a caller that let the user pick one has
  * to say so rather than report a cut that never happened.
+ *
+ * `liftIds` narrows the cut to those lifts — one stalled lift is reset without
+ * dragging the rest down with it. The guard is per lift either way.
  */
-export async function planDeload(db: TrainingDB, pct = 0.10): Promise<DeloadPlan> {
+export async function planDeload(db: TrainingDB, pct = 0.10, liftIds?: readonly number[]): Promise<DeloadPlan> {
   const cycleId = await currentCycleId(db)
-  const { changes, skipped } = await planTmChanges(db, deloadWeight(pct), deloadedIn(cycleId))
+  const { changes, skipped } = await planTmChanges(db, deloadWeight(pct), deloadedIn(cycleId), liftIds)
   return {
     cycleId,
     changes: changes.filter(c => c.weight !== c.oldWeight),
