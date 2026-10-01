@@ -268,6 +268,16 @@ describe('Today screen', () => {
     await screen.findByText(/DEADLIFT\s+5 × 10\s+FSL/)
   })
 
+  it('lists a paused cross block as paused, with no weight to lift', async () => {
+    await db.trainingMaxes.add({ liftId: 2, weight: 135, setAt: new Date() })
+    await db.liftSupplementals.add({
+      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 10, order: 1, paused: true,
+    })
+    renderToday()
+    const label = await screen.findByText(/DEADLIFT\s+5 × 10\s+FSL/)
+    expect(label.parentElement?.textContent).toContain('paused')
+  })
+
   // Selection is its own channel (▸ + aria-pressed) so status keeps the colour
   // and a completed lift still reads as done while selected.
   it('marks the selected lift without spending the status colour on it', async () => {

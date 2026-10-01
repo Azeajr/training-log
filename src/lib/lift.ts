@@ -1,6 +1,8 @@
 import type { TrainingDB } from '../db/index'
 import { discardPendingSessionRows } from './session'
-import type { Lift, LiftSupplemental } from '../types/domain'
+import { getCurrentTm } from './training-max'
+import { calcCrossSets, effectiveSupplementalWeek, type CrossSet } from './calc'
+import type { DeloadSupplemental, Lift, LiftSupplemental } from '../types/domain'
 
 export async function createLift(
   db: TrainingDB,
@@ -123,4 +125,50 @@ export async function updateLiftSupplemental(
 
 export async function removeLiftSupplemental(db: TrainingDB, id: number): Promise<void> {
   await db.liftSupplementals.delete(id)
+}
+
+/** A cross-lift block as its training day runs it in a given week. */
+export interface CrossPlanBlock {
+  block: LiftSupplemental
+  movement: Lift
+  /** Empty when paused: the block stays on the plan but is not run. */
+  sets: CrossSet[]
+  paused: boolean
+}
+
+// The cross-lift blocks a training day runs in a given week, in block order —
+// the one derivation behind both Today's preview and the Workout screen. Each
+// kept its own copy of this loop, and the copies had drifted: a block with no
+// sets was dropped from the preview but rendered on Workout as an empty section.
+// Cross work follows the same effective week as self-supplemental (deload may
+// remap or skip it), and each block is computed from its movement lift's
+// current TM. A block whose movement lift is gone, or that prescribes no sets,
+// is left out. A paused block comes back flagged and with no sets, rather than
+// left out: Today still lists it so it is not forgotten, Workout skips it.
+export async function loadCrossPlan(
+  db: TrainingDB,
+  liftId: number,
+  week: 1 | 2 | 3 | 4,
+  opts: { deloadSupplemental: DeloadSupplemental; barWeight: number },
+): Promise<CrossPlanBlock[]> {
+  const eff = effectiveSupplementalWeek(week, opts.deloadSupplemental)
+  if (eff === null) return []
+  const blocks = (await db.liftSupplementals.where('liftId').equals(liftId).toArray())
+    .sort((a, b) => a.order - b.order)
+  if (blocks.length === 0) return []
+  const lifts = await db.lifts.toArray()
+  const plan: CrossPlanBlock[] = []
+  for (const block of blocks) {
+    const movement = lifts.find(l => l.id === block.movementLiftId)
+    if (!movement) continue
+    if (block.paused) {
+      plan.push({ block, movement, sets: [], paused: true })
+      continue
+    }
+    const tm = await getCurrentTm(db, block.movementLiftId)
+    const sets = calcCrossSets(block, tm, eff, opts.barWeight)
+    if (sets.length === 0) continue
+    plan.push({ block, movement, sets, paused: false })
+  }
+  return plan
 }

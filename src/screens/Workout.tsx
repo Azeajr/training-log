@@ -10,7 +10,7 @@ import {
   getSupplementalLabel, calcJokerSet, calcJokerIncrement, calcNextJokerWeight,
   shouldShowJokerButton, JOKER_MIN_REPS, isSupplementalType, jokerChainBaseWeight,
   applyMainCascadeToSupplemental, supplementalSourceSetNumber,
-  calcCrossSets, getCrossLabel, effectiveSupplementalWeek, restTypeAfterSet,
+  getCrossLabel, effectiveSupplementalWeek, restTypeAfterSet,
 } from '../lib/calc'
 import { ACCESSORY_SETS } from '../lib/calc'
 import { composeAllSets, amrapTargetsFor } from '../lib/workout-compose'
@@ -21,6 +21,7 @@ import { discardPendingSession, finalizePendingSession, reconcileActiveSession }
 import { createSerialQueue } from '../lib/serial-queue'
 import { detectPRs } from '../lib/pr'
 import { getCurrentTm, setTm } from '../lib/training-max'
+import { loadCrossPlan } from '../lib/lift'
 import { settings } from '../store/settings-store'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
@@ -263,39 +264,29 @@ export default function Workout() {
     setSupplementalTemplate(template)
 
     // Load cross-lift supplemental blocks for this day before composing — the
-    // composition reads crossBlocks(). Cross work follows the same effective
-    // week as self-supplemental (deload may remap or skip it).
-    const crossWeek = effectiveSupplementalWeek(session.week, settings.deloadSupplemental)
-    const allLifts = await db.lifts.toArray()
-    const loaded: LoadedCrossBlock[] = []
-    if (crossWeek !== null) {
-      const blocks = (await db.liftSupplementals.where('liftId').equals(session.liftId).toArray())
-        .sort((a, b) => a.order - b.order)
-      for (const b of blocks) {
-        const mLift = allLifts.find(l => l.id === b.movementLiftId)
-        if (!mLift) continue
-        const mTm = await getCurrentTm(db, b.movementLiftId)
-        loaded.push({
-          movementLiftId: b.movementLiftId,
-          movementName: mLift.name,
-          movementLoading: resolveLiftLoading(mLift, settings.barWeight),
-        movement: mLift,
-          weightMode: b.weightMode,
-          percent: b.percent,
-          sets: b.sets,
-          reps: b.reps,
-          computed: calcCrossSets(b, mTm, crossWeek, settings.barWeight),
-        })
-      }
-    }
+    // composition reads crossBlocks(). Today's preview reads the same plan, and
+    // lists paused blocks; a workout does not run them.
+    const plan = await loadCrossPlan(db, session.liftId, session.week, settings)
+    const loaded: LoadedCrossBlock[] = plan.filter(p => !p.paused).map(({ block, movement, sets }) => ({
+      movementLiftId: block.movementLiftId,
+      movementName: movement.name,
+      movementLoading: resolveLiftLoading(movement, settings.barWeight),
+      movement,
+      weightMode: block.weightMode,
+      percent: block.percent,
+      sets: block.sets,
+      reps: block.reps,
+      computed: sets,
+    }))
     // Cross work that was logged and then lost its plan — the block was removed
-    // mid-session, or `deloadSupplemental` moved to `skip` during a week-4
+    // or paused mid-session, or `deloadSupplemental` moved to `skip` during a week-4
     // session. `composeCrossSets` restores those sets, but the page renders one
     // section per *block*, so without a block to hang them on they would still
     // be invisible while their rows keep counting toward History, PRs and Stats
     // (F32). Given a block, the existing "extra sets logged beyond the plan"
     // tail does the rest.
     const plannedIds = new Set(loaded.map(b => b.movementLiftId))
+    const allLifts = await db.lifts.toArray()
     for (const s of workout.loggedCrossSets) {
       if (s.liftId == null || plannedIds.has(s.liftId)) continue
       const mLift = allLifts.find(l => l.id === s.liftId)

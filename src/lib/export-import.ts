@@ -112,7 +112,7 @@ const COLS = {
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
   sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId', 'bandLoad'],
   exercises: ['id', 'name', 'type', 'category', 'archived', 'usesBarbell', 'plateMode', 'implementBase', 'bandProfile'],
-  liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order'],
+  liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order', 'paused'],
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance', 'dropRounds', 'bandLoad'],
   accessoryNotes: ['id', 'sessionId', 'exerciseId', 'notes'],
