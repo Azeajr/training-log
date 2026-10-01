@@ -316,10 +316,10 @@ export default function Today() {
   // Cross-lift supplemental preview for the selected lift — the same plan the
   // Workout screen loads, so the two cannot disagree about which blocks run.
   const [crossPreview] = createResource(
-    () => ({ liftId: selectedLiftId(), week: currentWeek(), mode: settings.deloadSupplemental }),
-    async ({ liftId, week, mode }) => {
+    () => ({ liftId: selectedLiftId(), week: currentWeek(), mode: settings.deloadSupplemental, on: settings.crossLiftSupplemental }),
+    async ({ liftId, week, mode, on }) => {
       if (!liftId) return []
-      const plan = await loadCrossPlan(db, liftId, week, { deloadSupplemental: mode, barWeight: settings.barWeight })
+      const plan = await loadCrossPlan(db, liftId, week, { deloadSupplemental: mode, barWeight: settings.barWeight, crossLiftSupplemental: on })
       return plan.map(({ block, movement, sets }): CrossPreview => ({
         label: getCrossLabel(block, movement.name), weight: sets[0].weight, reps: sets[0].reps,
       }))

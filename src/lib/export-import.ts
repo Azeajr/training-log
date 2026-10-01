@@ -128,7 +128,7 @@ const COLS = {
   // set back to the current prescription to interpret.
   ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done', 'reps', 'seconds', 'distance', 'distanceUnit', 'weight', 'band', 'equipmentHeight', 'equipmentHeightUnit', 'recorded', 'measure', 'resistanceKind'],
   ptNotes: ['id', 'sessionId', 'ptExerciseId', 'notes'],
-  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek', 'bands'],
+  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek', 'bands', 'crossLiftSupplemental'],
 } as const
 
 // Reject malformed table payloads BEFORE the destructive clear. Without this,

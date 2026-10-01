@@ -151,7 +151,8 @@ CREATE TABLE IF NOT EXISTS settings (
   plates TEXT,
   supplementalTemplate TEXT,
   restTimerNotifications INTEGER,
-  bands TEXT
+  bands TEXT,
+  crossLiftSupplemental INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_trainingMaxes_liftId ON trainingMaxes(liftId);
 CREATE INDEX IF NOT EXISTS idx_sessions_cycleId ON sessions(cycleId);
@@ -318,6 +319,9 @@ export const ADDITIVE_MIGRATIONS = [
   // cross-lift switch in Settings. Nothing reads the column any more; it stays
   // because this list is append-only and deployed databases already carry it.
   `ALTER TABLE liftSupplementals ADD COLUMN paused INTEGER`,
+  // One switch for all cross-lift supplemental work. NULL on a database from
+  // before it existed, and NULL reads as on — which is what those blocks were.
+  `ALTER TABLE settings ADD COLUMN crossLiftSupplemental INTEGER`,
 ] as const
 
 export const ALL_TABLES = [

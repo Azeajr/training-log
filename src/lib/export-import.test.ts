@@ -655,7 +655,7 @@ describe('exportJson → importFromRawData round-trip', () => {
     await db.accessoryTrainingMaxes.add({ id: 1, exerciseId: 1, weight: 50, incrementLb: 5, setAt: new Date('2026-01-01T00:00:00.000Z') })
     await db.accessorySets.add({ id: 1, sessionId: 1, exerciseId: 1, setNumber: 1, weight: 50, reps: 8, duration: null, distance: null })
     await db.accessoryNotes.add({ id: 1, sessionId: 1, exerciseId: 1, notes: 'purple band' })
-    await db.settings.add({ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, theme: 'mocha', barWeight: 45, plates: [{ weight: 45, count: 4 }, { weight: 25, count: 2 }], supplementalTemplate: 'fsl+bbb', deloadSupplemental: 'normal' })
+    await db.settings.add({ id: 1, restTimer1: 90, restTimer2: 180, restTimerFail: 300, theme: 'mocha', barWeight: 45, plates: [{ weight: 45, count: 4 }, { weight: 25, count: 2 }], supplementalTemplate: 'fsl+bbb', deloadSupplemental: 'normal', crossLiftSupplemental: false })
 
     await exportJson(db)
     const payload = JSON.parse(await capturedBlob!.text())
@@ -713,6 +713,7 @@ describe('exportJson → importFromRawData round-trip', () => {
     const settings = (await db.settings.toArray())[0]
     expect(settings.plates).toEqual([{ weight: 45, count: 4 }, { weight: 25, count: 2 }])
     expect(settings.theme).toBe('mocha')
+    expect(settings.crossLiftSupplemental).toBe(false)
     const block = (await db.liftSupplementals.toArray())[0]
     expect(block).toMatchObject({ liftId: 1, movementLiftId: 2, weightMode: 'percent', percent: 0.7, sets: 5, reps: 10 })
     const accSet = (await db.accessorySets.toArray())[0]

@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import { db } from '../../db/index'
 import { __resetForTest } from '../../db/sqlite-client'
 import LiftSetupModal from './LiftSetupModal'
+import { setSettings } from '../../store/settings-store'
 
 beforeEach(async () => { await __resetForTest() })
 afterEach(() => vi.restoreAllMocks())
@@ -126,5 +127,27 @@ describe('LiftSetupModal — a rejected commit (F50)', () => {
     fireEvent.click(screen.getByText('DONE'))
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
     expect(screen.getByText('DONE')).not.toBeDisabled()
+  })
+})
+
+// Blocks are still set up here with cross-lift switched off in Settings; say
+// so, or they look live and then never appear.
+describe('LiftSetupModal — cross-lift switched off', () => {
+  it('says the blocks will not run', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' } as never)
+    setSettings({ crossLiftSupplemental: false })
+    try {
+      render(() => <LiftSetupModal liftId={liftId} onCommit={() => {}} onCancel={() => {}} />)
+      expect(await screen.findByText(/off in Settings/)).toBeInTheDocument()
+    } finally {
+      setSettings({ crossLiftSupplemental: true })
+    }
+  })
+
+  it('says nothing when it is on', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' } as never)
+    render(() => <LiftSetupModal liftId={liftId} onCommit={() => {}} onCancel={() => {}} />)
+    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
+    expect(screen.queryByText(/off in Settings/)).toBeNull()
   })
 })

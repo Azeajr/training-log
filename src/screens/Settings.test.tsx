@@ -954,6 +954,22 @@ describe('Settings — SUPPLEMENTAL', () => {
     expect(fslBtns.length).toBe(1)
   })
 
+  // One switch for all cross-lift work, rather than a pause on each block.
+  it('turns cross-lift supplemental off and back on, and saves it', async () => {
+    renderSettings()
+    const group = await screen.findByRole('group', { name: 'Cross-lift supplemental' })
+    const on = within(group).getByRole('button', { name: 'ON' })
+    const off = within(group).getByRole('button', { name: 'OFF' })
+    expect(on).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(off)
+    await waitFor(async () => expect((await db.settings.toArray())[0].crossLiftSupplemental).toBe(false))
+    expect(off).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(on)
+    await waitFor(async () => expect((await db.settings.toArray())[0].crossLiftSupplemental).toBe(true))
+  })
+
   it('FSL+BBB button is highlighted by default', async () => {
     renderSettings()
     const btn = await screen.findByText('FSL+BBB')

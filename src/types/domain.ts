@@ -272,6 +272,9 @@ export interface Settings {
   // default; permission requested from a Settings gesture, not on first load).
   restTimerNotifications?: boolean
   highRepDiscount?: HighRepDiscount
+  // Whether cross-lift supplemental blocks run at all. false turns every block
+  // off without touching how each one is set up. Absent reads as on.
+  crossLiftSupplemental?: boolean
 }
 
 // ---------------------------------------------------------------------------

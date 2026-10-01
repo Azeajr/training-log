@@ -224,6 +224,9 @@ export default function LiftSetupModal(props: Props) {
         </Show>
 
         <Rule label="CROSS-LIFT SUPPLEMENTAL" class="text-muted mb-2" />
+        <Show when={!settings.crossLiftSupplemental}>
+          <div class="text-faint text-xs py-1">off in Settings — these blocks won't run</div>
+        </Show>
         <Show when={blocks().length === 0}>
           <div class="text-faint text-xs py-1">none</div>
         </Show>

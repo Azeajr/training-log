@@ -81,6 +81,7 @@ export async function harnessSnapshot(
       hasDeloadWeek: settings.hasDeloadWeek,
       supplementalTemplate: settings.supplementalTemplate,
       deloadSupplemental: settings.deloadSupplemental,
+      crossLiftSupplemental: settings.crossLiftSupplemental,
       highRepDiscount: settings.highRepDiscount,
       theme: settings.theme,
       barWeight: settings.barWeight,

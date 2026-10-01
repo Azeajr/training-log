@@ -253,6 +253,7 @@ export const SETTINGS_DEFAULTS = {
   hasDeloadWeek: true,
   highRepDiscount: 'off' as HighRepDiscount,
   restTimerNotifications: false,
+  crossLiftSupplemental: true,
 }
 
 function resolveThemeKey(key: string | null | undefined): ThemeKey {
@@ -282,6 +283,7 @@ interface SettingsState {
   hasDeloadWeek: boolean
   highRepDiscount: HighRepDiscount
   restTimerNotifications: boolean
+  crossLiftSupplemental: boolean
 }
 
 export const [settings, setSettings] = createStore<SettingsState>({ ...SETTINGS_DEFAULTS })
@@ -310,6 +312,7 @@ export async function loadSettings() {
     hasDeloadWeek: row.hasDeloadWeek ?? true,
     highRepDiscount: row.highRepDiscount ?? 'off',
     restTimerNotifications: row.restTimerNotifications ?? false,
+    crossLiftSupplemental: row.crossLiftSupplemental ?? true,
   })
   // Applied here, not only in updateSettings and at boot: a restored theme was
   // written into the store and left unpainted, so the screen kept the old

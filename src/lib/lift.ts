@@ -141,13 +141,14 @@ export interface CrossPlanBlock {
 // Cross work follows the same effective week as self-supplemental (deload may
 // remap or skip it), and each block is computed from its movement lift's
 // current TM. A block whose movement lift is gone, or that prescribes no sets,
-// is left out.
+// is left out — and with the Settings switch off, every block is.
 export async function loadCrossPlan(
   db: TrainingDB,
   liftId: number,
   week: 1 | 2 | 3 | 4,
-  opts: { deloadSupplemental: DeloadSupplemental; barWeight: number },
+  opts: { deloadSupplemental: DeloadSupplemental; barWeight: number; crossLiftSupplemental: boolean },
 ): Promise<CrossPlanBlock[]> {
+  if (!opts.crossLiftSupplemental) return []
   const eff = effectiveSupplementalWeek(week, opts.deloadSupplemental)
   if (eff === null) return []
   const blocks = (await db.liftSupplementals.where('liftId').equals(liftId).toArray())
