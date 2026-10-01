@@ -26,7 +26,6 @@ interface DraftBlock {
   percent: number | null
   sets: number
   reps: number
-  paused: boolean
 }
 
 interface Props {
@@ -84,7 +83,7 @@ export default function LiftSetupModal(props: Props) {
         setImplementBase(self.implementBase ?? (m === 'total' ? 0 : settings.barWeight))
       }
       const bs = (await db.liftSupplementals.where('liftId').equals(props.liftId).toArray()).sort((a, b) => a.order - b.order)
-      setBlocks(bs.map(b => ({ id: b.id, movementLiftId: b.movementLiftId, weightMode: b.weightMode, percent: b.percent, sets: b.sets, reps: b.reps, paused: b.paused ?? false })))
+      setBlocks(bs.map(b => ({ id: b.id, movementLiftId: b.movementLiftId, weightMode: b.weightMode, percent: b.percent, sets: b.sets, reps: b.reps })))
     }
     setLoaded(true)
   }
@@ -112,7 +111,6 @@ export default function LiftSetupModal(props: Props) {
       percent: newMode() === 'percent' ? newPercent() / 100 : null,
       sets: newSets(),
       reps: newReps(),
-      paused: false,
     }])
     setNewMovementId(null)
     setNewMode('fsl')
@@ -162,7 +160,7 @@ export default function LiftSetupModal(props: Props) {
         const draft = blocks()
         for (let i = 0; i < draft.length; i++) {
           const b = draft[i]
-          const fields = { movementLiftId: b.movementLiftId, weightMode: b.weightMode, percent: b.percent, sets: b.sets, reps: b.reps, order: i, paused: b.paused }
+          const fields = { movementLiftId: b.movementLiftId, weightMode: b.weightMode, percent: b.percent, sets: b.sets, reps: b.reps, order: i }
           if (b.id == null) await db.liftSupplementals.add({ liftId, ...fields })
           else await db.liftSupplementals.update(b.id, fields)
         }
@@ -226,6 +224,9 @@ export default function LiftSetupModal(props: Props) {
         </Show>
 
         <Rule label="CROSS-LIFT SUPPLEMENTAL" class="text-muted mb-2" />
+        <Show when={!settings.crossLiftSupplemental}>
+          <div class="text-faint text-xs py-1">off in Settings — these blocks won't run</div>
+        </Show>
         <Show when={blocks().length === 0}>
           <div class="text-faint text-xs py-1">none</div>
         </Show>
@@ -235,12 +236,6 @@ export default function LiftSetupModal(props: Props) {
               <div class="flex items-center justify-between mb-1">
                 <span class="text-text text-xs uppercase tracking-widest">{liftName(block().movementLiftId)}</span>
                 <button onClick={() => handleRemoveBlock(i)} class="text-muted text-xs hover:text-danger">del</button>
-              </div>
-              {/* Off for a while without losing the prescription below — a
-                  paused block is skipped by workouts and still listed on Today. */}
-              <div class="flex gap-2 mb-2">
-                <ToggleChip active={!block().paused} onClick={() => patchBlock(i, { paused: false })}>ON</ToggleChip>
-                <ToggleChip active={block().paused} onClick={() => patchBlock(i, { paused: true })}>PAUSED</ToggleChip>
               </div>
               <div class="flex gap-2 mb-2">
                 <For each={(['fsl', 'percent'] as const)}>

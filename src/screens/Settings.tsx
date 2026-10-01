@@ -677,6 +677,23 @@ export default function Settings() {
             )}</For>
           </div>
 
+          {/* One switch for every cross-lift block on every day. Off leaves each
+              block's setup alone, so turning it back on restores them as they were. */}
+          <SectionLabel class="mt-3 mb-1">Cross-lift</SectionLabel>
+          <div class="flex gap-1" role="group" aria-label="Cross-lift supplemental">
+            <For each={([[true, 'ON'], [false, 'OFF']] as const)}>{([on, label]) => (
+              <ToggleChip
+                active={settings.crossLiftSupplemental === on}
+                onClick={() => void updateSettings({ crossLiftSupplemental: on })}
+              >
+                {label}
+              </ToggleChip>
+            )}</For>
+          </div>
+          <p class="text-faint text-xs mt-1">
+            Off: no cross-lift blocks on Today or in workouts. Each lift's blocks stay set up.
+          </p>
+
           {/* Cycle shape — one list instead of two dependent controls. The old UI
               hid the supplemental modes until the deload week was toggled on, so
               their existence was undiscoverable; flattening makes the whole option

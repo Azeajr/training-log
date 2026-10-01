@@ -112,7 +112,7 @@ const COLS = {
   sessions: ['id', 'cycleId', 'liftId', 'week', 'date', 'notes', 'status'],
   sets: ['id', 'sessionId', 'type', 'setNumber', 'weight', 'reps', 'isAmrap', 'liftId', 'bandLoad'],
   exercises: ['id', 'name', 'type', 'category', 'archived', 'usesBarbell', 'plateMode', 'implementBase', 'bandProfile'],
-  liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order', 'paused'],
+  liftSupplementals: ['id', 'liftId', 'movementLiftId', 'weightMode', 'percent', 'sets', 'reps', 'order'],
   accessoryTrainingMaxes: ['id', 'exerciseId', 'weight', 'incrementLb', 'setAt'],
   accessorySets: ['id', 'sessionId', 'exerciseId', 'setNumber', 'weight', 'reps', 'duration', 'distance', 'dropRounds', 'bandLoad'],
   accessoryNotes: ['id', 'sessionId', 'exerciseId', 'notes'],
@@ -128,7 +128,7 @@ const COLS = {
   // set back to the current prescription to interpret.
   ptSetChecks: ['id', 'sessionId', 'ptExerciseId', 'setNumber', 'done', 'reps', 'seconds', 'distance', 'distanceUnit', 'weight', 'band', 'equipmentHeight', 'equipmentHeightUnit', 'recorded', 'measure', 'resistanceKind'],
   ptNotes: ['id', 'sessionId', 'ptExerciseId', 'notes'],
-  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek', 'bands'],
+  settings: ['id', 'restTimer1', 'restTimer2', 'restTimerFail', 'theme', 'barWeight', 'plates', 'supplementalTemplate', 'deloadSupplemental', 'highRepDiscount', 'restTimerNotifications', 'hasDeloadWeek', 'bands', 'crossLiftSupplemental'],
 } as const
 
 // Reject malformed table payloads BEFORE the destructive clear. Without this,

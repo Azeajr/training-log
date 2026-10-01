@@ -103,9 +103,6 @@ export interface LiftSupplemental {
   sets: number
   reps: number
   order: number
-  // Switched off for now: kept with its prescription, but not run. Absent on
-  // blocks from before the column existed, which read as running.
-  paused?: boolean
 }
 
 /**
@@ -275,6 +272,9 @@ export interface Settings {
   // default; permission requested from a Settings gesture, not on first load).
   restTimerNotifications?: boolean
   highRepDiscount?: HighRepDiscount
+  // Whether cross-lift supplemental blocks run at all. false turns every block
+  // off without touching how each one is set up. Absent reads as on.
+  crossLiftSupplemental?: boolean
 }
 
 // ---------------------------------------------------------------------------

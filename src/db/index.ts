@@ -29,7 +29,7 @@ class TrainingSQLiteDB {
   sessions = new SQLiteTable<Session>('sessions', { dateFields: ['date'] })
   sets = new SQLiteTable<Set>('sets', { boolFields: ['isAmrap'], jsonFields: ['bandLoad'] })
   exercises = new SQLiteTable<Exercise>('exercises', { boolFields: ['archived', 'usesBarbell'], jsonFields: ['bandProfile'] })
-  liftSupplementals = new SQLiteTable<LiftSupplemental>('liftSupplementals', { boolFields: ['paused'] })
+  liftSupplementals = new SQLiteTable<LiftSupplemental>('liftSupplementals')
   accessoryTrainingMaxes = new SQLiteTable<AccessoryTrainingMax>('accessoryTrainingMaxes', {
     dateFields: ['setAt'],
   })
@@ -41,7 +41,7 @@ class TrainingSQLiteDB {
   ptSessions = new SQLiteTable<PtSession>('ptSessions', { dateFields: ['date'] })
   ptSetChecks = new SQLiteTable<PtSetCheck>('ptSetChecks', { boolFields: ['done', 'recorded'] })
   ptNotes = new SQLiteTable<PtNote>('ptNotes')
-  settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates', 'bands'], boolFields: ['hasDeloadWeek', 'restTimerNotifications'] })
+  settings = new SQLiteTable<Settings>('settings', { jsonFields: ['plates', 'bands'], boolFields: ['hasDeloadWeek', 'restTimerNotifications', 'crossLiftSupplemental'] })
 
   transaction(fn: () => Promise<void>): Promise<void> {
     return sqliteClient.transaction(fn)

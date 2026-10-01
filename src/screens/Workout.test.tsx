@@ -148,12 +148,13 @@ describe('Workout screen — with active session', () => {
     await screen.findAllByText('SQUAT')
   })
 
-  it('does not run a paused cross-lift block', async () => {
+  it('runs no cross-lift block with cross-lift switched off in Settings', async () => {
     await db.lifts.add({ id: 2, name: 'Squat', order: 2, progressionIncrement: 10, baseWeight: 135, liftType: 'lower' })
     await db.trainingMaxes.add({ liftId: 2, weight: 300, setAt: new Date() })
     await db.liftSupplementals.add({
-      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1, paused: true,
+      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1,
     })
+    await updateSettings({ crossLiftSupplemental: false })
     startSession(BENCH)
     renderWorkout()
     // MAIN renders before loadData lands; the set rows come after crossBlocks
@@ -2492,9 +2493,10 @@ describe('Workout screen — cross work with no remaining block', () => {
     expect(screen.getAllByText('225').length).toBeGreaterThan(0)
   })
 
-  it('still shows them when the block was paused mid-session', async () => {
+  it('still shows them when cross-lift was switched off mid-session', async () => {
     await seedSquat()
-    await db.liftSupplementals.add({ liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1, paused: true })
+    await db.liftSupplementals.add({ liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 5, order: 1 })
+    await updateSettings({ crossLiftSupplemental: false })
     startSession(BENCH)
     loggedSquatCrossSets()
     renderWorkout()

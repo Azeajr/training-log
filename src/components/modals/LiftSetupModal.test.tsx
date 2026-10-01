@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import { db } from '../../db/index'
 import { __resetForTest } from '../../db/sqlite-client'
 import LiftSetupModal from './LiftSetupModal'
+import { setSettings } from '../../store/settings-store'
 
 beforeEach(async () => { await __resetForTest() })
 afterEach(() => vi.restoreAllMocks())
@@ -129,52 +130,24 @@ describe('LiftSetupModal — a rejected commit (F50)', () => {
   })
 })
 
-// A cross block can be switched off for a while without deleting it and
-// re-entering its prescription later. Buffered like everything else here.
-describe('LiftSetupModal — pausing a cross-lift block', () => {
-  const seed = async () => {
+// Blocks are still set up here with cross-lift switched off in Settings; say
+// so, or they look live and then never appear.
+describe('LiftSetupModal — cross-lift switched off', () => {
+  it('says the blocks will not run', async () => {
     const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' } as never)
-    const ohp = await db.lifts.add({ name: 'OHP', order: 2, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' } as never)
-    const blockId = await db.liftSupplementals.add({ liftId, movementLiftId: ohp, weightMode: 'percent', percent: 0.5, sets: 5, reps: 10, order: 0 })
-    return { liftId, blockId }
-  }
-
-  const open = async (liftId: number, onCommit = vi.fn()) => {
-    render(() => <LiftSetupModal liftId={liftId} onCommit={onCommit} onCancel={() => {}} />)
-    await screen.findByRole('button', { name: /^PAUSED$/ })
-    return onCommit
-  }
-
-  it('reads an existing block as on', async () => {
-    const { liftId } = await seed()
-    await open(liftId)
-    expect(screen.getByRole('button', { name: /^ON$/ })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: /^PAUSED$/ })).toHaveAttribute('aria-pressed', 'false')
+    setSettings({ crossLiftSupplemental: false })
+    try {
+      render(() => <LiftSetupModal liftId={liftId} onCommit={() => {}} onCancel={() => {}} />)
+      expect(await screen.findByText(/off in Settings/)).toBeInTheDocument()
+    } finally {
+      setSettings({ crossLiftSupplemental: true })
+    }
   })
 
-  it('writes the pause on DONE, not before, and keeps the prescription', async () => {
-    const { liftId, blockId } = await seed()
-    const onCommit = await open(liftId)
-
-    fireEvent.click(screen.getByRole('button', { name: /^PAUSED$/ }))
-    expect((await db.liftSupplementals.get(blockId))?.paused).toBeFalsy()
-
-    fireEvent.click(screen.getByText('DONE'))
-    await waitFor(() => expect(onCommit).toHaveBeenCalled())
-    expect(await db.liftSupplementals.get(blockId)).toMatchObject({
-      paused: true, weightMode: 'percent', percent: 0.5, sets: 5, reps: 10,
-    })
-  })
-
-  it('shows a paused block as paused, and turns it back on', async () => {
-    const { liftId, blockId } = await seed()
-    await db.liftSupplementals.update(blockId, { paused: true })
-    const onCommit = await open(liftId)
-    expect(screen.getByRole('button', { name: /^PAUSED$/ })).toHaveAttribute('aria-pressed', 'true')
-
-    fireEvent.click(screen.getByRole('button', { name: /^ON$/ }))
-    fireEvent.click(screen.getByText('DONE'))
-    await waitFor(() => expect(onCommit).toHaveBeenCalled())
-    expect((await db.liftSupplementals.get(blockId))?.paused).toBe(false)
+  it('says nothing when it is on', async () => {
+    const liftId = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 95, liftType: 'upper' } as never)
+    render(() => <LiftSetupModal liftId={liftId} onCommit={() => {}} onCancel={() => {}} />)
+    await screen.findByText(/CROSS-LIFT SUPPLEMENTAL/)
+    expect(screen.queryByText(/off in Settings/)).toBeNull()
   })
 })

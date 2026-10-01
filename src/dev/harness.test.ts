@@ -64,7 +64,7 @@ describe('harnessSnapshot', () => {
     const { harnessSnapshot } = await freshContext()
     const { settings } = await harnessSnapshot(['settings'])
     expect(Object.keys(settings as object).sort()).toEqual([
-      'barWeight', 'deloadSupplemental', 'hasDeloadWeek', 'highRepDiscount',
+      'barWeight', 'crossLiftSupplemental', 'deloadSupplemental', 'hasDeloadWeek', 'highRepDiscount',
       'restTimerNotifications', 'restTimers', 'supplementalTemplate', 'theme',
     ])
   })

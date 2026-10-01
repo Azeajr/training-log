@@ -190,7 +190,7 @@ describe('cross-lift supplemental CRUD', () => {
 // loop, and the copies disagreed on a block with no sets — so the one loader
 // has to settle every rule the two used to decide separately.
 describe('loadCrossPlan', () => {
-  const opts = { deloadSupplemental: 'normal' as const, barWeight: 45 }
+  const opts = { deloadSupplemental: 'normal' as const, barWeight: 45, crossLiftSupplemental: true }
 
   const seed = async () => {
     const day = await createLift(db, { name: 'Bench', progressionIncrement: 5, baseWeight: 95, liftType: 'upper' })
@@ -238,15 +238,9 @@ describe('loadCrossPlan', () => {
     expect(plan.map(p => p.movement.name)).toEqual(['Row'])
   })
 
-  it('flags a paused block and computes none of its sets', async () => {
-    const { day, ohpBlock } = await seed()
-    await updateLiftSupplemental(db, ohpBlock, { paused: true })
-
-    const plan = await loadCrossPlan(db, day, 1, opts)
-    // Still listed, in its place — Today shows it so it is not forgotten.
-    expect(plan.map(p => [p.movement.name, p.paused])).toEqual([['OHP', true], ['Row', false]])
-    expect(plan[0].sets).toEqual([])
-    expect(plan[1].sets).toHaveLength(3)
+  it('runs no block with cross-lift switched off in Settings', async () => {
+    const { day } = await seed()
+    expect(await loadCrossPlan(db, day, 1, { ...opts, crossLiftSupplemental: false })).toEqual([])
   })
 
   it('is empty for a day with no blocks', async () => {

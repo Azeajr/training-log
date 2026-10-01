@@ -264,10 +264,9 @@ export default function Workout() {
     setSupplementalTemplate(template)
 
     // Load cross-lift supplemental blocks for this day before composing — the
-    // composition reads crossBlocks(). Today's preview reads the same plan, and
-    // lists paused blocks; a workout does not run them.
+    // composition reads crossBlocks(). Today's preview reads the same plan.
     const plan = await loadCrossPlan(db, session.liftId, session.week, settings)
-    const loaded: LoadedCrossBlock[] = plan.filter(p => !p.paused).map(({ block, movement, sets }) => ({
+    const loaded: LoadedCrossBlock[] = plan.map(({ block, movement, sets }) => ({
       movementLiftId: block.movementLiftId,
       movementName: movement.name,
       movementLoading: resolveLiftLoading(movement, settings.barWeight),
@@ -279,7 +278,7 @@ export default function Workout() {
       computed: sets,
     }))
     // Cross work that was logged and then lost its plan — the block was removed
-    // or paused mid-session, or `deloadSupplemental` moved to `skip` during a week-4
+    // or cross-lift was switched off mid-session, or `deloadSupplemental` moved to `skip` during a week-4
     // session. `composeCrossSets` restores those sets, but the page renders one
     // section per *block*, so without a block to hang them on they would still
     // be invisible while their rows keep counting toward History, PRs and Stats

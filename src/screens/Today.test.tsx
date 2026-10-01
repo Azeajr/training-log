@@ -6,6 +6,7 @@ import { db } from '../db/index'
 import { clearSession, startSession, workout } from '../store/workout-store'
 import { toast } from '../store/toast-store'
 import { savePtRoutine } from '../lib/pt'
+import { setSettings } from '../store/settings-store'
 import { clearAllPtRuns, isPtSetDone, ptSessionRoutineIds, startPtRun, togglePtSet } from '../store/pt-store'
 import { ConfirmationContext, createConfirmation } from '../hooks/use-confirmation'
 import ConfirmationDialog from '../components/modals/ConfirmationDialog'
@@ -268,14 +269,25 @@ describe('Today screen', () => {
     await screen.findByText(/DEADLIFT\s+5 × 10\s+FSL/)
   })
 
-  it('lists a paused cross block as paused, with no weight to lift', async () => {
+  it('shows no cross block with cross-lift switched off, and shows it once switched on', async () => {
     await db.trainingMaxes.add({ liftId: 2, weight: 135, setAt: new Date() })
     await db.liftSupplementals.add({
-      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 10, order: 1, paused: true,
+      liftId: 1, movementLiftId: 2, weightMode: 'fsl', percent: null, sets: 5, reps: 10, order: 1,
     })
-    renderToday()
-    const label = await screen.findByText(/DEADLIFT\s+5 × 10\s+FSL/)
-    expect(label.parentElement?.textContent).toContain('paused')
+    setSettings({ crossLiftSupplemental: false })
+    try {
+      renderToday()
+      const start = await screen.findByText('START WORKOUT') as HTMLButtonElement
+      await waitFor(() => expect(start.disabled).toBe(false))
+      await drain()
+      expect(screen.queryByText(/DEADLIFT\s+5 × 10\s+FSL/)).toBeNull()
+      // The same render, switched on: the preview follows the setting, so the
+      // absence above was the switch and not a read that had yet to land.
+      setSettings({ crossLiftSupplemental: true })
+      await screen.findByText(/DEADLIFT\s+5 × 10\s+FSL/)
+    } finally {
+      setSettings({ crossLiftSupplemental: true })
+    }
   })
 
   // Selection is its own channel (▸ + aria-pressed) so status keeps the colour

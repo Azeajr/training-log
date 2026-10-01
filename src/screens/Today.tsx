@@ -28,11 +28,11 @@ import AccessoryPicker from '../components/workout/AccessoryPicker'
 const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
 
-// One cross-lift block on the preview. `readout` is null for a paused block:
-// listed so it is not forgotten, but with nothing to lift.
+// One cross-lift block on the preview: its label and first set.
 interface CrossPreview {
   label: string
-  readout: { weight: number; reps: number } | null
+  weight: number
+  reps: number
 }
 
 interface WeekStatus {
@@ -316,13 +316,12 @@ export default function Today() {
   // Cross-lift supplemental preview for the selected lift — the same plan the
   // Workout screen loads, so the two cannot disagree about which blocks run.
   const [crossPreview] = createResource(
-    () => ({ liftId: selectedLiftId(), week: currentWeek(), mode: settings.deloadSupplemental }),
-    async ({ liftId, week, mode }) => {
+    () => ({ liftId: selectedLiftId(), week: currentWeek(), mode: settings.deloadSupplemental, on: settings.crossLiftSupplemental }),
+    async ({ liftId, week, mode, on }) => {
       if (!liftId) return []
-      const plan = await loadCrossPlan(db, liftId, week, { deloadSupplemental: mode, barWeight: settings.barWeight })
-      return plan.map(({ block, movement, sets, paused }): CrossPreview => ({
-        label: getCrossLabel(block, movement.name),
-        readout: paused ? null : { weight: sets[0].weight, reps: sets[0].reps },
+      const plan = await loadCrossPlan(db, liftId, week, { deloadSupplemental: mode, barWeight: settings.barWeight, crossLiftSupplemental: on })
+      return plan.map(({ block, movement, sets }): CrossPreview => ({
+        label: getCrossLabel(block, movement.name), weight: sets[0].weight, reps: sets[0].reps,
       }))
     },
   )
@@ -487,10 +486,8 @@ export default function Today() {
                   <For each={crossPreviewSafe()}>
                     {block => (
                       <div>
-                        <SectionLabel class="mb-1" tone={block.readout ? undefined : 'text-faint'}>{block.label}</SectionLabel>
-                        <Show when={block.readout} fallback={<div class="pl-2 text-faint text-xs tracking-widest">paused</div>}>
-                          <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={block.readout!.weight} value={`${block.readout!.reps}`} />
-                        </Show>
+                        <SectionLabel class="mb-1">{block.label}</SectionLabel>
+                        <SetReadout size="sm" alignWeight tone="text-text-dim" class="pl-2" weight={block.weight} value={`${block.reps}`} />
                       </div>
                     )}
                   </For>
