@@ -3,6 +3,8 @@ import { A, useBeforeLeave, useNavigate } from '@solidjs/router'
 import { db } from '../db/index'
 import type { PtRoutine } from '../types/domain'
 import {
+  archivePtRoutine,
+  countPtRuns,
   deletePtRoutine,
   deletePtSession,
   formatPtCheck,
@@ -29,7 +31,6 @@ import PtSessionEditor, {
   type PtRunDraft,
 } from '../components/pt/PtSessionEditor'
 import SectionLabel from '../components/layout/SectionLabel'
-import InlineConfirm from '../components/ui/InlineConfirm'
 
 const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
@@ -40,6 +41,14 @@ const HISTORY_LIMIT = 30
 // were indistinguishable — in the list, and in the dialog asking which to delete.
 const runWhen = (date: Date): string => `${formatDateShort(date)}, ${formatTimeShort(date)}`
 
+const runCount = (n: number): string => `${n} run${n === 1 ? '' : 's'}`
+
+// Deleting saved history goes through one modal that names the cost; the
+// inline yes/no is for undoing work still in progress. A routine's ✕ used to
+// be that inline tap alone — the weakest gate in the app on its most
+// destructive PT action — while one run got the inline tap AND a modal.
+const DELETE_GLYPH_CLASS = 'text-muted text-xs font-mono hover:text-danger'
+
 // One loading voice per screen. The app has several shapes of "Loading…" by
 // context (full-screen fallback vs embedded), and a screen that uses two of
 // them reads as two different screens.
@@ -47,7 +56,7 @@ const LOADING_CLASS = 'text-muted text-xs uppercase tracking-widest'
 
 export default function PT() {
   const navigate = useNavigate()
-  const { confirm } = useConfirmation()
+  const { confirm, confirmWithChoice } = useConfirmation()
   const [routines, setRoutines] = createSignal<PtRoutine[]>([])
   const [selected, setSelected] = createSignal<number[]>([])
   const [archived, setArchived] = createSignal<PtRoutine[]>([])
@@ -116,7 +125,45 @@ export default function PT() {
 
   void read.run(load)
 
-  const handleDeleteRoutine = async (routine: PtRoutine) => {
+  // A live routine's ✕ offers the non-destructive half first. Archive was only
+  // on the edit screen, so the one removal the list offered took the history
+  // with it.
+  const handleRemoveRoutine = async (routine: PtRoutine) => {
+    const runs = await countPtRuns(db, routine.id!)
+    const choice = await confirmWithChoice(
+      runs > 0
+        ? `Archive ${routine.name} to keep its ${runCount(runs)}, or delete it with them? Deleting cannot be undone.`
+        : `Archive ${routine.name}, or delete it? Deleting cannot be undone.`,
+      {
+        title: 'REMOVE ROUTINE',
+        confirmLabel: 'ARCHIVE',
+        secondaryLabel: runs > 0 ? `DELETE + ${runCount(runs).toUpperCase()}` : 'DELETE',
+      },
+    )
+    if (choice === 'confirm') await handleArchive(routine)
+    else if (choice === 'secondary') await deleteRoutine(routine)
+  }
+
+  const handleDeleteArchivedRoutine = async (routine: PtRoutine) => {
+    const runs = await countPtRuns(db, routine.id!)
+    if (!await confirm(
+      `Delete ${routine.name}${runs > 0 ? ` and its ${runCount(runs)}` : ''}? This cannot be undone.`,
+      { destructive: true, confirmLabel: 'DELETE' },
+    )) return
+    await deleteRoutine(routine)
+  }
+
+  const handleArchive = async (routine: PtRoutine) => {
+    try {
+      await archivePtRoutine(db, routine.id!)
+      showToast(`${routine.name} archived.`)
+      await read.run(load)
+    } catch (err) {
+      showToast(`Could not archive that routine: ${message(err)}`)
+    }
+  }
+
+  const deleteRoutine = async (routine: PtRoutine) => {
     try {
       await deletePtRoutine(db, routine.id!)
       // The in-progress run belongs to a routine that no longer exists — its
@@ -260,12 +307,13 @@ export default function PT() {
                         >
                           EDIT
                         </A>
-                        <InlineConfirm
-                          label="✕"
-                          ariaLabel={`Delete ${routine.name}`}
-                          confirmText="delete routine + its history?"
-                          onConfirm={() => void handleDeleteRoutine(routine)}
-                        />
+                        <button
+                          onClick={() => void handleRemoveRoutine(routine)}
+                          aria-label={`Remove ${routine.name}`}
+                          class={DELETE_GLYPH_CLASS}
+                        >
+                          ✕
+                        </button>
                       </div>
                     </div>
                     <Show when={routine.notes}>
@@ -317,12 +365,13 @@ export default function PT() {
                       >
                         RESTORE
                       </button>
-                      <InlineConfirm
-                        label="✕"
-                        ariaLabel={`Delete ${routine.name}`}
-                        confirmText="delete routine + its history?"
-                        onConfirm={() => void handleDeleteRoutine(routine)}
-                      />
+                      <button
+                        onClick={() => void handleDeleteArchivedRoutine(routine)}
+                        aria-label={`Delete ${routine.name}`}
+                        class={DELETE_GLYPH_CLASS}
+                      >
+                        ✕
+                      </button>
                     </div>
                   </div>
                 )}
@@ -362,12 +411,13 @@ export default function PT() {
                         {summary.done}/{summary.total}
                       </span>
                     </button>
-                    <InlineConfirm
-                      label="✕"
-                      ariaLabel={`Delete ${summary.routineName} run from ${runWhen(summary.session.date)}`}
-                      confirmText="delete run?"
-                      onConfirm={() => void handleDeleteSession(summary)}
-                    />
+                    <button
+                      onClick={() => void handleDeleteSession(summary)}
+                      aria-label={`Delete ${summary.routineName} run from ${runWhen(summary.session.date)}`}
+                      class={DELETE_GLYPH_CLASS}
+                    >
+                      ✕
+                    </button>
                   </div>
 
                   <Show when={openSession() === summary.session.id}>

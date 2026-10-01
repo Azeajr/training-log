@@ -1,5 +1,9 @@
 import { createSignal, Show } from 'solid-js'
 
+// A one-tap "are you sure" in the row itself — for taking back work still in
+// progress: a set just logged, a row in an unsaved draft. Deleting saved
+// history is not that: it goes through the modal confirm (`destructive`),
+// which has room to name what is lost and say it cannot be undone.
 interface Props {
   label: string
   confirmText: string

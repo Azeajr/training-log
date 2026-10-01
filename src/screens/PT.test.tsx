@@ -123,8 +123,8 @@ describe('PT screen', () => {
     fireEvent.click(screen.getByText(/RESUME PT SESSION/))
     expect(mockNavigate).toHaveBeenCalledWith('/pt/run')
 
-    fireEvent.click(screen.getByLabelText('Delete Knee'))
-    fireEvent.click(await screen.findByRole('button', { name: /yes, delete knee/i }))
+    fireEvent.click(screen.getByLabelText('Remove Knee'))
+    fireEvent.click(await screen.findByRole('button', { name: 'DELETE' }))
     await waitFor(() => expect(getPtRun(knee)).toBeUndefined())
     expect(getPtRun(shoulder)).toBeDefined()
   })
@@ -135,8 +135,8 @@ describe('PT screen', () => {
     renderPT()
     await screen.findByText('Knee')
 
-    fireEvent.click(screen.getByLabelText('Delete Knee'))
-    fireEvent.click(await screen.findByRole('button', { name: /yes, delete knee/i }))
+    fireEvent.click(screen.getByLabelText('Remove Knee'))
+    fireEvent.click(await screen.findByRole('button', { name: 'DELETE' }))
 
     await waitFor(() => expect(document.body.textContent).toContain('No routines yet'))
     expect(await db.ptRoutines.count()).toBe(0)
@@ -443,9 +443,10 @@ describe('PT screen', () => {
     renderPT()
     await screen.findByText('Sep 16')
     fireEvent.click(screen.getByLabelText('Delete Knee run from Sep 16, 12:00 AM'))
-    fireEvent.click(await screen.findByRole('button', { name: /yes, delete knee run/i }))
-    // The confirm() dialog, then the delete.
-    fireEvent.click(await screen.findByText('DELETE'))
+    // One gate: the modal, straight away — no inline yes/no in front of it.
+    expect(screen.queryByRole('button', { name: /yes, delete/i })).toBeNull()
+    await screen.findByText(/This cannot be undone\./)
+    fireEvent.click(screen.getByRole('button', { name: 'DELETE' }))
 
     await waitFor(async () => expect(await db.ptSessions.count()).toBe(0))
     expect(await db.ptRoutines.count()).toBe(1)
@@ -492,9 +493,89 @@ describe('PT screen', () => {
     renderPT()
     await screen.findByText('ARCHIVED')
     fireEvent.click(screen.getByLabelText('Delete Old block'))
-    fireEvent.click(await screen.findByRole('button', { name: /yes, delete old block/i }))
+    await screen.findByText('Delete Old block? This cannot be undone.')
+    fireEvent.click(screen.getByRole('button', { name: 'DELETE' }))
 
     await waitFor(async () => expect(await db.ptRoutines.count()).toBe(0))
+  })
+
+  it('names the runs an archived routine takes with it', async () => {
+    const id = await savePtRoutine(db, { name: 'Old block', exercises: [repsDraft()] })
+    const exercise = (await getPtRoutine(db, id))!.exercises[0]
+    for (const day of [16, 17]) {
+      await commitPtRun(db, {
+        routineId: id,
+        date: new Date(2026, 8, day),
+        checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+      })
+    }
+    await archivePtRoutine(db, id)
+
+    renderPT()
+    await screen.findByText('ARCHIVED')
+    fireEvent.click(screen.getByLabelText('Delete Old block'))
+
+    expect(await screen.findByText('Delete Old block and its 2 runs? This cannot be undone.')).toBeTruthy()
+  })
+
+  // Archive used to live only on the edit screen, so the one removal the list
+  // offered took the history with it, behind a single inline tap.
+  describe("a live routine's ✕", () => {
+    const seedWithRun = async () => {
+      const id = await savePtRoutine(db, { name: 'Knee', exercises: [repsDraft()] })
+      const exercise = (await getPtRoutine(db, id))!.exercises[0]
+      await commitPtRun(db, {
+        routineId: id,
+        date: new Date(2026, 8, 16),
+        checks: [{ ptExerciseId: exercise.id!, setNumber: 1, done: true }],
+      })
+      return id
+    }
+
+    it('offers ARCHIVE first, and names what DELETE costs', async () => {
+      await seedWithRun()
+      renderPT()
+      fireEvent.click(await screen.findByLabelText('Remove Knee'))
+
+      expect(await screen.findByText(
+        'Archive Knee to keep its 1 run, or delete it with them? Deleting cannot be undone.',
+      )).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'ARCHIVE' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'DELETE + 1 RUN' })).toBeTruthy()
+    })
+
+    it('ARCHIVE keeps the routine and its run', async () => {
+      const id = await seedWithRun()
+      renderPT()
+      fireEvent.click(await screen.findByLabelText('Remove Knee'))
+      fireEvent.click(await screen.findByRole('button', { name: 'ARCHIVE' }))
+
+      await screen.findByText('ARCHIVED')
+      expect((await db.ptRoutines.get(id))?.archived).toBe(true)
+      expect(await db.ptSessions.count()).toBe(1)
+      await waitFor(() => expect(toast()).toBe('Knee archived.'))
+    })
+
+    it('DELETE takes the routine and its runs', async () => {
+      await seedWithRun()
+      renderPT()
+      fireEvent.click(await screen.findByLabelText('Remove Knee'))
+      fireEvent.click(await screen.findByRole('button', { name: 'DELETE + 1 RUN' }))
+
+      await waitFor(async () => expect(await db.ptRoutines.count()).toBe(0))
+      expect(await db.ptSessions.count()).toBe(0)
+    })
+
+    it('CANCEL changes nothing', async () => {
+      const id = await seedWithRun()
+      renderPT()
+      fireEvent.click(await screen.findByLabelText('Remove Knee'))
+      fireEvent.click(await screen.findByRole('button', { name: 'CANCEL' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect((await db.ptRoutines.get(id))?.archived).toBeFalsy()
+      expect(await db.ptSessions.count()).toBe(1)
+    })
   })
 
   it('shows no ARCHIVED section when nothing is archived', async () => {

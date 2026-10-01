@@ -272,9 +272,9 @@ export default function PtRoutineEdit() {
   }
 
   // Archive, not delete: deleting a routine takes every run of it, and the
-  // record of having done the rehab is usually the part worth keeping. Lives
-  // here rather than on the list row, which already carries START/EDIT/delete
-  // and wraps on a phone with a fourth control.
+  // record of having done the rehab is usually the part worth keeping. Not a
+  // button on the list row, which already carries START/EDIT/✕ and wraps on a
+  // phone with a fourth control — that row's ✕ offers it in its confirm instead.
   const handleArchive = guard(async () => {
     const id = routineId()
     if (id === null) return
