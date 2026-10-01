@@ -7,7 +7,7 @@ export type SupplementalSetType = Exclude<SupplementalTemplate, 'none'>
 //   normal — computed at week-1 percentages (~65%), "it's already light"
 export type DeloadSupplemental = 'skip' | 'deload' | 'normal'
 
-// How much reps>10 on an AMRAP set should be discounted in estimated1RM — high-rep
+// How much reps>6 on an AMRAP set should be discounted in estimated1RM — high-rep
 // sets are less reliable strength indicators than low-rep ones. 'off' = no discount
 // (plain Wathan). See calc.ts estimated1RM for the compression mechanics.
 export type HighRepDiscount = 'off' | 'mild' | 'moderate' | 'aggressive'

@@ -326,14 +326,18 @@ describe('estimated1RM', () => {
   it('defaults to no discount, same as passing off', () => {
     expect(estimated1RM(225, 20)).toBe(estimated1RM(225, 20, 'off'))
   })
-  it('reps at or under the threshold are never discounted, regardless of setting', () => {
-    const raw = estimated1RM(225, 10, 'off')
-    expect(estimated1RM(225, 10, 'mild')).toBe(raw)
-    expect(estimated1RM(225, 10, 'moderate')).toBe(raw)
-    expect(estimated1RM(225, 10, 'aggressive')).toBe(raw)
+  it('reps at or under the threshold (6) are never discounted, regardless of setting', () => {
+    const raw = estimated1RM(225, 6, 'off')
+    expect(estimated1RM(225, 6, 'mild')).toBe(raw)
+    expect(estimated1RM(225, 6, 'moderate')).toBe(raw)
+    expect(estimated1RM(225, 6, 'aggressive')).toBe(raw)
+  })
+  it('the first rep past the threshold is discounted', () => {
+    expect(estimated1RM(225, 7, 'mild')).toBeLessThan(estimated1RM(225, 7, 'off'))
   })
   it('moderate discounts a 20-rep set well below the raw Wathan estimate', () => {
-    expect(estimated1RM(225, 20, 'moderate')).toBeCloseTo(322.03, 1)
+    // 6 + 0.25 × 14 = 9.5 effective reps
+    expect(estimated1RM(225, 20, 'moderate')).toBeCloseTo(299.26, 1)
     expect(estimated1RM(225, 20, 'off')).toBeCloseTo(370.04, 1)
   })
   it('aggressive discounts harder than moderate at the same rep count', () => {
@@ -345,7 +349,7 @@ describe('estimated1RM', () => {
     // A flat post-hoc percentage discount would eventually make more reps score
     // lower (see targetReps' compression comment) — compressing the rep count
     // instead guarantees this never happens.
-    const reps = [10, 12, 15, 20, 25, 30, 50, 100]
+    const reps = [6, 7, 10, 12, 15, 20, 25, 30, 50, 100]
     for (let i = 1; i < reps.length; i++) {
       expect(estimated1RM(225, reps[i], 'aggressive')).toBeGreaterThanOrEqual(estimated1RM(225, reps[i - 1], 'aggressive'))
     }
@@ -388,7 +392,7 @@ describe('targetReps', () => {
     const prev1RM = 340
     const todayWeight = 200
     const reps = targetReps(prev1RM, todayWeight, 'moderate')
-    expect(reps).toBe(60)
+    expect(reps).toBe(72)
     expect(estimated1RM(todayWeight, reps!, 'moderate')).toBeGreaterThanOrEqual(prev1RM)
     expect(estimated1RM(todayWeight, reps! - 1, 'moderate')).toBeLessThan(prev1RM)
   })

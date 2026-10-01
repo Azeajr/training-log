@@ -921,7 +921,7 @@ export default function Settings() {
             )}</For>
           </div>
           <p class="text-faint text-xs mt-1">
-            Reps over 10 on an AMRAP set are less reliable strength indicators — higher
+            Reps over 6 on an AMRAP set are less reliable strength indicators — higher
             settings trust them less when estimating your 1RM. Off leaves the Wathan
             formula unchanged.
           </p>
