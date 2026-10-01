@@ -121,9 +121,9 @@ export interface TmChange {
   weight: number
 }
 
-// What `progressTms` would write, without writing it. Split out so a confirm can
-// show the exact before → after the write will produce, rather than a second
-// copy of the arithmetic that could drift from it.
+// The TM each active lift moves to, without writing it. Progression writes it
+// straight away (`progressTms`); a deload shows it in a confirm first and then
+// writes exactly what was shown (`planDeload` → `applyDeload`).
 async function planTmChanges(
   db: TrainingDB,
   nextWeight: (current: TrainingMax, lift: Lift) => number,
@@ -155,9 +155,8 @@ async function progressTms(
   nextWeight: (current: TrainingMax, lift: Lift) => number,
   source: TmSource,
   cycleId: number | null,
-  skip?: (current: TrainingMax) => boolean,
 ): Promise<TmChange[]> {
-  const { changes } = await planTmChanges(db, nextWeight, skip)
+  const { changes } = await planTmChanges(db, nextWeight)
   for (const { liftId, weight } of changes) {
     await db.trainingMaxes.add({ liftId, weight, setAt: new Date(), source, cycleId })
     noteTrainingMaxAdded()
@@ -275,23 +274,65 @@ export async function applyAccessoryTmProgression(db: TrainingDB, cycleId: numbe
  * this a guard rather than a lock.
  */
 export async function deloadTms(db: TrainingDB, pct = 0.10): Promise<TmChange[]> {
-  const cycleId = await currentCycleId(db)
-  return progressTms(db, deloadWeight(pct), 'deload', cycleId, deloadedIn(cycleId))
+  return applyDeload(db, await planDeload(db, pct))
+}
+
+/** A deload worked out but not yet written, for a confirm to show. */
+export interface DeloadPlan {
+  /** Stamped on every row the write adds; "already cut" is measured against it. */
+  cycleId: number | null
+  changes: TmChange[]
+  /** Cut already this cycle, so the once-per-cycle guard leaves them alone (F100). */
+  alreadyCut: string[]
+  /**
+   * The cut rounds back to the TM it started from — 5% of a 45 lb TM is 2.25,
+   * and 42.75 rounds to 45. Writing that row would cut nothing and still spend
+   * the guard, so a real cut later in the cycle would be refused.
+   */
+  tooLight: string[]
 }
 
 /**
  * What `deloadTms(db, pct)` would do right now: the cut for each lift it would
- * touch, and the lifts it would skip because they were already cut this cycle.
- * The guard means a second cut at a different percentage is a no-op, so a
- * caller that let the user pick one has to say so rather than report a cut that
- * never happened.
+ * touch, and the lifts it leaves alone and why. The guard means a second cut at
+ * a different percentage is a no-op, so a caller that let the user pick one has
+ * to say so rather than report a cut that never happened.
  */
-export async function planDeload(
-  db: TrainingDB,
-  pct = 0.10,
-): Promise<{ changes: TmChange[]; alreadyCut: string[] }> {
-  const { changes, skipped } = await planTmChanges(db, deloadWeight(pct), deloadedIn(await currentCycleId(db)))
-  return { changes, alreadyCut: skipped.map(l => l.name) }
+export async function planDeload(db: TrainingDB, pct = 0.10): Promise<DeloadPlan> {
+  const cycleId = await currentCycleId(db)
+  const { changes, skipped } = await planTmChanges(db, deloadWeight(pct), deloadedIn(cycleId))
+  return {
+    cycleId,
+    changes: changes.filter(c => c.weight !== c.oldWeight),
+    alreadyCut: skipped.map(l => l.name),
+    tooLight: changes.filter(c => c.weight === c.oldWeight).map(c => c.liftName),
+  }
+}
+
+/**
+ * Write a plan the user has seen, rather than working it out again: the confirm
+ * showed these numbers, so these are the ones written. Each change goes in only
+ * while the lift's current TM is still the one the plan cut from. A TM that
+ * moved while the confirm was open (another tab) is left alone rather than
+ * overwritten from a stale base, and a second write of the same plan finds the
+ * first one's cut and does nothing — which is also the once-per-cycle guard,
+ * since every planned cut changes the weight. One transaction, so two writers
+ * cannot both pass the check.
+ */
+export async function applyDeload(db: TrainingDB, plan: DeloadPlan): Promise<TmChange[]> {
+  const written: TmChange[] = []
+  if (plan.changes.length === 0) return written
+  await db.transaction(async () => {
+    const latest = await latestTms(db, plan.changes.map(c => c.liftId))
+    for (const change of plan.changes) {
+      const current = latest.get(change.liftId)
+      if (!current || current.weight !== change.oldWeight) continue
+      await db.trainingMaxes.add({ liftId: change.liftId, weight: change.weight, setAt: new Date(), source: 'deload', cycleId: plan.cycleId })
+      noteTrainingMaxAdded()
+      written.push(change)
+    }
+  })
+  return written
 }
 
 const deloadWeight = (pct: number) => (current: TrainingMax) =>

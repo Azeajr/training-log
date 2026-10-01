@@ -4,7 +4,7 @@ import type { Lift, Exercise, SupplementalTemplate, ExerciseCategory, PlateMode,
 import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '../store/settings-store'
 import { clearSession } from '../store/workout-store'
 import { exportJson, importJson, exportCsv, exportPtCsv } from '../lib/export-import'
-import { deloadTms, planDeload, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
+import { deloadTms, planDeload, applyDeload, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { applyPtCleanup, planPtCleanup, ptCleanupCount } from '../lib/pt'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
@@ -461,23 +461,28 @@ export default function Settings() {
     }
   }
 
-  // The confirm lists the cut per lift from the same plan the write uses, and
-  // names the lifts the once-per-cycle guard will leave alone. With a choosable
-  // percentage that guard is no longer invisible: cutting 5% and then trying 10%
-  // does nothing the second time, and saying "cut −10%" over that would be false.
+  // The confirm lists the cut per lift, and the write is that same plan rather
+  // than a second one worked out after the tap. It also names the lifts left
+  // alone: the once-per-cycle guard is no longer invisible with a choosable
+  // percentage (cut 5%, then try 10%, and the second does nothing), and a small
+  // cut on a light TM rounds back to where it started. Saying "cut −10%" over
+  // either would be false.
+  //
+  // Not `destructive`: a deload appends rows, and editing a TM puts it back.
   const handleDeload = async () => {
     const pct = deloadPct()
-    const { changes, alreadyCut } = await planDeload(db, pct / 100)
-    if (changes.length === 0) {
-      showToast(alreadyCut.length > 0
-        ? 'Already cut this cycle — edit a TM to change it'
-        : 'No training maxes to cut')
+    const plan = await planDeload(db, pct / 100)
+    const leftAlone = [
+      ...(plan.alreadyCut.length > 0 ? [`Already cut this cycle: ${plan.alreadyCut.join(', ')}`] : []),
+      ...(plan.tooLight.length > 0 ? [`−${pct}% rounds back to the same TM: ${plan.tooLight.join(', ')}`] : []),
+    ]
+    if (plan.changes.length === 0) {
+      showToast(leftAlone.length > 0 ? `Nothing to cut. ${leftAlone.join('. ')}` : 'No training maxes to cut')
       return
     }
-    const lines = changes.map(c => `${c.liftName}: ${c.oldWeight} → ${c.weight} lb`)
-    if (alreadyCut.length > 0) lines.push(`Already cut this cycle: ${alreadyCut.join(', ')}`)
-    if (!await confirm(`Cut training maxes by ${pct}%?\n\n${lines.join('\n')}`, { destructive: true, confirmLabel: 'CUT TMS' })) return
-    const cut = await deloadTms(db, pct / 100)
+    const lines = [...plan.changes.map(c => `${c.liftName}: ${c.oldWeight} → ${c.weight} lb`), ...leftAlone]
+    if (!await confirm(`Cut training maxes by ${pct}%?\n\n${lines.join('\n')}`, { confirmLabel: 'CUT TMS' })) return
+    const cut = await applyDeload(db, plan)
     await load()
     showToast(`Cut ${cut.length} TM${cut.length === 1 ? '' : 's'} −${pct}%`)
   }
@@ -687,7 +692,7 @@ export default function Settings() {
                 </div>
                 <button
                   onClick={() => void handleDeload()}
-                  class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-danger hover:text-danger"
+                  class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-warn hover:text-warn"
                 >
                   CUT ALL TMS  −{deloadPct()}%
                 </button>
