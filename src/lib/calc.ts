@@ -359,7 +359,7 @@ const WATHAN_DECAY = 0.075
 // Reps beyond this are treated as less trustworthy strength indicators (fatigue/
 // pacing dominate over max-effort at high rep counts) and get compressed before
 // hitting the curve — see effectiveReps.
-const HIGH_REP_THRESHOLD = 10
+const HIGH_REP_THRESHOLD = 6
 
 // Reps past HIGH_REP_THRESHOLD count for this fraction of a real rep in the
 // formula: 1 = no discount, smaller = more skeptical of high-rep AMRAPs.

@@ -406,6 +406,27 @@ describe('Settings — deload', () => {
     expect(await getCurrentTm(db, bench)).toBe(270)
   })
 
+  it("a lift's own cut drops only that lift's TM", async () => {
+    const ohp   = await db.lifts.add({ name: 'OHP',   order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    const bench = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId: ohp,   weight: 200, setAt: new Date('2026-01-01') })
+    await db.trainingMaxes.add({ liftId: bench, weight: 300, setAt: new Date('2026-01-01') })
+
+    renderSettings()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Increase deload percent' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cut Bench TM 15%' }))
+
+    await screen.findByText(/Cut Bench's training max by 15%\?/)
+    expect(screen.getByText(/Bench: 300 → 255 lb/)).toBeInTheDocument()
+    expect(screen.queryByText(/OHP: 200/)).toBeNull()
+    fireEvent.click(screen.getByText('CUT TM'))
+
+    await waitFor(() => expect(toast()).toBe('Cut 1 TM −15%'))
+    expect(await getCurrentTm(db, bench)).toBe(255)
+    expect(await getCurrentTm(db, ohp)).toBe(200)
+  })
+
   // A deload appends rows and an edit puts the TM back, so by the rule on
   // `destructive` its confirm is not the red one.
   it('does not danger-style the cut', async () => {

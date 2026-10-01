@@ -1098,6 +1098,27 @@ describe('planDeload', () => {
     expect(plan.changes).toHaveLength(lifts.length - 1)
   })
 
+  it('cuts only the lifts it is given', async () => {
+    const lifts = await setup()
+
+    const plan = await planDeload(db, 0.10, [lifts[1].id!])
+
+    expect(plan.changes).toEqual([
+      { liftId: lifts[1].id, liftName: lifts[1].name, oldWeight: 200, weight: 180 },
+    ])
+    expect(plan.alreadyCut).toEqual([])
+  })
+
+  it('guards per lift: cutting one leaves the rest free to cut later in the cycle', async () => {
+    const lifts = await setup()
+    await applyDeload(db, await planDeload(db, 0.10, [lifts[0].id!]))
+
+    const plan = await planDeload(db, 0.10)
+
+    expect(plan.alreadyCut).toEqual([lifts[0].name])
+    expect(plan.changes.map(c => c.liftId)).toEqual(lifts.slice(1).map(l => l.id))
+  })
+
   it('writes nothing for that lift, so a bigger cut later in the cycle still applies', async () => {
     const lifts = await setup()
     await setTm(db, lifts[0].id!, 45)

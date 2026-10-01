@@ -470,9 +470,12 @@ export default function Settings() {
   // either would be false.
   //
   // Not `destructive`: a deload appends rows, and editing a TM puts it back.
-  const handleDeload = async () => {
+  //
+  // `lift` cuts that one lift's TM (its row's cut button); without it, every
+  // active lift's.
+  const handleDeload = async (lift?: Lift) => {
     const pct = deloadPct()
-    const plan = await planDeload(db, pct / 100)
+    const plan = await planDeload(db, pct / 100, lift ? [lift.id!] : undefined)
     const leftAlone = [
       ...(plan.alreadyCut.length > 0 ? [`Already cut this cycle: ${plan.alreadyCut.join(', ')}`] : []),
       ...(plan.tooLight.length > 0 ? [`−${pct}% rounds back to the same TM: ${plan.tooLight.join(', ')}`] : []),
@@ -482,7 +485,8 @@ export default function Settings() {
       return
     }
     const lines = [...plan.changes.map(c => `${c.liftName}: ${c.oldWeight} → ${c.weight} lb`), ...leftAlone]
-    if (!await confirm(`Cut training maxes by ${pct}%?\n\n${lines.join('\n')}`, { confirmLabel: 'CUT TMS' })) return
+    const subject = lift ? `${lift.name}'s training max` : 'training maxes'
+    if (!await confirm(`Cut ${subject} by ${pct}%?\n\n${lines.join('\n')}`, { confirmLabel: lift ? 'CUT TM' : 'CUT TMS' })) return
     const cut = await applyDeload(db, plan)
     await load()
     showToast(`Cut ${cut.length} TM${cut.length === 1 ? '' : 's'} −${pct}%`)
@@ -667,6 +671,15 @@ export default function Settings() {
                     >
                       edit
                     </button>
+                    <Show when={tms()[l.id!] != null}>
+                      <button
+                        onClick={() => void handleDeload(l)}
+                        aria-label={`Cut ${l.name} TM ${deloadPct()}%`}
+                        class="text-muted text-xs hover:text-warn"
+                      >
+                        cut −{deloadPct()}%
+                      </button>
+                    </Show>
                   </>
                 }>
                   <div class="flex flex-col gap-2 flex-1">
@@ -704,7 +717,8 @@ export default function Settings() {
               </div>
               <p class="text-faint text-xs mt-1">
                 Drops every lift's training max by {deloadPct()}%, effective from your next
-                session. Once per cycle; edit a TM above to undo it.
+                session; a lift's own cut drops just that one. Once per cycle per lift; edit
+                a TM above to undo it.
               </p>
             </div>
           </Show>
@@ -907,7 +921,7 @@ export default function Settings() {
             )}</For>
           </div>
           <p class="text-faint text-xs mt-1">
-            Reps over 10 on an AMRAP set are less reliable strength indicators — higher
+            Reps over 6 on an AMRAP set are less reliable strength indicators — higher
             settings trust them less when estimating your 1RM. Off leaves the Wathan
             formula unchanged.
           </p>
@@ -1141,7 +1155,7 @@ export default function Settings() {
       <CycleCompleteModal
         data={cycleCompleteData()}
         onDismiss={async () => { setCycleCompleteData(null); await load() }}
-        onDeload={async () => { await deloadTms(db); setCycleCompleteData(null); await load() }}
+        onDeload={async (pct) => { await deloadTms(db, pct); setCycleCompleteData(null); await load() }}
         onDoubleIncrement={async (liftId, progressionIncrement) => {
           setCycleCompleteData(await applyCycleDoubling(db, cycleCompleteData(), liftId, progressionIncrement))
         }}

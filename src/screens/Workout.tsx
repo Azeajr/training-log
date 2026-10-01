@@ -889,8 +889,8 @@ export default function Workout() {
     navigate('/today')
   }
 
-  const handleCycleDeload = async () => {
-    await deloadTms(db)
+  const handleCycleDeload = async (pct: number) => {
+    await deloadTms(db, pct)
     handleCycleCompleteDismiss()
   }
 

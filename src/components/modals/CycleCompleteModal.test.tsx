@@ -45,6 +45,16 @@ describe('CycleCompleteModal', () => {
     d.release()
   })
 
+  it('cuts by the percentage on its stepper, not a fixed 10%', () => {
+    const onDeload = vi.fn()
+    render(() => (
+      <CycleCompleteModal data={DATA} onDismiss={noop} onDeload={onDeload} onDoubleIncrement={noop} />
+    ))
+    fireEvent.click(screen.getByRole('button', { name: 'Increase deload percent' }))
+    fireEvent.click(screen.getByRole('button', { name: /CUT ALL TMS INSTEAD\s+−15%/ }))
+    expect(onDeload).toHaveBeenCalledWith(0.15)
+  })
+
   it('fires the deload callback once for three taps', async () => {
     const d = deferred()
     render(() => (
