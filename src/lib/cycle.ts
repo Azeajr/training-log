@@ -4,7 +4,7 @@ import { roundToNearest5, SEED_WINDOW, cycleFinalWeek } from './calc'
 import { bestEstimatedPerformance, isWorkingPerformance } from './performance'
 import { getCycleDoublingCandidates } from './tm-recommendations'
 import type { DoublingCandidate } from './tm-recommendations'
-import { getCurrentTm, setTm, noteTrainingMaxAdded } from './training-max'
+import { getCurrentTm, setTm, noteTrainingMaxAdded, latestTmByLift } from './training-max'
 
 // Active = non-archived lifts, ordered. The number of active lifts is the
 // per-week session target (one training day per lift). Archived lifts keep
@@ -127,19 +127,27 @@ export interface TmChange {
 async function planTmChanges(
   db: TrainingDB,
   nextWeight: (current: TrainingMax, lift: Lift) => number,
-  skip?: (tms: TrainingMax[]) => boolean,
+  skip?: (current: TrainingMax) => boolean,
 ): Promise<{ changes: TmChange[]; skipped: Lift[] }> {
   const lifts = await activeLiftsOrdered(db)
   const changes: TmChange[] = []
   const skipped: Lift[] = []
+  // One read for every lift, and the current row picked by getCurrentTm's own
+  // rule: a confirm prints `oldWeight` beside a TM list that getCurrentTm
+  // filled, so the two must not resolve a tie differently (F36).
+  const latest = await latestTms(db, lifts.map(l => l.id!))
   for (const lift of lifts) {
-    const tms = await db.trainingMaxes.where('liftId').equals(lift.id!).sortBy('setAt')
-    const current = tms[tms.length - 1]
+    const current = latest.get(lift.id!)
     if (!current) continue
-    if (skip?.(tms)) { skipped.push(lift); continue }
+    if (skip?.(current)) { skipped.push(lift); continue }
     changes.push({ liftId: lift.id!, liftName: lift.name, oldWeight: current.weight, weight: nextWeight(current, lift) })
   }
   return { changes, skipped }
+}
+
+async function latestTms(db: TrainingDB, liftIds: number[]): Promise<Map<number, TrainingMax>> {
+  if (liftIds.length === 0) return new Map()
+  return latestTmByLift(await db.trainingMaxes.where('liftId').anyOf(liftIds).toArray())
 }
 
 async function progressTms(
@@ -147,7 +155,7 @@ async function progressTms(
   nextWeight: (current: TrainingMax, lift: Lift) => number,
   source: TmSource,
   cycleId: number | null,
-  skip?: (tms: TrainingMax[]) => boolean,
+  skip?: (current: TrainingMax) => boolean,
 ): Promise<TmChange[]> {
   const { changes } = await planTmChanges(db, nextWeight, skip)
   for (const { liftId, weight } of changes) {
@@ -289,10 +297,8 @@ export async function planDeload(
 const deloadWeight = (pct: number) => (current: TrainingMax) =>
   roundToNearest5(current.weight * (1 - pct))
 
-const deloadedIn = (cycleId: number | null) => (tms: TrainingMax[]) => {
-  const newest = tms[tms.length - 1]
-  return cycleId != null && newest?.source === 'deload' && newest.cycleId === cycleId
-}
+const deloadedIn = (cycleId: number | null) => (current: TrainingMax) =>
+  cycleId != null && current.source === 'deload' && current.cycleId === cycleId
 
 // The end-of-cycle summary: what every TM moved to, plus which lifts earned the
 // option of a doubled increment. Lives here rather than next to the modal that
