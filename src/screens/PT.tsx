@@ -125,15 +125,35 @@ export default function PT() {
 
   void read.run(load)
 
+  // The count the confirm names, or null once a toast has said it could not be
+  // read. These handlers are fired with `void` from a ✕, so a rejection here
+  // opened no dialog and said nothing.
+  const runsOf = async (routine: PtRoutine): Promise<number | null> => {
+    try {
+      return await countPtRuns(db, routine.id!)
+    } catch (err) {
+      showToast(`Could not read that routine's runs: ${message(err)}`)
+      return null
+    }
+  }
+
+  // A routine that leaves the list leaves the selection too. Kept, it went on
+  // counting toward START SESSION (n), which then started without it — or, with
+  // nothing else selected, opened an empty run that bounced straight back.
+  const deselect = (routine: PtRoutine) =>
+    setSelected(ids => ids.filter(id => id !== routine.id))
+
   // A live routine's ✕ offers the non-destructive half first. Archive was only
   // on the edit screen, so the one removal the list offered took the history
   // with it.
   const handleRemoveRoutine = async (routine: PtRoutine) => {
-    const runs = await countPtRuns(db, routine.id!)
+    const runs = await runsOf(routine)
+    if (runs === null) return
     const choice = await confirmWithChoice(
-      runs > 0
+      (runs > 0
         ? `Archive ${routine.name} to keep its ${runCount(runs)}, or delete it with them? Deleting cannot be undone.`
-        : `Archive ${routine.name}, or delete it? Deleting cannot be undone.`,
+        : `Archive ${routine.name}, or delete it? Deleting cannot be undone.`)
+      + (getPtRun(routine.id!) ? ' Deleting also discards the run in progress.' : ''),
       {
         title: 'REMOVE ROUTINE',
         confirmLabel: 'ARCHIVE',
@@ -145,9 +165,11 @@ export default function PT() {
   }
 
   const handleDeleteArchivedRoutine = async (routine: PtRoutine) => {
-    const runs = await countPtRuns(db, routine.id!)
+    const runs = await runsOf(routine)
+    if (runs === null) return
     if (!await confirm(
-      `Delete ${routine.name}${runs > 0 ? ` and its ${runCount(runs)}` : ''}? This cannot be undone.`,
+      `Delete ${routine.name}${runs > 0 ? ` and its ${runCount(runs)}` : ''}? This cannot be undone.`
+      + (getPtRun(routine.id!) ? ' It also discards the run in progress.' : ''),
       { destructive: true, confirmLabel: 'DELETE' },
     )) return
     await deleteRoutine(routine)
@@ -156,6 +178,7 @@ export default function PT() {
   const handleArchive = async (routine: PtRoutine) => {
     try {
       await archivePtRoutine(db, routine.id!)
+      deselect(routine)
       showToast(`${routine.name} archived.`)
       await read.run(load)
     } catch (err) {
@@ -170,6 +193,7 @@ export default function PT() {
       // exercise ids would resolve to nothing on the run screen. Dropped here
       // rather than left to fail later.
       clearPtRun(routine.id!)
+      deselect(routine)
       showToast(`Deleted ${routine.name}.`)
       await read.run(load)
     } catch (err) {
