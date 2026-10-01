@@ -31,6 +31,10 @@ import PtSessionEditor, {
   type PtRunDraft,
 } from '../components/pt/PtSessionEditor'
 import SectionLabel from '../components/layout/SectionLabel'
+// Deleting saved history goes through one modal that names the cost; the
+// inline yes/no is for undoing work still in progress, so these rows borrow
+// only InlineConfirm's look for their ✕.
+import { GLYPH_BUTTON_CLASS } from '../components/ui/InlineConfirm'
 
 const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
@@ -42,12 +46,6 @@ const HISTORY_LIMIT = 30
 const runWhen = (date: Date): string => `${formatDateShort(date)}, ${formatTimeShort(date)}`
 
 const runCount = (n: number): string => `${n} run${n === 1 ? '' : 's'}`
-
-// Deleting saved history goes through one modal that names the cost; the
-// inline yes/no is for undoing work still in progress. A routine's ✕ used to
-// be that inline tap alone — the weakest gate in the app on its most
-// destructive PT action — while one run got the inline tap AND a modal.
-const DELETE_GLYPH_CLASS = 'text-muted text-xs font-mono hover:text-danger'
 
 // One loading voice per screen. The app has several shapes of "Loading…" by
 // context (full-screen fallback vs embedded), and a screen that uses two of
@@ -334,7 +332,7 @@ export default function PT() {
                         <button
                           onClick={() => void handleRemoveRoutine(routine)}
                           aria-label={`Remove ${routine.name}`}
-                          class={DELETE_GLYPH_CLASS}
+                          class={GLYPH_BUTTON_CLASS}
                         >
                           ✕
                         </button>
@@ -392,7 +390,7 @@ export default function PT() {
                       <button
                         onClick={() => void handleDeleteArchivedRoutine(routine)}
                         aria-label={`Delete ${routine.name}`}
-                        class={DELETE_GLYPH_CLASS}
+                        class={GLYPH_BUTTON_CLASS}
                       >
                         ✕
                       </button>
@@ -438,7 +436,7 @@ export default function PT() {
                     <button
                       onClick={() => void handleDeleteSession(summary)}
                       aria-label={`Delete ${summary.routineName} run from ${runWhen(summary.session.date)}`}
-                      class={DELETE_GLYPH_CLASS}
+                      class={GLYPH_BUTTON_CLASS}
                     >
                       ✕
                     </button>

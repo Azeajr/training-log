@@ -137,6 +137,19 @@ class Query<T> {
     return this.orderBy(field).toArray()
   }
 
+  // COUNT(*) in SQL, so a caller that wants how many does not ship every row
+  // across the worker to read `.length`. A JS filter or a LIMIT has to see the
+  // rows, so those count what toArray returns.
+  async count(): Promise<number> {
+    if (this.filterFn || this.limitN != null) return (await this.toArray()).length
+    const where = this.whereSql ? ` WHERE ${this.whereSql}` : ''
+    const rows = await sqliteClient.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM "${this.table.tableName}"${where}`,
+      this.whereParams,
+    )
+    return rows[0]?.count ?? 0
+  }
+
   async delete(): Promise<void> {
     if (this.filterFn) {
       const rows = await this.toArray()

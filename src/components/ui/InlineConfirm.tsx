@@ -18,6 +18,10 @@ interface Props {
   ariaLabel?: string
 }
 
+// The bare glyph (✕) that starts a removal: here, where the confirm is inline,
+// and on rows whose removal goes to the modal instead (PT). One look for both.
+export const GLYPH_BUTTON_CLASS = 'text-muted text-xs font-mono hover:text-danger'
+
 export default function InlineConfirm(props: Props) {
   const [confirming, setConfirming] = createSignal(false)
 
@@ -52,7 +56,7 @@ export default function InlineConfirm(props: Props) {
       <button
         onClick={e => handle(e, () => setConfirming(true))}
         aria-label={props.ariaLabel}
-        class={`${props.strong ? 'text-danger/50 text-sm' : 'text-muted text-xs'} font-mono hover:text-danger${props.class ? ` ${props.class}` : ''}`}
+        class={`${props.strong ? 'text-danger/50 text-sm font-mono hover:text-danger' : GLYPH_BUTTON_CLASS}${props.class ? ` ${props.class}` : ''}`}
       >
         {props.label}
       </button>

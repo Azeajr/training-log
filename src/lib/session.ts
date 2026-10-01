@@ -59,7 +59,7 @@ async function resolveDuplicatePending(db: TrainingDB, pending: Session[]): Prom
   if (pending.length === 1) return pending[0]
   const withCounts = await Promise.all(pending.map(async session => ({
     session,
-    sets: (await db.sets.where('sessionId').equals(session.id!).toArray()).length,
+    sets: await db.sets.where('sessionId').equals(session.id!).count(),
   })))
   withCounts.sort((a, b) => b.sets - a.sets || a.session.id! - b.session.id!)
   for (const { session } of withCounts.slice(1)) {

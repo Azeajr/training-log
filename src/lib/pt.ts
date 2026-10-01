@@ -354,7 +354,7 @@ export async function deletePtRoutine(db: TrainingDB, routineId: number): Promis
  * should name the cost. Not read off the history list: that list is capped.
  */
 export async function countPtRuns(db: TrainingDB, routineId: number): Promise<number> {
-  return (await db.ptSessions.where('routineId').equals(routineId).toArray()).length
+  return db.ptSessions.where('routineId').equals(routineId).count()
 }
 
 export interface PtRunCheck {
