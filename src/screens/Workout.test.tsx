@@ -1716,7 +1716,7 @@ describe('Workout screen — cycle complete', () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
   })
 
-  it('CUT ALL TMS INSTEAD in cycle complete modal deloads and navigates', async () => {
+  it('DELOAD ALL in cycle complete modal previews, confirms and navigates', async () => {
     const session4 = await setupCycleComplete()
     startSession(session4)
     logCompletedWork(session4.id!)
@@ -1725,7 +1725,11 @@ describe('Workout screen — cycle complete', () => {
     fireEvent.click(await findFinishButton())
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
 
-    fireEvent.click(screen.getByText(/CUT ALL TMS INSTEAD/))
+    fireEvent.click(screen.getByRole('button', { name: 'DELOAD ALL' }))
+    expect(mockNavigate).not.toHaveBeenCalledWith('/today')
+    fireEvent.click(screen.getByRole('button', { name: 'Increase deload percent' }))
+    await waitFor(() => expect(screen.getByText('CONFIRM DELOAD −15%')).toBeEnabled())
+    fireEvent.click(screen.getByText('CONFIRM DELOAD −15%'))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/today'))
   })
 

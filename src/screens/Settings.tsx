@@ -5,7 +5,7 @@ import { settings, updateSettings, loadSettings, THEMES, DEFAULT_PLATES } from '
 import { clearSession } from '../store/workout-store'
 import { clearAllPtRuns } from '../store/pt-store'
 import { exportJson, importJson, exportCsv, exportPtCsv } from '../lib/export-import'
-import { deloadTms, planDeload, applyDeload, advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
+import { advanceCycleIfComplete, syncClosedThroughWeek, applyCycleDoubling, retireWeeksPastFinalWeek } from '../lib/cycle'
 import { buildCleanupPlan } from '../lib/cleanup'
 import { applyPtCleanup, planPtCleanup, ptCleanupCount } from '../lib/pt'
 import { EXERCISE_CATEGORIES, CATEGORY_LABEL } from '../lib/assistance'
@@ -16,6 +16,8 @@ import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
 import { calcMainSets, cycleFinalWeek, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
+import DeloadModal from '../components/modals/DeloadModal'
+import DeloadButton from '../components/ui/DeloadButton'
 import type { CycleCompleteData } from '../components/modals/CycleCompleteModal'
 import LiftSetupModal, { type DraftLiftFields } from '../components/modals/LiftSetupModal'
 import Rule from '../components/layout/Rule'
@@ -93,8 +95,7 @@ export default function Settings() {
   const [currentCycleWeek, setCurrentCycleWeek] = createSignal<1 | 2 | 3 | 4 | null>(null)
   const [currentCycleId, setCurrentCycleId] = createSignal<number | null>(null)
   const [cycleCompleteData, setCycleCompleteData] = createSignal<CycleCompleteData | null>(null)
-  // A one-off choice, not a setting: how hard to cut is decided per deload.
-  const [deloadPct, setDeloadPct] = createSignal(10)
+  const [deloadTarget, setDeloadTarget] = createSignal<{ lift?: { id: number; name: string } } | null>(null)
 
   const [importError, setImportError] = createSignal<string | null>(null)
 
@@ -462,36 +463,6 @@ export default function Settings() {
     }
   }
 
-  // The confirm lists the cut per lift, and the write is that same plan rather
-  // than a second one worked out after the tap. It also names the lifts left
-  // alone: the once-per-cycle guard is no longer invisible with a choosable
-  // percentage (cut 5%, then try 10%, and the second does nothing), and a small
-  // cut on a light TM rounds back to where it started. Saying "cut −10%" over
-  // either would be false.
-  //
-  // Not `destructive`: a deload appends rows, and editing a TM puts it back.
-  //
-  // `lift` cuts that one lift's TM (its row's cut button); without it, every
-  // active lift's.
-  const handleDeload = async (lift?: Lift) => {
-    const pct = deloadPct()
-    const plan = await planDeload(db, pct / 100, lift ? [lift.id!] : undefined)
-    const leftAlone = [
-      ...(plan.alreadyCut.length > 0 ? [`Already cut this cycle: ${plan.alreadyCut.join(', ')}`] : []),
-      ...(plan.tooLight.length > 0 ? [`−${pct}% rounds back to the same TM: ${plan.tooLight.join(', ')}`] : []),
-    ]
-    if (plan.changes.length === 0) {
-      showToast(leftAlone.length > 0 ? `Nothing to cut. ${leftAlone.join('. ')}` : 'No training maxes to cut')
-      return
-    }
-    const lines = [...plan.changes.map(c => `${c.liftName}: ${c.oldWeight} → ${c.weight} lb`), ...leftAlone]
-    const subject = lift ? `${lift.name}'s training max` : 'training maxes'
-    if (!await confirm(`Cut ${subject} by ${pct}%?\n\n${lines.join('\n')}`, { confirmLabel: lift ? 'CUT TM' : 'CUT TMS' })) return
-    const cut = await applyDeload(db, plan)
-    await load()
-    showToast(`Cut ${cut.length} TM${cut.length === 1 ? '' : 's'} −${pct}%`)
-  }
-
   const handleFileSelected = (e: Event & { currentTarget: HTMLInputElement }) => {
     const file = e.currentTarget.files?.[0]
     if (!file) return
@@ -672,13 +643,11 @@ export default function Settings() {
                       edit
                     </button>
                     <Show when={tms()[l.id!] != null}>
-                      <button
-                        onClick={() => void handleDeload(l)}
-                        aria-label={`Cut ${l.name} TM ${deloadPct()}%`}
-                        class="text-muted text-xs hover:text-warn"
-                      >
-                        cut −{deloadPct()}%
-                      </button>
+                      <DeloadButton
+                        liftName={l.name}
+                        inline
+                        onClick={() => setDeloadTarget({ lift: { id: l.id!, name: l.name } })}
+                      />
                     </Show>
                   </>
                 }>
@@ -703,22 +672,10 @@ export default function Settings() {
           )}</For>
           <Show when={activeLifts().some(l => tms()[l.id!] != null)}>
             <div class="mt-4">
-              <div class="flex flex-wrap items-center gap-3">
-                <div class="flex items-center gap-2">
-                  <Stepper value={deloadPct()} onChange={setDeloadPct} step={5} min={5} max={30} fieldLabel="deload percent" />
-                  <span class="text-muted text-xs">%</span>
-                </div>
-                <button
-                  onClick={() => void handleDeload()}
-                  class="border border-border text-muted px-3 py-1.5 text-xs font-mono tracking-widest hover:border-warn hover:text-warn"
-                >
-                  CUT ALL TMS  −{deloadPct()}%
-                </button>
-              </div>
+              <DeloadButton onClick={() => setDeloadTarget({})} />
               <p class="text-faint text-xs mt-1">
-                Drops every lift's training max by {deloadPct()}%, effective from your next
-                session; a lift's own cut drops just that one. Once per cycle per lift; edit
-                a TM above to undo it.
+                Deload all lifts or choose one above. Adjust the percentage and review
+                the training maxes before confirming.
               </p>
             </div>
           </Show>
@@ -1152,10 +1109,18 @@ export default function Settings() {
         </div>
       </Group>
 
+      <Show when={deloadTarget()}>{target => (
+        <DeloadModal
+          lift={target().lift}
+          onCancel={() => setDeloadTarget(null)}
+          onComplete={async () => { setDeloadTarget(null); await load() }}
+        />
+      )}</Show>
+
       <CycleCompleteModal
         data={cycleCompleteData()}
         onDismiss={async () => { setCycleCompleteData(null); await load() }}
-        onDeload={async (pct) => { await deloadTms(db, pct); setCycleCompleteData(null); await load() }}
+        onDeloadComplete={async () => { setCycleCompleteData(null); await load() }}
         onDoubleIncrement={async (liftId, progressionIncrement) => {
           setCycleCompleteData(await applyCycleDoubling(db, cycleCompleteData(), liftId, progressionIncrement))
         }}
