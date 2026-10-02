@@ -285,7 +285,7 @@ describe('Settings — deload', () => {
 
   afterEach(drain)
 
-  it('CUT ALL TMS confirmed drops all TMs by 10% (new TM records added)', async () => {
+  it('DELOAD ALL confirmed drops all TMs by 10% (new TM records added)', async () => {
     const liftId1 = await db.lifts.add({ name: 'OHP',   order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
     const liftId2 = await db.lifts.add({ name: 'Bench', order: 1, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
     await db.trainingMaxes.add({ liftId: liftId1, weight: 200, setAt: new Date('2026-01-01') })
@@ -293,8 +293,9 @@ describe('Settings — deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
-    fireEvent.click(await screen.findByText('CUT TMS'))
+    fireEvent.click(await screen.findByRole('button', { name: 'DELOAD ALL' }))
+    await waitFor(() => expect(screen.getByText('CONFIRM DELOAD −10%')).toBeEnabled())
+    fireEvent.click(screen.getByText('CONFIRM DELOAD −10%'))
 
     await waitFor(async () => {
       const tms = await db.trainingMaxes.orderBy('setAt').toArray()
@@ -305,13 +306,13 @@ describe('Settings — deload', () => {
     })
   })
 
-  it('CUT ALL TMS cancelled does not change TMs', async () => {
+  it('DELOAD ALL cancelled does not change TMs', async () => {
     const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
     await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') })
 
     renderSettings()
 
-    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+    fireEvent.click(await screen.findByRole('button', { name: 'DELOAD ALL' }))
     fireEvent.click(await screen.findByText('CANCEL'))
 
     await waitFor(async () => {
@@ -329,13 +330,13 @@ describe('Settings — deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Increase deload percent' }))
-    fireEvent.click(await screen.findByText('CUT ALL TMS −15%', { normalizer: s => s.replace(/\s+/g, ' ').trim() }))
+    fireEvent.click(await screen.findByRole('button', { name: 'DELOAD ALL' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Increase deload percent' }))
 
-    await screen.findByText(/Cut training maxes by 15%\?/)
-    expect(screen.getByText(/OHP: 200 → 170 lb/)).toBeInTheDocument()
-    expect(screen.getByText(/Bench: 300 → 255 lb/)).toBeInTheDocument()
-    fireEvent.click(screen.getByText('CUT TMS'))
+    await screen.findByText(/Cut all active lifts’ training maxes by 15%\?/)
+    expect(await screen.findByText(/OHP: 200 → 170 lb/)).toBeInTheDocument()
+    expect(await screen.findByText(/Bench: 300 → 255 lb/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('CONFIRM DELOAD −15%'))
 
     await waitFor(async () => {
       expect(await getCurrentTm(db, liftId1)).toBe(170)
@@ -347,7 +348,7 @@ describe('Settings — deload', () => {
   // The once-per-cycle guard makes a second cut a no-op. Before the percentage
   // was choosable that only ever caught a double tap; now it also catches
   // "5% wasn't enough, try 10%", and the screen must not claim a cut it skipped.
-  it('says so, and asks nothing, when every lift was already cut this cycle', async () => {
+  it('explains why confirmation is disabled when every lift was already cut this cycle', async () => {
     const liftId = await db.lifts.add({ name: 'OHP', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
     await db.trainingMaxes.add({ liftId, weight: 200, setAt: new Date('2026-01-01') })
     await db.cycles.add({ number: 1, startDate: new Date(), endDate: null, closedThroughWeek: 0 })
@@ -355,10 +356,10 @@ describe('Settings — deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+    fireEvent.click(await screen.findByRole('button', { name: 'DELOAD ALL' }))
 
-    await waitFor(() => expect(toast()).toBe('Nothing to cut. Already cut this cycle: OHP'))
-    expect(screen.queryByText('CUT TMS')).not.toBeInTheDocument()
+    await screen.findByText('Already cut this cycle: OHP')
+    expect(screen.getByText('CONFIRM DELOAD −10%')).toBeDisabled()
     expect(await getCurrentTm(db, liftId)).toBe(190)
   })
 
@@ -372,14 +373,14 @@ describe('Settings — deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Decrease deload percent' }))
-    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+    fireEvent.click(await screen.findByRole('button', { name: 'DELOAD ALL' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease deload percent' }))
 
-    await screen.findByText(/Cut training maxes by 5%\?/)
-    expect(screen.getByText(/Bench: 300 → 285 lb/)).toBeInTheDocument()
+    await screen.findByText(/Cut all active lifts’ training maxes by 5%\?/)
+    expect(await screen.findByText(/Bench: 300 → 285 lb/)).toBeInTheDocument()
     expect(screen.getByText(/−5% rounds back to the same TM: OHP/)).toBeInTheDocument()
     expect(screen.queryByText(/OHP: 45 → 45/)).toBeNull()
-    fireEvent.click(screen.getByText('CUT TMS'))
+    fireEvent.click(screen.getByText('CONFIRM DELOAD −5%'))
 
     await waitFor(() => expect(toast()).toBe('Cut 1 TM −5%'))
     expect(await db.trainingMaxes.where('liftId').equals(ohp).toArray()).toHaveLength(1)
@@ -396,10 +397,10 @@ describe('Settings — deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
+    fireEvent.click(await screen.findByRole('button', { name: 'DELOAD ALL' }))
     await screen.findByText(/OHP: 200 → 180 lb/)
     await setTm(db, ohp, 250) // another tab, while the confirm is open
-    fireEvent.click(screen.getByText('CUT TMS'))
+    fireEvent.click(screen.getByText('CONFIRM DELOAD −10%'))
 
     await waitFor(() => expect(toast()).toBe('Cut 1 TM −10%'))
     expect(await getCurrentTm(db, ohp)).toBe(250)
@@ -414,13 +415,13 @@ describe('Settings — deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Increase deload percent' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Cut Bench TM 15%' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Deload Bench' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Increase deload percent' }))
 
     await screen.findByText(/Cut Bench's training max by 15%\?/)
-    expect(screen.getByText(/Bench: 300 → 255 lb/)).toBeInTheDocument()
+    expect(await screen.findByText(/Bench: 300 → 255 lb/)).toBeInTheDocument()
     expect(screen.queryByText(/OHP: 200/)).toBeNull()
-    fireEvent.click(screen.getByText('CUT TM'))
+    fireEvent.click(screen.getByText('CONFIRM DELOAD −15%'))
 
     await waitFor(() => expect(toast()).toBe('Cut 1 TM −15%'))
     expect(await getCurrentTm(db, bench)).toBe(255)
@@ -435,8 +436,8 @@ describe('Settings — deload', () => {
 
     renderSettings()
 
-    fireEvent.click(await screen.findByText(/CUT ALL TMS/))
-    expect(await screen.findByText('CUT TMS')).not.toHaveClass('text-danger')
+    fireEvent.click(await screen.findByRole('button', { name: 'DELOAD ALL' }))
+    expect(await screen.findByText('CONFIRM DELOAD −10%')).not.toHaveClass('text-danger')
   })
 })
 
@@ -1251,7 +1252,7 @@ describe('Settings — skip deload', () => {
     await waitFor(() => expect(screen.queryByText('CYCLE COMPLETE')).toBeNull())
   })
 
-  it('CUT ALL TMS INSTEAD in Settings CycleCompleteModal deloads TMs and dismisses modal (covers onDeload)', async () => {
+  it('DELOAD ALL in Settings cycle completion confirms the cut and dismisses the dialog', async () => {
     const { liftIds } = await seedWeek4Context()
     renderSettings()
 
@@ -1260,7 +1261,9 @@ describe('Settings — skip deload', () => {
     fireEvent.click(screen.getByText('END CYCLE'))
 
     await waitFor(() => expect(document.body.textContent).toContain('CYCLE COMPLETE'))
-    fireEvent.click(screen.getByText(/CUT ALL TMS INSTEAD/))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'CYCLE COMPLETE' })).getByRole('button', { name: 'DELOAD ALL' }))
+    await waitFor(() => expect(screen.getByText('CONFIRM DELOAD −10%')).toBeEnabled())
+    fireEvent.click(screen.getByText('CONFIRM DELOAD −10%'))
 
     await waitFor(async () => {
       const tms = await db.trainingMaxes.where('liftId').equals(liftIds[0]).sortBy('setAt')

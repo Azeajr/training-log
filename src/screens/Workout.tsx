@@ -16,7 +16,7 @@ import { ACCESSORY_SETS } from '../lib/calc'
 import { composeAllSets, amrapTargetsFor } from '../lib/workout-compose'
 import type { AmrapTarget, MainSet, FslSet, WarmupSet, JokerSet, CrossSet } from '../lib/calc'
 import type { SupplementalTemplate } from '../types/domain'
-import { advanceCycleIfComplete, getRecentWorkingSets, deloadTms, applyCycleDoubling } from '../lib/cycle'
+import { advanceCycleIfComplete, getRecentWorkingSets, applyCycleDoubling } from '../lib/cycle'
 import { discardPendingSession, finalizePendingSession, reconcileActiveSession } from '../lib/session'
 import { createSerialQueue } from '../lib/serial-queue'
 import { detectPRs } from '../lib/pr'
@@ -889,11 +889,6 @@ export default function Workout() {
     navigate('/today')
   }
 
-  const handleCycleDeload = async (pct: number) => {
-    await deloadTms(db, pct)
-    handleCycleCompleteDismiss()
-  }
-
   const handleDoubleIncrement = async (liftId: number, progressionIncrement: number) => {
     setCycleCompleteData(await applyCycleDoubling(db, cycleCompleteData(), liftId, progressionIncrement))
   }
@@ -1406,7 +1401,7 @@ export default function Workout() {
         <CycleCompleteModal
           data={cycleCompleteData()}
           onDismiss={handleCycleCompleteDismiss}
-          onDeload={handleCycleDeload}
+          onDeloadComplete={handleCycleCompleteDismiss}
           onDoubleIncrement={handleDoubleIncrement}
         />
 

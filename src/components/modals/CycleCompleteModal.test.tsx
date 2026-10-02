@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import CycleCompleteModal from './CycleCompleteModal'
 import type { CycleCompleteData } from '../../lib/cycle'
+import { db } from '../../db/index'
+import { getCurrentTm } from '../../lib/training-max'
 
 const DATA: CycleCompleteData = {
   newTms: [{ liftId: 1, liftName: 'Bench', oldWeight: 200, weight: 205 }],
@@ -19,10 +21,16 @@ function deferred() {
 }
 
 describe('CycleCompleteModal', () => {
+  beforeEach(async () => {
+    await Promise.all([db.lifts.clear(), db.trainingMaxes.clear(), db.cycles.clear()])
+    await db.lifts.add({ id: 1, name: 'Bench', order: 0, progressionIncrement: 5, baseWeight: 45, liftType: 'upper' })
+    await db.trainingMaxes.add({ liftId: 1, weight: 205, setAt: new Date('2026-01-01') })
+  })
+
   // ── F47 ───────────────────────────────────────────────────────────────────
   it('does not land focus on the training-max write button', () => {
     render(() => (
-      <CycleCompleteModal data={DATA} onDismiss={noop} onDeload={noop} onDoubleIncrement={noop} />
+      <CycleCompleteModal data={DATA} onDismiss={noop} onDeloadComplete={noop} onDoubleIncrement={noop} />
     ))
     // The first focusable is "+10 LBS", which writes a TM. Focus on open must
     // not arm it under the next Enter keypress.
@@ -34,7 +42,7 @@ describe('CycleCompleteModal', () => {
   it('fires the doubling callback once for three taps', async () => {
     const d = deferred()
     render(() => (
-      <CycleCompleteModal data={DATA} onDismiss={noop} onDeload={noop} onDoubleIncrement={d.fn} />
+      <CycleCompleteModal data={DATA} onDismiss={noop} onDeloadComplete={noop} onDoubleIncrement={d.fn} />
     ))
     const btn = screen.getByRole('button', { name: '+10 LBS' })
     fireEvent.click(btn)
@@ -45,40 +53,70 @@ describe('CycleCompleteModal', () => {
     d.release()
   })
 
-  it('cuts by the percentage on its stepper, not a fixed 10%', () => {
+  it('previews and confirms the selected percentage before completing', async () => {
     const onDeload = vi.fn()
     render(() => (
-      <CycleCompleteModal data={DATA} onDismiss={noop} onDeload={onDeload} onDoubleIncrement={noop} />
+      <CycleCompleteModal data={DATA} onDismiss={noop} onDeloadComplete={onDeload} onDoubleIncrement={noop} />
     ))
+    fireEvent.click(screen.getByRole('button', { name: 'DELOAD ALL' }))
+    expect(onDeload).not.toHaveBeenCalled()
+    expect(await getCurrentTm(db, 1)).toBe(205)
     fireEvent.click(screen.getByRole('button', { name: 'Increase deload percent' }))
-    fireEvent.click(screen.getByRole('button', { name: /CUT ALL TMS INSTEAD\s+−15%/ }))
-    expect(onDeload).toHaveBeenCalledWith(0.15)
+    await screen.findByText('Bench: 205 → 175 lb')
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM DELOAD −15%' }))
+    await waitFor(() => expect(onDeload).toHaveBeenCalledTimes(1))
+    expect(await getCurrentTm(db, 1)).toBe(175)
   })
 
   it('fires the deload callback once for three taps', async () => {
     const d = deferred()
     render(() => (
-      <CycleCompleteModal data={DATA} onDismiss={noop} onDeload={d.fn} onDoubleIncrement={noop} />
+      <CycleCompleteModal data={DATA} onDismiss={noop} onDeloadComplete={d.fn} onDoubleIncrement={noop} />
     ))
-    const btn = screen.getByRole('button', { name: /CUT ALL TMS/ })
+    fireEvent.click(screen.getByRole('button', { name: 'DELOAD ALL' }))
+    await screen.findByText('Bench: 205 → 185 lb')
+    const btn = screen.getByRole('button', { name: 'CONFIRM DELOAD −10%' })
     fireEvent.click(btn)
     fireEvent.click(btn)
     fireEvent.click(btn)
     await waitFor(() => expect(btn).toBeDisabled())
-    expect(d.fn).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(d.fn).toHaveBeenCalledTimes(1))
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(screen.getByRole('dialog', { name: 'DELOAD ALL LIFTS' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'CANCEL' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Increase deload percent' })).toBeDisabled()
+    expect(await db.trainingMaxes.count()).toBe(2)
     d.release()
+  })
+
+  it('cancel and Escape return to cycle completion without cutting, and reopening starts at 10%', async () => {
+    const onDismiss = vi.fn()
+    const onDeload = vi.fn()
+    render(() => <CycleCompleteModal data={DATA} onDismiss={onDismiss} onDeloadComplete={onDeload} onDoubleIncrement={noop} />)
+    fireEvent.click(screen.getByRole('button', { name: 'DELOAD ALL' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Increase deload percent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'CANCEL' }))
+    expect(screen.getByRole('dialog', { name: 'CYCLE COMPLETE' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'DELOAD ALL' }))
+    await screen.findByText('Bench: 205 → 185 lb')
+    expect(screen.getByRole('button', { name: 'CONFIRM DELOAD −10%' })).toBeEnabled()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(screen.getByRole('dialog', { name: 'CYCLE COMPLETE' })).toBeInTheDocument()
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect(onDeload).not.toHaveBeenCalled()
+    expect(await getCurrentTm(db, 1)).toBe(205)
   })
 
   it('disables every control while one handler is in flight', async () => {
     const d = deferred()
     render(() => (
-      <CycleCompleteModal data={DATA} onDismiss={noop} onDeload={noop} onDoubleIncrement={d.fn} />
+      <CycleCompleteModal data={DATA} onDismiss={noop} onDeloadComplete={noop} onDoubleIncrement={d.fn} />
     ))
     fireEvent.click(screen.getByRole('button', { name: '+10 LBS' }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+10 LBS' })).toBeDisabled()
       expect(screen.getByRole('button', { name: 'CONTINUE' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: /CUT ALL TMS/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'DELOAD ALL' })).toBeDisabled()
     })
     d.release()
   })
@@ -89,7 +127,7 @@ describe('CycleCompleteModal', () => {
     const onDismiss = vi.fn()
     render(() => (
       <CycleCompleteModal
-        data={DATA} onDismiss={onDismiss} onDeload={noop} onDoubleIncrement={d.fn}
+        data={DATA} onDismiss={onDismiss} onDeloadComplete={noop} onDoubleIncrement={d.fn}
       />
     ))
     fireEvent.click(screen.getByRole('button', { name: '+10 LBS' }))
@@ -107,7 +145,7 @@ describe('CycleCompleteModal', () => {
     const onDismiss = vi.fn()
     render(() => (
       <CycleCompleteModal
-        data={DATA} onDismiss={onDismiss} onDeload={noop} onDoubleIncrement={d.fn}
+        data={DATA} onDismiss={onDismiss} onDeloadComplete={noop} onDoubleIncrement={d.fn}
       />
     ))
     fireEvent.click(screen.getByRole('button', { name: '+10 LBS' }))
