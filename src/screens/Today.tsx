@@ -5,6 +5,7 @@ import type { Lift, PtRoutine } from '../types/domain'
 import { workout, startSession, resumeSession, clearSession, addAccessory, toActiveAccessory } from '../store/workout-store'
 import { calcMainSets, calcWarmup, calcSupplementalSets, getSupplementalLabel, getCrossLabel, effectiveSupplementalWeek } from '../lib/calc'
 import type { FslSet } from '../lib/calc'
+import { liftWeightFloor } from '../lib/plate-loading'
 import { getNextSessionAdvancingIfDone } from '../lib/cycle'
 import {
   discardPendingSession, hydrateSessionState, reconcileActiveSession, startOrResumePendingSession,
@@ -293,18 +294,19 @@ export default function Today() {
   })
 
   const selectedLift = () => lifts().find(l => l.id === selectedLiftId())
-  const main = () => selectedLift() ? calcMainSets(tm(), currentWeek(), settings.barWeight) : []
+  const floor = () => { const l = selectedLift(); return l ? liftWeightFloor(l, settings.barWeight) : 0 }
+  const main = () => selectedLift() ? calcMainSets(tm(), currentWeek(), floor()) : []
   // The day's defining lift: the heaviest (last) main set — the AMRAP on weeks
   // 1-3, the top deload set on week 4. Promoted to the hero readout.
   const topMain = () => { const m = main(); return m.length > 0 ? m[m.length - 1] : null }
-  const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm(), settings.barWeight) : []
+  const warmup = () => selectedLift() ? calcWarmup(tm(), main()[0]?.weight ?? tm(), floor()) : []
 
   // Supplemental preview runs at the effective week (deload may remap or skip).
   const effSuppWeek = () => effectiveSupplementalWeek(currentWeek(), settings.deloadSupplemental)
   const supplementalSets = (): FslSet[] => {
     const e = effSuppWeek()
     if (e === null) return []
-    return calcSupplementalSets(settings.supplementalTemplate ?? 'fsl+bbb', calcMainSets(tm(), e, settings.barWeight), tm(), e, settings.barWeight)
+    return calcSupplementalSets(settings.supplementalTemplate ?? 'fsl+bbb', calcMainSets(tm(), e, floor()), tm(), e, floor())
   }
 
   const supplementalLabel = (): string | null => {

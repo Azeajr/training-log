@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveLiftLoading, resolveExerciseLoading } from './plate-loading'
+import { liftWeightFloor, resolveLiftLoading, resolveExerciseLoading } from './plate-loading'
 
 const BAR = 45
 
@@ -38,6 +38,23 @@ describe('resolveLiftLoading', () => {
 
   it('tracks the global bar when base is unset (paired default)', () => {
     expect(resolveLiftLoading({ plateMode: 'paired' }, 35)).toEqual({ mode: 'paired', base: 35 })
+  })
+})
+
+describe('liftWeightFloor', () => {
+  it('is the global bar for an untouched barbell lift', () => {
+    expect(liftWeightFloor({}, BAR)).toBe(BAR)
+  })
+
+  it('is the lift\'s own base when one is set, including zero', () => {
+    expect(liftWeightFloor({ plateMode: 'paired', implementBase: 0 }, BAR)).toBe(0)
+    expect(liftWeightFloor({ plateMode: 'paired', implementBase: 55 }, BAR)).toBe(55)
+    expect(liftWeightFloor({ plateMode: 'total' }, BAR)).toBe(0)
+  })
+
+  it('is zero for a lift that is not plate-loaded', () => {
+    expect(liftWeightFloor({ plateMode: 'none' }, BAR)).toBe(0)
+    expect(liftWeightFloor({ usesBarbell: false }, BAR)).toBe(0)
   })
 })
 
