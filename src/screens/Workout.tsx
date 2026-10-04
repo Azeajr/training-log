@@ -32,7 +32,7 @@ import SetRow from '../components/workout/SetRow'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
 import AccessoryLog from '../components/workout/AccessoryLog'
 import CrossBlockLog from '../components/workout/CrossBlockLog'
-import { resolveLiftLoading, type PlateLoading } from '../lib/plate-loading'
+import { liftWeightFloor, resolveLiftLoading, type PlateLoading } from '../lib/plate-loading'
 import RestTimer from '../components/workout/RestTimer'
 import SessionBar, { isOutstanding, scrollToSection, type SessionSegment } from '../components/workout/SessionBar'
 import BottomBar from '../components/layout/BottomBar'
@@ -213,7 +213,7 @@ export default function Workout() {
   const composeSets = (tm: number, week: 1 | 2 | 3 | 4, template: SupplementalTemplate) =>
     composeAllSets({
       tm, week, template,
-      barWeight: settings.barWeight,
+      floor: lift() ? liftWeightFloor(lift()!, settings.barWeight) : 0,
       deloadSupplemental: settings.deloadSupplemental,
       loggedSets: workout.loggedSets,
       crossBlocks: crossBlocks(),

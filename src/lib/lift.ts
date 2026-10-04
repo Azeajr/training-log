@@ -2,6 +2,7 @@ import type { TrainingDB } from '../db/index'
 import { discardPendingSessionRows } from './session'
 import { getCurrentTm } from './training-max'
 import { calcCrossSets, effectiveSupplementalWeek } from './calc'
+import { liftWeightFloor } from './plate-loading'
 import type { CrossBlockPlan } from './workout-compose'
 import type { DeloadSupplemental, Lift, LiftSupplemental } from '../types/domain'
 
@@ -164,7 +165,7 @@ export async function loadCrossPlan(
     const movement = lifts.find(l => l.id === block.movementLiftId)
     if (!movement) continue
     const tm = await getCurrentTm(db, block.movementLiftId)
-    const computed = calcCrossSets(block, tm, eff, opts.barWeight)
+    const computed = calcCrossSets(block, tm, eff, liftWeightFloor(movement, opts.barWeight))
     if (computed.length === 0) continue
     plan.push({ block, movement, movementLiftId: block.movementLiftId, computed })
   }

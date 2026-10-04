@@ -24,7 +24,8 @@ export interface ComposeInput {
   tm: number
   week: 1 | 2 | 3 | 4
   template: SupplementalTemplate
-  barWeight: number
+  /** The lift's empty implement — see `liftWeightFloor`. */
+  floor: number
   deloadSupplemental: DeloadSupplemental
   /** The linear logged sets for this session's own lift. */
   loggedSets: Set[]
@@ -92,14 +93,14 @@ export function composeAllSets(input: ComposeInput): {
   cross: CrossSet[]
   main: MainSet[]
 } {
-  const { tm, week, template, barWeight, deloadSupplemental, loggedSets } = input
-  const main = calcMainSets(tm, week, barWeight)
-  const warmup = calcWarmup(tm, main[0].weight, barWeight)
+  const { tm, week, template, floor, deloadSupplemental, loggedSets } = input
+  const main = calcMainSets(tm, week, floor)
+  const warmup = calcWarmup(tm, main[0].weight, floor)
 
   // Supplemental runs at the effective week (deload may remap or skip it).
   const eff = effectiveSupplementalWeek(week, deloadSupplemental)
-  const suppMain = eff === null ? [] : calcMainSets(tm, eff, barWeight)
-  let fsl = eff === null ? [] : calcSupplementalSets(template, suppMain, tm, eff, barWeight)
+  const suppMain = eff === null ? [] : calcMainSets(tm, eff, floor)
+  let fsl = eff === null ? [] : calcSupplementalSets(template, suppMain, tm, eff, floor)
   const sourceSetNumber = supplementalSourceSetNumber(template)
   const loggedSource = sourceSetNumber === null
     ? undefined

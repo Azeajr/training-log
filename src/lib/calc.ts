@@ -208,13 +208,18 @@ export interface MainSet {
 // `percentages.map` on undefined — which blanks the Workout screen, because the
 // app has no route error boundary (F28). No sets is a legible degradation; a
 // TypeError is not.
-export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): MainSet[] => {
+//
+// `floor` (here and in every set calculator below) is the lightest load the
+// lift can be set up at — its empty implement, from `liftWeightFloor`. It is
+// per lift, not the global bar: a dumbbell or a 0lb-base lift clamped to 45
+// turned a 45 TM into 45 · 45 · 45.
+export const calcMainSets = (tm: number, week: 1 | 2 | 3 | 4, floor = BAR_WEIGHT): MainSet[] => {
   const percentages = MAIN_PERCENTAGES[week] as readonly number[] | undefined
   const reps = MAIN_REPS[week] as readonly number[] | undefined
   if (!percentages || !reps) return []
   return percentages.map((pct, i) => ({
     setNumber: i + 1,
-    weight: Math.max(barWeight, roundToNearest5(tm * pct)),
+    weight: Math.max(floor, roundToNearest5(tm * pct)),
     reps: reps[i],
     isAmrap: week !== 4 && i === 2,
     type: 'main',
@@ -292,16 +297,16 @@ export const calcSslSets    = (secondSetWeight: number) => buildFixedSets(second
 export const calcFslBbbSets = (firstSetWeight: number)  => buildFixedSets(firstSetWeight,  10,       'fsl+bbb')
 export const calcSslBbbSets = (secondSetWeight: number) => buildFixedSets(secondSetWeight, 10,       'ssl+bbb')
 
-export const calcBbbSets = (tm: number, barWeight = BAR_WEIGHT): FslSet[] =>
-  buildFixedSets(Math.max(barWeight, roundToNearest5(tm * BBB_PCT)), 10, 'bbb')
+export const calcBbbSets = (tm: number, floor = BAR_WEIGHT): FslSet[] =>
+  buildFixedSets(Math.max(floor, roundToNearest5(tm * BBB_PCT)), 10, 'bbb')
 
-export const calcBbsSets = (tm: number, week: 1 | 2 | 3 | 4, barWeight = BAR_WEIGHT): FslSet[] => {
+export const calcBbsSets = (tm: number, week: 1 | 2 | 3 | 4, floor = BAR_WEIGHT): FslSet[] => {
   const pct = BBS_PERCENTAGES[week] as number | null | undefined
   // `== null`, not `=== null`: an out-of-range week looks up `undefined`, which
   // the strict check let through and turned into ten sets of NaN — loggable and
   // persistable (F28).
   if (pct == null) return []
-  return buildFixedSets(Math.max(barWeight, roundToNearest5(tm * pct)), 5, 'bbs', 10)
+  return buildFixedSets(Math.max(floor, roundToNearest5(tm * pct)), 5, 'bbs', 10)
 }
 
 export interface AccessorySetCalc {
@@ -335,11 +340,11 @@ const WARMUP_PERCENTAGES: { pct: number; reps: number }[] = [
 export const calcWarmup = (
   tm: number,
   workingWeight: number,
-  barWeight = BAR_WEIGHT,
+  floor = BAR_WEIGHT,
 ): WarmupSet[] => {
   const sets: WarmupSet[] = []
   for (const { pct, reps } of WARMUP_PERCENTAGES) {
-    const weight = Math.max(barWeight, roundToNearest5(tm * pct))
+    const weight = Math.max(floor, roundToNearest5(tm * pct))
     if (weight >= workingWeight) break
     if (sets.length > 0 && weight === sets[sets.length - 1].weight) continue
     sets.push({ setNumber: sets.length + 1, weight, reps, type: 'warmup' })
@@ -531,7 +536,7 @@ export function calcSupplementalSets(
   main: MainSet[],
   tm: number,
   week: 1 | 2 | 3 | 4,
-  barWeight = BAR_WEIGHT,
+  floor = BAR_WEIGHT,
 ): FslSet[] {
   if (main.length === 0) return []
   // The SSL variants derive from main set 2, so they need a second set to
@@ -542,10 +547,10 @@ export function calcSupplementalSets(
   switch (template) {
     case 'fsl':     return calcFslSets(main[0].weight)
     case 'ssl':     return secondSet ? calcSslSets(secondSet.weight) : []
-    case 'bbb':     return calcBbbSets(tm, barWeight)
+    case 'bbb':     return calcBbbSets(tm, floor)
     case 'fsl+bbb': return calcFslBbbSets(main[0].weight)
     case 'ssl+bbb': return secondSet ? calcSslBbbSets(secondSet.weight) : []
-    case 'bbs':     return calcBbsSets(tm, week, barWeight)
+    case 'bbs':     return calcBbsSets(tm, week, floor)
     case 'none':    return []
   }
 }
@@ -597,11 +602,11 @@ export const calcCrossSets = (
   block: CrossBlockConfig,
   movementTm: number,
   week: 1 | 2 | 3 | 4,
-  barWeight = BAR_WEIGHT,
+  floor = BAR_WEIGHT,
 ): CrossSet[] => {
   const weight = block.weightMode === 'fsl'
-    ? calcMainSets(movementTm, week, barWeight)[0].weight
-    : Math.max(barWeight, roundToNearest5(movementTm * (block.percent ?? 0)))
+    ? calcMainSets(movementTm, week, floor)[0].weight
+    : Math.max(floor, roundToNearest5(movementTm * (block.percent ?? 0)))
   return Array.from({ length: Math.max(0, block.sets) }, (_, i) => ({
     setNumber: i + 1,
     weight,

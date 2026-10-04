@@ -38,6 +38,12 @@ type LoadingFields = Pick<Lift, 'plateMode' | 'implementBase' | 'usesBarbell'>
 export const resolveLiftLoading = (lift: LoadingFields, barWeight: number): PlateLoading | null =>
   resolve(lift.plateMode, lift.implementBase, lift.usesBarbell === false ? 'none' : 'paired', barWeight)
 
+// The lightest load a lift's set math may prescribe: its empty implement. A
+// percentage below that can't be loaded, so it rounds up to the bar or carriage.
+// Not plate-loaded (dumbbell, cable stack) ⇒ no implement, nothing to clamp to.
+export const liftWeightFloor = (lift: LoadingFields, barWeight: number): number =>
+  resolveLiftLoading(lift, barWeight)?.base ?? 0
+
 // Accessories default to none — only an explicit usesBarbell=true (or plateMode)
 // opts them into a readout.
 export const resolveExerciseLoading = (ex: Pick<Exercise, 'plateMode' | 'implementBase' | 'usesBarbell'>, barWeight: number): PlateLoading | null =>

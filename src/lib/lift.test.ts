@@ -218,6 +218,16 @@ describe('loadCrossPlan', () => {
     expect(plan[1].computed[0]).toMatchObject({ weight: 50, reps: 10 })
   })
 
+  it('floors each block at its movement lift\'s implement, not the global bar', async () => {
+    const { day, ohp } = await seed()
+    await setTm(db, ohp, 60)
+    // 50% of 60 is 30 — under the 45lb bar, so a barbell OHP clamps up to it...
+    expect((await loadCrossPlan(db, day, 1, opts)).find(p => p.movement.name === 'OHP')?.computed[0].weight).toBe(45)
+    // ...and an OHP set up as a 0lb-base implement does not.
+    await updateLift(db, ohp, { plateMode: 'paired', implementBase: 0 })
+    expect((await loadCrossPlan(db, day, 1, opts)).find(p => p.movement.name === 'OHP')?.computed[0].weight).toBe(30)
+  })
+
   it('follows the deload-week supplemental setting', async () => {
     const { day } = await seed()
     expect(await loadCrossPlan(db, day, 4, { ...opts, deloadSupplemental: 'skip' })).toEqual([])

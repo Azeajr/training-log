@@ -15,6 +15,7 @@ import { setTm, getCurrentTm } from '../lib/training-max'
 import { useConfirmation } from '../hooks/use-confirmation'
 import { showToast } from '../store/toast-store'
 import { calcMainSets, cycleFinalWeek, formatDuration, DEFAULT_ACCESSORY_INCREMENT_LB } from '../lib/calc'
+import { liftWeightFloor } from '../lib/plate-loading'
 import CycleCompleteModal from '../components/modals/CycleCompleteModal'
 import DeloadModal from '../components/modals/DeloadModal'
 import DeloadButton from '../components/ui/DeloadButton'
@@ -665,7 +666,7 @@ export default function Settings() {
               </div>
               <Show when={editingTm() === l.id && tmInput() > 0}>
                 <div class="text-faint text-xs font-mono mt-1 ml-24">
-                  {'W1: ' + calcMainSets(tmInput(), 1, settings.barWeight).map(s => s.weight).join(' · ') + ' lb'}
+                  {'W1: ' + calcMainSets(tmInput(), 1, liftWeightFloor(l, settings.barWeight)).map(s => s.weight).join(' · ') + ' lb'}
                 </div>
               </Show>
             </div>

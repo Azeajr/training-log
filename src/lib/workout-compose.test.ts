@@ -19,7 +19,7 @@ const input = (over: Partial<ComposeInput> = {}): ComposeInput => ({
   tm: 300,
   week: 1,
   template: 'fsl',
-  barWeight: BAR,
+  floor: BAR,
   deloadSupplemental: 'skip',
   loggedSets: [],
   crossBlocks: [],
@@ -33,6 +33,18 @@ describe('composeAllSets', () => {
     const types = [...new Set(all.map(s => s.type))]
     expect(types).toEqual(['warmup', 'main', 'fsl'])
     expect(main).toEqual(calcMainSets(300, 1, BAR))
+  })
+
+  it('clamps light sets to the lift\'s floor, not the global bar', () => {
+    // A 45 TM on a 0lb-base lift (dumbbell press): week 1 is 65/75/85%. The
+    // global 45lb bar used to floor every set, warmups included, to 45.
+    const { all, main } = composeAllSets(input({ tm: 45, floor: 0 }))
+    expect(main.map(s => s.weight)).toEqual([30, 35, 40])
+    expect(all.filter(s => s.type === 'fsl').map(s => s.weight)).toEqual([30, 30, 30, 30, 30])
+    expect(all.filter(s => s.type === 'warmup').map(s => s.weight)).toEqual([20, 25])
+
+    const barbell = composeAllSets(input({ tm: 45, floor: BAR }))
+    expect(barbell.main.map(s => s.weight)).toEqual([45, 45, 45])
   })
 
   it('cascades a logged main source set into the pending supplemental sets', () => {

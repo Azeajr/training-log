@@ -257,6 +257,17 @@ describe('Today screen', () => {
     expect(liftButtons.some(b => b.textContent?.includes('done'))).toBe(false)
   })
 
+  it('floors the preview at the lift\'s own implement, not the global bar', async () => {
+    // OHP set up on a 0lb base (a dumbbell press) with a 45 TM: week 1 is
+    // 30 · 35 · 40. The global 45lb bar used to floor all three to 45.
+    await db.lifts.update(1, { plateMode: 'paired', implementBase: 0 })
+    await db.trainingMaxes.clear()
+    await db.trainingMaxes.add({ liftId: 1, weight: 45, setAt: new Date() })
+    renderToday()
+    const top = (await screen.findByText('TOP SET')).parentElement!
+    expect(top.textContent).toContain('40lb')
+  })
+
   it('renders a cross-supplemental preview block driven by the movement lift TM', async () => {
     // OHP (id 1) is auto-selected. Give it an FSL cross block off Deadlift (id 2),
     // which needs its own TM so calcCrossSets has a weight. Exercises the whole
