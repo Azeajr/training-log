@@ -46,5 +46,10 @@ need before implementation.
   guarantee delivery after the browser closes.
 - **Microloading controls.** Expose smaller plates and input steps where the configured
   equipment supports them.
+- **Dumbbell equipment mode.** NONE shows only the number, and PER SIDE shows plates per
+  side, never the dumbbell. A DUMBBELL mode would read "each dumbbell: 20" and round to
+  weights a rack holds (a configurable per-hand step, usually 5 lb). Decide first whether
+  a set stores the pair or one dumbbell: lifts already tracked per hand on NONE should
+  not need their history converted.
 - **Per-set comments.** Add an optional note field to sets, including backup, CSV and
   history editing support.
