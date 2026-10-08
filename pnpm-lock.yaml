@@ -129,8 +129,8 @@ importers:
         version: 4.3.3
     devDependencies:
       '@azeajr/web-harness':
-        specifier: github:Azeajr/web-harness#v0.2.2
-        version: https://codeload.github.com/Azeajr/web-harness/tar.gz/68d86d63f2853c82366aa41dee4d497149b5fb6a(playwright@1.63.0)
+        specifier: github:Azeajr/web-harness#v0.2.3
+        version: https://codeload.github.com/Azeajr/web-harness/tar.gz/46ba47a3131379b1e3c90a9fd01f566205f608d0(playwright@1.63.0)
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.11.0(jiti@2.7.0)(supports-color@10.2.2))
@@ -214,9 +214,9 @@ packages:
     resolution: {integrity: sha512-NT4s3yZLjovPpliRpTvdsdzyPjqRqiCZj9MxnarBihbaY5MbAG7DWAJcrLlhmC7xKTNCXsTELcqB8YsqpLnUFQ==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
-  '@azeajr/web-harness@https://codeload.github.com/Azeajr/web-harness/tar.gz/68d86d63f2853c82366aa41dee4d497149b5fb6a':
-    resolution: {gitHosted: true, integrity: sha512-Sgo7K31s2Q4YDmVGSXsXP+LUXt3NQMYXK3aRbJWqzWseB3tYXS7O7FDA08JBI5kyYa71a47dvcclT1cm01wa3A==, tarball: https://codeload.github.com/Azeajr/web-harness/tar.gz/68d86d63f2853c82366aa41dee4d497149b5fb6a}
-    version: 0.2.2
+  '@azeajr/web-harness@https://codeload.github.com/Azeajr/web-harness/tar.gz/46ba47a3131379b1e3c90a9fd01f566205f608d0':
+    resolution: {gitHosted: true, integrity: sha512-B12SzvtyTyPiDOsd1FPwjEJCXxprdvK6KMxuPB+NNuJ8abUpKHRhTtlt+VeQWvse7tx39np9oNrfA8FR1pbdiw==, tarball: https://codeload.github.com/Azeajr/web-harness/tar.gz/46ba47a3131379b1e3c90a9fd01f566205f608d0}
+    version: 0.2.3
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -4007,7 +4007,7 @@ snapshots:
       is-potential-custom-element-name: 1.0.1
       lru-cache: 11.5.3
 
-  '@azeajr/web-harness@https://codeload.github.com/Azeajr/web-harness/tar.gz/68d86d63f2853c82366aa41dee4d497149b5fb6a(playwright@1.63.0)':
+  '@azeajr/web-harness@https://codeload.github.com/Azeajr/web-harness/tar.gz/46ba47a3131379b1e3c90a9fd01f566205f608d0(playwright@1.63.0)':
     dependencies:
       playwright: 1.63.0
 
