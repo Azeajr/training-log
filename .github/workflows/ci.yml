@@ -38,7 +38,7 @@ jobs:
       deploy: ${{ steps.scope.outputs.deploy }}
     steps:
       - id: scope
-        uses: Azeajr/web-harness/.github/actions/scope@v0.2.3
+        uses: Azeajr/web-harness/.github/actions/scope@v0.2.4
         with:
           # Only prose that no test reads belongs here.
           skip: '^(README\.md|ROADMAP\.md|CLAUDE\.md|\.claude/COMMON_MISTAKES\.md|docs/diagnostic-trace\.md|docs/design/band-loading\.md)$'
@@ -53,7 +53,7 @@ jobs:
     outputs:
       digest: ${{ steps.digest.outputs.digest }}
     steps:
-      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.3
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.4
         with:
           node-version: 24
       # Supply-chain gate before anything runs installed code.
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.3
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.4
         with:
           node-version: 24
           browsers: chromium
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.3
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.4
         with:
           node-version: 24
           browsers: chromium
@@ -136,7 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.3
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.4
         with:
           node-version: 24
           browsers: chromium
@@ -153,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: Azeajr/web-harness/.github/actions/verdict@v0.2.3
+      - uses: Azeajr/web-harness/.github/actions/verdict@v0.2.4
         with:
           needs: ${{ toJSON(needs) }}
           code: ${{ needs.scope.outputs.code }}
@@ -169,7 +169,7 @@ jobs:
       cancel-in-progress: false
     steps:
       # Installs the lockfile-pinned, signature-audited wrangler; nothing is rebuilt.
-      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.3
+      - uses: Azeajr/web-harness/.github/actions/setup@v0.2.4
         with:
           node-version: 24
       - uses: actions/download-artifact@v8
