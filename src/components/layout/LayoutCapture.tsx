@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, Show } from 'solid-js'
+import { createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { useLocation } from '@solidjs/router'
 import { isTraceEnabled, setTraceEnabled, subscribeTraceEnabled } from '../../lib/trace'
 import { captureLayout } from '../../lib/layout-trace'
@@ -22,10 +22,22 @@ export default function LayoutCapture() {
     captureLayout()
     showToast('Issue captured — stop recording, then share the trace in Settings')
   }
-  return <Show when={enabled() && !HIDDEN_ON.includes(location.pathname)}>
+  const available = () => enabled() && !HIDDEN_ON.includes(location.pathname)
+  onMount(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!available() || event.repeat || event.ctrlKey || event.metaKey || !event.altKey || !event.shiftKey || event.code !== 'KeyC') return
+      event.preventDefault()
+      capture()
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    onCleanup(() => document.removeEventListener('keydown', onKeyDown, true))
+  })
+  return <Show when={available()}>
     <div class="fixed top-[env(safe-area-inset-top,0px)] right-2 z-[90] flex bg-bg border border-accent">
       <button
         data-layout-anchor="capture-control"
+        aria-keyshortcuts="Alt+Shift+C"
+        title="Capture issue (Alt+Shift+C), including while a dialog is open"
         class="text-accent px-3 py-2 text-xs"
         // Pointer capture precedes focus/blur (and possible keyboard dismissal).
         onPointerDown={event => { if (event.isPrimary) capture() }}

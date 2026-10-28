@@ -12,6 +12,19 @@ beforeEach(() => {
 afterEach(() => { stop(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.innerHTML = '' })
 
 describe('layout evidence', () => {
+  it('records nested scroll offsets even when anchor geometry stays unchanged', () => {
+    setTraceEnabled(true)
+    stop = installLayoutTrace()
+    vi.advanceTimersByTime(2000)
+    const area = document.querySelector('textarea')!
+    for (const top of [100, 200]) {
+      area.scrollTop = top
+      area.dispatchEvent(new Event('scroll'))
+      vi.advanceTimersByTime(2000)
+      expect(readTrace().at(-1)?.d?.interaction).toMatchObject({ kind: 'scroll', tag: 'textarea', scroll: [0, top] })
+    }
+    expect(readTrace().filter(e => e.ev === 'layout.sample')).toHaveLength(3)
+  })
   it('records geometry and containing styles without text or input values', () => {
     const textarea = document.querySelector('textarea')!
     textarea.value = 'SECRET VALUE'

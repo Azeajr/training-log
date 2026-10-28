@@ -109,15 +109,16 @@ export function installLayoutTrace(): () => void {
       try {
         const started = performance.now()
         const snapshot = layoutSnapshot()
-        const key = JSON.stringify(snapshot)
+        const target = interaction?.target
+        const interactionRecord = target ? { kind: interaction!.kind, ...identity(target), scroll: [target.scrollLeft, target.scrollTop] } : null
+        const key = JSON.stringify({ snapshot, interaction: interactionRecord })
         const measureMs = round(performance.now() - started)
         if (key !== lastKey || started - lastAt >= QUIET_RECORD_MS) {
           lastKey = key
           lastAt = started
-          const target = interaction?.target
           trace('layout.sample', {
             reasons: [...reasons],
-            interaction: target ? { kind: interaction!.kind, ...identity(target), scroll: [target.scrollLeft, target.scrollTop] } : null,
+            interaction: interactionRecord,
             ...snapshot, measureMs, prevWriteMs: writeMs,
           })
           writeMs = round(performance.now() - started - measureMs)
