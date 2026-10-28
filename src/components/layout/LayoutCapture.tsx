@@ -19,8 +19,9 @@ export default function LayoutCapture() {
     const now = performance.now()
     if (now - lastCapture < DEDUPE_MS) return
     lastCapture = now
-    captureLayout()
-    showToast('Issue captured — stop recording, then share the trace in Settings')
+    showToast(captureLayout()
+      ? 'Issue captured — stop recording, then share the trace in Settings'
+      : 'Capture failed — see the trace for layout.unavailable')
   }
   const available = () => enabled() && !HIDDEN_ON.includes(location.pathname)
   onMount(() => {
@@ -33,7 +34,10 @@ export default function LayoutCapture() {
     onCleanup(() => document.removeEventListener('keydown', onKeyDown, true))
   })
   return <Show when={available()}>
-    <div class="fixed top-[env(safe-area-inset-top,0px)] right-2 z-[90] flex bg-bg border border-accent">
+    <div class="fixed top-[env(safe-area-inset-top,0px)] right-2 z-[90] flex bg-bg border border-accent"
+      // Keep focus where it was (e.g. inside a focus-trapped modal): a mouse
+      // press would otherwise move it onto these buttons.
+      onMouseDown={event => event.preventDefault()}>
       <button
         data-layout-anchor="capture-control"
         aria-keyshortcuts="Alt+Shift+C"

@@ -122,6 +122,29 @@ describe('trace — records', () => {
     expect(all[1].d).toMatchObject({ oversized: true })
   })
 
+  it('spares the newest captures when a quota failure drops the oldest half', () => {
+    enable()
+    trace('layout.capture', { n: 1 })
+    for (let i = 0; i < 10; i++) trace('t', { i })
+    const real = Storage.prototype.setItem
+    let failed = false
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) {
+      if (!failed && k === 'notif-trace') { failed = true; throw new Error('quota') }
+      return real.call(this, k, v)
+    })
+    trace('t', { i: 11 })
+    expect(readTrace().some(e => e.ev === 'layout.capture')).toBe(true)
+  })
+
+  it('gives no protection to captures from before the latest trace.on', () => {
+    enable()
+    trace('layout.capture', { old: true })
+    setTraceEnabled(false)
+    setTraceEnabled(true)
+    for (let i = 0; i < 1250; i++) trace('t', { i })
+    expect(readTrace().some(e => e.ev === 'layout.capture')).toBe(false)
+  })
+
   it('does not let an unserialisable payload throw out of an instrumentation call', () => {
     const cyclic: Record<string, unknown> = {}
     cyclic.self = cyclic

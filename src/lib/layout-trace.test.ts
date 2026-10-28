@@ -36,6 +36,35 @@ describe('layout evidence', () => {
     for (const secret of ['PRIVATE NOTE', 'PRIVATE EXERCISE', 'SECRET VALUE']) expect(encoded).not.toContain(secret)
   })
 
+  it('does not hit-test elements that have no box on screen', () => {
+    const bar = document.querySelector('[data-layout-anchor="session-bar"]')!
+    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 5000, 100, 40))
+    const record = layoutSnapshot(true).anchors.find(a => a.landmark === 'session-bar')!
+    expect(record).toMatchObject({ onScreen: false, centerHit: null, centerUnobstructed: null })
+  })
+
+  it('serialises a shared ancestor once per snapshot', () => {
+    const anchors = layoutSnapshot(true).anchors
+    const ancestors = anchors.flatMap(a => a.ancestors)
+    expect(ancestors.filter(a => a.path.endsWith('div:1') && !('repeat' in a)).length).toBe(1)
+    expect(ancestors.some(a => 'repeat' in a)).toBe(true)
+  })
+
+  it('trims a capture that would exceed the record budget and reports whether it was recorded', () => {
+    setTraceEnabled(true)
+    document.getElementById('root')!.insertAdjacentHTML('beforeend', '<div data-section="x">' + '<button>b</button>'.repeat(60) + '</div>')
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 50, 20))
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue(new Proxy({}, { get: () => 'x'.repeat(200) }) as CSSStyleDeclaration)
+    expect(captureLayout()).toBe(true)
+    const d = readTrace().find(e => e.ev === 'layout.capture')!.d!
+    expect(d.oversized).toBeUndefined()
+    expect(d.trimmed).toBeDefined()
+  })
+
+  it('reports false when tracing is off', () => {
+    expect(captureLayout()).toBe(false)
+  })
+
   it('stays inactive when off; starts on toggle, coalesces scrolls and stops immediately', () => {
     const measure = vi.spyOn(Element.prototype, 'getBoundingClientRect')
     stop = installLayoutTrace()

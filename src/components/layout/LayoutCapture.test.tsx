@@ -31,6 +31,12 @@ describe('LayoutCapture', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
+  it('does not take focus on a mouse press', () => {
+    render(() => <LayoutCapture />)
+    const button = screen.getByRole('button', { name: 'Capture issue' })
+    expect(fireEvent.mouseDown(button)).toBe(false)
+  })
+
   it('ignores the shortcut when recording is stopped', () => {
     render(() => <LayoutCapture />)
     setTraceEnabled(false)

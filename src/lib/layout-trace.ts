@@ -29,23 +29,39 @@ function css(el: Element) {
   }
 }
 
-function elementRecord(el: Element, detailed: boolean) {
+function briefCss(el: Element) {
+  const s = getComputedStyle(el)
+  return { position: s.position, bottom: s.bottom, display: s.display, visibility: s.visibility }
+}
+const isOnScreen = (r: DOMRect) =>
+  r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
+
+/** `seen` holds ancestor paths already serialised in full by an earlier anchor;
+ *  a shared ancestor is then reported by identity alone. */
+function elementRecord(el: Element, detailed: boolean, seen: Set<string>) {
   const r = el.getBoundingClientRect()
-  const x = Math.min(innerWidth - 1, Math.max(0, r.x + r.width / 2))
-  const y = Math.min(innerHeight - 1, Math.max(0, r.y + r.height / 2))
-  const hit = document.elementFromPoint?.(x, y)
+  // An element with no box or none on screen has no point to hit-test; clamping
+  // one would report whatever sits at the viewport edge as "obstructing" it.
+  const onScreen = isOnScreen(r)
+  const hit = onScreen
+    ? document.elementFromPoint?.(
+      Math.min(innerWidth - 1, Math.max(0, r.x + r.width / 2)),
+      Math.min(innerHeight - 1, Math.max(0, r.y + r.height / 2)),
+    )
+    : null
   const ancestors = []
   for (let p = detailed ? el.parentElement : null; p && ancestors.length < 6; p = p.parentElement) {
-    ancestors.push({ ...identity(p), rect: rect(p.getBoundingClientRect()), css: css(p) })
+    const id = identity(p)
+    if (seen.has(id.path)) { ancestors.push({ ...id, repeat: true }); continue }
+    seen.add(id.path)
+    ancestors.push({ ...id, rect: rect(p.getBoundingClientRect()), css: css(p) })
   }
   return {
-    ...identity(el), rect: rect(r), css: detailed ? css(el) : (() => {
-      const s = getComputedStyle(el)
-      return { position: s.position, bottom: s.bottom, display: s.display, visibility: s.visibility }
-    })(),
+    ...identity(el), rect: rect(r), css: detailed ? css(el) : briefCss(el),
     scroll: [el.scrollLeft, el.scrollTop, el.scrollWidth, el.scrollHeight, el.clientWidth, el.clientHeight],
+    onScreen,
     centerHit: hit ? identity(hit) : null,
-    centerUnobstructed: Boolean(hit && el.contains(hit)), ancestors,
+    centerUnobstructed: onScreen ? Boolean(hit && el.contains(hit)) : null, ancestors,
   }
 }
 
@@ -63,10 +79,8 @@ export function layoutSnapshot(detailed = false) {
   // candidates in document order still reports what is on screen.
   const matches = detailed ? [...document.querySelectorAll(CANDIDATES)] : []
   const scanned = matches.slice(0, MAX_SCANNED)
-  const visible = scanned.filter(el => {
-    const r = el.getBoundingClientRect()
-    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
-  })
+  const visible = scanned.filter(el => isOnScreen(el.getBoundingClientRect()))
+  const seen = new Set<string>()
   return {
     route: location.pathname.replace(/\d+/g, ':id'),
     window: [innerWidth, innerHeight, outerWidth, outerHeight, devicePixelRatio],
@@ -75,15 +89,32 @@ export function layoutSnapshot(detailed = false) {
     orientation: screen.orientation?.type ?? null, visibility: document.visibilityState,
     focus: document.activeElement ? identity(document.activeElement) : null,
     fonts: document.fonts?.status ?? null,
-    anchors: anchors.map(el => elementRecord(el, detailed)),
+    anchors: anchors.map(el => elementRecord(el, detailed, seen)),
     ...(detailed ? { elements: visible.slice(0, MAX_VISIBLE).map(el => ({ ...identity(el), rect: rect(el.getBoundingClientRect()), css: css(el) })), truncated: matches.length > MAX_SCANNED || visible.length > MAX_VISIBLE } : {}),
   }
 }
 
-export function captureLayout(reason = 'manual') {
-  if (!isTraceEnabled()) return
-  try { trace('layout.capture', { reason, ...layoutSnapshot(true) }) }
-  catch { trace('layout.unavailable', { reason }) }
+// trace() replaces any record over half its byte budget with a bare marker;
+// stay well under that so the capture degrades in detail instead of vanishing.
+const MAX_CAPTURE_CHARS = 80_000
+
+/** Whether a capture was recorded; false when tracing is off or it failed. */
+export function captureLayout(reason = 'manual'): boolean {
+  if (!isTraceEnabled()) return false
+  try {
+    let snapshot: Record<string, unknown> = layoutSnapshot(true)
+    if (JSON.stringify(snapshot).length > MAX_CAPTURE_CHARS) {
+      snapshot = { ...snapshot, elements: undefined, trimmed: 'elements' }
+    }
+    if (JSON.stringify(snapshot).length > MAX_CAPTURE_CHARS) {
+      snapshot = { ...layoutSnapshot(false), trimmed: 'elements,ancestors' }
+    }
+    trace('layout.capture', { reason, ...snapshot })
+    return true
+  } catch {
+    trace('layout.unavailable', { reason })
+    return false
+  }
 }
 
 const QUIET_RECORD_MS = 60_000

@@ -70,6 +70,15 @@ function eventBytes(event: TraceEvent): number {
 const PINNED_EV = 'layout.capture'
 const PINNED_KEEP = 2
 const ENVELOPE_BYTES = 14
+/** The newest captures of the CURRENT recording: ones left over from before the
+ *  latest `trace.on` are stale evidence and get no protection. */
+function pinnedCaptures(): Set<TraceEvent> {
+  let from = 0
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].ev === 'trace.on') { from = i; break }
+  }
+  return new Set(events.slice(from).filter(e => e.ev === PINNED_EV).slice(-PINNED_KEEP))
+}
 const fits = (count: number, bytes: number) =>
   count <= MAX_EVENTS && bytes + Math.max(0, count - 1) + ENVELOPE_BYTES <= MAX_BYTES
 /** Drop only as many events as needed, oldest first, sparing pinned captures
@@ -78,7 +87,7 @@ function shrinkToFit(): void {
   let count = events.length
   let bytes = payloadBytes
   if (fits(count, bytes)) return
-  const pinned = new Set(events.filter(e => e.ev === PINNED_EV).slice(-PINNED_KEEP))
+  const pinned = pinnedCaptures()
   const newest = events[events.length - 1]
   const drop = new Set<TraceEvent>()
   for (const spare of [true, false]) {
@@ -94,8 +103,14 @@ function shrinkToFit(): void {
   events = events.filter(e => !drop.has(e))
 }
 function dropOldest(count: number): void {
-  for (const event of events.slice(0, count)) payloadBytes -= eventBytes(event)
-  events = events.slice(count)
+  const pinned = pinnedCaptures()
+  const drop = new Set<TraceEvent>()
+  for (const e of events) {
+    if (drop.size >= count) break
+    if (!pinned.has(e)) drop.add(e)
+  }
+  for (const event of drop) payloadBytes -= eventBytes(event)
+  events = events.filter(e => !drop.has(e))
 }
 let enabled = false
 let seq = 0
