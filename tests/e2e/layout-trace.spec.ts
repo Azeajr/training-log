@@ -10,6 +10,10 @@ test('diagnostics captures scrolling, occlusion and focus without notes, survive
   await page.getByRole('link', { name: 'TODAY' }).click()
   await expect(page.getByRole('button', { name: 'Capture issue' })).toBeVisible()
   await startWorkout(page)
+  // The control sits over every screen's top row; the full-width lift header
+  // under it must still take a centre tap (an intercepted click fails here).
+  await page.getByRole('button', { name: /View history for/ }).click()
+  await page.getByRole('button', { name: '← BACK' }).click()
   await page.getByPlaceholder('session notes...').fill('PRIVATE-NOTE-MUST-NOT-BE-TRACED')
   await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight))
   await expect.poll(() => page.evaluate(() => {
@@ -37,10 +41,12 @@ test('diagnostics captures scrolling, occlusion and focus without notes, survive
 
   await page.reload()
   await expect(page.getByRole('button', { name: 'Capture issue' })).toBeVisible()
+  await page.getByRole('link', { name: 'SETTINGS' }).click()
   await page.getByRole('button', { name: 'Stop recording' }).click()
+  await expect(page.getByRole('button', { name: 'Start recording' })).toBeVisible()
+  await page.getByRole('link', { name: 'TODAY' }).click()
   await expect(page.getByRole('button', { name: 'Capture issue' })).toBeHidden()
   await page.getByRole('link', { name: 'SETTINGS' }).click()
-  await expect(page.getByRole('button', { name: 'Start recording' })).toBeVisible()
   await page.getByText('More options', {exact:true}).click()
   await page.getByRole('button', { name: 'Show trace', exact: true }).click()
   const text = await page.getByTestId('trace-text').textContent()

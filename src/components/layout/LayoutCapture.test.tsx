@@ -72,9 +72,11 @@ describe('LayoutCapture', () => {
     expect(screen.queryByRole('button', { name: 'Capture issue' })).toBeNull()
   })
 
-  it('stops recording from the overlay', () => {
+  it('is one compact control that hides once recording is stopped in Settings', () => {
     render(() => <LayoutCapture />)
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }))
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Capture issue' })).toHaveTextContent('REC')
+    setTraceEnabled(false)
     expect(screen.queryByRole('button', { name: 'Capture issue' })).toBeNull()
   })
 })

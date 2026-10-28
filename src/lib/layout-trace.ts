@@ -182,8 +182,11 @@ export function installLayoutTrace(): () => void {
     }
     const mutations = new MutationObserver(records => {
       // Timer text changes every second. Only element additions/removals or
-      // style/class changes can require a new structural measurement.
-      if (records.some(r => r.type === 'attributes' || [...r.addedNodes, ...r.removedNodes].some(n => n.nodeType === Node.ELEMENT_NODE))) schedule('dom')
+      // style/class changes can require a new structural measurement — except
+      // inside `data-layout-volatile`, a fixed-size box restyled every tick (the
+      // rest bar's width), which would otherwise resample every rest.
+      if (records.some(r => !(r.target instanceof Element && r.target.closest('[data-layout-volatile]'))
+        && (r.type === 'attributes' || [...r.addedNodes, ...r.removedNodes].some(n => n.nodeType === Node.ELEMENT_NODE)))) schedule('dom')
     })
     mutations.observe(document.getElementById('root') ?? document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open'] })
     const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => schedule('layout.resize'))

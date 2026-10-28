@@ -112,8 +112,8 @@ export default function DiagnosticsPanel() {
     <div class="mb-6">
       <SectionLabel class="mb-2">DIAGNOSTICS</SectionLabel>
       <div class="text-faint text-xs mb-2">
-        Start recording, reproduce the problem, then tap Capture issue while it
-        is visible. Stop recording and share the trace here. No screenshot needed.
+        Start recording, reproduce the problem, then tap ● REC in the top corner
+        while it is visible. Stop recording and share the trace here. No screenshot needed.
       </div>
       <button class="border border-accent text-accent px-3 py-2 text-xs uppercase tracking-widest" onClick={toggle}>
         {on() ? 'Stop recording' : 'Start recording'}

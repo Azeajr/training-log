@@ -252,8 +252,9 @@ export default function RestTimer() {
             </button>
           </div>
         </div>
-        {/* One depleting rule. Cheaper to read at arm's length than digits. */}
-        <div class="h-0.5 bg-border-dim mt-3">
+        {/* One depleting rule. Cheaper to read at arm's length than digits.
+            Volatile: its per-tick width is not a layout change worth sampling. */}
+        <div data-layout-volatile class="h-0.5 bg-border-dim mt-3">
           <div
             class={`h-full ${overrun() ? 'bg-danger' : 'bg-warn'}`}
             style={{ width: `${progress() * 100}%` }}

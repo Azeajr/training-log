@@ -1,8 +1,8 @@
 # Capturing a visual issue
 
 In Settings → Diagnostics, choose **Start recording**, then use the app normally.
-When the issue appears, tap **Capture issue** in the top corner. Tap **Stop
-recording** to preserve the recent evidence. Return to Diagnostics and use
+When the issue appears, tap **● REC** in the top corner to capture it. Return to
+Diagnostics, tap **Stop recording** to preserve the recent evidence, then use
 **Share trace** or **Copy trace**. **More options** contains the text viewer,
 clear action and sound test. No screenshot is required.
 
@@ -23,8 +23,9 @@ until you copy or share it. The workout JSON backup does not include this log.
 - `measureMs` on automatic samples reports the layout-measurement cost;
   `prevWriteMs` reports the previous sample's serialization and storage write.
 
-The Capture issue control is itself a fixed overlay (landmark `capture-control`,
-hidden on Settings and setup), so it can appear as an occluder in hit tests.
+The ● REC control (accessible name "Capture issue") is itself a fixed overlay
+(landmark `capture-control`, hidden on Settings and setup), so it can appear as
+an occluder in hit tests. It is kept narrow so the top row under it stays usable.
 Repeated taps within half a second record one capture.
 
 Manual pointer capture runs before focus changes can dismiss a keyboard.
@@ -40,7 +41,8 @@ When off, no layout listeners, observers, sampling timers or DOM measurements
 remain. When on, passive handlers only schedule work and retain one target.
 Events coalesce into at most one automatic measurement every two seconds;
 a ten-second heartbeat covers quiet layout changes. Automatic measurements
-inspect at most 16 landmarks/dialogs. Text-only timer mutations are ignored.
+inspect at most 16 landmarks/dialogs. Text-only timer mutations are ignored, as
+is restyling inside `data-layout-volatile` (the rest bar's per-second width).
 Automatic samples identical to the previous one are skipped (one is still
 written per minute). Detailed visible-element scans occur only on explicit
 capture: visibility is tested on at most 2,000 candidates before the 60-entry

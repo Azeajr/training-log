@@ -135,6 +135,24 @@ describe('layout evidence', () => {
     expect(encoded).not.toContain('Bench Press')
   })
 
+  it('does not resample for per-tick restyling inside a volatile box, but does elsewhere', async () => {
+    document.getElementById('root')!.insertAdjacentHTML('beforeend', '<div data-layout-volatile><div id="bar"></div></div><div id="panel"></div>')
+    setTraceEnabled(true)
+    stop = installLayoutTrace()
+    await vi.advanceTimersByTimeAsync(2000)
+    const measure = vi.spyOn(Element.prototype, 'getBoundingClientRect')
+    const bar = document.getElementById('bar')!
+    // A rest timer tick, every second, short of the ten-second heartbeat.
+    for (let i = 1; i <= 7; i++) {
+      bar.style.width = `${i * 10}%`
+      await vi.advanceTimersByTimeAsync(1000)
+    }
+    expect(measure).not.toHaveBeenCalled()
+    document.getElementById('panel')!.style.width = '10px'
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(measure).toHaveBeenCalled()
+  })
+
   it('skips samples that repeat an unchanged layout', () => {
     setTraceEnabled(true)
     stop = installLayoutTrace()
