@@ -92,6 +92,11 @@ export default defineHarness({
   // with the E2E JSON report, that every mapped test ran and passed). A gap is listed as a gap.
   scenarios: [
     {
+      id: 'layout-diagnostics',
+      title: 'Capture a visual issue, stop recording and export without screenshots',
+      covers: [{ file: 'tests/e2e/layout-trace.spec.ts', test: 'diagnostics captures scrolling, occlusion and focus without notes, survives reload and exports' }],
+    },
+    {
       id: 'first-run-setup',
       title: 'Fresh install walks the wizard and lands on week 1',
       covers: [

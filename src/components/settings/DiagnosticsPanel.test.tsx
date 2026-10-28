@@ -36,12 +36,12 @@ afterEach(() => {
 describe('DiagnosticsPanel', () => {
   it('starts off, and switching it on records from that moment', async () => {
     renderPanel()
-    const chip = screen.getByLabelText('Diagnostic trace')
-    expect(chip).toHaveTextContent('OFF')
+    const chip = screen.getByRole('button', { name: 'Start recording' })
+    expect(chip).toHaveTextContent('Start recording')
     expect(isTraceEnabled()).toBe(false)
 
     fireEvent.click(chip)
-    await waitFor(() => expect(screen.getByLabelText('Diagnostic trace')).toHaveTextContent('ON'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop recording' })).toHaveTextContent('Stop recording'))
     expect(isTraceEnabled()).toBe(true)
     // The switch itself is the first record, so a log never opens with an
     // unexplained edge.
@@ -64,7 +64,7 @@ describe('DiagnosticsPanel', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     renderPanel()
-    fireEvent.click(screen.getByText('COPY'))
+    fireEvent.click(screen.getByText('Copy trace'))
     await waitFor(() => expect(writeText).toHaveBeenCalled())
     expect(String(writeText.mock.calls[0][0])).toContain('rest.start')
     await waitFor(() => expect(toast()).toBe('Trace copied'))
@@ -79,7 +79,7 @@ describe('DiagnosticsPanel', () => {
       configurable: true,
     })
     renderPanel()
-    fireEvent.click(screen.getByText('COPY'))
+    fireEvent.click(screen.getByText('Copy trace'))
     // An installed iOS PWA is exactly where a clipboard write gets refused, so
     // this path is the one that has to work.
     await waitFor(() => expect(screen.getByTestId('trace-text')).toBeInTheDocument())
@@ -91,7 +91,7 @@ describe('DiagnosticsPanel', () => {
     reloadTrace()
     trace('notify.arm')
     renderPanel()
-    fireEvent.click(screen.getByText('SHOW'))
+    fireEvent.click(screen.getByText('Show trace'))
     await waitFor(() => expect(screen.getByTestId('trace-text')).toHaveTextContent('notify.arm'))
   })
 
@@ -100,7 +100,7 @@ describe('DiagnosticsPanel', () => {
     reloadTrace()
     trace('rest.start')
     renderPanel()
-    fireEvent.click(screen.getByText('CLEAR'))
+    fireEvent.click(screen.getByText('Clear trace'))
     await waitFor(() => expect(screen.getByText('Discard the recorded trace?')).toBeInTheDocument())
     fireEvent.click(screen.getByText('CANCEL'))
     await drain()
@@ -112,7 +112,7 @@ describe('DiagnosticsPanel', () => {
     reloadTrace()
     trace('rest.start')
     renderPanel()
-    fireEvent.click(screen.getByText('CLEAR'))
+    fireEvent.click(screen.getByText('Clear trace'))
     await waitFor(() => expect(screen.getByText('DISCARD')).toBeInTheDocument())
     fireEvent.click(screen.getByText('DISCARD'))
     await waitFor(() => expect(readTrace()).toHaveLength(0))
@@ -120,7 +120,7 @@ describe('DiagnosticsPanel', () => {
 
   it('offers SHARE only where the platform has it', () => {
     renderPanel()
-    expect(screen.queryByText('SHARE')).toBeNull()
+    expect(screen.queryByText('Share trace')).toBeNull()
   })
 })
 
@@ -134,7 +134,7 @@ describe('TEST CUE', () => {
   it('plays the real cue on a real tap', async () => {
     const { playCue } = await import('../../lib/audio-cues')
     renderPanel()
-    fireEvent.click(screen.getByText('TEST CUE'))
+    fireEvent.click(screen.getByText('Test sound'))
     expect(playCue).toHaveBeenCalledWith('nudge')
   })
 
@@ -142,14 +142,14 @@ describe('TEST CUE', () => {
     localStorage.setItem('notif-trace-on', '1')
     reloadTrace()
     renderPanel()
-    fireEvent.click(screen.getByText('TEST CUE'))
+    fireEvent.click(screen.getByText('Test sound'))
     expect(readTrace().map(e => e.ev)).toContain('cue.test')
   })
 
   it('works with tracing off — it is a speaker test, not a trace feature', async () => {
     const { playCue } = await import('../../lib/audio-cues')
     renderPanel()
-    fireEvent.click(screen.getByText('TEST CUE'))
+    fireEvent.click(screen.getByText('Test sound'))
     expect(playCue).toHaveBeenCalled()
     expect(readTrace()).toHaveLength(0)
   })

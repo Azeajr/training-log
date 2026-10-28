@@ -9,6 +9,10 @@ import { setupWorkoutPersistence } from './store/workout-store'
 import { setupPtRunPersistence } from './store/pt-store'
 import { prepareApp } from './startup'
 import { StartupError, StorageUnavailable } from './components/StartupScreen'
+import { installLayoutTrace } from './lib/layout-trace'
+
+const stopLayoutTrace = installLayoutTrace()
+if (import.meta.hot) import.meta.hot.dispose(stopLayoutTrace)
 
 const root = document.getElementById('root')!
 const mount = (ui: () => unknown) => {

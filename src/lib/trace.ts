@@ -54,12 +54,33 @@ const MAX_EVENTS = 1200
 const MAX_BYTES = 192 * 1024
 
 let events: TraceEvent[] = []
+const eventSizes = new WeakMap<TraceEvent, number>()
+let payloadBytes = 0
+const encoder = new TextEncoder()
+function eventBytes(event: TraceEvent): number {
+  let bytes = eventSizes.get(event)
+  if (bytes === undefined) {
+    bytes = encoder.encode(JSON.stringify(event)).length
+    eventSizes.set(event, bytes)
+  }
+  return bytes
+}
+function dropOldest(count: number): void {
+  for (const event of events.slice(0, count)) payloadBytes -= eventBytes(event)
+  events = events.slice(count)
+}
 let enabled = false
 let seq = 0
 // Set when localStorage has refused a write twice. The buffer stays in memory
 // so an export from the live page still works; only durability is lost, and
 // the marker below says so rather than leaving a silent hole.
 let writesFailed = false
+const enabledListeners = new Set<(on: boolean) => void>()
+
+export function subscribeTraceEnabled(listener: (on: boolean) => void): () => void {
+  enabledListeners.add(listener)
+  return () => { enabledListeners.delete(listener) }
+}
 
 function readEnabled(): boolean {
   try {
@@ -99,7 +120,7 @@ function persist(): void {
     // Quota, private mode, or a browser that refuses the write. Drop the oldest
     // half and try once — a trace that keeps its recent half is worth more than
     // one that stops recording at the moment it filled up.
-    events = events.slice(Math.floor(events.length / 2))
+    dropOldest(Math.floor(events.length / 2))
     try {
       localStorage.setItem(EVENTS_KEY, JSON.stringify({ v: STORAGE_VERSION, e: events }))
     } catch {
@@ -111,6 +132,7 @@ function persist(): void {
 function init(): void {
   enabled = readEnabled()
   events = readEvents()
+  payloadBytes = events.reduce((total, event) => total + eventBytes(event), 0)
   seq = events.length > 0 ? Math.max(...events.map(e => e.seq)) + 1 : 0
   writesFailed = false
 }
@@ -140,6 +162,7 @@ export function setTraceEnabled(on: boolean): void {
   enabled = true
   trace(on ? 'trace.on' : 'trace.off', { max: MAX_EVENTS })
   enabled = on
+  for (const listener of enabledListeners) listener(on)
 }
 
 /**
@@ -170,17 +193,14 @@ export function trace(ev: string, d?: Record<string, unknown>, src: TraceSource 
     }
   }
   events.push(rec)
-  if (events.length > MAX_EVENTS) events = events.slice(-MAX_EVENTS)
-  persist()
-  if (!writesFailed && approxBytes() > MAX_BYTES) {
-    events = events.slice(Math.floor(events.length / 2))
-    persist()
+  payloadBytes += eventBytes(rec)
+  if (events.length > MAX_EVENTS) dropOldest(events.length - MAX_EVENTS)
+  // Layout records vary greatly in size. Bound actual UTF-8 bytes BEFORE
+  // writing, rather than assuming every event is a 120-byte timer tick.
+  while (events.length && payloadBytes + Math.max(0, events.length - 1) + 14 > MAX_BYTES) {
+    dropOldest(Math.max(1, Math.floor(events.length / 4)))
   }
-}
-
-function approxBytes(): number {
-  // Cheap upper bound rather than a second stringify of the whole buffer.
-  return events.length * 120
+  persist()
 }
 
 export function readTrace(): TraceEvent[] {
@@ -189,6 +209,7 @@ export function readTrace(): TraceEvent[] {
 
 export function clearTrace(): void {
   events = []
+  payloadBytes = 0
   seq = 0
   writesFailed = false
   try {

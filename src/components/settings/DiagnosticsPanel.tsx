@@ -7,7 +7,6 @@ import { settings } from '../../store/settings-store'
 import { showToast } from '../../store/toast-store'
 import { useConfirmation } from '../../hooks/use-confirmation'
 import SectionLabel from '../layout/SectionLabel'
-import ToggleChip from '../ui/ToggleChip'
 
 /**
  * The read-back end of the diagnostic trace.
@@ -113,29 +112,25 @@ export default function DiagnosticsPanel() {
     <div class="mb-6">
       <SectionLabel class="mb-2">DIAGNOSTICS</SectionLabel>
       <div class="text-faint text-xs mb-2">
-        Records what the rest timer, the audio cue and the notifications actually
-        do, so a bell that never rings leaves evidence behind. Off by default;
-        it writes only while it is on.
+        Start recording, reproduce the problem, then tap Capture issue while it
+        is visible. Stop recording and share the trace here. No screenshot needed.
       </div>
-      <div class="flex items-center justify-between py-1 border-b border-border-dim">
-        <span class="text-muted text-xs uppercase tracking-widest">TRACE</span>
-        <ToggleChip active={on()} onClick={toggle} ariaLabel="Diagnostic trace">
-          {on() ? 'ON' : 'OFF'}
-        </ToggleChip>
-      </div>
+      <button class="border border-accent text-accent px-3 py-2 text-xs" onClick={toggle}>
+        {on() ? 'Stop recording' : 'Start recording'}
+      </button>
       <div class="text-faint text-xs py-2" data-testid="trace-stats">
-        {stats().count} events · {span()}
+        {on() ? 'Recording' : 'Stopped'} · {stats().count} events · {span()}
         <Show when={stats().degraded}>
           <span class="text-warn"> · storage full, keeping the recent half only</span>
         </Show>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap gap-2 mb-2">
         <button
           onClick={copy}
           disabled={busy()}
           class="border border-border px-3 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent disabled:opacity-50"
         >
-          COPY
+          Copy trace
         </button>
         <Show when={typeof navigator !== 'undefined' && 'share' in navigator}>
           <button
@@ -143,30 +138,40 @@ export default function DiagnosticsPanel() {
             disabled={busy()}
             class="border border-border px-3 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent disabled:opacity-50"
           >
-            SHARE
+            Share trace
           </button>
         </Show>
+      </div>
+      <details>
+        <summary class="text-muted text-xs cursor-pointer py-2">More options</summary>
+        <p class="text-faint text-xs mb-2">
+          Keeps recent layout, scrolling, viewport and focus changes, plus timer,
+          sound and notification events. Notes and form values are excluded.
+          Older events roll off the local log; stop recording to preserve it.
+        </p>
+        <div class="flex flex-wrap gap-2">
         <button
           onClick={testCue}
           class="border border-border px-3 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent"
         >
-          TEST CUE
+          Test sound
         </button>
         <button
           onClick={show}
           disabled={busy()}
           class="border border-border px-3 py-2 text-muted text-xs uppercase tracking-widest hover:border-accent hover:text-accent disabled:opacity-50"
         >
-          SHOW
+          Show trace
         </button>
         <button
           onClick={clear}
           disabled={busy()}
           class="border border-border px-3 py-2 text-danger text-xs uppercase tracking-widest hover:border-danger disabled:opacity-50"
         >
-          CLEAR
+          Clear trace
         </button>
       </div>
+      </details>
       <Show when={text()}>
         <pre
           data-testid="trace-text"

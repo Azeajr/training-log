@@ -85,6 +85,14 @@ describe('trace — records', () => {
     expect(all[all.length - 1].d).toEqual({ i: 1299 })
   })
 
+  it('bounds actual bytes for large layout records before persisting', () => {
+    for (let i = 0; i < 30; i++) trace('layout.capture', { i, geometry: '界'.repeat(4000) })
+    const raw = localStorage.getItem(EVENTS_KEY)!
+    expect(new TextEncoder().encode(raw).length).toBeLessThanOrEqual(192 * 1024)
+    expect(readTrace().at(-1)?.d?.i).toBe(29)
+    expect(readTrace().length).toBeLessThan(30)
+  })
+
   it('does not let an unserialisable payload throw out of an instrumentation call', () => {
     const cyclic: Record<string, unknown> = {}
     cyclic.self = cyclic
