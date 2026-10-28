@@ -69,4 +69,39 @@ describe('layout evidence', () => {
     vi.advanceTimersByTime(10000)
     expect(readTrace()).toHaveLength(count)
   })
+
+  // jsdom has no layout: every rect is empty unless a test supplies one.
+  const visibleRect = (hidden: (el: Element) => boolean) =>
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const h = hidden(this) ? 0 : 20
+      return { x: 0, y: 10, width: h && 50, height: h, top: 10, bottom: 10 + h, left: 0, right: 50 } as DOMRect
+    })
+
+  it('reports visible elements even when more than 400 precede them in the document', () => {
+    const filler = Array.from({ length: 450 }, () => '<button data-hidden>x</button>').join('')
+    document.body.innerHTML = `<div id="root">${filler}<div data-section="late"></div></div>`
+    visibleRect(el => el.hasAttribute('data-hidden'))
+    const snapshot = layoutSnapshot(true) as { elements: { section: string | null }[] }
+    expect(snapshot.elements.map(e => e.section)).toEqual(['late'])
+  })
+
+  it('does not record text, only structure and numeric ids in data-section', () => {
+    document.body.innerHTML = '<div id="root"><div data-section="assist-extra-12"><button>Bench Press</button></div></div>'
+    visibleRect(() => false)
+    const encoded = JSON.stringify(layoutSnapshot(true))
+    expect(encoded).toContain('assist-extra-12')
+    expect(encoded).not.toContain('Bench Press')
+  })
+
+  it('skips samples that repeat an unchanged layout', () => {
+    setTraceEnabled(true)
+    stop = installLayoutTrace()
+    vi.advanceTimersByTime(2000)
+    const first = readTrace().filter(e => e.ev === 'layout.sample').length
+    expect(first).toBe(1)
+    vi.advanceTimersByTime(30000)
+    expect(readTrace().filter(e => e.ev === 'layout.sample')).toHaveLength(1)
+    vi.advanceTimersByTime(40000)
+    expect(readTrace().filter(e => e.ev === 'layout.sample').length).toBeGreaterThan(1)
+  })
 })

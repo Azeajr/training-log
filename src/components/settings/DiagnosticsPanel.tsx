@@ -115,7 +115,7 @@ export default function DiagnosticsPanel() {
         Start recording, reproduce the problem, then tap Capture issue while it
         is visible. Stop recording and share the trace here. No screenshot needed.
       </div>
-      <button class="border border-accent text-accent px-3 py-2 text-xs" onClick={toggle}>
+      <button class="border border-accent text-accent px-3 py-2 text-xs uppercase tracking-widest" onClick={toggle}>
         {on() ? 'Stop recording' : 'Start recording'}
       </button>
       <div class="text-faint text-xs py-2" data-testid="trace-stats">

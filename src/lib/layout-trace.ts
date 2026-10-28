@@ -49,14 +49,21 @@ function elementRecord(el: Element, detailed: boolean) {
   }
 }
 
+const CANDIDATES = 'button,input,textarea,select,main,nav,h1,h2,h3,img,svg,[data-section]'
+const MAX_SCANNED = 2000
+const MAX_VISIBLE = 60
+
 export function layoutSnapshot(detailed = false) {
   const vv = window.visualViewport
   const root = document.documentElement
   const anchors = [...document.querySelectorAll('[data-layout-anchor], [role="dialog"], dialog')].slice(0, 16)
   // A bounded structural map makes overflow and overlapping controls visible
   // without serialising the DOM or user-entered content.
-  const candidates = detailed ? [...document.querySelectorAll('button,input,textarea,select,main,nav,h1,h2,h3,img,svg,[data-section]')].slice(0, 400) : []
-  const visible = candidates.filter(el => {
+  // Filter for visibility BEFORE capping, so a page scrolled past the first
+  // candidates in document order still reports what is on screen.
+  const matches = detailed ? [...document.querySelectorAll(CANDIDATES)] : []
+  const scanned = matches.slice(0, MAX_SCANNED)
+  const visible = scanned.filter(el => {
     const r = el.getBoundingClientRect()
     return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
   })
@@ -69,7 +76,7 @@ export function layoutSnapshot(detailed = false) {
     focus: document.activeElement ? identity(document.activeElement) : null,
     fonts: document.fonts?.status ?? null,
     anchors: anchors.map(el => elementRecord(el, detailed)),
-    ...(detailed ? { elements: visible.slice(0, 60).map(el => ({ ...identity(el), rect: rect(el.getBoundingClientRect()), css: css(el) })), truncated: candidates.length === 400 || visible.length > 60 } : {}),
+    ...(detailed ? { elements: visible.slice(0, MAX_VISIBLE).map(el => ({ ...identity(el), rect: rect(el.getBoundingClientRect()), css: css(el) })), truncated: matches.length > MAX_SCANNED || visible.length > MAX_VISIBLE } : {}),
   }
 }
 
@@ -78,6 +85,8 @@ export function captureLayout(reason = 'manual') {
   try { trace('layout.capture', { reason, ...layoutSnapshot(true) }) }
   catch { trace('layout.unavailable', { reason }) }
 }
+
+const QUIET_RECORD_MS = 60_000
 
 /** Active only while tracing. Coalesce busy scroll/mutation streams; do not
  * write localStorage or measure layout on each animation frame. */
@@ -90,17 +99,29 @@ export function installLayoutTrace(): () => void {
     let timer: ReturnType<typeof setTimeout> | undefined
     const reasons = new Set<string>()
     let interaction: { kind: string; target: Element } | null = null
+    // An unchanged layout is not new evidence; skipping it spares the
+    // synchronous storage write and keeps captures from being rolled off.
+    let lastKey = ''
+    let lastAt = 0
+    let writeMs = 0
     const sample = () => {
       timer = undefined
       try {
         const started = performance.now()
         const snapshot = layoutSnapshot()
-        const target = interaction?.target
-        trace('layout.sample', {
-          reasons: [...reasons],
-          interaction: target ? { kind: interaction!.kind, ...identity(target), scroll: [target.scrollLeft, target.scrollTop] } : null,
-          ...snapshot, measureMs: round(performance.now() - started),
-        })
+        const key = JSON.stringify(snapshot)
+        const measureMs = round(performance.now() - started)
+        if (key !== lastKey || started - lastAt >= QUIET_RECORD_MS) {
+          lastKey = key
+          lastAt = started
+          const target = interaction?.target
+          trace('layout.sample', {
+            reasons: [...reasons],
+            interaction: target ? { kind: interaction!.kind, ...identity(target), scroll: [target.scrollLeft, target.scrollTop] } : null,
+            ...snapshot, measureMs, prevWriteMs: writeMs,
+          })
+          writeMs = round(performance.now() - started - measureMs)
+        }
       }
       catch { trace('layout.unavailable') }
       reasons.clear()

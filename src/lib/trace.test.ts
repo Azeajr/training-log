@@ -93,6 +93,35 @@ describe('trace — records', () => {
     expect(readTrace().length).toBeLessThan(30)
   })
 
+  it('keeps the newest captures when routine samples fill the budget', () => {
+    enable()
+    trace('layout.capture', { n: 'old', blob: 'x'.repeat(60000) })
+    trace('layout.capture', { n: 'new', blob: 'x'.repeat(60000) })
+    for (let i = 0; i < 200; i++) trace('layout.sample', { i, blob: 'y'.repeat(2000) })
+    const all = readTrace()
+    expect(all.filter(e => e.ev === 'layout.capture').map(e => e.d?.n)).toEqual(['old', 'new'])
+    expect(new TextEncoder().encode(localStorage.getItem(EVENTS_KEY)!).length).toBeLessThanOrEqual(192 * 1024)
+    expect(all.at(-1)?.d?.i).toBe(199)
+  })
+
+  it('evicts only what is needed, not a fixed quarter of the history', () => {
+    enable()
+    for (let i = 0; i < 100; i++) trace('t', { i })
+    trace('big', { blob: 'z'.repeat(90 * 1024) })
+    trace('big', { blob: 'z'.repeat(90 * 1024) })
+    const all = readTrace()
+    expect(all.filter(e => e.ev === 't').length).toBeGreaterThan(0)
+  })
+
+  it('replaces a record larger than the budget instead of emptying the buffer', () => {
+    enable()
+    trace('before')
+    trace('layout.capture', { blob: 'q'.repeat(300 * 1024) })
+    const all = readTrace()
+    expect(all.map(e => e.ev)).toEqual(['before', 'layout.capture'])
+    expect(all[1].d).toMatchObject({ oversized: true })
+  })
+
   it('does not let an unserialisable payload throw out of an instrumentation call', () => {
     const cyclic: Record<string, unknown> = {}
     cyclic.self = cyclic

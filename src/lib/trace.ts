@@ -65,6 +65,34 @@ function eventBytes(event: TraceEvent): number {
   }
   return bytes
 }
+// The newest detailed captures are the evidence a user is trying to preserve;
+// routine samples must not roll them off before the recording is stopped.
+const PINNED_EV = 'layout.capture'
+const PINNED_KEEP = 2
+const ENVELOPE_BYTES = 14
+const fits = (count: number, bytes: number) =>
+  count <= MAX_EVENTS && bytes + Math.max(0, count - 1) + ENVELOPE_BYTES <= MAX_BYTES
+/** Drop only as many events as needed, oldest first, sparing pinned captures
+ *  and the newest event until nothing else is left to drop. */
+function shrinkToFit(): void {
+  let count = events.length
+  let bytes = payloadBytes
+  if (fits(count, bytes)) return
+  const pinned = new Set(events.filter(e => e.ev === PINNED_EV).slice(-PINNED_KEEP))
+  const newest = events[events.length - 1]
+  const drop = new Set<TraceEvent>()
+  for (const spare of [true, false]) {
+    for (const e of events) {
+      if (fits(count, bytes)) break
+      if (e === newest || drop.has(e) || (spare && pinned.has(e))) continue
+      drop.add(e)
+      count--
+      bytes -= eventBytes(e)
+    }
+  }
+  payloadBytes = bytes
+  events = events.filter(e => !drop.has(e))
+}
 function dropOldest(count: number): void {
   for (const event of events.slice(0, count)) payloadBytes -= eventBytes(event)
   events = events.slice(count)
@@ -192,14 +220,18 @@ export function trace(ev: string, d?: Record<string, unknown>, src: TraceSource 
       rec.d = { unserialisable: true }
     }
   }
+  // A single record that cannot fit would evict the whole buffer, itself
+  // included; keep a marker of its size instead.
+  const size = eventBytes(rec)
+  if (size > MAX_BYTES / 2) {
+    rec.d = { oversized: true, bytes: size }
+    eventSizes.delete(rec)
+  }
   events.push(rec)
   payloadBytes += eventBytes(rec)
-  if (events.length > MAX_EVENTS) dropOldest(events.length - MAX_EVENTS)
   // Layout records vary greatly in size. Bound actual UTF-8 bytes BEFORE
   // writing, rather than assuming every event is a 120-byte timer tick.
-  while (events.length && payloadBytes + Math.max(0, events.length - 1) + 14 > MAX_BYTES) {
-    dropOldest(Math.max(1, Math.floor(events.length / 4)))
-  }
+  shrinkToFit()
   persist()
 }
 
