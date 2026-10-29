@@ -94,7 +94,10 @@ export default defineHarness({
     {
       id: 'layout-diagnostics',
       title: 'Capture a visual issue, stop recording and export without screenshots',
-      covers: [{ file: 'tests/e2e/layout-trace.spec.ts', test: 'diagnostics captures scrolling, occlusion and focus without notes, survives reload and exports' }],
+      covers: [
+        { file: 'tests/e2e/layout-trace.spec.ts', test: 'diagnostics captures scrolling, occlusion and focus without notes, survives reload and exports' },
+        { file: 'tests/e2e/layout-trace.spec.ts', test: 'captures an open dialog and its controls without dismissing it or moving focus' },
+      ],
     },
     {
       id: 'first-run-setup',

@@ -54,3 +54,35 @@ test('diagnostics captures scrolling, occlusion and focus without notes, survive
   expect(text).toContain('session-bar')
   expect(text).not.toContain('PRIVATE-NOTE-MUST-NOT-BE-TRACED')
 })
+
+test('captures an open dialog and its controls without dismissing it or moving focus', async ({ page }) => {
+  await completeSetupWizard(page)
+  await page.getByRole('link', { name: 'SETTINGS' }).click()
+  await page.getByRole('button', { name: 'Start recording' }).click()
+  await page.getByRole('link', { name: 'TODAY' }).click()
+  await startWorkout(page)
+  await page.getByRole('button', { name: /View history for/ }).click()
+  const dialog = page.getByRole('dialog')
+  const back = dialog.getByRole('button', { name: '← BACK' })
+  await expect(back).toBeVisible()
+  const focused = () => page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120))
+  const focusBefore = await focused()
+
+  await page.getByRole('button', { name: 'Capture issue' }).tap()
+  await expect(page.getByText(/Issue captured/)).toBeVisible()
+  await expect(dialog).toBeVisible()
+  expect(await focused()).toBe(focusBefore)
+
+  const capture = await page.evaluate(() => {
+    const events = JSON.parse(localStorage.getItem('notif-trace')!).e
+    return events.findLast((e: {ev: string}) => e.ev === 'layout.capture')
+  })
+  // Matched by geometry: records carry structure and rectangles, not roles or text.
+  const near = (rect: number[], box: {x: number; y: number; width: number; height: number}) =>
+    [box.x, box.y, box.width, box.height].every((v, i) => Math.abs(rect[i] - v) <= 1)
+  const dialogBox = (await dialog.boundingBox())!
+  const backBox = (await back.boundingBox())!
+  expect(capture.d.trimmed).toBeUndefined()
+  expect(capture.d.anchors.some((a: {landmark: string | null; rect: number[]}) => a.landmark === null && near(a.rect, dialogBox))).toBe(true)
+  expect(capture.d.elements.some((e: {tag: string; rect: number[]}) => e.tag === 'button' && near(e.rect, backBox))).toBe(true)
+})
