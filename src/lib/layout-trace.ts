@@ -4,10 +4,17 @@ import { isTraceEnabled, subscribeTraceEnabled, trace } from './trace'
 // arbitrary attributes or URL query strings. Numeric paths are normalised.
 const round = (n: number) => Math.round(n * 10) / 10
 const rect = (r: DOMRect) => [r.x, r.y, r.width, r.height].map(round)
+/** 1-based position among element siblings, walking back rather than copying
+ *  the parent's whole child list (a long history list has hundreds). */
+function siblingIndex(el: Element) {
+  let i = 1
+  for (let s = el.previousElementSibling; s; s = s.previousElementSibling) i++
+  return i
+}
 function identity(el: Element) {
   const path: string[] = []
   for (let p: Element | null = el; p && path.length < 8; p = p.parentElement) {
-    path.unshift(`${p.tagName.toLowerCase()}:${p.parentElement ? [...p.parentElement.children].indexOf(p) + 1 : 1}`)
+    path.unshift(`${p.tagName.toLowerCase()}:${siblingIndex(p)}`)
   }
   return {
     tag: el.tagName.toLowerCase(), landmark: el.getAttribute('data-layout-anchor'),

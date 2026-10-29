@@ -33,7 +33,7 @@ describe('LayoutCapture', () => {
 
   it('does not take focus on a mouse press', () => {
     render(() => <LayoutCapture />)
-    const button = screen.getByRole('button', { name: 'Capture issue' })
+    const button = screen.getByRole('button', { name: /capture issue/i })
     expect(fireEvent.mouseDown(button)).toBe(false)
   })
 
@@ -45,7 +45,7 @@ describe('LayoutCapture', () => {
   })
   it('captures once for a touch sequence of pointerdown then click', () => {
     render(() => <LayoutCapture />)
-    const button = screen.getByRole('button', { name: 'Capture issue' })
+    const button = screen.getByRole('button', { name: /capture issue/i })
     fireEvent.pointerDown(button, { isPrimary: true })
     fireEvent.click(button, { detail: 1 })
     expect(captures()).toHaveLength(1)
@@ -54,7 +54,7 @@ describe('LayoutCapture', () => {
 
   it('captures on keyboard activation, and not twice for a repeat', () => {
     render(() => <LayoutCapture />)
-    const button = screen.getByRole('button', { name: 'Capture issue' })
+    const button = screen.getByRole('button', { name: /capture issue/i })
     fireEvent.click(button, { detail: 0 })
     fireEvent.click(button, { detail: 0 })
     expect(captures()).toHaveLength(1)
@@ -62,21 +62,32 @@ describe('LayoutCapture', () => {
 
   it('ignores non-primary pointers', () => {
     render(() => <LayoutCapture />)
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Capture issue' }), { isPrimary: false })
+    fireEvent.pointerDown(screen.getByRole('button', { name: /capture issue/i }), { isPrimary: false })
+    expect(captures()).toHaveLength(0)
+  })
+
+  it('ignores a right or middle click', () => {
+    render(() => <LayoutCapture />)
+    const button = screen.getByRole('button', { name: /capture issue/i })
+    fireEvent.pointerDown(button, { isPrimary: true, button: 2 })
+    fireEvent.pointerDown(button, { isPrimary: true, button: 1 })
     expect(captures()).toHaveLength(0)
   })
 
   it.each(['/settings', '/setup'])('is hidden on %s', path => {
     pathname = path
     render(() => <LayoutCapture />)
-    expect(screen.queryByRole('button', { name: 'Capture issue' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /capture issue/i })).toBeNull()
   })
 
   it('is one compact control that hides once recording is stopped in Settings', () => {
     render(() => <LayoutCapture />)
     expect(screen.getAllByRole('button')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: 'Capture issue' })).toHaveTextContent('REC')
+    const button = screen.getByRole('button', { name: /capture issue/i })
+    // Label in name: the accessible name starts with what is on screen.
+    expect(button).toHaveTextContent('REC')
+    expect(button).toHaveAccessibleName('REC: capture issue')
     setTraceEnabled(false)
-    expect(screen.queryByRole('button', { name: 'Capture issue' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /capture issue/i })).toBeNull()
   })
 })

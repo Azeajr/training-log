@@ -39,6 +39,8 @@ training-log-*.json
 coverage/
 reports/
 stryker-setup-*.js
+# Stryker sandboxes, left behind when a mutation run is interrupted
+.stryker-tmp/
 
 # Playwright run artifacts — per-failure screenshots, videos and traces, plus a
 # .last-run.json receipt. `.last-run.json` used to be TRACKED, and its committed
@@ -46,6 +48,8 @@ stryker-setup-*.js
 # nothing ran it: a stale green receipt anyone could read and believe.
 test-results/
 playwright-report/
+# Written into the checkout by `web-harness e2e` (CI regenerates its own)
+e2e-results.json
 
 # Hermes agent worktrees — worker checkouts, never committed
 .worktrees/

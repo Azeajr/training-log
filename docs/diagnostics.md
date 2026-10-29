@@ -23,9 +23,10 @@ until you copy or share it. The workout JSON backup does not include this log.
 - `measureMs` on automatic samples reports the layout-measurement cost;
   `prevWriteMs` reports the previous sample's serialization and storage write.
 
-The ● REC control (accessible name "Capture issue") is itself a fixed overlay
-(landmark `capture-control`, hidden on Settings and setup), so it can appear as
-an occluder in hit tests. It is kept narrow so the top row under it stays usable.
+The ● REC control (accessible name "REC: capture issue") is itself a fixed
+overlay (landmark `capture-control`, hidden on Settings and setup), so it can
+appear as an occluder in hit tests. It is kept small (24px tall) so the top row
+under it stays usable. Only a primary touch, pen or left click captures.
 Repeated taps within half a second record one capture.
 
 Manual pointer capture runs before focus changes can dismiss a keyboard.
@@ -53,7 +54,9 @@ events roll off, only as many as needed; the two newest `layout.capture`
 records are spared until nothing else remains, and a record over half the
 budget is replaced by an `oversized` marker. The oldest retained timestamp is
 available in the export.
-Event sizes are counted once; storage serializes the bounded buffer per event.
+Each event is serialised once; every write joins the cached JSON of the
+bounded buffer. If storage refuses a write, the oldest half of the bytes is
+dropped (captures last) and the write retried once.
 LocalStorage is synchronous, so recording still has a cost. Capture and stop
 promptly. This is diagnostic evidence, not a continuous session recorder.
 

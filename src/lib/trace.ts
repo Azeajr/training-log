@@ -46,7 +46,7 @@ const ENABLED_KEY = 'notif-trace-on'
 const STORAGE_VERSION = 1
 
 // Bounded twice over. The count bound keeps the whole-array rewrite on every
-// event cheap (localStorage has no append, so each record re-serialises the
+// event cheap (localStorage has no append, so each record rewrites the
 // buffer); the byte bound is the backstop for events carrying fat payloads.
 // A 1 Hz heartbeat fills 1200 records in 20 minutes of rest, which is longer
 // than any rest this app schedules.
@@ -54,17 +54,22 @@ const MAX_EVENTS = 1200
 const MAX_BYTES = 192 * 1024
 
 let events: TraceEvent[] = []
-const eventSizes = new WeakMap<TraceEvent, number>()
+// Records never change once buffered, so each is serialised once: sizing it
+// and every later write reuse the same JSON. Re-serialising the whole buffer
+// per event cost several times the join that persist() does now.
+const encoded = new WeakMap<TraceEvent, { json: string; bytes: number }>()
 let payloadBytes = 0
 const encoder = new TextEncoder()
-function eventBytes(event: TraceEvent): number {
-  let bytes = eventSizes.get(event)
-  if (bytes === undefined) {
-    bytes = encoder.encode(JSON.stringify(event)).length
-    eventSizes.set(event, bytes)
+function encode(event: TraceEvent): { json: string; bytes: number } {
+  let e = encoded.get(event)
+  if (e === undefined) {
+    const json = JSON.stringify(event)
+    e = { json, bytes: encoder.encode(json).length }
+    encoded.set(event, e)
   }
-  return bytes
+  return e
 }
+const eventBytes = (event: TraceEvent) => encode(event).bytes
 // The newest detailed captures are the evidence a user is trying to preserve;
 // routine samples must not roll them off before the recording is stopped.
 const PINNED_EV = 'layout.capture'
@@ -81,18 +86,18 @@ function pinnedCaptures(): Set<TraceEvent> {
 }
 const fits = (count: number, bytes: number) =>
   count <= MAX_EVENTS && bytes + Math.max(0, count - 1) + ENVELOPE_BYTES <= MAX_BYTES
-/** Drop only as many events as needed, oldest first, sparing pinned captures
- *  and the newest event until nothing else is left to drop. */
-function shrinkToFit(): void {
+/** Drop only as many events as `done` needs, oldest first, sparing pinned
+ *  captures and the newest event until nothing else is left to drop. */
+function evict(done: (count: number, bytes: number) => boolean): void {
   let count = events.length
   let bytes = payloadBytes
-  if (fits(count, bytes)) return
+  if (done(count, bytes)) return
   const pinned = pinnedCaptures()
   const newest = events[events.length - 1]
   const drop = new Set<TraceEvent>()
   for (const spare of [true, false]) {
     for (const e of events) {
-      if (fits(count, bytes)) break
+      if (done(count, bytes)) break
       if (e === newest || drop.has(e) || (spare && pinned.has(e))) continue
       drop.add(e)
       count--
@@ -102,16 +107,7 @@ function shrinkToFit(): void {
   payloadBytes = bytes
   events = events.filter(e => !drop.has(e))
 }
-function dropOldest(count: number): void {
-  const pinned = pinnedCaptures()
-  const drop = new Set<TraceEvent>()
-  for (const e of events) {
-    if (drop.size >= count) break
-    if (!pinned.has(e)) drop.add(e)
-  }
-  for (const event of drop) payloadBytes -= eventBytes(event)
-  events = events.filter(e => !drop.has(e))
-}
+const serialise = () => `{"v":${STORAGE_VERSION},"e":[${events.map(e => encode(e).json).join(',')}]}`
 let enabled = false
 let seq = 0
 // Set when localStorage has refused a write twice. The buffer stays in memory
@@ -158,14 +154,17 @@ function isTraceEvent(x: unknown): x is TraceEvent {
 function persist(): void {
   if (writesFailed) return
   try {
-    localStorage.setItem(EVENTS_KEY, JSON.stringify({ v: STORAGE_VERSION, e: events }))
+    localStorage.setItem(EVENTS_KEY, serialise())
   } catch {
     // Quota, private mode, or a browser that refuses the write. Drop the oldest
     // half and try once — a trace that keeps its recent half is worth more than
-    // one that stops recording at the moment it filled up.
-    dropOldest(Math.floor(events.length / 2))
+    // one that stops recording at the moment it filled up. Half the BYTES:
+    // half the records could all be ticks, leaving two pinned captures that
+    // are most of the buffer and a retry no smaller than the refused write.
+    const half = payloadBytes / 2
+    evict((_, bytes) => bytes <= half)
     try {
-      localStorage.setItem(EVENTS_KEY, JSON.stringify({ v: STORAGE_VERSION, e: events }))
+      localStorage.setItem(EVENTS_KEY, serialise())
     } catch {
       writesFailed = true
     }
@@ -182,8 +181,8 @@ function init(): void {
 
 init()
 
-/** Re-read the flag and the buffer from storage. Test seam, and used by the
- *  Settings panel after it clears the log. */
+/** Re-read the flag and the buffer from storage. Test seam: it does not tell
+ *  `subscribeTraceEnabled` listeners if the flag changed. */
 export function reloadTrace(): void {
   init()
 }
@@ -240,13 +239,13 @@ export function trace(ev: string, d?: Record<string, unknown>, src: TraceSource 
   const size = eventBytes(rec)
   if (size > MAX_BYTES / 2) {
     rec.d = { oversized: true, bytes: size }
-    eventSizes.delete(rec)
+    encoded.delete(rec)
   }
   events.push(rec)
   payloadBytes += eventBytes(rec)
   // Layout records vary greatly in size. Bound actual UTF-8 bytes BEFORE
   // writing, rather than assuming every event is a 120-byte timer tick.
-  shrinkToFit()
+  evict(fits)
   persist()
 }
 
