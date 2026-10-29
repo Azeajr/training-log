@@ -2,6 +2,7 @@ import { Router, Route, useNavigate, useLocation } from '@solidjs/router'
 import { lazy, Suspense, Show, createEffect, createSignal, onMount, onCleanup, type ParentProps } from 'solid-js'
 import { createConfirmation, ConfirmationContext } from './hooks/use-confirmation'
 import BottomNav from './components/layout/BottomNav'
+import LayoutCapture from './components/layout/LayoutCapture'
 import Toast from './components/layout/Toast'
 import ConfirmationDialog from './components/modals/ConfirmationDialog'
 import { db } from './db/index'
@@ -72,6 +73,7 @@ function AppShell(props: ParentProps) {
       style={{ 'padding-top': 'env(safe-area-inset-top, 0px)' }}
     >
       <main
+        data-layout-anchor="main"
         class="flex-1 overflow-y-auto"
         style={{ 'padding-bottom': 'var(--nav-h)' }}
       >
@@ -79,6 +81,7 @@ function AppShell(props: ParentProps) {
           {props.children}
         </Suspense>
       </main>
+      <LayoutCapture />
       <Show when={location.pathname !== '/setup'}>
         <Toast />
         <BottomNav />

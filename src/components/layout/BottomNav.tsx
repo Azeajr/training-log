@@ -5,6 +5,7 @@ import { workout } from '../../store/workout-store'
 export default function BottomNav() {
   return (
     <nav
+      data-layout-anchor="bottom-nav"
       class="fixed bottom-0 left-0 right-0 bg-bg border-t border-border flex h-[var(--nav-h)]"
       style={{ 'padding-bottom': 'env(safe-area-inset-bottom, 0px)' }}
     >

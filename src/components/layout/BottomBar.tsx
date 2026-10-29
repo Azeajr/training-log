@@ -14,7 +14,7 @@ import type { JSX } from 'solid-js'
  */
 export default function BottomBar(props: { children: JSX.Element }) {
   return (
-    <div class="fixed bottom-[var(--nav-h)] left-0 right-0 bg-bg border-t-2 border-border">
+    <div data-layout-anchor="session-bar" class="fixed bottom-[var(--nav-h)] left-0 right-0 bg-bg border-t-2 border-border">
       <div class="max-w-3xl mx-auto px-4">{props.children}</div>
     </div>
   )

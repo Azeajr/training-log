@@ -85,6 +85,70 @@ describe('trace — records', () => {
     expect(all[all.length - 1].d).toEqual({ i: 1299 })
   })
 
+  it('bounds actual bytes for large layout records before persisting', () => {
+    for (let i = 0; i < 30; i++) trace('layout.capture', { i, geometry: '界'.repeat(4000) })
+    const raw = localStorage.getItem(EVENTS_KEY)!
+    expect(new TextEncoder().encode(raw).length).toBeLessThanOrEqual(192 * 1024)
+    expect(readTrace().at(-1)?.d?.i).toBe(29)
+    expect(readTrace().length).toBeLessThan(30)
+  })
+
+  it('keeps the newest captures when routine samples fill the budget', () => {
+    enable()
+    trace('layout.capture', { n: 'old', blob: 'x'.repeat(60000) })
+    trace('layout.capture', { n: 'new', blob: 'x'.repeat(60000) })
+    for (let i = 0; i < 200; i++) trace('layout.sample', { i, blob: 'y'.repeat(2000) })
+    const all = readTrace()
+    expect(all.filter(e => e.ev === 'layout.capture').map(e => e.d?.n)).toEqual(['old', 'new'])
+    expect(new TextEncoder().encode(localStorage.getItem(EVENTS_KEY)!).length).toBeLessThanOrEqual(192 * 1024)
+    expect(all.at(-1)?.d?.i).toBe(199)
+  })
+
+  it('evicts only what is needed, not a fixed quarter of the history', () => {
+    enable()
+    for (let i = 0; i < 100; i++) trace('t', { i })
+    trace('big', { blob: 'z'.repeat(90 * 1024) })
+    trace('big', { blob: 'z'.repeat(90 * 1024) })
+    const all = readTrace()
+    expect(all.filter(e => e.ev === 't').length).toBeGreaterThan(0)
+  })
+
+  it('replaces a record larger than the budget instead of emptying the buffer', () => {
+    enable()
+    trace('before')
+    trace('layout.capture', { blob: 'q'.repeat(300 * 1024) })
+    const all = readTrace()
+    expect(all.map(e => e.ev)).toEqual(['before', 'layout.capture'])
+    expect(all[1].d).toMatchObject({ oversized: true })
+  })
+
+  it('spares the newest captures when a quota failure drops the oldest half', () => {
+    enable()
+    trace('layout.capture', { n: 1 })
+    for (let i = 0; i < 10; i++) trace('t', { i })
+    // Spied on the instance: jsdom's localStorage does not route through a
+    // Storage.prototype spy, which left this test passing without a refusal.
+    const realSetItem = window.localStorage.setItem.bind(window.localStorage)
+    let failed = false
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation((k: string, v: string) => {
+      if (!failed && k === EVENTS_KEY) { failed = true; throw new DOMException('QuotaExceededError') }
+      realSetItem(k, v)
+    })
+    trace('t', { i: 11 })
+    expect(failed).toBe(true)
+    expect(readTrace().some(e => e.ev === 'layout.capture')).toBe(true)
+    expect(readTrace().length).toBeLessThan(12)
+  })
+
+  it('gives no protection to captures from before the latest trace.on', () => {
+    enable()
+    trace('layout.capture', { old: true })
+    setTraceEnabled(false)
+    setTraceEnabled(true)
+    for (let i = 0; i < 1250; i++) trace('t', { i })
+    expect(readTrace().some(e => e.ev === 'layout.capture')).toBe(false)
+  })
+
   it('does not let an unserialisable payload throw out of an instrumentation call', () => {
     const cyclic: Record<string, unknown> = {}
     cyclic.self = cyclic
@@ -169,6 +233,34 @@ describe('trace — hostile storage', () => {
     expect(all.length).toBeLessThan(11)
     expect(all[all.length - 1].d).toEqual({ i: 10 })
     expect(traceStats().degraded).toBe(false)
+  })
+
+  it('frees half the bytes, not half the records, before retrying a refused write', () => {
+    enable()
+    trace('layout.capture', { n: 'old', blob: 'x'.repeat(60000) })
+    trace('layout.capture', { n: 'new', blob: 'x'.repeat(60000) })
+    for (let i = 0; i < 20; i++) trace('t', { i })
+    // Room for about half of what is buffered: dropping half the RECORDS
+    // (all ticks, captures spared) would leave the retry as large as before.
+    const realSetItem = window.localStorage.setItem.bind(window.localStorage)
+    const refuse = vi.spyOn(window.localStorage, 'setItem').mockImplementation((k: string, v: string) => {
+      if (k === EVENTS_KEY && v.length > 70000) throw new DOMException('QuotaExceededError')
+      realSetItem(k, v)
+    })
+    trace('t', { i: 20 })
+    expect(refuse).toHaveBeenCalledTimes(2)
+    expect(traceStats().degraded).toBe(false)
+    const all = readTrace()
+    expect(all.filter(e => e.ev === 'layout.capture').map(e => e.d?.n)).toEqual(['new'])
+    expect(all.at(-1)?.d).toEqual({ i: 20 })
+  })
+
+  it('writes exactly what a whole-buffer JSON.stringify would', () => {
+    enable()
+    trace('a', { s: 'quote " and \\ and 界' })
+    trace('layout.capture', { blob: 'x'.repeat(1000) })
+    trace('b', undefined, 'worker')
+    expect(localStorage.getItem(EVENTS_KEY)).toBe(JSON.stringify({ v: 1, e: readTrace() }))
   })
 
   it('keeps recording in memory once durability is lost, and says so', () => {
