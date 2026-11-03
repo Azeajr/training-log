@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dedupePrecacheUrls, toPrecachePaths } from './precache'
+import { dedupePrecacheUrls, precacheVersion, toPrecachePaths } from './precache'
 
 // `cache.addAll()` rejects with InvalidStateError on a repeated URL, and the
 // injected manifest can repeat one: vite-plugin-pwa adds the web app manifest's
@@ -60,5 +60,37 @@ describe('toPrecachePaths', () => {
   it('keeps the three forms distinguishable from one another', () => {
     expect(toPrecachePaths(['a.js', '/a.js', 'https://example.com/a.js']))
       .toEqual(['/a.js', '/a.js', '/a.js'])
+  })
+})
+
+describe('precacheVersion', () => {
+  const deploy = [
+    { url: 'index.html', revision: 'r1' },
+    { url: 'assets/index-AAAA.js', revision: null },
+    { url: 'assets/Settings-BBBB.js', revision: null },
+  ]
+
+  it('is stable for the same list', () => {
+    expect(precacheVersion(deploy)).toBe(precacheVersion(deploy.map(e => ({ ...e }))))
+  })
+
+  it('changes when a hashed asset is renamed', () => {
+    const next = deploy.map(e => e.url === 'assets/Settings-BBBB.js' ? { ...e, url: 'assets/Settings-CCCC.js' } : e)
+    expect(precacheVersion(next)).not.toBe(precacheVersion(deploy))
+  })
+
+  it('changes when only an unhashed file\'s revision does', () => {
+    // index.html keeps its URL across deploys; its revision is the only signal.
+    const next = deploy.map(e => e.url === 'index.html' ? { ...e, revision: 'r2' } : e)
+    expect(precacheVersion(next)).not.toBe(precacheVersion(deploy))
+  })
+
+  it('ignores the order the build listed files in', () => {
+    expect(precacheVersion([...deploy].reverse())).toBe(precacheVersion(deploy))
+  })
+
+  it('is usable as part of a cache name', () => {
+    expect(precacheVersion(deploy)).toMatch(/^[0-9a-z]+$/)
+    expect(precacheVersion([])).toMatch(/^[0-9a-z]+$/)
   })
 })
