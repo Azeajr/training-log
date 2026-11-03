@@ -71,12 +71,17 @@ export default defineConfig(() => {
       //     workbox's cleanupOutdatedCaches(): no workbox runtime is imported,
       //     so that function does not exist here. The SW deletes caches whose
       //     key starts with `precache-` and is not the current one.
-      //   - clientsClaim skipped  → user keeps refresh-prompt control
-      //   - skipWaiting skipped   → refresh stays user-gated (matches CSP)
+      //   - clientsClaim skipped  → a new SW never takes over a live tab
+      //   - skipWaiting only when the user takes an update (SKIP_WAITING message)
       srcDir: 'src',
       filename: 'service-worker.ts',
       strategies: 'injectManifest',
-      registerType: 'prompt',
+      // The app registers the SW itself (src/lib/sw-update.ts), which is where
+      // the update prompt lives. `registerType: 'prompt'` was set here, but it
+      // only configures the plugin's virtual:pwa-register module, which nothing
+      // imported: the generated registerSW.js just called register(), and there
+      // was no prompt at all.
+      injectRegister: false,
       injectManifest: {
         // index.html is precached so the SW's navigation fallback can serve
         // the shell offline (src/service-worker.ts fetch handler).

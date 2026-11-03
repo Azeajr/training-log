@@ -25,6 +25,8 @@ import AsyncErrorBox from '../components/ui/AsyncErrorBox'
 import SectionLabel from '../components/layout/SectionLabel'
 import SetReadout from '../components/forms/SetReadout'
 import AccessoryPicker from '../components/workout/AccessoryPicker'
+import UpdateBanner from '../components/layout/UpdateBanner'
+import { appUpdate } from '../store/update-store'
 
 const message = (err: unknown): string =>
   err instanceof Error ? err.message : 'something went wrong'
@@ -373,6 +375,7 @@ export default function Today() {
       fallback={<div class="p-4 md:p-8 font-mono text-muted text-sm tracking-widest uppercase">Loading…</div>}
     >
       <div class="p-4 md:p-8 font-mono max-w-5xl mx-auto">
+        <UpdateBanner ready={appUpdate.updateReady()} onApply={appUpdate.apply} />
         {/* A button, not a link: this is the second entry into a live session,
             so it goes through the same reconciliation START does. As an <A> it
             walked past that check straight into live workout controls over a

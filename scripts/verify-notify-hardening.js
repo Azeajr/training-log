@@ -14,17 +14,32 @@
  *   B. hidden tab: page ALSO fires (page + SW, tag-coalesced to one OS item)
  *   D. SW dead + hidden tab: page timer still fires
  *   H. diagnostic trace: the page sink records a real rest into localStorage
+ *   F. a controlled navigation is answered from the precached shell, never the network
+ *   G. a 502 never enters the cache-first precache
+ *   I. after a deploy, a screen not yet opened still opens offline
+ *   J. after a deploy whose SW failed to install, an offline launch still renders
+ *   K. a deploy is found on resume, offered, and taking it lands on it
+ *
+ * I, J and K serve a second deploy synthesised from dist/ (see makeNextDeploy) on
+ * their own port, so the SW update path is tested against this exact build.
  *
  * Each leg runs in a FRESH browser context (fresh OPFS + storage + SW), so no
  * production DB reset hook is required (that hook is DEV-only). Rest state is
  * injected via localStorage before a reload.
  */
 
+import { cp, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { chromium } from 'playwright'
 import { createStaticServer } from '@azeajr/web-harness/static-server'
 
 const BASE = 'http://127.0.0.1:5175'
 const PORT = 5175
+// Legs I, J and K swap the server under a live context, so they get their own
+// origin rather than the one every other leg shares.
+const DEPLOY_PORT = 5176
+const DEPLOY_BASE = `http://127.0.0.1:${DEPLOY_PORT}`
 const REST_MS = 90_000 // normal-rest threshold used by scheduleRest
 
 const results = []
@@ -173,6 +188,95 @@ async function freshContext(browser) {
   return { context, page, swWorker }
 }
 
+// ─── deploy helpers (legs I, J, K) ───────────────────────────────────────────
+
+/**
+ * The next deploy of this same build: every file in assets/ renamed, as new
+ * content hashes would, and every reference to it rewritten — index.html, the
+ * chunks' dynamic imports, and the SW's injected precache list. That last one
+ * changes the SW script's bytes, so the browser installs it as an update.
+ *
+ * The code itself is unchanged, deliberately. Anything these legs catch comes
+ * from two deploys meeting, not from a change in the app.
+ */
+async function makeNextDeploy(from) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'sw-next-deploy-'))
+  await cp(from, dir, { recursive: true })
+  const assets = path.join(dir, 'assets')
+  const renames = new Map()
+  for (const name of await readdir(assets)) {
+    const ext = path.extname(name)
+    renames.set(name, `${name.slice(0, -ext.length)}N${ext}`)
+  }
+  for (const [was, now] of renames) await rename(path.join(assets, was), path.join(assets, now))
+
+  // Longest first, so no name can match inside a longer one.
+  const escaped = [...renames.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const pattern = new RegExp(escaped.join('|'), 'g')
+  const textFiles = [
+    'index.html',
+    'service-worker.js',
+    ...[...renames.values()].filter((n) => /\.(js|css)$/.test(n)).map((n) => `assets/${n}`),
+  ]
+  for (const file of textFiles) {
+    const full = path.join(dir, file)
+    const text = await readFile(full, 'utf8')
+    await writeFile(full, text.replace(pattern, (m) => renames.get(m)))
+  }
+  const renamed = (re) => {
+    const hit = [...renames.values()].find((n) => re.test(n))
+    if (!hit) throw new Error(`setup: no asset matches ${re}`)
+    return `/assets/${hit}`
+  }
+  return { dir, renamed }
+}
+
+/** Fresh context on deploy 1: setup done, the SW installed and controlling. */
+async function installDeployOne(browser) {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.goto(`${DEPLOY_BASE}/`)
+  await completeSetupWizard(page)
+  await page.waitForURL('**/today', { timeout: 15_000 })
+  await page.getByText('HISTORY').first().waitFor({ timeout: 15_000 })
+  // Park the pointer. Hovering a nav link preloads its screen, and the cursor
+  // was left wherever START TRAINING sat.
+  await page.mouse.move(0, 0)
+  // No clients.claim(): the page that installed the SW is not controlled by
+  // it. The next real navigation is.
+  await page.evaluate(() => navigator.serviceWorker.ready)
+  await page.goto(`${DEPLOY_BASE}/today`)
+  await page.getByText('HISTORY').first().waitFor({ timeout: 15_000 })
+  await waitForSwControl(page)
+  return { context, page }
+}
+
+/** Ask for an update now, then wait for the install attempt to settle. */
+async function settleUpdate(page) {
+  await page.evaluate(async () => {
+    const reg = await navigator.serviceWorker.getRegistration()
+    await reg?.update().catch(() => {})
+  })
+  for (let i = 0; i < 60; i++) {
+    const state = await page.evaluate(async () => {
+      const reg = await navigator.serviceWorker.getRegistration()
+      return { installing: Boolean(reg?.installing), waiting: Boolean(reg?.waiting) }
+    })
+    if (!state.installing) return state
+    await page.waitForTimeout(250)
+  }
+  throw new Error('setup: the update never finished installing')
+}
+
+/** Which main bundle the cached shell loads. */
+const cachedShellBundle = (page) =>
+  page.evaluate(async () => {
+    const hit = await caches.match('/index.html')
+    return hit ? ((await hit.text()).match(/assets\/index-[^"]+\.js/)?.[0] ?? null) : null
+  })
+
 // ─── legs ────────────────────────────────────────────────────────────────────
 
 async function leg(name, fn) {
@@ -190,6 +294,7 @@ async function main() {
   // does not itself keep the process alive once the legs are done — without it
   // a fully passing run still sat here for 200s and then exited 3.
   setTimeout(() => { console.error('watchdog: 200s cap hit, forcing exit'); process.exit(3) }, 200_000).unref()
+  const next = await makeNextDeploy('dist')
   const browser = await chromium.launch()
   const server = await startServer()
   try {
@@ -203,42 +308,19 @@ async function main() {
       await context.setOffline(false)
     })
 
-    await leg('F: shell refreshes on 200, and a 503 never replaces it', async () => {
+    // The shell comes from the worker's own precache, not the network. It used
+    // to be network-first, and a shell fetched from a newer deploy than the
+    // worker serving it is what legs I and J catch. This holds the narrower
+    // line: a controlled navigation never asks the network at all, so nothing
+    // the network says (here, a 503) can reach the page or the cache.
+    await leg('F: a navigation is answered from the precached shell, not the network', async () => {
       const { context, page } = await freshContext(browser)
-
-      // Read the cached shell directly. Asserting only that the app still
-      // renders offline is too weak: it passes while the navigation handler's
-      // cache write is dead, because `install` already precached a good shell
-      // and nothing can overwrite it. Both halves below must hold.
-      const shellStatus = () =>
-        page.evaluate(async () => {
-          const name = (await caches.keys()).find((k) => k.startsWith('precache-'))
-          const hit = name ? await (await caches.open(name)).match('/index.html') : null
-          return hit ? hit.status : null
-        })
-      const dropShell = () =>
-        page.evaluate(async () => {
-          const name = (await caches.keys()).find((k) => k.startsWith('precache-'))
-          if (name) await (await caches.open(name)).delete('/index.html')
-        })
-
-      // 1. Network-first means a healthy navigation REFRESHES the shell. If the
-      //    clone is taken after the body is handed to the navigation it throws
-      //    and the write silently never happens.
-      await dropShell()
-      if ((await shellStatus()) !== null) throw new Error('setup: shell was not dropped')
-      await page.goto(`${BASE}/`)
-      await page.waitForTimeout(1_000)
-      if ((await shellStatus()) !== 200) {
-        throw new Error('a healthy navigation did not refresh the cached shell')
-      }
-
-      // 2. One transient 503 while ONLINE. `fetch` only rejects on a network
-      //    failure, so this resolves and the handler must refuse to cache it.
-      //    Match on the path, not resourceType: the SW's own `fetch(req)` for a
-      //    navigation reaches Playwright as `fetch`, not `document`.
+      let asked = 0
+      // Match on the path, not resourceType: the SW's own `fetch(req)` for a
+      // navigation reaches Playwright as `fetch`, not `document`.
       const poison = async (route, request) => {
         if (new URL(request.url()).pathname === '/') {
+          asked++
           await route.fulfill({
             status: 503,
             contentType: 'text/html',
@@ -250,17 +332,12 @@ async function main() {
       }
       await context.route('**/*', poison)
       const res = await page.goto(`${BASE}/`)
-      if (res?.status() !== 503) throw new Error(`setup: expected a 503, got ${res?.status()}`)
-      await page.waitForTimeout(1_000)
-      const after = await shellStatus()
-      if (after !== 200) throw new Error(`503 replaced the cached shell (now ${after})`)
       await context.unroute('**/*', poison)
-
-      // 3. And the end-to-end consequence: offline still renders the app.
-      await context.setOffline(true)
-      await page.goto(`${BASE}/`)
+      if (asked) throw new Error(`the SW asked the network for the shell (${asked}x, got ${res?.status()})`)
+      if (res?.status() !== 200 || !res.fromServiceWorker()) {
+        throw new Error(`navigation got ${res?.status()} (from SW: ${res?.fromServiceWorker()}), expected the cached 200`)
+      }
       await page.getByText('HISTORY').first().waitFor({ timeout: 10_000 })
-      await context.setOffline(false)
     })
 
     await leg('G: a 502 must not enter the cache-first precache', async () => {
@@ -376,9 +453,170 @@ async function main() {
       }
     })
 
+    // A deploy must not leave the open app running one deploy's page under
+    // another deploy's worker. When navigations were network-first, the first
+    // online launch after a deploy ran the NEW page while the OLD worker stayed
+    // in charge until every window closed; the old worker serves only its own
+    // precache list, so the new page's lazily loaded screens had nothing to
+    // serve them offline, even once the new worker had cached them.
+    await leg('I: after a deploy, a screen not yet opened still opens offline', async () => {
+      let server2 = await createStaticServer({ dir: 'dist', port: DEPLOY_PORT })
+      let context
+      try {
+        const one = await installDeployOne(browser)
+        context = one.context
+        const page = one.page
+        const settingsLoads = []
+        const failed = []
+        page.on('request', (r) => {
+          if (new URL(r.url()).pathname.startsWith('/assets/Settings-')) settingsLoads.push(r.url())
+        })
+        page.on('requestfailed', (r) => failed.push(new URL(r.url()).pathname))
+
+        // Deploy 2 goes live. The app is opened online and left open.
+        await server2.close()
+        server2 = await createStaticServer({ dir: next.dir, port: DEPLOY_PORT })
+        await page.goto(`${DEPLOY_BASE}/today`)
+        await page.getByText('HISTORY').first().waitFor({ timeout: 15_000 })
+        const update = await settleUpdate(page)
+        if (!update.waiting) throw new Error('setup: deploy 2 SW did not install')
+        if (settingsLoads.length) {
+          throw new Error('setup: Settings loaded while online, so this leg cannot test it')
+        }
+
+        // Signal drops. Settings is opened for the first time this session.
+        await context.setOffline(true)
+        await page.locator('a[href="/settings"]').first().click()
+        try {
+          await page.getByText('REST NOTIFICATIONS').first().waitFor({ timeout: 10_000 })
+        } catch {
+          const running = await page.evaluate(
+            () => document.querySelector('script[type="module"][src*="/assets/index-"]')?.getAttribute('src'),
+          )
+          const chunk = next.renamed(/^Settings-/)
+          const inCache = await page.evaluate(async (p) => Boolean(await caches.match(p)), chunk)
+          throw new Error(
+            `Settings did not open offline. Page runs ${running}; failed: [${failed.join(', ')}]; ` +
+              `${chunk} in cache: ${inCache}`,
+          )
+        }
+      } finally {
+        await context?.close()
+        await server2.close()
+      }
+    })
+
+    // A failed install must leave the old version working. The new SW's install
+    // fails part-way: one precache fetch dies, so cache.addAll() rejects (F72
+    // was one way to get there, a dropped connection mid-download is another).
+    // When navigations were network-first, the launch that found the deploy had
+    // already written deploy 2's shell into the cache deploy 1's worker serves
+    // offline, and that shell named scripts no cache held.
+    await leg('J: after a deploy whose SW failed to install, an offline launch still renders', async () => {
+      let server2 = await createStaticServer({ dir: 'dist', port: DEPLOY_PORT })
+      let context
+      try {
+        const one = await installDeployOne(browser)
+        context = one.context
+        // A screen chunk this leg never opens, so the only thing that fetches
+        // it is the install's addAll. Failing something the page also loads
+        // (the wasm, say) breaks the online page too, and an SW that proxies
+        // misses through its own fetch makes those requests look like the
+        // install's.
+        const victim = next.renamed(/^HistoryEdit-/)
+        let aborted = 0
+        await context.route('**/*', async (route, request) => {
+          if (new URL(request.url()).pathname === victim) {
+            aborted++
+            await route.abort()
+          } else {
+            await route.continue()
+          }
+        })
+
+        await server2.close()
+        server2 = await createStaticServer({ dir: next.dir, port: DEPLOY_PORT })
+        await one.page.goto(`${DEPLOY_BASE}/today`)
+        await one.page.getByText('HISTORY').first().waitFor({ timeout: 15_000 })
+        const update = await settleUpdate(one.page)
+        if (!aborted) throw new Error("setup: deploy 2's SW never fetched its precache")
+        if (update.waiting) throw new Error('setup: deploy 2 SW installed despite the failed fetch')
+        const shell = await cachedShellBundle(one.page)
+
+        // Closed, then opened again with no signal.
+        await one.page.close()
+        await context.setOffline(true)
+        const page = await context.newPage()
+        const failed = []
+        page.on('requestfailed', (r) => failed.push(new URL(r.url()).pathname))
+        try {
+          await page.goto(`${DEPLOY_BASE}/`)
+          await page.getByText('HISTORY').first().waitFor({ timeout: 10_000 })
+        } catch (err) {
+          throw new Error(
+            `offline launch did not render (${String(err).split('\n')[0]}). ` +
+              `Cached shell loads ${shell}; failed: [${failed.join(', ')}]`,
+            { cause: err },
+          )
+        }
+      } finally {
+        await context?.close()
+        await server2.close()
+      }
+    })
+
+    // The other half of serving the shell from the worker's own cache: a deploy
+    // reaches the page only when its worker takes over, so the page must find
+    // it, offer it, and land on it. No navigation here: a single-page app
+    // resumed from the background makes none, so coming back to the
+    // foreground is the only thing that can find the deploy.
+    await leg('K: a deploy is found on resume, offered, and taking it lands on it', async () => {
+      let server2 = await createStaticServer({ dir: 'dist', port: DEPLOY_PORT })
+      let context
+      try {
+        const one = await installDeployOne(browser)
+        context = one.context
+        const page = one.page
+        const bundle = () =>
+          page.evaluate(
+            () => document.querySelector('script[type="module"][src*="/assets/index-"]')?.getAttribute('src'),
+          )
+        const before = await bundle()
+
+        await server2.close()
+        server2 = await createStaticServer({ dir: next.dir, port: DEPLOY_PORT })
+        await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+        const offer = page.getByRole('button', { name: /UPDATE READY/ })
+        await offer.waitFor({ timeout: 15_000 })
+        if ((await bundle()) !== before) throw new Error('the page changed deploy before the update was taken')
+
+        await Promise.all([page.waitForEvent('load', { timeout: 15_000 }), offer.click()])
+        await page.getByText('HISTORY').first().waitFor({ timeout: 15_000 })
+        const after = await bundle()
+        const expected = next.renamed(/^index-.*\.js$/)
+        if (after !== expected) throw new Error(`after the update the page runs ${after}, expected ${expected}`)
+        const precaches = await page.evaluate(async () =>
+          (await caches.keys()).filter((k) => k.startsWith('precache-')),
+        )
+        if (precaches.length !== 1) {
+          throw new Error(`expected one precache after the update, found [${precaches.join(', ')}]`)
+        }
+        if (await offer.isVisible()) throw new Error('the update is still offered after it was taken')
+
+        // And deploy 2 works offline from its own cache, the old one now gone.
+        await context.setOffline(true)
+        await page.reload()
+        await page.getByText('HISTORY').first().waitFor({ timeout: 10_000 })
+      } finally {
+        await context?.close()
+        await server2.close()
+      }
+    })
+
   } finally {
     await browser.close()
     await server.close()
+    await rm(next.dir, { recursive: true, force: true })
   }
 
   for (const r of results) {

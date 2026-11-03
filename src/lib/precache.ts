@@ -10,7 +10,8 @@
 
 export interface PrecacheEntry {
   url: string
-  revision?: string
+  // null for a file whose URL already carries a content hash.
+  revision?: string | null
 }
 
 /**
@@ -43,3 +44,30 @@ export const toPrecachePaths = (urls: readonly string[]): string[] =>
   urls.map(u =>
     u.startsWith('http') ? new URL(u).pathname : u.startsWith('/') ? u : `/${u}`,
   )
+
+/**
+ * A short name for one deploy's precache list, used as its cache name.
+ *
+ * A deploy changes the list — hashed asset URLs, or the revision of an unhashed
+ * file like index.html — so it changes the name, and each deploy installs into
+ * a cache of its own. The name used to be the constant `precache-v1`: every
+ * deploy installed into the cache the previous one was still serving, and the
+ * activate cleanup that deletes other `precache-` caches never had anything to
+ * delete, so every deploy's assets piled up for good.
+ *
+ * Order-independent, so a build that lists the same files in another order
+ * does not throw away a cache that is still correct. FNV-1a: this only has to
+ * tell deploys apart, not resist anyone.
+ */
+export const precacheVersion = (entries: readonly PrecacheEntry[]): string => {
+  const text = entries
+    .map(e => `${e.url} ${e.revision ?? ''}`)
+    .sort()
+    .join('\n')
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}

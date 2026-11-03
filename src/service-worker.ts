@@ -1,20 +1,24 @@
 /// <reference lib="webworker" />
 import { createNotifyTimers } from './lib/notify-timers'
-import { dedupePrecacheUrls, toPrecachePaths, type PrecacheEntry } from './lib/precache'
+import { dedupePrecacheUrls, precacheVersion, toPrecachePaths, type PrecacheEntry } from './lib/precache'
 // Custom SW for rest-timer notifications. vite-plugin-pwa runs injectManifest:
 // it rewrites `sw.__WB_MANIFEST` into the precache list built from globPatterns
 // in vite.config.ts. Precaching + wasm caching are handled inline via the native
 // Cache API (no workbox runtime import, zero extra deps).
 //
-// Security posture mirrors the audited generateSW flags:
-//   - no self.clients.claim()  → stale SW never hijacks a live tab
-//   - no self.skipWaiting()    → refresh stays via the registerSW prompt (CSP)
-//   - stale precache caches evicted on activate (precache- prefix only, so a
-//     future feature cache is never wiped)
+// Lifecycle:
+//   - no self.clients.claim()  → a new SW never takes over a live tab
+//   - skipWaiting() only on the page's SKIP_WAITING message, which it sends
+//     when the user takes an update (lib/sw-update.ts); the page reloads on
+//     the controller change, so it never runs on under another deploy's SW
+//   - one cache per deploy, named from the precache list; activate deletes
+//     the other `precache-` caches (prefix only, so a future feature cache is
+//     never wiped)
 //
-// Fetch: navigations are network-first with the precached shell as offline
-// fallback (cold offline launch of /, /workout, … renders index.html instead
-// of a dead page); precache paths are cache-first.
+// Fetch: navigations get THIS worker's precached shell, never the network's
+// (cold offline launch of /, /workout, … renders index.html instead of a dead
+// page, and the shell always matches the assets this worker serves); precache
+// paths are cache-first.
 //
 // Notification schedule from the page is best-effort here — see
 // COMMON_MISTAKES #11: a SW's own setTimeout does not keep the worker alive,
@@ -30,7 +34,8 @@ const PRECACHE_MANIFEST = ((self as any).__WB_MANIFEST ?? []) as PrecacheEntry[]
 // URL, and the injected manifest can repeat one — see lib/precache.ts for what
 // that cost when it happened.
 const PRECACHE_URLS = dedupePrecacheUrls(PRECACHE_MANIFEST)
-const CACHE_NAME = 'precache-v1'
+// Per deploy (lib/precache.ts says what the constant `precache-v1` cost).
+const CACHE_NAME = `precache-${precacheVersion(PRECACHE_MANIFEST)}`
 
 const PRECACHE_PATHS = toPrecachePaths(PRECACHE_URLS)
 
@@ -58,31 +63,25 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
   if (req.method !== 'GET') return
   const path = new URL(req.url).pathname
 
-  // Navigations: network-first, precached shell as offline fallback. Offline
-  // cold launches of /, /workout, … render index.html instead of a dead page.
+  // Navigations: this worker's own shell, from this worker's own cache. Never
+  // the network's. This was network-first, writing each shell it fetched into
+  // the cache, and a shell from the network can belong to a newer deploy than
+  // the worker serving it: the app opened online after a deploy ran the new
+  // page under the old worker, which does not serve the new page's scripts, so
+  // screens not yet opened would not load offline; and if the new worker's
+  // install failed, the cached shell named scripts no cache held and an
+  // offline launch never got past LOADING (hardening legs I and J). A new
+  // deploy now reaches the page through the update hand-off instead.
+  //
+  // The network is only for a shell missing from the cache, and nothing it
+  // returns is stored: the cache holds what `install` put there, so a 503 or a
+  // maintenance page can never become the offline shell either.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((response) => {
-          // Clone SYNCHRONOUSLY. `return response` below hands this body to the
-          // navigation, and a clone taken after that throws "body is already
-          // used" — which is what made the previous `caches.open(...).then(c =>
-          // c.put(..., response.clone()))` a silent no-op: the clone ran inside
-          // the async callback, always too late, and `void` discarded the
-          // rejection. The shell was therefore frozen at whatever `install`
-          // precached and this refresh never ran once.
-          //
-          // Only a good shell may replace a good shell. `fetch` rejects only on
-          // a NETWORK failure, so a 503/502/500/404 or a host's maintenance page
-          // all resolve here; caching one would poison the offline fallback
-          // below until the next successful navigation.
-          if (response.ok && response.type === 'basic') {
-            const copy = response.clone()
-            event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy)))
-          }
-          return response
-        })
-        .catch(() => caches.match('/index.html').then((hit) => hit ?? Response.error())),
+      caches
+        .open(CACHE_NAME)
+        .then((cache) => cache.match('/index.html'))
+        .then((hit) => hit ?? fetch(req)),
     )
     return
   }
@@ -93,8 +92,9 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
       const cached = await cache.match(event.request)
       if (cached) return cached
       const response = await fetch(event.request)
-      // Same gate, and it matters more here: this branch is cache-first, so a
-      // bad response is not merely stored, it is never re-fetched.
+      // Only a good response is stored. `fetch` rejects only on a network
+      // failure, so a 502 or a host's error page resolves here, and this branch
+      // is cache-first: anything stored is never re-fetched (hardening leg G).
       if (response.ok && response.type === 'basic') await cache.put(event.request, response.clone())
       return response
     }),
@@ -120,8 +120,15 @@ sw.addEventListener('message', (event: ExtendableMessageEvent) => {
   const msg = event.data as
     | { type: 'schedule'; tag: string; fireAt: number; title: string; body: string }
     | { type: 'cancel'; tag: string }
+    | { type: 'SKIP_WAITING' }
     | undefined
   if (!msg || typeof msg.type !== 'string') return
+  // The user took the update (lib/sw-update.ts). Only a waiting worker acts on
+  // it; for the active one skipWaiting() does nothing.
+  if (msg.type === 'SKIP_WAITING') {
+    void sw.skipWaiting()
+    return
+  }
   if (
     msg.type === 'schedule' &&
     typeof msg.tag === 'string' &&
