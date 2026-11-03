@@ -145,6 +145,22 @@ hidden-tab fire gate, SW mirror).
 
 ---
 
+### 12. A shell from the network can belong to another deploy than the SW
+
+**Symptom**: After a deploy, the app works online but offline a screen not yet opened won't load,
+or an offline launch hangs on LOADING. Nothing fails while online, so nobody notices.
+**Check**: Is any navigation answered with, or caching, an `index.html` fetched from the network?
+That shell names the newest deploy's hashed scripts, while the worker serving it may be the old
+one (a waiting worker activates only when every window closes) and serves only its own precache
+list. A cache name that never changes makes it worse: each deploy installs into the cache the
+last one is still serving.
+**Fix**: Navigations get the worker's own precached shell, cache-first, and nothing from the
+network is written over it. One cache per deploy (`precacheVersion`). New deploys arrive through
+the update hand-off in `src/lib/sw-update.ts`: SKIP_WAITING, then a reload on `controllerchange`.
+Guarded by hardening legs F, I, J and K in `scripts/verify-notify-hardening.js`.
+
+---
+
 **Update when**: a bug took >1h, could cause data loss, or recurred across sessions.
 
-**Last Updated**: 2026-08-09
+**Last Updated**: 2026-11-03
