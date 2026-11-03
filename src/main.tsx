@@ -10,6 +10,7 @@ import { setupPtRunPersistence } from './store/pt-store'
 import { prepareApp } from './startup'
 import { StartupError, StorageUnavailable } from './components/StartupScreen'
 import { installLayoutTrace } from './lib/layout-trace'
+import { appUpdate } from './store/update-store'
 
 const stopLayoutTrace = installLayoutTrace()
 if (import.meta.hot) import.meta.hot.dispose(stopLayoutTrace)
@@ -46,6 +47,11 @@ void prepareApp({ dbReady, seed: seedDatabase, loadSettings }).then((result) => 
   }
   startApp()
 })
+
+// Production only: the dev server serves no service worker. After `load`, as
+// the generated registerSW.js this replaces did, so the SW's precache download
+// does not compete with the app's own boot.
+if (import.meta.env.PROD) window.addEventListener('load', () => void appUpdate.start())
 
 // Read-only state accessor for the agent harness (harness.config.mjs). The
 // dynamic import sits behind the DEV constant, so production builds drop it
