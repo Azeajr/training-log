@@ -79,7 +79,7 @@ jobs:
       - uses: Azeajr/web-harness/.github/actions/setup@v0.2.7
         with:
           node-version: 24
-          browsers: chromium
+          browsers: chromium webkit
       - uses: actions/download-artifact@v8
         with:
           name: dist-${{ github.sha }}
