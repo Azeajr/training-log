@@ -81,7 +81,22 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
       caches
         .open(CACHE_NAME)
         .then((cache) => cache.match('/index.html'))
-        .then((hit) => hit ?? fetch(req)),
+        .then((hit) => {
+          if (!hit) return fetch(req)
+          // Pages redirects /index.html to /. Cache API keeps the followed
+          // redirect flag, which a navigation (redirect mode "manual") cannot
+          // accept: Safari reports "Response served by service worker has
+          // redirections". Copy this worker's cached shell to clear that flag,
+          // retaining its body and headers, including CSP. Do this on read so
+          // it also handles shells already cached by the previous worker.
+          return hit.redirected
+            ? new Response(hit.body, {
+                status: hit.status,
+                statusText: hit.statusText,
+                headers: hit.headers,
+              })
+            : hit
+        }),
     )
     return
   }

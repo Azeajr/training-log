@@ -160,7 +160,11 @@ export default defineHarness({
     {
       id: 'offline-install',
       title: 'The shipped build installs, persists and reloads offline',
-      covers: [{ lane: 'smoke' }, { lane: 'verify-sw' }],
+      covers: [
+        { lane: 'smoke' },
+        { lane: 'verify-sw' },
+        { file: 'tests/e2e/service-worker.spec.ts', test: 'a redirected precached shell loads online and offline without losing training data' },
+      ],
     },
     {
       id: 'finish-session',
