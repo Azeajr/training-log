@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures'
 import type { Locator, Page } from 'playwright/test'
+import { completeSetupWizard, startWorkout } from './helpers'
 
 // An iPhone 13 mini, the narrowest phone this is used on. Layout is the one
 // thing jsdom cannot check, so these read real boxes from a real build.
@@ -79,4 +80,40 @@ test('long lift names keep workout headers whole on a 375px phone', async ({ pag
   await page.getByRole('button', { name: '+ ADD EXTRA ASSISTANCE' }).click()
   const back = page.getByRole('dialog').getByRole('button', { name: '← BACK' })
   expect((await box(back)).height).toBeLessThan(ONE_LINE)
+})
+
+// The document never scrolls; <main> does (COMMON_MISTAKES #13). On iOS 27 a
+// zero-height visual viewport let the layout viewport lag the page by up to a
+// screen, and with the document as the scroller every fixed bar rode along.
+// The browsers here report a real viewport, so this cannot reproduce that. It
+// guards the layout that makes it harmless.
+test('screens scroll inside main, never the document, and open at the top', async ({ page }) => {
+  await completeSetupWizard(page)
+  const scroll = () => page.evaluate(() => ({
+    doc: scrollY,
+    room: document.documentElement.scrollHeight - innerHeight,
+    main: document.querySelector('main')!.scrollTop,
+  }))
+
+  // Settings is the longest screen. Reaching a control near its end moves
+  // <main> and nothing else, and the nav stays on the bottom edge.
+  await page.getByRole('link', { name: 'SETTINGS' }).click()
+  await page.getByRole('button', { name: 'Start recording' }).scrollIntoViewIfNeeded()
+  const settings = await scroll()
+  expect(settings.doc).toBe(0)
+  expect(settings.room).toBeLessThanOrEqual(0)
+  expect(settings.main).toBeGreaterThan(0)
+  const nav = await box(page.locator('[data-layout-anchor="bottom-nav"]'))
+  expect(nav.y + nav.height).toBeCloseTo(812, 0)
+
+  // A screen opens at its top. The router resets the window's scroll, which
+  // never moves now, so the shell resets <main>'s. Without that, Settings
+  // (already loaded, so no fallback in between) opened where Workout was left.
+  await page.getByRole('link', { name: 'TODAY' }).click()
+  await startWorkout(page)
+  await page.getByPlaceholder('session notes...').scrollIntoViewIfNeeded()
+  expect((await scroll()).main).toBeGreaterThan(0)
+  await page.getByRole('link', { name: 'SETTINGS' }).click()
+  await expect(page.getByRole('button', { name: 'Start recording' })).toBeAttached()
+  expect(await scroll()).toEqual({ doc: 0, room: 0, main: 0 })
 })
