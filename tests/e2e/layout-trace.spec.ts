@@ -15,10 +15,14 @@ test('diagnostics captures scrolling, occlusion and focus without notes, survive
   await page.getByRole('button', { name: /View history for/ }).click()
   await page.getByRole('button', { name: '← BACK' }).click()
   await page.getByPlaceholder('session notes...').fill('PRIVATE-NOTE-MUST-NOT-BE-TRACED')
-  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight))
+  // <main> is the scroller, not the document (COMMON_MISTAKES #13), so its
+  // scroll lives on the `main` anchor; the window's stays 0.
+  await page.evaluate(() => { const m = document.querySelector('main')!; m.scrollTo(0, m.scrollHeight) })
   await expect.poll(() => page.evaluate(() => {
-    const events = JSON.parse(localStorage.getItem('notif-trace') ?? '{"e":[]}').e
-    return events.some((e: {ev: string; d?: {scroll?: number[]}}) => e.ev === 'layout.sample' && (e.d?.scroll?.[1] ?? 0) > 0)
+    type Sample = { ev: string; d?: { anchors?: { landmark: string | null; scroll?: number[] }[] } }
+    const events: Sample[] = JSON.parse(localStorage.getItem('notif-trace') ?? '{"e":[]}').e
+    return events.some(e => e.ev === 'layout.sample' &&
+      (e.d?.anchors?.find(a => a.landmark === 'main')?.scroll?.[1] ?? 0) > 0)
   })).toBe(true)
 
   // A controlled visual fault proves the capture can expose the bug class:

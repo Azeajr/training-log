@@ -161,6 +161,22 @@ Guarded by hardening legs F, I, J and K in `scripts/verify-notify-hardening.js`.
 
 ---
 
+### 13. A `fixed` bar is only as fixed as the document is still
+
+**Symptom**: On the phone, the bottom nav and the workout's session bar scroll with the page,
+part way or right off the top, and settle again near the top. A layout trace shows
+`visualViewport.height` 0 while `innerHeight` is 812, and the nav's top + `offsetTop` constant.
+**Check**: Does the document scroll? Every `fixed` element is placed in WebKit's layout viewport,
+which moves only when the visual viewport crosses its edge. iOS 27.0.1 was caught (2026-11-07)
+with a zero-height visual viewport, most likely a stale keyboard frame, which travels a whole
+screen before the layout viewport follows. Nothing in the app's CSS can see or correct that.
+**Fix**: The document never scrolls. `AppShell` is `fixed inset-0` and `<main>` is the scroller; it
+resets its own scroll on a route change, because the router only resets the window's. Don't
+put `min-h-screen` back on the shell, and scroll `main`, not `window`, from code and tests.
+Guarded by the "screens scroll inside main" test in `tests/e2e/narrow.spec.ts`.
+
+---
+
 **Update when**: a bug took >1h, could cause data loss, or recurred across sessions.
 
-**Last Updated**: 2026-11-03
+**Last Updated**: 2026-11-07
