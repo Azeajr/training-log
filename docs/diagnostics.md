@@ -62,6 +62,11 @@ promptly. This is diagnostic evidence, not a continuous session recorder.
 
 For a displaced workout bar, compare `session-bar` and `bottom-nav` rectangles
 against `visualViewport`, document scroll, and the bar's ancestor styles.
+The document itself never scrolls (`.claude/COMMON_MISTAKES.md` #13): a
+screen's scroll is the `main` anchor's `scroll`, and a non-zero document
+`scroll[1]` is itself a finding. `visualViewport.height` 0, with the nav's top
+plus `offsetTop` constant across samples, is the iOS zero-height viewport that
+#13 describes.
 `centerUnobstructed: false` indicates that its sampled center hit another
 element or nothing; inspect `centerHit` and the rectangles before concluding
 that a control was covered. Center testing does not prove the entire region

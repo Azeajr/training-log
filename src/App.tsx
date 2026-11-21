@@ -1,5 +1,5 @@
 import { Router, Route, useNavigate, useLocation } from '@solidjs/router'
-import { lazy, Suspense, Show, createEffect, createSignal, onMount, onCleanup, type ParentProps } from 'solid-js'
+import { lazy, Suspense, Show, createEffect, createSignal, on, onMount, onCleanup, type ParentProps } from 'solid-js'
 import { createConfirmation, ConfirmationContext } from './hooks/use-confirmation'
 import BottomNav from './components/layout/BottomNav'
 import LayoutCapture from './components/layout/LayoutCapture'
@@ -61,6 +61,23 @@ function AppShell(props: ParentProps) {
     onCleanup(() => window.removeEventListener('pageshow', onPageShow))
   })
 
+  // The screen scrolls inside <main>; the document never does. iOS 27 was
+  // caught reporting a zero-height visual viewport (visualViewport.height 0,
+  // innerHeight 812), and WebKit only drags the layout viewport — the box
+  // every `fixed` bar is placed in — once the visual viewport crosses its edge.
+  // A zero-height one can travel a whole screen first, so with the document as
+  // the scroller the nav and session bar rode up the page and off the top.
+  // A root with nothing to scroll gives the viewport nowhere to go, whatever
+  // state WebKit is in. COMMON_MISTAKES #13.
+  //
+  // The router still resets scroll on navigation, but it resets the window's,
+  // which is now always 0. Do it for <main> instead.
+  // eslint-disable-next-line no-unassigned-vars -- Solid `ref={mainEl}` reassigns at runtime
+  let mainEl: HTMLElement | undefined
+  createEffect(on(() => location.pathname, () => {
+    if (mainEl) mainEl.scrollTop = 0
+  }, { defer: true }))
+
   return (
     // No `user-select: none` and no contextmenu block here: both used to be set
     // on this root and applied to the whole app, including notes, weights, and
@@ -69,12 +86,13 @@ function AppShell(props: ParentProps) {
     // `-webkit-touch-callout: none` in that same rule — so copy/paste and the
     // native context menu work on the user's own data again.
     <div
-      class="bg-bg min-h-screen font-mono text-text flex flex-col"
+      class="fixed inset-0 bg-bg font-mono text-text flex flex-col"
       style={{ 'padding-top': 'env(safe-area-inset-top, 0px)' }}
     >
       <main
+        ref={mainEl}
         data-layout-anchor="main"
-        class="flex-1 overflow-y-auto"
+        class="flex-1 min-h-0 overflow-y-auto overscroll-y-contain"
         style={{ 'padding-bottom': 'var(--nav-h)' }}
       >
         <Suspense fallback={<ScreenFallback />}>

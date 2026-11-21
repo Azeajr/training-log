@@ -21,6 +21,17 @@
   --nav-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
 }
 
+/* The document has nothing to scroll: AppShell is a fixed box and <main>
+   scrolls inside it (COMMON_MISTAKES #13). iOS can rubber-band a root even
+   when it has nothing to scroll, and that bounce would drag the whole shell,
+   nav included, so switch it off. <main> keeps its own bounce (`overscroll-y-contain`). The
+   background covers whatever the bounce or the keyboard exposes, which used
+   to be the shell's in-flow height and is now nothing. */
+html {
+  overscroll-behavior: none;
+  background-color: var(--color-bg);
+}
+
 /* Selection is suppressed on interactive chrome only, never on content.
    AppShell used to set `user-select: none` on the app root, which caught the
    things a training log exists to hold — session notes, training maxes,

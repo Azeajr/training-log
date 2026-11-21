@@ -13,6 +13,14 @@ async function setUp(page: Page, bands: string[]) {
   await page.getByRole('spinbutton', { name: 'added weight', exact: true }).press('Enter')
 }
 
+// Five chips have to wrap, not push the screen sideways. The screen is
+// <main>'s scrollport, not the document's (COMMON_MISTAKES #13): a row too
+// wide scrolls <main> and leaves the document's width untouched.
+const fitsWidth = (page: Page) => page.evaluate(() => {
+  const main = document.querySelector('main')!
+  return main.scrollWidth <= main.clientWidth && document.documentElement.scrollWidth <= innerWidth
+})
+
 test('main-lift bands survive reload and raw-load recalibration on mobile', async ({ page }) => {
   // An iPhone 13 mini, the narrowest phone this is used on: five chips have to
   // wrap inside it rather than push the page sideways.
@@ -50,7 +58,7 @@ test('main-lift bands survive reload and raw-load recalibration on mobile', asyn
   // Bands stack: Purple on top of Green assists 50 + 30.
   await page.getByRole('group', { name: 'bands', exact: true }).first().getByRole('button', { name: 'Purple', exact: true }).click()
   await expect(page.getByTestId('active-weight')).toHaveText('111lb')
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(await fitsWidth(page)).toBe(true)
   await page.getByRole('button', { name: 'LOG', exact: true }).first().click()
   await expect.poll(async () => (await getWorkoutState(page))?.loggedSets).toMatchObject([
     { weight: 111, bandLoad: { bands: ['Green', 'Purple'], rawLoad: 191, assistance: 80, addedWeight: 0 } },
@@ -68,5 +76,5 @@ test('main-lift bands survive reload and raw-load recalibration on mobile', asyn
   await setUp(page, ['Green'])
   await expect(page.getByTestId('active-weight')).toHaveText('151lb')
   await expect.poll(async () => (await getWorkoutState(page))?.loggedSets).toMatchObject([{ weight: 111, bandLoad: { rawLoad: 191 } }])
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(await fitsWidth(page)).toBe(true)
 })
